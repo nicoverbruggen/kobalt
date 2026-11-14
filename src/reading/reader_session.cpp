@@ -1117,11 +1117,13 @@ bool ReaderSession::goToSyncedPosition(const QString &position,
 bool ReaderSession::importPosition(const QString &location, bool native,
                                    std::function<void(QString)> finished)
 {
-    if (running)
+    if (running || retiring || !lease_ || lease_->revoked() || !layoutReady_)
         return false;
+    cancelPendingTurn();
     cancelSearch();
     running = true;
-    const auto job = revision;
+    const auto job = ++revision;
+    newest->store(job);
     auto engine = engine_;
     const auto positions = positions_;
     const auto markup = markupRequest_;
@@ -1153,14 +1155,28 @@ bool ReaderSession::importPosition(const QString &location, bool native,
                                         if (!guard || guard->lease_ != lease)
                                             return;
                                         guard->running = false;
-                                        guard->frame = result;
-                                        // The owner records the accepted native baseline before saving the
-                                        // newly imported frame. A failed import leaves the anchor unchanged.
-                                        finished(error);
-                                        if (!guard || guard->lease_ != lease)
+                                        if (lease->revoked())
                                             return;
-                                        if (!guard->running && job != guard->revision)
-                                            guard->dispatch();
+                                        if (job != guard->revision) {
+                                            // The owner saves the displayed position in finished().
+                                            // Wait for the requested layout before acknowledging it.
+                                            const auto position = result.state.value("position");
+                                            guard->dispatch(false, [guard, position, error, finished] {
+                                                if (error.isEmpty()
+                                                    && guard->frame.state.value("position")
+                                                            != position)
+                                                    finished(strings::get(
+                                                            "error.could_not_find_that_passage"));
+                                                else
+                                                    finished(error);
+                                            });
+                                            return;
+                                        }
+                                        guard->frame = result;
+                                        finished(error);
+                                        if (!guard || guard->lease_ != lease || lease->revoked()
+                                            || guard->running || guard->revision != job)
+                                            return;
                                         if (guard->updated)
                                             guard->updated();
                                         if (guard) {
@@ -2537,7 +2553,7 @@ void ReaderSession::request(bool appearanceChange, RenderReason reason)
         dispatch();
 }
 
-void ReaderSession::dispatch(bool pageTurn)
+void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
 {
     running = true;
     turning = pageTurn;
@@ -2604,8 +2620,9 @@ void ReaderSession::dispatch(bool pageTurn)
         diagnostic("render-queued", { { "render_id", double(job) }, { "delta", delta } }, false);
     kobalt::qt::invoke(
             engineWorker(),
-            [guard, engine, requested, chapterMode, swapToFull, size, anchor, chapter, delta, target,
-             fraction, job, lease, latest, progress, positions, markup, markupGeneration] {
+            [guard, engine, requested, chapterMode, swapToFull, size, anchor, chapter, delta,
+             target, fraction, job, lease, latest, progress, positions, markup, markupGeneration,
+             afterFrame] {
                 EngineJob activity;
                 const bool timing = diagnosticsActive();
                 QElapsedTimer timer;
@@ -2742,20 +2759,23 @@ void ReaderSession::dispatch(bool pageTurn)
                 const bool failed = !result.error.isEmpty();
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, result = std::move(result), job, lease, delta, failed] {
+                        [guard, result = std::move(result), job, lease, delta, failed, afterFrame] {
                             if (!guard) {
                                 return;
                             }
                             guard->completeFrameMarkup(
                                     std::move(result), job, lease,
-                                    [guard, job, lease, delta, failed](ReaderFrame result) {
+                                    [guard, job, lease, delta, failed,
+                                     afterFrame](ReaderFrame result) {
                                         if (!guard || guard->lease_ != lease)
                                             return;
                                         guard->running = false;
                                         guard->turning = false;
+                                        if (afterFrame && lease->revoked())
+                                            return;
                                         // Do not flash intermediate layouts while newer settings wait.
                                         if (job != guard->revision) {
-                                            guard->dispatch();
+                                            guard->dispatch(false, afterFrame);
                                             return;
                                         }
                                         guard->frame = result;
@@ -2777,8 +2797,14 @@ void ReaderSession::dispatch(bool pageTurn)
                                         if (failed)
                                             guard->cancelPendingTurn();
                                         guard->clearRenderProgress();
-                                        if (!guard)
+                                        if (!guard || guard->lease_ != lease)
                                             return;
+                                        if (afterFrame && !lease->revoked()) {
+                                            afterFrame();
+                                            if (!guard || guard->lease_ != lease || guard->running
+                                                || guard->revision != job)
+                                                return;
+                                        }
                                         if (guard->updated)
                                             guard->updated();
                                         if (guard) {

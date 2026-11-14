@@ -4,6 +4,7 @@
 #include "sync/kosync.h"
 #include "app/messages/opening_message.h"
 #include "publication/native_resources.h"
+#include "publication/local_resources.h"
 #include "plain_archive.h"
 #include "publication/resource_server.h"
 #include "support/diagnostics.h"
@@ -217,6 +218,108 @@ static void hybridFontEdits(const QString &path, quint16 port)
         lookup.exec();
     renderingMode::setBuildQuietMilliseconds(quiet);
     renderingMode::setOverride(-1);
+}
+
+static void positionImportTransitions(const QString &path, const QString &replacement)
+{
+    ReaderSession reader(test::readerFonts(), test::readerPlaceholder());
+    QEventLoop loop;
+    const PositionCodec positions{
+        [](const Engine &, const QString &anchor, QString *) { return anchor; },
+        [](const Engine &engine, QString *) { return engine.position(); },
+        [](const QString &anchor) { return anchor; }
+    };
+    const auto open = [&](const QString &file) {
+        auto lease = std::make_shared<SourceLease>();
+        reader.open({ file,
+                      file,
+                      QSize(758, 900),
+                      {},
+                      {},
+                      {},
+                      lease,
+                      localResourceFactory(file, lease),
+                      positions },
+                    [&](OpeningResult result) {
+                        require(result.ready(), qPrintable(openingMessage(result)));
+                        loop.quit();
+                    });
+        loop.exec();
+    };
+    // Queue the competing request in the same GUI turn as the import. Its worker result
+    // can arrive only after the GUI has recorded the replacement request.
+    for (const bool native : { false, true }) {
+        open(path);
+        QString target;
+        reader.pageSummary(2, [&](QString start, QString text) {
+            require(!text.isEmpty(), "The imported page must contain text");
+            target = start;
+            loop.quit();
+        });
+        loop.exec();
+        require(!target.isEmpty() && target != reader.state().value("position"),
+                "The import must move to another passage");
+        const auto startImport = [&](std::function<void(QString)> finished) {
+            require(native ? reader.goToNative(target, finished)
+                           : reader.goToSyncedPosition(target, finished),
+                    "The first position import must start");
+        };
+        bool stalePreview = false;
+        const auto pageBeforeImport = reader.page();
+        reader.previewPage(pageBeforeImport, QSize(180, 240), [&](QImage) { stalePreview = true; });
+        startImport([&](QString error) {
+            require(error.isEmpty() && reader.state().value("position") == target,
+                    "Import must move the displayed position");
+            loop.quit();
+        });
+        loop.exec();
+        require(!stalePreview, "An import must cancel queued page previews just like a page turn");
+        require(reader.go(pageBeforeImport), "Cannot return to the page before import");
+        reader.updated = [&] {
+            if (!reader.busy())
+                loop.quit();
+        };
+        loop.exec();
+        reader.updated = {};
+        const int pixels = reader.fontSize() + 2;
+        const auto originalImage = reader.image().cacheKey();
+        int completions = 0;
+        startImport([&](QString error) {
+            ++completions;
+            require(error.isEmpty() && reader.state().value("position") == target
+                            && reader.state().value("font_pixels").toInt() == pixels
+                            && !reader.busy(),
+                    "Import completion must save the imported passage in the final layout");
+            require(reader.turn(1), "The import callback must be able to turn the page");
+        });
+        reader.updated = [&] {
+            if (reader.image().cacheKey() != originalImage)
+                require(reader.state().value("font_pixels").toInt() == pixels,
+                        "An import published a superseded layout");
+            if (!reader.busy() && reader.turnDirection() == 1)
+                loop.quit();
+        };
+        reader.editAppearance(appearance::Patch(qt::object({ { "font_pixels", pixels - 1 } })));
+        reader.editAppearance(appearance::Patch(qt::object({ { "font_pixels", pixels } })));
+        loop.exec();
+        require(completions == 1 && reader.state().value("position") != target,
+                "Reentrant navigation must finish without repeating import completion");
+        reader.updated = {};
+        int stale = 0;
+        startImport([&](QString) { ++stale; });
+        open(replacement);
+        require(stale == 0 && reader.syncFilename() == QFileInfo(replacement).fileName(),
+                "An old import must not complete on a replacement book");
+        startImport([&](QString) { ++stale; });
+        const auto before = reader.image().cacheKey();
+        reader.revokeSource();
+        ReaderSession::drain([&] { loop.quit(); });
+        loop.exec();
+        require(stale == 0 && !reader.busy() && reader.image().cacheKey() == before,
+                "A revoked import must not publish or acknowledge a position");
+        require(!reader.goToSyncedPosition(target, {}) && !reader.goToNative(target, {}),
+                "A revoked reader must refuse new position imports");
+    }
 }
 
 int run(int argc, char **argv)
@@ -481,6 +584,7 @@ int run(int argc, char **argv)
             opened.exec();
             servedPath = path;
         }
+        positionImportTransitions(path, publisherPath);
         hybridFontEdits(path, server.serverPort());
         ReaderSession::drain([&] { opened.quit(); });
         opened.exec();

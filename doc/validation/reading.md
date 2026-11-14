@@ -8,6 +8,8 @@ A numbered jump during handoff uses the displayed chapter. A second number can b
 
 My Words resolves a saved passage while Hybrid switches to whole-book pagination. The returned page must match an Accurate session. `desktop.savedWords` also checks the page number on the action in the word detail view.
 
+Native and synced position imports cancel outstanding page previews. An import interrupted by font edits must finish on the final frame, where its caller can save the position and turn the page. Replacing or revoking the source discards its old completion.
+
 Label `reading`. Build `mac-tests`, then run `ctest --preset mac -L reading` from `platforms/desktop/`. `ctest --preset mac -N -L reading` lists its tests.
 
 These checks cover empty-library startup, opening books, rendered pages, page turns, saved positions, opening failures and cancellation, the feature tour, reader sessions, the opening cover, local resources and archives. [Test inventory](../validation.md#test-inventory) lists the desktop checks.

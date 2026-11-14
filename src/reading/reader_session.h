@@ -562,6 +562,6 @@ private:
                     std::shared_ptr<std::atomic_bool> cancelled,
                     std::function<void(SearchBatch)> finished, bool reset);
     void request(bool appearanceChange = false, RenderReason reason = RenderReason::Appearance);
-    void dispatch(bool pageTurn = false);
+    void dispatch(bool pageTurn = false, std::function<void()> afterFrame = {});
 };
 } // namespace kobalt

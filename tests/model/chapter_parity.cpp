@@ -425,6 +425,40 @@ Action search(const QString &query, const QString &abandoned = {})
             } };
 }
 
+void searchUnopenedChapter()
+{
+    Book book;
+    book.files = test::engineBook();
+    book.files["OEBPS/c3.xhtml"] = test::publisherHtml(
+            QStringLiteral("<p>Caf&#233;teria a−minus سـلام</p><p>One<!-- note > here -->Two</p>"
+                           "<p>Pub<![CDATA[lication]]>Needle</p>")
+                    .toUtf8());
+    book.files["OEBPS/c2.xhtml"] = test::publisherHtml("<p>Andr&eacute;nav</p>");
+    QString error;
+    EngineDocument whole(test::readerFonts()), chapters(test::readerFonts());
+    require(book.open(whole, settings, &error) && book.open(chapters, settings, &error),
+            qPrintable(error));
+    chapters.setChapterSlices(2);
+    require(chapters.showSpineItems(0, 0), "Cannot open the first chapter");
+    const auto hits = [](EngineDocument &model, const QString &query) {
+        QStringList positions;
+        SearchBatch batch;
+        do {
+            batch = model.searchText(query, batch.cursor, 16);
+            for (const auto &hit : batch.hits)
+                positions.append(hit.start);
+        } while (!batch.done);
+        return positions;
+    };
+    for (const auto &query : { QStringLiteral("cafe"), QStringLiteral("a-minus"),
+                               QStringLiteral("سلام"), QStringLiteral("OneTwo"),
+                               QStringLiteral("PublicationNeedle"), QStringLiteral("Andrénav") }) {
+        const auto expected = hits(whole, query);
+        require(expected.size() == 1 && hits(chapters, query) == expected,
+                qPrintable("Missing search result in an unopened chapter: " + query));
+    }
+}
+
 // A negative index counts from the end.
 Action openResult(int index)
 {
@@ -1476,6 +1510,8 @@ int main(int argc, char **argv)
         nonLinearTurns(true, 18);
         nonLinearTurns(false, 2);
     }
+    if (only.isEmpty() || only == QLatin1String("unopened search"))
+        searchUnopenedChapter();
     const auto other = qEnvironmentVariable("KOBALT_PARITY_BOOK");
     int differences = 0;
     for (const auto &scenario : scenarios()) {

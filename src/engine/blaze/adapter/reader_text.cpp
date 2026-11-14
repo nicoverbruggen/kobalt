@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <QElapsedTimer>
 #include <QRegularExpression>
+#include <QXmlStreamReader>
 
 namespace kobalt {
 namespace {
@@ -1824,82 +1825,24 @@ SearchBatch EngineDocument::searchLoaded(const QString &query, SearchCursor curs
 }
 
 namespace {
-// Text for the check whether a query can match: case folded, without
-// white space, soft hyphens and format characters, with one kind of
-// apostrophe and hyphen. The engine folds the same way or less.
+// Ignore spaces for this preliminary check: adjacent text nodes can acquire
+// or lose a space when the engine lays them out.
 QString searchKey(const QString &text)
 {
-    const auto normalized = text.normalized(QString::NormalizationForm_KC).toCaseFolded();
-    QString key;
-    key.reserve(normalized.size());
-    for (const auto ch : normalized) {
-        if (ch.isSpace() || ch.category() == QChar::Other_Format || ch == QChar(0xad))
-            continue;
-        if (ch == QChar(0x2019) || ch == QChar(0x2018) || ch == QChar(0x2bc))
-            key.append(QLatin1Char('\''));
-        else if (ch.category() == QChar::Punctuation_Dash)
-            key.append(QLatin1Char('-'));
-        else
-            key.append(ch);
-    }
-    return key;
+    return qstring(ldomFoldSearchPattern(cre(text), searchFlags)).remove(QLatin1Char(' '));
 }
 
-// The text of XHTML without its tags, with the common entities decoded.
-QString plainText(const QByteArray &xhtml)
+QString chapterSearchKey(const QByteArray &xhtml)
 {
-    const auto source = QString::fromUtf8(xhtml);
+    QXmlStreamReader xml(xhtml);
     QString text;
-    text.reserve(source.size());
-    bool tag = false;
-    for (int i = 0; i < source.size(); ++i) {
-        const auto ch = source.at(i);
-        if (tag) {
-            tag = ch != QLatin1Char('>');
-            continue;
-        }
-        if (ch == QLatin1Char('<')) {
-            tag = true;
-            continue;
-        }
-        if (ch == QLatin1Char('&')) {
-            const int end = source.indexOf(QLatin1Char(';'), i);
-            if (end > i && end - i < 12) {
-                const auto name = source.mid(i + 1, end - i - 1);
-                static const QHash<QString, QChar> named{
-                    { QStringLiteral("amp"), QLatin1Char('&') },
-                    { QStringLiteral("lt"), QLatin1Char('<') },
-                    { QStringLiteral("gt"), QLatin1Char('>') },
-                    { QStringLiteral("quot"), QLatin1Char('"') },
-                    { QStringLiteral("apos"), QLatin1Char('\'') },
-                    { QStringLiteral("nbsp"), QChar(0xa0) },
-                    { QStringLiteral("shy"), QChar(0xad) }
-                };
-                bool numeric = false;
-                const uint code = name.startsWith(QLatin1String("#x"))
-                        ? name.mid(2).toUInt(&numeric, 16)
-                        : name.startsWith(QLatin1Char('#')) ? name.mid(1).toUInt(&numeric)
-                                                            : 0;
-                if (numeric && code > 0 && code <= 0x10ffff) {
-                    if (QChar::requiresSurrogates(code)) {
-                        text.append(QChar(QChar::highSurrogate(code)));
-                        text.append(QChar(QChar::lowSurrogate(code)));
-                    } else {
-                        text.append(QChar(ushort(code)));
-                    }
-                    i = end;
-                    continue;
-                }
-                if (named.contains(name)) {
-                    text.append(named.value(name));
-                    i = end;
-                    continue;
-                }
-            }
-        }
-        text.append(ch);
+    while (!xml.atEnd()) {
+        if (xml.readNext() == QXmlStreamReader::Characters)
+            text += xml.text().toString();
     }
-    return text;
+    // The renderer accepts some markup and named entities beyond strict XML.
+    // Only a complete parse can rule out a match in this chapter.
+    return xml.hasError() ? QStringLiteral("") : searchKey(text);
 }
 
 // The spine item of an engine position, counted from zero, or -1.
@@ -1926,16 +1869,13 @@ bool EngineDocument::mayContain(int item, const QString &query) const
         if (!stream.isNull() && stream->GetSize() < 64 * 1024 * 1024) {
             bytes.resize(int(stream->GetSize()));
             lvsize_t read = 0;
-            if (stream->Read(bytes.data(), bytes.size(), &read) != LVERR_OK)
+            if (stream->Read(bytes.data(), bytes.size(), &read) != LVERR_OK
+                || read != stream->GetSize())
                 bytes.clear();
-            bytes.resize(int(read));
         }
-        // An item that cannot be read is searched by the engine.
-        texts[item] = bytes.isEmpty() ? QStringLiteral("") : searchKey(plainText(bytes));
-        if (bytes.isEmpty())
-            return true;
+        texts[item] = bytes.isEmpty() ? QStringLiteral("") : chapterSearchKey(bytes);
     }
-    return texts[item].contains(searchKey(query));
+    return texts[item].isEmpty() || texts[item].contains(searchKey(query));
 }
 
 EngineDocument *EngineDocument::documentFor(int item, const std::function<bool()> &current)

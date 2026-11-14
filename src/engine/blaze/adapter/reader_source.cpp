@@ -928,8 +928,22 @@ bool EngineDocument::hasPageAt(const QString &position) const
 {
     const auto pointer = engine_->getDocument()->createXPointer(cre(position));
     // CREngine maps a hidden node to page zero. Only a laid-out position
-    // can carry the reader from a chapter into the whole book.
+    // can carry the reader between layouts.
     return !pointer.isNull() && pointer.toPoint().y >= 0;
+}
+
+// Both prepared and freshly opened layouts must prove they can display the
+// current passage before taking ownership of the reading document.
+bool EngineDocument::adoptLayout(EngineDocument &next, const std::function<bool()> &current)
+{
+    const auto place = position();
+    if ((current && !current()) || !next.hasPageAt(place)
+        || (next.position() != place && !next.goTo(place)) || (current && !current()))
+        return false;
+    EngineDocument old(fonts_);
+    old = std::move(*this);
+    *this = std::move(next);
+    return true;
 }
 
 bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, QSize size,
@@ -956,16 +970,6 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
             prepared = !before.contains(it.key()) || before.value(it.key()) == it.value();
     }
     if (prepared) {
-        const auto place = position();
-        // Keep the chapter on screen if the prepared document cannot resolve
-        // its place. A failed switch must never send the reader to page one.
-        if (!full_->hasPageAt(place) || !full_->goTo(place)) {
-            // The same build would refuse the same place again. Drop it and
-            // do not build it again for this appearance.
-            fullFailed_ = fullKey_;
-            full_.reset();
-            return false;
-        }
         auto full = std::move(full_);
         if (externalChapters_) {
             full->setChapters(contents_, graph_);
@@ -973,10 +977,11 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
         }
         full->interrupt_ = interrupt_;
         full->nativeLocation_ = nativeLocation_;
-        EngineDocument old(fonts_);
-        old = std::move(*this);
-        *this = std::move(*full);
-        return true;
+        if (adoptLayout(*full, current))
+            return true;
+        if (!current || current())
+            fullFailed_ = fullKey_;
+        return false;
     }
     EngineDocument next(fonts_);
     next.openingFontSource_ =
@@ -1008,8 +1013,6 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
                 : next.open(source_->bytes, viewport, saved, &error, std::move(progress));
         if (!opened || (current && !current()))
             return false;
-        if (!fast && windowFirst_ >= 0 && !next.hasPageAt(position()))
-            return false;
 #  ifdef KOBLAZE_CANCEL_CHECK
     } catch (const KoblazeRenderCancelled &) {
         koblazeSetSpineWindow(-1, -1);
@@ -1029,12 +1032,7 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
             next.externalChapters_ = true;
         }
     }
-    if (current && !current())
-        return false;
-    EngineDocument old(fonts_);
-    old = std::move(*this);
-    *this = std::move(next);
-    return true;
+    return adoptLayout(next, current);
 #else
     Q_UNUSED(fast);
     Q_UNUSED(current);

@@ -1885,6 +1885,35 @@ void hiddenHeadingAtHandoff()
     }
 }
 
+// The heading is visible in the whole book only because its preceding
+// chapter participates in the selector. A font edit opens the chapter alone.
+void hiddenHeadingOnChapterReflow()
+{
+    auto files = test::engineBook(false, 2, 12);
+    for (const auto &name : { "OEBPS/c1.xhtml", "OEBPS/c2.xhtml" })
+        files[name].replace("<html ", "<html class='chapter' ");
+    files["OEBPS/c2.xhtml"].replace("</head>",
+                                    "<style>h1 {display:none} .chapter + .chapter h1 "
+                                    "{display:block}</style></head>");
+    EngineDocument model(test::readerFonts());
+    openResources(model, files, { { "font_pixels", 28 } });
+    int headingPage = -1;
+    for (int page = 1; page < model.pages(); ++page)
+        if (model.pageExcerpt(page).startsWith("Chapter 2")) {
+            headingPage = page;
+            break;
+        }
+    require(headingPage > 0 && model.go(headingPage), "Cannot reach the visible second heading");
+    const auto position = model.position();
+    const auto image = model.image(model.page());
+    require(!model.setChapterMode(true, appearance::Patch(QJsonObject{ { "font_pixels", 32 } }),
+                                  {}),
+            "A chapter without the displayed passage must refuse the font-change handoff");
+    require(model.bookFraction() < 0 && model.page() == headingPage && model.position() == position
+                    && model.image(model.page()) == image,
+            "A refused font-change handoff must leave the original document usable");
+}
+
 // Hybrid rendering builds the document of the whole book beside the chapter
 // that is shown, and then shows it: the same page, the pages of the whole
 // book, and no new load. A try that is stopped leaves nothing behind.
@@ -2753,6 +2782,7 @@ int main(int argc, char **argv)
         return 0;
     }
 #if __has_include(<koblaze.h>)
+    hiddenHeadingOnChapterReflow();
     hiddenHeadingAtHandoff();
 #endif
     offscreenRangeEnd();

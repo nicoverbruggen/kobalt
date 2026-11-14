@@ -614,6 +614,7 @@ private:
     // How long the last window took to load and lay out.
     qint64 windowLoadMs_ = -1;
     // Loads the window that holds `position` when it is outside the window.
+    bool adoptLayout(EngineDocument &next, const std::function<bool()> &current);
     bool hasPageAt(const QString &position) const;
     bool showSpineItemOf(const QString &position);
     // Lays out the book. False when the layout was interrupted.

@@ -8942,9 +8942,12 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                     },
                     5000);
         };
+        // The first frame can precede the idle page estimate. Rendering
+        // being idle does not mean that the page totals have arrived.
+        QTRY_VERIFY2_WITH_TIMEOUT(
+                shown().books > 0 && shown().chapters > 0,
+                qPrintable(page->slotContents[2].text + " | " + page->slotContents[5].text), 30000);
         auto current = shown();
-        QVERIFY2(current.books > 0 && current.chapters > 0,
-                 qPrintable(page->slotContents[2].text + " | " + page->slotContents[5].text));
         QCOMPARE(current.chapter, 1);
         // On to the first chapter that is long enough for the turns below.
         for (int step = 0; step < 200 && (current.chapter != 1 || current.chapters < 8); ++step) {

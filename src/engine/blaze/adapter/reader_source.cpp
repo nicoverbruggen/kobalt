@@ -1831,19 +1831,22 @@ bool EngineDocument::turnInWindow(int delta)
 PagePreview EngineDocument::previewTurn(int direction,
                                         const QVector<QPair<QString, QString>> &ranges,
                                         const std::function<bool()> &current,
-                                        const QStringList &bookmarkPositions)
+                                        const QStringList &bookmarkPositions,
+                                        bool adoptingFullDocument)
 {
     if (!engine_ || direction < -1 || direction > 1 || (current && !current()))
         return {};
-    const int target = direction ? turnTarget(page(), direction) : page();
+    const int spread = adoptingFullDocument ? preparedSpreadTurn(direction) : -1;
+    const int target = spread >= 0 ? spread : turnTarget(page(), direction);
     const bool tail = direction > 0 && slices() && visiblePages_ > 0 && target >= visiblePages_;
-    if ((!direction || target != page()) && !tail) {
+    if (spread >= 0 || ((!direction || target != page()) && !tail)) {
+        auto &document = spread >= 0 ? *full_ : *this;
         PagePreview result;
-        result.image = image(target);
-        result.position = pageStart(target);
-        result.ranges = pageRangeRects(target, ranges);
-        result.bookmarked =
-                !bookmarkPositions.isEmpty() && pagesOf(bookmarkPositions).contains(target);
+        result.image = document.image(target);
+        result.position = document.pageStart(target);
+        result.ranges = document.pageRangeRects(target, ranges);
+        result.bookmarked = !bookmarkPositions.isEmpty()
+                && document.pagesOf(bookmarkPositions).contains(target);
         return current && !current() ? PagePreview{} : result;
     }
     if (windowFirst_ < 0 || !source_)

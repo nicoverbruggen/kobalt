@@ -1553,7 +1553,8 @@ void ReaderSession::previewAdjacentPage(int direction, QSize bounds, QStringList
     kobalt::qt::invoke(
             engineWorker(),
             [engine, guard, direction, bounds, finished, request, token, latest, job, lease, markup,
-             markupGeneration, dark, bookmarkPositions] {
+             markupGeneration, dark, bookmarkPositions,
+             adoptingFullDocument = fullDocumentPending_] {
                 const auto current = [token, request, latest, job, lease] {
                     return token->load() == request && latest->load() == job && !lease->revoked();
                 };
@@ -1565,7 +1566,8 @@ void ReaderSession::previewAdjacentPage(int direction, QSize bounds, QStringList
                 QVector<QPair<QString, QString>> ranges;
                 for (const auto &range : markup.saved)
                     ranges.append(qMakePair(range.start, range.end));
-                auto preview = engine->previewTurn(direction, ranges, current, bookmarkPositions);
+                auto preview = engine->previewTurn(direction, ranges, current, bookmarkPositions,
+                                                   adoptingFullDocument);
                 if (!current() || preview.image.isNull())
                     return;
                 if (!preview.image.isNull() && !markup.saved.isEmpty()) {

@@ -190,7 +190,8 @@ public:
     virtual PagePreview previewTurn(int direction,
                                     const QVector<QPair<QString, QString>> &ranges = {},
                                     const std::function<bool()> &current = {},
-                                    const QStringList &bookmarkPositions = {}) = 0;
+                                    const QStringList &bookmarkPositions = {},
+                                    bool adoptingFullDocument = false) = 0;
     // One screen that starts at the reading position instead of a page break. With
     // stayInChapter, it starts earlier near a chapter's end, so that a full screen stays in
     // the chapter. Without it, the text continues past the chapter to fill the screen.

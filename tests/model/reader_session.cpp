@@ -258,6 +258,7 @@ static void mixedSpreadHandoff()
     ReaderSession whole(test::readerFonts(), test::readerPlaceholder());
     open(whole, false);
     const auto coverAndTitle = whole.image();
+    const QString coverPosition = whole.state().value("position").toString();
     for (int direction : { 1, -1 }) {
         ReaderSession hybrid(test::readerFonts(), test::readerPlaceholder());
         open(hybrid, true);
@@ -277,6 +278,21 @@ static void mixedSpreadHandoff()
                 Qt::QueuedConnection);
         frame.exec();
         hybrid.showFullDocument();
+        const QSize bounds(536, 379);
+        QImage thumbnail;
+        bool bookmarked = false;
+        hybrid.previewAdjacentPage(direction, bounds, { coverPosition },
+                                   [&](QImage image, bool marked) {
+                                       thumbnail = std::move(image);
+                                       bookmarked = marked;
+                                       frame.quit();
+                                   });
+        frame.exec();
+        require(bookmarked
+                        && thumbnail
+                                == coverAndTitle.scaled(bounds, Qt::KeepAspectRatio,
+                                                        Qt::SmoothTransformation),
+                "Navigate showed a chapter thumbnail for the prepared full-book turn");
         require(hybrid.turn(direction), "Cannot turn across the prepared two-column handoff");
         frame.exec();
         require(!hybrid.state().contains("book_fraction") && hybrid.image() == coverAndTitle

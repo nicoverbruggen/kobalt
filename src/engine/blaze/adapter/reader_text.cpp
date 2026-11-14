@@ -1606,6 +1606,8 @@ struct EngineDocument::SearchText
     bool done = false;
     QString query, pattern, origin;
     SearchScope scope = SearchScope::Book;
+    SearchBounds bounds;
+    QVector<ChapterLink> scopeChapters;
     ldomXPointerEx lower, upper;
 };
 
@@ -1666,51 +1668,94 @@ bool EngineDocument::prepareSearch()
     return cache.done;
 }
 
-bool EngineDocument::ensureSearchScope(SearchScope scope, const QString &origin)
+EngineDocument::SearchBounds EngineDocument::searchBounds(SearchScope scope, const QString &origin,
+                                                          const std::function<bool()> &current)
 {
+    if (scope == SearchScope::Book)
+        return { {}, {}, true };
     ensureSearchText();
     auto &cache = *searchText_;
-    if (cache.scope == scope && cache.origin == origin && !cache.lower.isNull())
-        return true;
-    cache.scope = scope;
-    cache.origin = origin;
-    ldomXRange document(engine_->getDocument()->getRootNode(), true);
-    cache.lower = document.getStart();
-    cache.upper = document.getEnd();
-    if (scope != SearchScope::Book) {
-        ldomXPointerEx position(engine_->getDocument()->createXPointer(cre(origin)));
-        if (position.isNull()) {
-            cache.lower = ldomXPointerEx();
-            return false;
-        }
-        if (scope == SearchScope::Chapter) {
-            const auto links = chapters();
-            const auto selected = chapterAround(links, origin);
-            if (selected.current >= 0)
-                cache.lower = ldomXPointerEx(engine_->getDocument()->createXPointer(
-                        cre(links[selected.current].position)));
-            if (selected.next >= 0)
-                cache.upper = ldomXPointerEx(
-                        engine_->getDocument()->createXPointer(cre(links[selected.next].position)));
-        } else {
-            const int page = engine_->getBookmarkPage(position);
-            const auto boundary = page + 1 < pages()
-                    ? ldomXPointerEx(engine_->getPageBookmark(page + 1))
-                    : cache.upper;
-            if (scope == SearchScope::Before)
-                cache.upper = boundary;
-            else
-                cache.lower = boundary;
+    if (cache.scope == scope && cache.origin == origin && cache.bounds.valid
+        && (scope != SearchScope::Chapter
+            || cache.scopeChapters.constData() == contents_.constData()))
+        return cache.bounds;
+    // Search keeps its original page when the reader follows a result.
+    // Resolve the bounds in the layout that contains that page.
+    const int item = spineItemIndex(origin);
+    auto *document = this;
+    if (windowFirst_ >= 0 && slicePages_ > 0 && item >= 0) {
+        document = documentFor(item, current);
+        if (document && document->slices()) {
+            const int before = document->textBefore(origin);
+            if (before < document->sliceFirst_ || before >= document->sliceEnd_) {
+                if (document == this)
+                    document = openAhead(item, current);
+                if (document && !document->showSliceOf(origin))
+                    document = nullptr;
+            }
         }
     }
-    return true;
+    if (!document)
+        return {};
+    auto *view = document->engine_.get();
+    ldomXPointerEx position(view->getDocument()->createXPointer(cre(origin)));
+    if (position.isNull())
+        return {};
+    SearchBounds bounds{ {}, {}, true };
+    if (scope == SearchScope::Chapter) {
+        cache.scopeChapters = contents_;
+        if (document != this)
+            document->setChapters(contents_, graph_);
+        const auto links = document->chapters();
+        const auto selected = document->chapterAround(links, origin);
+        if (selected.current >= 0)
+            bounds.lower = links[selected.current].position;
+        if (selected.next >= 0)
+            bounds.upper = links[selected.next].position;
+    } else {
+        const int page = view->getBookmarkPage(position);
+        QString boundary;
+        if (page + 1 < document->pages())
+            boundary = document->pageStart(page + 1);
+        else if (document->windowLast_ >= 0 && document->windowLast_ + 1 < spineItemCount_)
+            boundary = QString("/body[1]/DocFragment[%1].0").arg(document->windowLast_ + 2);
+        else if (scope == SearchScope::After)
+            return {};
+        if (scope == SearchScope::Before)
+            bounds.upper = boundary;
+        else
+            bounds.lower = boundary;
+    }
+    cache.scope = scope;
+    cache.origin = origin;
+    cache.bounds = bounds;
+    return bounds;
 }
 
-QVector<SearchHit> EngineDocument::searchDetailsLoaded(QVector<SearchHit> hits, SearchScope scope,
-                                                       const QString &origin)
+bool EngineDocument::setSearchBounds(const SearchBounds &bounds)
 {
-    if (!engine_ || !ensureSearchScope(scope, origin))
-        return {};
+    if (!bounds.valid)
+        return false;
+    ensureSearchText();
+    auto *doc = engine_->getDocument();
+    ldomXRange all(doc->getRootNode(), true);
+    auto &cache = *searchText_;
+    const auto resolve = [&](const QString &anchor, bool lower) -> ldomXPointerEx {
+        if (!anchor.isEmpty()) {
+            const int item = spineItemIndex(anchor);
+            if (windowFirst_ < 0 || item < 0 || (item >= windowFirst_ && item <= windowLast_))
+                return ldomXPointerEx(doc->createXPointer(cre(anchor)));
+            lower = item < windowFirst_;
+        }
+        return lower ? all.getStart() : all.getEnd();
+    };
+    cache.lower = resolve(bounds.lower, true);
+    cache.upper = resolve(bounds.upper, false);
+    return !cache.lower.isNull() && !cache.upper.isNull() && cache.lower.compare(cache.upper) < 0;
+}
+
+QVector<SearchHit> EngineDocument::searchDetailsLoaded(QVector<SearchHit> hits, SearchScope scope)
+{
     const auto &cache = *searchText_;
     auto *doc = engine_->getDocument();
     for (auto &hit : hits) {
@@ -1746,7 +1791,7 @@ QVector<SearchHit> EngineDocument::searchDetailsLoaded(QVector<SearchHit> hits, 
 }
 
 SearchBatch EngineDocument::searchLoaded(const QString &query, SearchCursor cursor, int maximum,
-                                         SearchScope scope, const QString &origin, bool details,
+                                         SearchScope scope, bool details,
                                          const std::function<bool()> &current)
 {
     SearchBatch result;
@@ -1762,10 +1807,6 @@ SearchBatch EngineDocument::searchLoaded(const QString &query, SearchCursor curs
     if (cache.query != query) {
         cache.query = query;
         cache.pattern = qstring(ldomFoldSearchPattern(cre(query), searchFlags));
-    }
-    if (!ensureSearchScope(scope, origin)) {
-        result.done = true;
-        return result;
     }
 
     if (cache.pattern.isEmpty()) {
@@ -1815,7 +1856,7 @@ SearchBatch EngineDocument::searchLoaded(const QString &query, SearchCursor curs
             continue;
         SearchHit hit{ qstring(start.toString()), qstring(end.toString()), {}, {}, {}, -1 };
         if (details)
-            hit = searchDetailsLoaded({ hit }, scope, origin).first();
+            hit = searchDetailsLoaded({ hit }, scope).first();
         result.hits.append(std::move(hit));
     }
     result.cursor = cursor;
@@ -1910,16 +1951,32 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
                                        SearchScope scope, const QString &origin, bool details,
                                        std::function<bool()> current)
 {
-    if (windowFirst_ < 0 || slicePages_ <= 0 || scope != SearchScope::Book || !engine_)
-        return searchLoaded(query, cursor, maximum, scope, origin, details, current);
     SearchBatch result;
     result.cursor = cursor;
+    if (!engine_ || query.isEmpty() || query.size() > 256 || maximum <= 0) {
+        result.done = true;
+        return result;
+    }
     if (current && !current())
         return result;
+    const auto bounds = searchBounds(scope, origin, current);
+    if (!bounds.valid) {
+        result.done = !current || current();
+        return result;
+    }
+    if (windowFirst_ < 0 || slicePages_ <= 0) {
+        if (setSearchBounds(bounds))
+            return searchLoaded(query, cursor, maximum, scope, details, current);
+        result.done = true;
+        return result;
+    }
+    const int firstItem = spineItemIndex(bounds.lower);
+    const int lastItem = spineItemIndex(bounds.upper);
+    cursor.item = qMax(cursor.item, firstItem);
     QElapsedTimer budget;
     budget.start();
-    while (cursor.item < spineItemCount_ && result.hits.size() < maximum
-           && (result.hits.isEmpty() || budget.elapsed() < 8)) {
+    while (cursor.item < spineItemCount_ && (lastItem < 0 || cursor.item <= lastItem)
+           && result.hits.size() < maximum && (result.hits.isEmpty() || budget.elapsed() < 8)) {
         if (current && !current())
             break;
         const bool loaded = cursor.item >= windowFirst_ && cursor.item <= windowLast_;
@@ -1973,8 +2030,12 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
         if (document != this && cursor.item < windowFirst_)
             last = qMin(last, windowFirst_ - 1);
         SearchCursor local{ cursor.block, cursor.offset, 0 };
-        auto batch = document->searchLoaded(query, local, maximum - result.hits.size(), scope,
-                                            origin, details, current);
+        SearchBatch batch;
+        if (document->setSearchBounds(bounds))
+            batch = document->searchLoaded(query, local, maximum - result.hits.size(), scope,
+                                           details, current);
+        else
+            batch.done = true;
         for (auto &hit : batch.hits) {
             const int item = positionItem(hit.start);
             if (item < cursor.item || item > last)
@@ -2010,7 +2071,7 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
         }
     }
     result.cursor = cursor;
-    result.done = cursor.item >= spineItemCount_;
+    result.done = cursor.item >= spineItemCount_ || (lastItem >= 0 && cursor.item > lastItem);
     result.nextPage = result.done ? pages() : 0;
     return result;
 }
@@ -2018,8 +2079,14 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
 QVector<SearchHit> EngineDocument::searchDetails(QVector<SearchHit> hits, SearchScope scope,
                                                  const QString &origin)
 {
-    if (windowFirst_ < 0 || slicePages_ <= 0 || scope != SearchScope::Book || !engine_)
-        return searchDetailsLoaded(std::move(hits), scope, origin);
+    if (!engine_ || hits.isEmpty())
+        return {};
+    const auto bounds = searchBounds(scope, origin);
+    if (!bounds.valid)
+        return {};
+    if (windowFirst_ < 0 || slicePages_ <= 0)
+        return setSearchBounds(bounds) ? searchDetailsLoaded(std::move(hits), scope)
+                                       : QVector<SearchHit>();
     QVector<SearchHit> result;
     for (const auto &hit : hits) {
         const int item = positionItem(hit.start);
@@ -2036,8 +2103,9 @@ QVector<SearchHit> EngineDocument::searchDetails(QVector<SearchHit> hits, Search
                     document = nullptr;
             }
         }
-        auto found = document ? document->searchDetailsLoaded({ hit }, scope, origin)
-                              : QVector<SearchHit>();
+        auto found = document && document->setSearchBounds(bounds)
+                ? document->searchDetailsLoaded({ hit }, scope)
+                : QVector<SearchHit>();
         for (auto &one : found)
             document->labelChapterHit(one);
         result += found;

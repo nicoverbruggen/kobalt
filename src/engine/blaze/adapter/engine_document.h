@@ -350,10 +350,9 @@ private:
     std::shared_ptr<SearchText> searchText_;
     // The search in the text that this document has.
     SearchBatch searchLoaded(const QString &query, SearchCursor cursor, int maximum,
-                             SearchScope scope, const QString &origin, bool details,
+                             SearchScope scope, bool details,
                              const std::function<bool()> &current = {});
-    QVector<SearchHit> searchDetailsLoaded(QVector<SearchHit> hits, SearchScope scope,
-                                           const QString &origin);
+    QVector<SearchHit> searchDetailsLoaded(QVector<SearchHit> hits, SearchScope scope);
     // In chapter mode: the document that has the text of spine item `item`,
     // this one, the one opened ahead, or a new one opened ahead. Null when
     // it cannot open.
@@ -367,7 +366,16 @@ private:
     // when this document does not have the text of `position`.
     int estimatedBookPage(const QString &position) const;
     void ensureSearchText();
-    bool ensureSearchScope(SearchScope scope, const QString &origin);
+
+    struct SearchBounds
+    {
+        QString lower, upper;
+        bool valid = false;
+    };
+
+    SearchBounds searchBounds(SearchScope scope, const QString &origin,
+                              const std::function<bool()> &current = {});
+    bool setSearchBounds(const SearchBounds &bounds);
     struct SourceIndex;
     friend struct ReaderSourceIndexProbe;
     friend struct ReaderFootnoteProbe;

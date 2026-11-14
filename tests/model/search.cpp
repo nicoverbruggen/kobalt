@@ -6,9 +6,76 @@
 #include <cstdio>
 #include "check.h"
 
+// Compare all source ranges and the deferred excerpts with the fully laid-out book.
+static void chapterScopes()
+{
+    using namespace kobalt;
+    QFile book(QStringLiteral(KOBALT_TEST_FIXTURES) + "/trevelyans-type-tester.kepub.epub");
+    require(book.open(QIODevice::ReadOnly), "Cannot read the Type Tester");
+    const auto bytes = book.readAll();
+    EngineDocument whole(test::readerFonts()), chapter(test::readerFonts());
+    QString error;
+    const QSize viewport{ 600, 800 };
+    require(whole.open(bytes, viewport, {}, &error) && chapter.open(bytes, viewport, {}, &error),
+            qPrintable(error));
+    chapter.setChapterSlices(2);
+    require(chapter.showSpineItems(0, 0), "Cannot open in chapter mode");
+    QString origin = whole.pageStart(whole.pages() / 2);
+    require(chapter.goTo(origin), "Cannot reach the middle of the book");
+    const auto scan = [&](EngineDocument &reader, SearchScope scope) {
+        QVector<SearchHit> hits;
+        SearchBatch batch;
+        for (int pass = 0; !batch.done; ++pass) {
+            require(pass < 10000, "Scoped query failed to finish");
+            batch = reader.searchText("the", batch.cursor, 11, scope, origin, false);
+            hits += batch.hits;
+        }
+        return reader.searchDetails(hits, scope, origin);
+    };
+    const auto compare = [&](SearchScope scope) {
+        const auto shown = chapter.position();
+        const auto expected = scan(whole, scope);
+        const auto actual = scan(chapter, scope);
+        const auto reason = QString("Scope %1 returned %2 matches, expected %3")
+                                    .arg(int(scope))
+                                    .arg(actual.size())
+                                    .arg(expected.size());
+        require(actual.size() == expected.size(), qPrintable(reason));
+        for (int i = 0; i < expected.size(); ++i) {
+            const auto &a = actual[i], &e = expected[i];
+            require(a.start == e.start && a.end == e.end, "Scoped match anchors changed");
+            require(a.before == e.before && a.text == e.text && a.after == e.after,
+                    "Scoped excerpt differs from Accurate");
+        }
+        require(chapter.position() == shown, "Scoped search moved the reading position");
+        return actual.size();
+    };
+    for (const auto scope : { SearchScope::Chapter, SearchScope::Before, SearchScope::After }) {
+        require(compare(scope) > 0, "Scope fixture must contain matches");
+    }
+    // Returning from a search result keeps the page where Search was opened.
+    require(chapter.goTo(whole.pageStart(whole.pages() - 2)), "Cannot follow a distant result");
+    compare(SearchScope::Chapter);
+    compare(SearchScope::Before);
+    compare(SearchScope::After);
+    const int middle = whole.pages() / 2;
+    const QVector<ChapterLink> sections{ { "Start", whole.pageStart(middle - 3), -1, 0 },
+                                         { "End", whole.pageStart(middle + 2), -1, 0 } };
+    const auto oldCount = compare(SearchScope::Chapter);
+    whole.setChapters(sections, {});
+    chapter.setChapters(sections, {});
+    const auto firstCustom = scan(whole, SearchScope::Chapter);
+    require(!firstCustom.isEmpty() && firstCustom.size() < oldCount,
+            "Search retained the old chapter limits");
+    require(compare(SearchScope::Chapter) > 0, "Search lost a chapter with internal boundaries");
+    origin = whole.pageStart(whole.pages() - 1);
+    require(compare(SearchScope::After) == 0, "Search after the last page must be empty");
+}
+
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    chapterScopes();
     require(argc == 2, "Pass the synthetic dictionary EPUB");
     QFile file(QString::fromLocal8Bit(argv[1]));
     require(file.open(QIODevice::ReadOnly), "Missing fixture");

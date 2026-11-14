@@ -1928,6 +1928,10 @@ int run(int argc, char **argv)
             opened.exec();
             require(!live.first.rectangles.isEmpty() && !live.last.end.isEmpty(),
                     "Expected selectable text on the displayed page");
+            bool comparisonStale = false;
+            metadata.compareNativePosition(live.last.end, [&](PositionComparison comparison) {
+                comparisonStale = comparison.status == PositionComparison::Status::Stale;
+            });
             int emptyReplies = 0;
             metadata.annotationPageEdges(
                     [&](AnnotationPageEdges edges) { emptyReplies += edges.first.text.isEmpty(); });
@@ -1946,6 +1950,7 @@ int run(int argc, char **argv)
                 metadata.cancelSource();
             ReaderSession::drain([&] { drained.quit(); });
             drained.exec();
+            require(comparisonStale, "An ended source compared a native reading position");
             require(emptyReplies == 3, "An ended source returned a pending text selection");
             require(!published && (metadata.chapters().isEmpty()
                                    || metadata.chapters().first().title != "Ended source"),

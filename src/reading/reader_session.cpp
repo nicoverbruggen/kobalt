@@ -1247,7 +1247,7 @@ void ReaderSession::compareNativePosition(const QString &location,
                             if (!guard)
                                 return;
                             PositionComparison result;
-                            if (guard->revision != job || guard->running)
+                            if (!guard->currentSourceFrame(job) || guard->running)
                                 result.status = PositionComparison::Status::Stale;
                             else if (!error.isEmpty())
                                 result.error = error;

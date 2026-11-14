@@ -463,6 +463,61 @@ kobalt::LinkDetails inspectNote(const NoteCase &test, bool dark)
     return details;
 }
 
+void linksOutsideCurrentLayout()
+{
+    using namespace kobalt;
+    auto files = test::linkBook();
+    files["OEBPS/first.xhtml"] =
+            "<html xmlns='http://www.w3.org/1999/xhtml'><body><p>"
+            "<a href='#later'>Later</a> <a href='second.xhtml#destination'>Next</a> "
+            "<a href='#hidden'>Hidden</a> <a href='second.xhtml#missing'>Missing</a></p>"
+            + QByteArray("<p>A paragraph of the chapter for the reader to turn through.</p>")
+                      .repeated(100)
+            + "<p id='later'>The last passage.</p><div style='display:none'><p id='hidden'>Hidden passage.</p></div></body></html>";
+    QTemporaryDir directory;
+    require(directory.isValid() && test::writeBook(directory.path(), "links.epub", files),
+            "Cannot create the chapter link fixture");
+    QFile file(directory.filePath("links.epub"));
+    require(file.open(QIODevice::ReadOnly), "Cannot read the chapter link fixture");
+    const auto bytes = file.readAll();
+    QMap<QString, QString> destinations;
+    QMap<QString, QImage> pages;
+    for (int slicePages : { -1, 1, 0 }) {
+        EngineDocument model(test::readerFonts());
+        QString error;
+        require(model.open(bytes, { 600, 800 }, { { "font_pixels", 28 } }, &error),
+                qPrintable(error));
+        if (slicePages >= 0) {
+            model.setChapterSlices(slicePages);
+            require(model.showSpineItems(0, 0) && model.go(0), "Cannot open the chapter window");
+        }
+        const auto origin = model.position();
+        const auto links = model.pageLinks();
+        require(links.size() == 4, "The link fixture lost a reference");
+        for (const auto &link : links) {
+            const auto details = model.linkDetails(link.source);
+            require(model.position() == origin, "Inspecting a link moved the page");
+            if (details.label == "Hidden" || details.label == "Missing") {
+                require(details.kind == LinkKind::Unavailable && details.target.isEmpty(),
+                        "A missing or hidden passage became navigable");
+            } else {
+                require(link.kind == LinkKind::Passage && details.kind == LinkKind::Passage
+                                && model.goTo(details.target),
+                        qPrintable("Cannot follow the link to " + details.label));
+                if (slicePages < 0) {
+                    destinations[details.label] = details.target;
+                    pages[details.label] = model.image(model.page());
+                } else {
+                    require(destinations.value(details.label) == details.target
+                                    && model.image(model.page()) == pages.value(details.label),
+                            "A chapter link landed on a different page than Accurate");
+                }
+                require(model.goTo(origin), "Cannot return to the passage containing the link");
+            }
+        }
+    }
+}
+
 void noteMatching()
 {
     using kobalt::LinkKind;
@@ -656,6 +711,7 @@ int main(int argc, char **argv)
     inpageStyling();
     inpageFootnotes();
     noteMatching();
+    linksOutsideCurrentLayout();
     const auto origin = model.position();
     for (const bool dark : { false, true }) {
         model.setDarkMode(dark);

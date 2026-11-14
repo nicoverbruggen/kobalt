@@ -710,7 +710,8 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
     auto match = noteReference(node);
     // In chapter mode the target can be in a spine item that is not loaded.
     // The engine names a link into spine item n "#_doc_fragment_n_ id".
-    bool elsewhere = false;
+    EngineDocument *targetDocument = this;
+    std::unique_ptr<EngineDocument> sideWindow;
     if (!target && windowFirst_ >= 0) {
         static const QRegularExpression fragment(QStringLiteral("^#_doc_fragment_(\\d+)_ "));
         const auto found = fragment.match(text(href));
@@ -729,12 +730,16 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
             result.error.clear();
             return result;
         }
-        auto *side = openAhead(item);
-        if (!side || !side->engine_)
+        if (slicePages_ > 0) {
+            targetDocument = openAhead(item);
+        } else {
+            sideWindow = openSide(windowSettings(item, item), {}, nullptr);
+            targetDocument = sideWindow.get();
+        }
+        if (!targetDocument || !targetDocument->engine_)
             return result;
-        auto *other = side->engine_->getDocument();
+        auto *other = targetDocument->engine_->getDocument();
         target = other->getNodeById(other->getAttrValueIndex(href.substr(1).c_str()));
-        elsewhere = true;
     }
     if (!target)
         return result;
@@ -765,10 +770,22 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
         }
     }
     ldomXPointer destination(target, 0);
-    // A spine item that was opened for the link has a layout of its first
-    // slice only, so the target can be past it.
-    if (elsewhere || destination.toPoint().y >= 0) {
-        result.target = text(destination.toString());
+    // The destination may be in another slice of this document or of a chapter
+    // opened for the link. Such a block has no coordinates until the jump.
+    const auto position = text(destination.toString());
+    bool navigable = destination.toPoint().y >= 0;
+    if (!navigable && targetDocument->slices()) {
+        const int offset = targetDocument->textBefore(position);
+        navigable = offset >= 0
+                && (offset < targetDocument->sliceFirst_ || offset >= targetDocument->sliceEnd_);
+        for (auto *parent = target; navigable && parent; parent = parent->getParentNode()) {
+            const auto style = parent->getStyle();
+            if (!style.isNull() && style->display == css_d_none)
+                navigable = false;
+        }
+    }
+    if (navigable) {
+        result.target = position;
         if (preview)
             result.chapter = chapterTitle(result.target);
     }

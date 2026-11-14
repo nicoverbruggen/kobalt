@@ -3,6 +3,7 @@
 #include "engine/blaze/adapter/engine_document.h"
 #include "engine/blaze/adapter/document_cache.h"
 #include "support/qt_compat.h"
+#include "storage/reader_storage.h"
 #include <lvtinydom.h>
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -158,7 +159,15 @@ int main(int argc, char **argv)
         // fingerprint or policy must parse again.
         QTemporaryDir cacheRoot;
         require(cacheRoot.isValid(), "Cannot create a document cache directory");
-        const auto cacheDirectory = cacheRoot.path() + "/.cache";
+        const auto cacheDirectory = kobalt::storage::Paths{ cacheRoot.path() }.documentCache();
+        const auto beta8Directory = cacheRoot.path() + "/.cache";
+        require(QDir().mkpath(beta8Directory), "Cannot create beta 8 cache directory");
+        QFile beta8Entry(beta8Directory + "/book.cr3");
+        const QByteArray beta8Bytes("beta8-cache-sentinel");
+        require(beta8Entry.open(QIODevice::WriteOnly)
+                        && beta8Entry.write(beta8Bytes) == beta8Bytes.size(),
+                "Cannot seed beta 8 cache");
+        beta8Entry.close();
         const QByteArray fingerprint(64, 'a'), policy("document-cache-test");
         require(kobalt::documentCacheChecksum(policy, 1)
                         == kobalt::documentCacheChecksum(policy, 1, 12),
@@ -294,6 +303,8 @@ int main(int argc, char **argv)
         opened(otherBook, QByteArray(64, 'b'), policy, settings);
         require(otherPolicy.openedFromCache() && otherBook.openedFromCache(),
                 "Cache cleanup lost the replacement, another book or their index entries");
+        require(beta8Entry.open(QIODevice::ReadOnly) && beta8Entry.readAll() == beta8Bytes,
+                "Blaze cache loading, saving or eviction changed beta 8 cache");
     }
     QTemporaryDir compatibilityRoot;
     require(compatibilityRoot.isValid(), "Cannot create the cache compatibility fixture");

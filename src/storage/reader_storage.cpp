@@ -83,7 +83,7 @@ QString Paths::previews() const
 
 QString Paths::documentCache() const
 {
-    return child(directory, ".cache");
+    return child(directory, ".cache-blaze");
 }
 
 QString Paths::bookState(const QString &identity) const

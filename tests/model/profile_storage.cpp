@@ -155,6 +155,13 @@ int main(int argc, char **argv)
         storage::closeProfile();
     }
     const storage::Paths paths{ root.path() };
+    require(paths.documentCache() == root.path() + "/.cache-blaze"
+                    && storage::Paths{}.documentCache().isEmpty(),
+            "Blaze cache has its own profile namespace");
+    const auto beta8Cache = root.path() + "/.cache";
+    require(QDir().mkpath(beta8Cache), "Beta 8 cache directory");
+    const auto beta8Entry = beta8Cache + "/book.cr3";
+    write(beta8Entry, "beta8-cache-sentinel");
     const QString identity = "file:///books/invented.epub";
     QJsonObject state;
     state["schema"] = 1;
@@ -175,6 +182,11 @@ int main(int argc, char **argv)
     preview.fill(Qt::white);
     require(preview.save(legacyPreview, "PNG"), "Legacy preview fixture");
     require(storage::prepareProfile(paths), "Import complete profile");
+    require(QDir().mkpath(paths.documentCache()), "Blaze cache directory");
+    write(paths.documentCache() + "/book.cr3", "blaze-cache-sentinel");
+    require(QDir(paths.documentCache()).removeRecursively()
+                    && bytes(beta8Entry) == "beta8-cache-sentinel",
+            "Profile preparation and Blaze cache clearing preserve beta 8 cache");
     require(!QFile::exists(legacyPreview), "Profile preparation left a legacy preview");
     require(storage::readBookState(paths, identity).object == state, "Imported state changed");
     const auto backup =

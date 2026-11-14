@@ -122,6 +122,8 @@ private:
     unsigned generation = 0;
     bool busy = false;
     bool profilePrepared = false;
+    // The interface fonts are registered; the Home sleep screen reuses them.
+    bool interfaceFontsLoaded = false;
     // Shown by the next reader: a saved-data reset, or a benchmark result that
     // no reader was open to show.
     kobalt::ReaderNotice pendingNotice;

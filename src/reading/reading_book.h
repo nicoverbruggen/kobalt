@@ -134,6 +134,13 @@ public:
     // Memory only. The caller queues the existing book checkpoint.
     void setHideBookOnSleepScreen(bool hide) { hideBookOnSleepScreen_ = hide; }
 
+    // This book's own sleep-screen positions, a `sleep_positions` object.
+    // They override the global ones, like the privacy choice survive Mark as
+    // unread, and are saved with the next checkpoint.
+    QJsonObject sleepPositions() const { return sleepPositions_; }
+
+    void setSleepPositions(const QJsonObject &positions) { sleepPositions_ = positions; }
+
     void suppressFinishPrompt() { finishPromptSuppressed = true; }
 
     void pollProgress();
@@ -196,6 +203,7 @@ private:
     bool canFinish() const;
     bool finishPromptSuppressed = false;
     bool hideBookOnSleepScreen_ = false;
+    QJsonObject sleepPositions_;
     struct ActivitySave;
     void writeActivity(std::shared_ptr<ActivitySave>, int attempt);
     void resumeDeferredCheckpoints();

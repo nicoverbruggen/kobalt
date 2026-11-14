@@ -435,8 +435,9 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     resize(QGuiApplication::primaryScreen()->size());
     prepareSleepCover();
     loadTodayReading();
-    if (sleep::mode(preferences) == sleep::Mode::Overlay)
+    if (sleep::uses(preferences, sleep::Mode::Overlay))
         prepareSleepOverlay();
+    prepareSleepWallpapers();
     const auto battery = services.battery();
     lowBattery = !battery.charging && !battery.fullyCharged && battery.percent >= 0
             && battery.percent <= 5;

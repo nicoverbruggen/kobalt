@@ -44,13 +44,24 @@ public:
     void setEnabled(sleep::Design design, bool enabled);
     // New text, such as a changed greeting, redraws every preview.
     void setSample(const sleep::Snapshot &sample);
+    // The Custom screen, its wallpapers and the status places the previews use.
+    void setCustom(const sleep::Custom &custom);
+    void setWallpapers(const QImage &sleeping, const QImage &poweredOff);
+    void setPlaces(const QHash<int, sleep::Place> &places);
+    // Marks a design as chosen, such as Custom after its editor saves.
+    void setCurrent(sleep::Design design);
+    // What a design draws while sleeping, or when powered off.
+    sleep::Look look(sleep::Design design, bool poweredOff = false) const;
+    // Whether holding the design opens options: Night's greeting, the Custom
+    // editor, or the arrange page of a design whose status can move.
+    bool customizable(sleep::Design design) const;
 
     std::function<void(sleep::Design)> chosen;
     // A tap on an unavailable entry, so the reader can say why.
     std::function<void(sleep::Design)> unavailable;
     std::function<void()> closed;
     std::function<bool(bool)> followOrientationChanged;
-    // A long press on an entry with options. Only Night has one: its greeting.
+    // A long press on an entry with options; see customizable().
     std::function<void(sleep::Design)> customize;
 
     static QString label(sleep::Design design);
@@ -68,7 +79,9 @@ private:
     sleep::Design current_;
     sleep::Snapshot sample_;
     sleep::NativePreview native_;
-    QImage cover_, pageImage_, overlay_;
+    QImage cover_, pageImage_, overlay_, wallpaper_, offWallpaper_;
+    sleep::Custom custom_;
+    QHash<int, sleep::Place> places_;
     QSize screen_, readingScreen_;
     ui::CheckCellButton *followOrientation_;
     ui::ButtonFeedback *orientationNotice_;

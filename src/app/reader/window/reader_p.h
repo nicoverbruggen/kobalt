@@ -75,6 +75,7 @@ class QVBoxLayout;
 
 namespace kobalt::reader {
 class SleepGallery;
+class SleepEditor;
 // Global preference for the Wi-Fi power saver. Missing means on.
 inline constexpr const char *wifiPowerSaverKey = "turn_off_wifi_on_open";
 inline constexpr const char *disableReaderStandbyKey = "disable_reader_standby";
@@ -429,6 +430,11 @@ private:
     bool lifecycleHidden = false;
     QImage sleepImage, sleepCover, sleepOverlay;
     bool sleepOverlayLoading = false;
+    // The wallpapers of a Custom screen while sleeping and when powered off,
+    // and the files the wallpaper folders hold, loaded off the GUI thread.
+    QImage sleepWallpaper, sleepOffWallpaper;
+    QStringList sleepWallpaperNames;
+    quint64 sleepWallpaperRequest = 0;
     sleep::Tile activeSleepTile = sleep::Tile::Bookmark;
     // The design and text of the current sleep screen, without its image, and
     // what lies under its status so a battery change can repaint only that.
@@ -716,9 +722,23 @@ private:
     void applyBoldReading(bool enabled);
     void prepareSleepCover();
     void prepareSleepOverlay();
+    void prepareSleepWallpapers();
     void updateSleepOverlayOption();
-    sleep::Snapshot captureSleepScreen();
-    sleep::Snapshot privateSleepSnapshot();
+    void updateSleepWallpaperOption();
+    // The Custom editor, or the arrange page of a design whose status moves.
+    void openSleepEditor(sleep::Design design);
+    void closeSleepEditor();
+    void showSleepWallpaperHelp();
+    // Each status design's place for the open book.
+    QHash<int, sleep::Place> sleepPlaces() const;
+    // `poweredOff` selects the power-off look of a Custom screen.
+    sleep::Snapshot captureSleepScreen(bool poweredOff = false);
+    // The clean backdrop of `look` at `size` in `shot`: its image, whether the
+    // page is dimmed and where the cover sits. Leaves the image null when the
+    // backdrop has nothing to show, such as a coverless book without a page.
+    void sleepBackdrop(const sleep::Look &look, QSize size, sleep::Snapshot &shot,
+                       bool poweredOff = false);
+    sleep::Snapshot privateSleepSnapshot(bool poweredOff = false);
     sleep::Details sleepDetails();
     void loadTodayReading();
     void updateSleepBattery();
@@ -902,6 +922,7 @@ private:
     kobalt::ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> sleepPopup;
     QPointer<kobalt::reader::SleepGallery> sleepGallery;
+    QPointer<kobalt::reader::SleepEditor> sleepEditor;
     QPointer<kobalt::ui::ChoiceModal> greetingEditor;
     std::unique_ptr<kobalt::KeyboardController> greetingKeyboard;
     kobalt::reader::TextPresetSection *textPresetSection = nullptr;

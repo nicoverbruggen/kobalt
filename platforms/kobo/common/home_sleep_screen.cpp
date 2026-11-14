@@ -7,7 +7,10 @@
 #include "support/diagnostics.h"
 #include "support/strings.h"
 #include <QFile>
+#include <QImageReader>
+#include <QSqlQuery>
 #include <QApplication>
+#include <QWidget>
 #include <QEvent>
 #include <QScreen>
 #include <QJsonArray>
@@ -39,6 +42,100 @@ QString databasePath()
     if (!native.isValid() || !native.isOpen())
         return {};
     return native.databaseName();
+}
+
+// Nickel's cache of full-screen covers, found by the book's image id. Nickel
+// names the two folders after Qt 4's string hash of the id.
+QString nativeCoverPath(const QString &imageId)
+{
+    if (imageId.isEmpty())
+        return {};
+    uint hash = 0;
+    for (const char byte : imageId.toUtf8()) {
+        hash = (hash << 4) + static_cast<unsigned char>(byte);
+        hash ^= (hash & 0xf0000000) >> 23;
+        hash &= 0x0fffffff;
+    }
+    return QStringLiteral("/mnt/onboard/.kobo-images/%1/%2/%3 - N3_FULL.parsed")
+            .arg(hash & 0xff)
+            .arg((hash & 0xff00) >> 8)
+            .arg(imageId);
+}
+
+struct NativeBook
+{
+    QString title, author, imageId;
+    // Nickel's percentage, as My Books shows it; -1 when unknown.
+    int percent = -1;
+};
+
+// The title, author and cover id Nickel keeps for a book, read-only.
+NativeBook readNativeBook(const QString &path, const QString &identity)
+{
+    NativeBook book;
+    if (path.isEmpty() || identity.isEmpty())
+        return book;
+    static std::atomic<unsigned> serial{ 0 };
+    const auto connectionName = QStringLiteral("kobalt-home-book-%1").arg(++serial);
+    {
+        auto database = QSqlDatabase::addDatabase("QSQLITE", connectionName);
+        database.setDatabaseName(path);
+        database.setConnectOptions("QSQLITE_OPEN_READONLY;QSQLITE_BUSY_TIMEOUT=100");
+        if (database.open()) {
+            QSqlQuery query(database);
+            query.prepare("SELECT Title, Attribution, ImageId, ___PercentRead FROM content "
+                          "WHERE ContentID = ? AND ContentType = 6 LIMIT 1");
+            query.addBindValue(identity);
+            if (query.exec() && query.next()) {
+                book.title = query.value(0).toString();
+                book.author = query.value(1).toString();
+                book.imageId = query.value(2).toString();
+                bool valid = false;
+                const int percent = query.value(3).toInt(&valid);
+                if (valid && !query.value(3).isNull())
+                    book.percent = qBound(0, percent, 100);
+            }
+        }
+        database.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+    return book;
+}
+
+// Whether Nickel's own reader is showing a book. Its sleep screen stays Nickel's.
+bool nativeReading()
+{
+    for (auto *widget : QApplication::topLevelWidgets())
+        if (widget->isVisible() && widget->inherits("MainWindowView"))
+            for (auto *child : widget->findChildren<QWidget *>())
+                if (child->isVisible() && child->inherits("ReadingView"))
+                    return true;
+    return false;
+}
+
+// What Nickel shows right now, such as Home or My Books. Reading page uses it
+// outside the reader, the way it uses the book's page inside it.
+QImage nativeScreen()
+{
+    for (auto *widget : QApplication::topLevelWidgets())
+        if (widget->isVisible() && widget->inherits("MainWindowView"))
+            return widget->grab().toImage().convertToFormat(QImage::Format_RGB32);
+    return {};
+}
+
+// Decodes no larger than the screen needs.
+QImage readCover(const QString &path, QSize screen)
+{
+    QFile file(path);
+    if (path.isEmpty() || !file.open(QIODevice::ReadOnly) || file.size() > 20 * 1024 * 1024)
+        return {};
+    QImageReader reader(&file);
+    const QSize size = reader.size();
+    if (size.isEmpty() || size.width() > 8192 || size.height() > 8192)
+        return {};
+    if (size.width() > screen.width() || size.height() > screen.height())
+        reader.setScaledSize(size.scaled(screen, Qt::KeepAspectRatio));
+    return reader.read();
 }
 
 QString readToken(const QString &path, const QString &book = {}, QJsonObject *measurement = nullptr)
@@ -219,14 +316,125 @@ bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &opening
         source.percent = completed ? 100 : qBound(0, bookState.value("percent").toInt(), 100);
         source.progress = strings::get("sleep.percent_read").arg(source.percent);
     }
-    snapshot =
-            sleep::privateSnapshot(screen ? screen->size() : QSize(800, 1200), preferences, source);
+    source.place = sleep::place(preferences, bookState.value("sleep_positions").toObject(),
+                                sleep::look(preferences, powerOff));
+    snapshot = sleep::privateSnapshot(screen ? screen->size() : QSize(800, 1200), preferences,
+                                      source, false, powerOff);
     if (source.privateBook && source.design == sleep::Design::Overlay
         && sleep::design(preferences) == sleep::Design::Overlay && !source.image.isNull())
         snapshot.image = source.image;
+    // The neutral screen draws its status with Kobalt's fonts too.
+    if (prepareFonts)
+        prepareFonts();
     poweredOff = powerOff;
     compose();
     return true;
+}
+
+bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIdentity)
+{
+    if (preparePrivateScreen(powerOff, openingIdentity))
+        return true;
+    clear();
+    if (!presentation->supportsSleepScreen())
+        return false;
+    const auto database = databasePath();
+    auto identity = openingIdentity;
+    if (identity.isEmpty()) {
+        const auto fields = QJsonDocument::fromJson(readToken(database).toUtf8()).array();
+        identity = fields.isEmpty() ? QString() : fields.at(0).toString();
+    }
+    if (identity.isEmpty() || nativeReading())
+        return false;
+    // Kobalt keeps state only for the books it opened.
+    const auto state = storage::readBookState(paths, identity, paths.bookState(identity));
+    if (state.status != storage::ReadStatus::Ok
+        || state.object.value("book").toString() != identity)
+        return false;
+    const auto preferences = storage::readPreferences(paths.preferences());
+    if (preferences.status != storage::ReadStatus::Ok)
+        return false;
+    auto look = sleep::look(preferences.object, powerOff);
+    if (look.mode == sleep::Mode::Stock)
+        return false;
+    // Outside the reader, Nickel's own screen is the page. Without it, the
+    // cover stands in.
+    QImage page;
+    if (look.mode == sleep::Mode::Page || look.mode == sleep::Mode::Overlay) {
+        page = nativeScreen();
+        if (page.isNull())
+            look.mode = sleep::Mode::Cover;
+    }
+    const auto *screen = QGuiApplication::primaryScreen();
+    QSize size = screen ? screen->size() : QSize(800, 1200);
+    size = QSize(qMin(size.width(), size.height()), qMax(size.width(), size.height()));
+    const auto book = readNativeBook(database, identity);
+    sleep::Snapshot shot;
+    shot.orientation = Qt::PortraitOrientation;
+    shot.dark = preferences.object.value("dark_mode").toBool(false);
+    shot.design = look.design;
+    shot.tile = look.tile;
+    shot.place = sleep::place(preferences.object, state.object.value("sleep_positions").toObject(),
+                              look);
+    shot.dimPage = false;
+    const auto finished = state.object.value("finished_position").toString();
+    const bool completed =
+            !finished.isEmpty() && finished == state.object.value("position").toString();
+    // Nickel's percentage matches My Books, also after reading in Nickel.
+    if (completed || book.percent >= 0 || state.object.value("percent").isDouble()) {
+        shot.percent = completed    ? 100
+                : book.percent >= 0 ? book.percent
+                                    : qBound(0, state.object.value("percent").toInt(), 100);
+        shot.progress = strings::get("sleep.percent_read").arg(shot.percent);
+    }
+    shot.details.title = book.title;
+    shot.details.author = book.author;
+    shot.details.font = preferences.object.value("default_font_face").toString();
+    shot.details.greeting = preferences.object.value(sleep::greetingKey).toString();
+    shot.mode = look.mode;
+    if (!page.isNull()) {
+        shot.image = std::move(page);
+        shot.dimPage = true;
+        if (look.mode == sleep::Mode::Overlay) {
+            const auto overlay =
+                    storage::loadSleepOverlay({ QStringLiteral(KOBALT_CONFIG_DIR "/screensaver"),
+                                                QStringLiteral("/mnt/onboard/.adds/screensaver") });
+            if (!overlay.isNull()) {
+                reader::dimSleepPage(shot.image, shot.dark);
+                sleep::drawOverlay(shot.image, overlay);
+                shot.dimPage = false;
+            }
+        }
+    } else if (look.mode == sleep::Mode::Cover) {
+        const auto cover = readCover(nativeCoverPath(book.imageId), size);
+        if (!cover.isNull()) {
+            shot.image = sleep::coverBackground(cover, size);
+            shot.coverArea = sleep::coverArea(cover.size(), size);
+        }
+    } else if (look.mode == sleep::Mode::Wallpaper) {
+        const auto custom = sleep::custom(preferences.object);
+        const auto &layer = powerOff && !custom.same ? custom.off : custom.sleep;
+        shot.image = reader::sleepWallpaperBackground(
+                storage::loadSleepWallpaper({ QStringLiteral(KOBALT_CONFIG_DIR "/wallpapers") },
+                                            layer.wallpaper, size),
+                size);
+    }
+    // A missing cover or wallpaper leaves the status on blank paper.
+    if (shot.image.isNull()) {
+        shot.mode = sleep::Mode::Plain;
+        shot.image = QImage(size, QImage::Format_RGB32);
+        shot.image.fill(shot.dark ? Qt::black : Qt::white);
+    }
+    if (prepareFonts)
+        prepareFonts();
+    snapshot = std::move(shot);
+    poweredOff = powerOff;
+    compose();
+    diagnostic("home-sleep-screen",
+               { { "design", sleep::value(snapshot.design) },
+                 { "mode", sleep::value(snapshot.mode) },
+                 { "power_off", powerOff } });
+    return !snapshot.image.isNull();
 }
 
 void HomeSleepScreen::prepare(bool enabled, bool powerOff)
@@ -239,15 +447,17 @@ void HomeSleepScreen::prepare(bool enabled, bool powerOff)
     const auto preferences = storage::readPreferences(paths.preferences());
     if (preferences.status != storage::ReadStatus::Ok)
         return;
-    const auto mode = sleep::mode(preferences.object);
+    const auto look = sleep::look(preferences.object, powerOff);
+    const auto mode = look.mode;
     const auto token = readToken(databasePath());
     if (!token.isEmpty() && token == rememberedToken && remembered.mode == mode
         && (remembered.coverPath.isEmpty() || storage::currentSleepCover(remembered)))
         snapshot = remembered;
     else
         snapshot = storage::readSleepSnapshot(paths.sleepScreen(), token, mode);
-    snapshot.tile = sleep::tile(preferences.object);
-    snapshot.design = sleep::design(preferences.object);
+    snapshot.tile = look.tile;
+    snapshot.design = look.design;
+    snapshot.place = sleep::place(preferences.object, {}, look);
     poweredOff = powerOff;
     compose();
 }

@@ -100,6 +100,89 @@ int main()
                         && sleep::tile(clean) == sleep::Tile::None,
                 "Invalid sleep design lost the legacy selection");
     }
+    {
+        // Custom: one look while sleeping and charging, another when powered off.
+        const auto defaults = sleep::custom({});
+        require(defaults.same && defaults.sleep.backdrop == sleep::Mode::Cover
+                        && defaults.sleep.status == sleep::Design::Bookmark
+                        && defaults.off == defaults.sleep,
+                "A missing Custom screen must default to the cover with the bookmark");
+        sleep::Custom custom;
+        custom.same = false;
+        custom.sleep = { sleep::Mode::Wallpaper, sleep::Design::Seal, QStringLiteral("waves.png") };
+        custom.off = { sleep::Mode::Page, sleep::Design::Cover, {} };
+        QJsonObject preferences;
+        sleep::setCustom(preferences, custom);
+        sleep::setDesign(preferences, sleep::Design::Custom);
+        preferences = appearance::cleanPreferences(preferences);
+        const auto read = sleep::custom(preferences);
+        require(sleep::design(preferences) == sleep::Design::Custom && !read.same
+                        && read.sleep == custom.sleep && read.off == custom.off,
+                "A Custom screen did not survive preference cleanup");
+        const auto sleeping = sleep::look(preferences), off = sleep::look(preferences, true);
+        require(sleeping.design == sleep::Design::Seal && sleeping.mode == sleep::Mode::Wallpaper
+                        && sleeping.tile == sleep::Tile::None,
+                "Custom sleep did not resolve to its status and backdrop");
+        require(off.design == sleep::Design::Cover && off.mode == sleep::Mode::Page
+                        && off.tile == sleep::Tile::None,
+                "Custom power off did not use its own look");
+        require(sleep::uses(preferences, sleep::Mode::Page)
+                        && sleep::uses(preferences, sleep::Mode::Wallpaper)
+                        && !sleep::uses(preferences, sleep::Mode::Cover),
+                "Custom must prepare exactly the backdrops it shows");
+        // An older Kobalt reads the cover with the bookmark.
+        require(sleep::savedMode(preferences) == sleep::Mode::Cover
+                        && sleep::savedTile(preferences) == sleep::Tile::Bookmark,
+                "Custom must leave a valid legacy screen for older releases");
+        custom.same = true;
+        sleep::setCustom(preferences, custom);
+        require(sleep::look(preferences, true).design == sleep::Design::Seal,
+                "The same screen must also show when powered off");
+        auto layer = sleep::layer(qt::object({ { "background", "photo" },
+                                               { "status", "night" },
+                                               { "wallpaper", "../escape.png" } }));
+        require(layer.backdrop == sleep::Mode::Cover && layer.status == sleep::Design::Bookmark
+                        && layer.wallpaper.isEmpty(),
+                "Invalid Custom fields must fall back one by one");
+        for (const auto &wrong : { QJsonValue("custom"), QJsonValue(3) })
+            require(!appearance::cleanPreferences(qt::object({ { sleep::customKey, wrong },
+                                                               { sleep::placesKey, wrong } }))
+                             .contains(sleep::customKey),
+                    "A Custom screen that is not an object must be removed");
+        sleep::Layer start;
+        require(sleep::asLayer(sleep::Design::Page, sleep::Tile::Card, start)
+                        && start.backdrop == sleep::Mode::Page
+                        && start.status == sleep::Design::Card
+                        && !sleep::asLayer(sleep::Design::Night, sleep::Tile::Bookmark, start),
+                "Custom must start from presets that are a backdrop with one status");
+    }
+    {
+        // Positions: the book's own place wins over the global one.
+        QJsonObject global, book;
+        sleep::setPlace(global, sleep::Design::Seal, sleep::Place::TopLeft);
+        sleep::setPlace(global, sleep::Design::Pill, sleep::Place::Bottom);
+        sleep::setPlace(global, sleep::Design::Card, sleep::Place::Left);
+        require(global.size() == 1, "Default and invalid places must not be saved");
+        const auto preferences = qt::object({ { sleep::placesKey, global } });
+        require(sleep::place(preferences, {}, sleep::Design::Seal) == sleep::Place::TopLeft
+                        && sleep::place(preferences, {}, sleep::Design::Medallion)
+                                == sleep::Place::Default,
+                "A moved status must keep its place");
+        book[sleep::value(sleep::Design::Seal)] = sleep::value(sleep::Place::BottomRight);
+        require(sleep::place(preferences, book, sleep::Design::Seal) == sleep::Place::BottomRight,
+                "The book's own place must win over the global one");
+        const sleep::Look pageBookmark{ sleep::Design::Page, sleep::Mode::Page,
+                                        sleep::Tile::Bookmark };
+        require(sleep::statusDesign(pageBookmark) == sleep::Design::Bookmark,
+                "Reading page must move its bookmark");
+        for (const auto design : sleep::designs)
+            for (const auto option : sleep::places(design))
+                require(sleep::savedPlace(
+                                qt::object({ { sleep::value(design), sleep::value(option) } }),
+                                design)
+                                == option,
+                        "A place did not survive saving");
+    }
     require(sleep::followsReading({}), "Sleep screens must follow reading orientation by default");
     for (bool follow : { false, true }) {
         const auto clean =

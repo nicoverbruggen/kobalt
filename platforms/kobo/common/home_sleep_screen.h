@@ -4,6 +4,7 @@
 #include "reading/sleep_screen.h"
 #include "platform/api/window_presentation.h"
 #include <QObject>
+#include <functional>
 #include <future>
 
 namespace kobalt::nickel {
@@ -17,6 +18,15 @@ public:
     void preparePowerOff(sleep::Snapshot);
     // Rebuild from the last book's durable privacy choice, never a cached image.
     bool preparePrivateScreen(bool powerOff = false, const QString &identity = {});
+    // Kobalt's own screen outside the reader, when Kobalt opened the last book.
+    // Draws it from current data: the book's place, Nickel's progress, title
+    // and full-size cover, and the wallpaper folder. Reading page and PNG over
+    // text dim what Nickel shows, or use the cover when that cannot be read.
+    // Nickel's own reading view keeps Nickel's screen. A private book keeps
+    // its neutral screen. Returns false to leave Nickel's screen.
+    bool prepareHomeScreen(bool powerOff = false, const QString &identity = {});
+    // Registers Kobalt's interface fonts, once it is clear Kobalt draws.
+    std::function<void()> prepareFonts;
     void persistPowerOff(const QString &identity);
     void present();
     void clear();

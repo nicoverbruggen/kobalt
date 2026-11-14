@@ -950,6 +950,38 @@
 "sleep.design_letter" = "Letter";
 "sleep.design_page" = "Reading page";
 "sleep.design_overlay" = "PNG over text";
+"sleep.design_custom" = "Custom";
+"sleep.custom_title" = "Customize Lock & Sleep Screen";
+"sleep.custom_editing" = "Screen";
+"sleep.custom_background" = "Background";
+"sleep.custom_status" = "Status";
+"sleep.custom_same" = "Same screen for sleep and power off";
+"sleep.custom_same_description" = "Turn this off to choose a different screen for when the device is switched off.";
+"sleep.backdrop_cover" = "Book cover";
+"sleep.backdrop_page" = "Reading page";
+"sleep.backdrop_overlay" = "PNG over page";
+"sleep.backdrop_wallpaper" = "Wallpaper";
+"sleep.backdrop_plain" = "Blank";
+"sleep.status_none" = "None";
+"sleep.wallpaper_random" = "Random wallpaper";
+"sleep.wallpaper_help_title" = "Wallpapers";
+"sleep.wallpaper_help" = "Did you know you can use your own wallpapers? Copy PNG or JPEG images to .adds/kobalt/wallpapers on your Kobo. Each image becomes a step in the Background row, and Random wallpaper picks a different one every time your Kobo sleeps.";
+/* Arguments: %1 position, %2 count */
+"sleep.step_count" = "%1 of %2";
+/* Arguments: %1 sleep screen name */
+"sleep.arrange_title" = "%1 position";
+/* Arguments: %1 sleep screen name in lowercase */
+"sleep.arrange_hint" = "Tap a dashed area to move the %1.";
+"sleep.arrange_book_only" = "Only for this book";
+"sleep.arrange_book_only_description" = "Other books keep their own position.";
+"sleep.place_top_left" = "Top left";
+"sleep.place_top_right" = "Top right";
+"sleep.place_bottom_left" = "Bottom left";
+"sleep.place_bottom_right" = "Bottom right";
+"sleep.place_left" = "Left";
+"sleep.place_right" = "Right";
+"sleep.place_top" = "Top";
+"sleep.place_bottom" = "Bottom";
 "settings.about" = "About";
 "settings.edge_light_description" = "Swipe up or down along the left edge for brightness, and along the right edge for warmth.";
 "settings.edge_brightness_description" = "Swipe up or down along the left edge for brightness.";

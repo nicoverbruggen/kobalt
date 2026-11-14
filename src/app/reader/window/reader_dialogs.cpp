@@ -1,3 +1,4 @@
+#include "app/reader/settings/sleep_editor.h"
 #include "app/reader/settings/sleep_gallery.h"
 #include <QLineEdit>
 #include "app/reader/views/sleep_screen.h"
@@ -984,13 +985,14 @@ void Reader::showSleepScreen()
 
 void Reader::closeSleepScreen()
 {
+    closeSleepEditor();
     if (sleepGallery) {
         sleepGallery->hide();
         sleepGallery->deleteLater();
         sleepGallery.clear();
     }
     if (!sleepPopup) {
-        if (sleep::mode(preferences) != sleep::Mode::Overlay)
+        if (!sleep::uses(preferences, sleep::Mode::Overlay))
             sleepOverlay = {};
         return;
     }
@@ -1043,7 +1045,15 @@ void Reader::openSleepScreen()
         next[sleep::followOrientationKey] = checked;
         return saveSleepPreferences(next);
     };
+    sleepGallery->setCustom(sleep::custom(preferences));
+    sleepGallery->setPlaces(sleepPlaces());
+    sleepGallery->setWallpapers(sleepWallpaper, sleepOffWallpaper);
     sleepGallery->chosen = [this](sleep::Design design) {
+        // Custom is chosen when its editor closes.
+        if (design == sleep::Design::Custom) {
+            openSleepEditor(design);
+            return;
+        }
         auto next = preferences;
         sleep::setDesign(next, design);
         next.remove("kobalt_sleep_screen");
@@ -1059,6 +1069,8 @@ void Reader::openSleepScreen()
     sleepGallery->customize = [this](sleep::Design design) {
         if (design == sleep::Design::Night)
             editSleepGreeting();
+        else
+            openSleepEditor(design);
     };
     if (!sleepCover.isNull())
         sleepGallery->setCover(sleepCover);
@@ -1075,6 +1087,152 @@ void Reader::openSleepScreen()
     sleepGallery->raise();
     if (sleepOverlay.isNull())
         prepareSleepOverlay();
+    prepareSleepWallpapers();
+}
+
+QHash<int, sleep::Place> Reader::sleepPlaces() const
+{
+    QHash<int, sleep::Place> places;
+    const auto own = book ? book->sleepPositions() : QJsonObject();
+    for (const auto design : sleep::customStatuses)
+        places.insert(int(design), sleep::place(preferences, own, design));
+    return places;
+}
+
+void Reader::openSleepEditor(sleep::Design design)
+{
+    if (sleepEditor || !sleepGallery)
+        return;
+    SleepEditor::Setup setup;
+    setup.arrange = design != sleep::Design::Custom;
+    setup.custom = sleep::custom(preferences);
+    setup.preset = sleepGallery->look(design);
+    const auto status = sleep::statusDesign(setup.preset);
+    setup.bookOnly = book && book->sleepPositions().contains(sleep::value(status));
+    setup.sample = sleepPreviewSample();
+    setup.screen = sleep::followsReading(preferences) || !page
+            ? (page ? page->size() : size())
+            : QSize(qMin(page->width(), page->height()), qMax(page->width(), page->height()));
+    setup.places = sleepPlaces();
+    // Holding Custom before it was ever saved starts from the chosen design,
+    // when that design is a backdrop with one status.
+    if (!setup.arrange && !preferences.contains(sleep::customKey)) {
+        sleep::Layer start;
+        if (sleep::asLayer(sleep::design(preferences), sleep::savedTile(preferences), start))
+            setup.custom.sleep = setup.custom.off = start;
+    }
+    auto *editor = new SleepEditor(this, setup);
+    sleepEditor = editor;
+    editor->setGeometry(sleepGallery->geometry());
+    editor->setImages(sleepCover, page ? page->snapshot(true) : QImage(), sleepOverlay);
+    editor->setWallpapers(sleepWallpaperNames);
+    const QPointer<SleepEditor> guard(editor);
+    editor->wallpaperWanted = [this, guard](const QString &name) {
+        if (!session || services.sleepWallpaperDirectories.isEmpty())
+            return;
+        const QSize screen = page ? page->size() : size();
+        const int side = qMax(screen.width(), screen.height());
+        session->sleepWallpapers(services.sleepWallpaperDirectories, { name }, QSize(side, side),
+                                 [this, guard, name](QStringList names, QVector<QImage> images) {
+                                     sleepWallpaperNames = names;
+                                     if (!guard)
+                                         return;
+                                     guard->setWallpapers(names);
+                                     guard->setWallpaper(name, images.value(0));
+                                 });
+    };
+    // The list of files, for the background row.
+    editor->wallpaperWanted(setup.custom.sleep.wallpaper);
+    editor->help = [this] { showSleepWallpaperHelp(); };
+    editor->done = [this, guard] {
+        if (!guard)
+            return;
+        auto next = preferences;
+        auto global = next.value(sleep::placesKey).toObject();
+        auto own = book ? book->sleepPositions() : QJsonObject();
+        const auto ownBefore = own;
+        const auto keep = [&](sleep::Design design, sleep::Place place, bool forBook) {
+            if (forBook) {
+                // A book's own place is kept even when it is the default, so
+                // it still wins over a moved global one.
+                own[sleep::value(design)] = sleep::value(
+                        place == sleep::Place::Default ? sleep::defaultPlace(design) : place);
+            } else {
+                sleep::setPlace(global, design, place);
+                own.remove(sleep::value(design));
+            }
+        };
+        const auto moved = guard->moved();
+        for (auto it = moved.constBegin(); it != moved.constEnd(); ++it) {
+            const auto design = sleep::Design(it.key());
+            const bool forBook =
+                    guard->arranging() ? guard->bookOnly() : own.contains(sleep::value(design));
+            keep(design, it.value(), forBook && book);
+        }
+        // Ticking "Only for this book" without moving keeps the current place
+        // for this book; clearing it returns the book to the global place.
+        if (guard->arranging() && book && !moved.contains(int(guard->arranged()))) {
+            const auto design = guard->arranged();
+            const auto key = sleep::value(design);
+            if (!guard->bookOnly())
+                own.remove(key);
+            else if (!own.contains(key))
+                keep(design, sleepPlaces().value(int(design)), true);
+        }
+        if (global.isEmpty())
+            next.remove(sleep::placesKey);
+        else
+            next[sleep::placesKey] = global;
+        const bool custom = !guard->arranging();
+        if (custom) {
+            sleep::setCustom(next, guard->custom());
+            sleep::setDesign(next, sleep::Design::Custom);
+            next.remove("kobalt_sleep_screen");
+        }
+        if (book && own != ownBefore) {
+            book->setSleepPositions(own);
+            QJsonObject snapshot;
+            book->checkpoint(&snapshot, true);
+        }
+        if (!saveSleepPreferences(next))
+            return;
+        closeSleepEditor();
+        if (custom) {
+            prepareSleepCover();
+            if (sleep::uses(preferences, sleep::Mode::Overlay))
+                prepareSleepOverlay();
+            prepareSleepWallpapers();
+            // Back to the list of lock screens, with Custom chosen.
+            if (sleepGallery) {
+                sleepGallery->setCustom(sleep::custom(preferences));
+                sleepGallery->setCurrent(sleep::Design::Custom);
+            }
+        }
+        if (sleepGallery)
+            sleepGallery->setPlaces(sleepPlaces());
+    };
+    for (auto *widget : editor->findChildren<QWidget *>())
+        textRefresh(widget);
+    textRefresh(editor);
+    editor->show();
+    editor->raise();
+}
+
+void Reader::closeSleepEditor()
+{
+    if (!sleepEditor)
+        return;
+    sleepEditor->hide();
+    sleepEditor->deleteLater();
+    sleepEditor.clear();
+}
+
+void Reader::updateSleepWallpaperOption()
+{
+    if (sleepGallery)
+        sleepGallery->setWallpapers(sleepWallpaper, sleepOffWallpaper);
+    if (sleepEditor)
+        sleepEditor->setWallpapers(sleepWallpaperNames);
 }
 
 void Reader::loadGalleryCover()
@@ -1214,6 +1372,34 @@ void Reader::showSleepOverlayHelp()
     sleepPopup = notice;
     notice->setObjectName("rrSleepOverlayHelpPopup");
     notice->descriptionLabel()->setObjectName("rrSleepOverlayHelpHint");
+    notice->setGeometry(rect());
+    notice->dismissed = [this] { closePopup(sleepPopup); };
+    connect(notice->primaryButton(), &QPushButton::clicked, this,
+            [this] { closePopup(sleepPopup); });
+    notice->card()->fitToWidth(
+            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
+    notice->centerCard();
+    for (auto *widget : notice->findChildren<QWidget *>())
+        textRefresh(widget);
+    textRefresh(notice);
+    notice->show();
+    notice->raise();
+    notice->primaryButton()->setFocus();
+}
+
+void Reader::showSleepWallpaperHelp()
+{
+    if (sleepPopup)
+        return;
+    // The same explaining card as the PNG help, above the Custom editor.
+    auto *notice = new ui::NoticeModal(this,
+                                       { strings::get("sleep.wallpaper_help"),
+                                         strings::get("sleep.wallpaper_help_title"),
+                                         {},
+                                         "rrSleepWallpaperHelpTitle" },
+                                       { strings::get("common.ok"), "rrSleepWallpaperHelpClose" });
+    sleepPopup = notice;
+    notice->setObjectName("rrSleepWallpaperHelpPopup");
     notice->setGeometry(rect());
     notice->dismissed = [this] { closePopup(sleepPopup); };
     connect(notice->primaryButton(), &QPushButton::clicked, this,

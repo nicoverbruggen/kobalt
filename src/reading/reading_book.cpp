@@ -81,6 +81,8 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
     // Privacy belongs to the publication, including after Mark as unread.
     hideBookOnSleepScreen_ = saved.value("book").toString() == identity_
             && saved.value("hide_book_on_sleep_screen").toBool(false);
+    if (saved.value("book").toString() == identity_)
+        sleepPositions_ = saved.value("sleep_positions").toObject();
     // The native opener resets its snapshot before the database record is
     // replaced. Apply the same reset before retaining fields or preferences.
     if (this->bridge)
@@ -914,6 +916,10 @@ QJsonObject ReadingBook::checkpointState() const
     state["finished_position"] = acceptedFinishedAnchor;
     state["suppress_finish_prompt"] = finishPromptSuppressed;
     state["hide_book_on_sleep_screen"] = hideBookOnSleepScreen_;
+    if (sleepPositions_.isEmpty())
+        state.remove("sleep_positions");
+    else
+        state["sleep_positions"] = sleepPositions_;
     if (!imageViews.isEmpty())
         state["image_views"] = imageViews;
     // For the Android and desktop library, which shows progress without

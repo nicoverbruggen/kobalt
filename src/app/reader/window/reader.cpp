@@ -335,7 +335,8 @@ void Reader::prepareSleepCover()
     if (scenario::sleepPersistenceOptions().mode >= 0)
         mode = sleep::Mode(scenario::sleepPersistenceOptions().mode);
 #endif
-    if (!presentation->supportsSleepScreen() || mode != sleep::Mode::Cover) {
+    if (!presentation->supportsSleepScreen()
+        || (mode != sleep::Mode::Cover && !sleep::uses(preferences, sleep::Mode::Cover))) {
         return;
     }
     // Decode off the GUI thread while the book is available. Keep at most
@@ -371,7 +372,7 @@ void Reader::prepareSleepOverlay()
             return;
         guard->sleepOverlayLoading = false;
         const bool choosing = bool(guard->sleepGallery);
-        if (!choosing && sleep::mode(guard->preferences) != sleep::Mode::Overlay)
+        if (!choosing && !sleep::uses(guard->preferences, sleep::Mode::Overlay))
             return;
         guard->sleepOverlay = std::move(image);
         if (choosing)
@@ -379,43 +380,136 @@ void Reader::prepareSleepOverlay()
     });
 }
 
+void Reader::prepareSleepWallpapers()
+{
+    if (!presentation->supportsSleepScreen() || services.sleepWallpaperDirectories.isEmpty()
+        || !session)
+        return;
+    const auto custom = sleep::custom(preferences);
+    const bool chosen = sleep::design(preferences) == sleep::Design::Custom;
+    const bool choosing = bool(sleepGallery);
+    // Decode only the states that show a wallpaper. The same screen shares one
+    // image, so a random pick shows the same wallpaper asleep and powered off.
+    // The open gallery still lists the files for the editor.
+    const bool sleepWants = (chosen || choosing) && custom.sleep.backdrop == sleep::Mode::Wallpaper;
+    const bool offWants =
+            (chosen || choosing) && !custom.same && custom.off.backdrop == sleep::Mode::Wallpaper;
+    const auto request = ++sleepWallpaperRequest;
+    if (!sleepWants)
+        sleepWallpaper = {};
+    if (!offWants)
+        sleepOffWallpaper = sleepWallpaper;
+    if (!choosing && !sleepWants && !offWants)
+        return;
+    QStringList wanted;
+    if (sleepWants)
+        wanted.append(custom.sleep.wallpaper);
+    if (offWants)
+        wanted.append(custom.off.wallpaper);
+    const QSize screen = page ? page->size() : size();
+    const int side = qMax(screen.width(), screen.height());
+    const QPointer<Reader> guard(this);
+    session->sleepWallpapers(
+            services.sleepWallpaperDirectories, wanted, QSize(side, side),
+            [guard, request, sleepWants, offWants](QStringList names, QVector<QImage> images) {
+                if (!guard || guard->sleepWallpaperRequest != request)
+                    return;
+                guard->sleepWallpaperNames = std::move(names);
+                if (sleepWants)
+                    guard->sleepWallpaper = images.value(0);
+                guard->sleepOffWallpaper =
+                        offWants ? images.value(sleepWants ? 1 : 0) : guard->sleepWallpaper;
+                // Lets tests wait for the decode.
+                guard->setProperty("sleepWallpaperReady", !guard->sleepWallpaper.isNull());
+                guard->updateSleepWallpaperOption();
+            });
+}
+
+void Reader::sleepBackdrop(const sleep::Look &look, QSize size, sleep::Snapshot &shot,
+                           bool poweredOff)
+{
+    shot.mode = look.mode;
+    shot.coverArea = {};
+    shot.dimPage = false;
+    shot.image = {};
+    const auto pageBackdrop = [&] {
+        shot.image = page->snapshot(true);
+        shot.dimPage = true;
+    };
+    switch (look.mode) {
+    case sleep::Mode::Stock:
+        return;
+    case sleep::Mode::Plain:
+        // Designs without a cover draw the whole screen themselves.
+        shot.image = QImage(size, QImage::Format_RGB32);
+        shot.image.fill(Qt::white);
+        return;
+    case sleep::Mode::Wallpaper: {
+        const auto &wallpaper = poweredOff ? sleepOffWallpaper : sleepWallpaper;
+        shot.image = sleepWallpaperBackground(wallpaper, size);
+        // Without a usable wallpaper, the reading page stands in, as for a
+        // book without a cover.
+        if (shot.image.isNull())
+            pageBackdrop();
+        return;
+    }
+    case sleep::Mode::Cover:
+        if (sleepCover.isNull()) {
+            pageBackdrop();
+            return;
+        }
+        shot.image = sleepCoverBackground(sleepCover, size);
+        shot.coverArea = sleep::coverArea(sleepCover.size(), size);
+        return;
+    case sleep::Mode::Page:
+        pageBackdrop();
+        return;
+    case sleep::Mode::Overlay:
+        pageBackdrop();
+        if (!shot.image.isNull() && !sleepOverlay.isNull()) {
+            dimSleepPage(shot.image, darkTheme);
+            sleep::drawOverlay(shot.image, sleepOverlay);
+            shot.dimPage = false;
+        }
+        return;
+    }
+}
+
 sleep::Snapshot Reader::powerScreenSnapshot()
 {
     if (book->hideBookOnSleepScreen())
-        return privateSleepSnapshot();
+        return privateSleepSnapshot(true);
     if (exportRunning)
         return exitSleepSnapshot;
     if (lifecycleHidden && !sleepImage.isNull()) {
         auto shot = sleepShot;
         shot.dark = darkTheme;
         shot.dimPage = false;
-        if (!sleep::tiled(shot.design)) {
-            // Newer designs draw over the whole backdrop. Give power-off a fresh
-            // one so it is not drawn twice.
-            if (shot.mode == sleep::Mode::Plain) {
-                shot.image = QImage(sleepImage.size(), QImage::Format_RGB32);
-                shot.image.fill(Qt::white);
-            } else if (shot.mode == sleep::Mode::Cover && !sleepCover.isNull()) {
-                shot.image = sleepCoverBackground(sleepCover, sleepImage.size());
-            } else if (shot.mode == sleep::Mode::Cover) {
-                // Coverless books use the reading page. Rebuild that clean backdrop
-                // rather than preserving the status already painted for sleep.
-                shot.image = page->snapshot(true);
-                shot.coverArea = {};
-                shot.dimPage = true;
+        // Designs that draw over the whole backdrop, and every Custom screen,
+        // get a fresh backdrop for power-off, so the sleeping status is not
+        // drawn twice and a separate power-off look or wallpaper shows.
+        if (sleep::design(preferences) == sleep::Design::Custom || !sleep::tiled(shot.design)) {
+            const auto off = sleep::look(preferences, true);
+            shot.design = off.design;
+            shot.tile = off.tile;
+            shot.place = sleep::place(preferences, book->sleepPositions(), off);
+            sleepBackdrop(off, sleepImage.size(), shot, true);
+            if (!shot.image.isNull()) {
                 if (!sleep::followsReading(preferences))
                     portraitSleepSnapshot(shot);
-            }
-            if (!shot.image.isNull())
                 return shot;
+            }
             // Without a clean backdrop, keep the sleeping screen as it is.
+            shot = sleepShot;
+            shot.dark = darkTheme;
+            shot.dimPage = false;
             shot.design = sleep::Design::Cover;
             shot.tile = sleep::Tile::None;
         }
         shot.image = sleepImage;
         return shot;
     }
-    return captureSleepScreen();
+    return captureSleepScreen(true);
 }
 
 sleep::Details Reader::sleepDetails()
@@ -461,10 +555,10 @@ void Reader::loadTodayReading()
     });
 }
 
-sleep::Snapshot Reader::privateSleepSnapshot()
+sleep::Snapshot Reader::privateSleepSnapshot(bool poweredOff)
 {
     auto snapshot = sleep::privateSnapshot(page->size(), preferences, sleepPreviewSample(),
-                                           sleep::followsReading(preferences));
+                                           sleep::followsReading(preferences), poweredOff);
     // Nickel can change orientation after handoff. A later power screen keeps
     // the direction captured when the reader went to sleep.
     snapshot.orientation = lifecycleHidden && !sleepImage.isNull()
@@ -472,72 +566,55 @@ sleep::Snapshot Reader::privateSleepSnapshot()
             : kobalt::shownOrientation(QGuiApplication::primaryScreen());
     if (!sleep::followsReading(preferences))
         portraitSleepSnapshot(snapshot);
+    snapshot.place = sleep::place(preferences, book->sleepPositions(),
+                                  sleep::Look{ snapshot.design, snapshot.mode, snapshot.tile });
     // Transparent artwork keeps its style, but never reveals the reading page.
     if (sleep::design(preferences) == sleep::Design::Overlay && !sleepOverlay.isNull())
         sleep::drawOverlay(snapshot.image, sleepOverlay);
     return snapshot;
 }
 
-sleep::Snapshot Reader::captureSleepScreen()
+sleep::Snapshot Reader::captureSleepScreen(bool poweredOff)
 {
     // Privacy must also cover Stock, previews, modal dialogs and unavailable pages.
     if (book->hideBookOnSleepScreen())
-        return privateSleepSnapshot();
+        return privateSleepSnapshot(poweredOff);
     // RGB32 needs four bytes per pixel. Bound the optional capture to 16 MiB;
     // oversized viewports keep Nickel's power screen instead.
     const qint64 pixels = qint64(page->width()) * page->height();
     const auto *modal = QApplication::activeModalWidget();
     const bool foreground = !modal || modal == this || isAncestorOf(modal);
-    auto mode = sleep::mode(preferences);
+    auto look = sleep::look(preferences, poweredOff);
 #ifdef KOBALT_SCENARIO_PLAYER
-    if (scenario::sleepPersistenceOptions().mode >= 0)
-        mode = sleep::Mode(scenario::sleepPersistenceOptions().mode);
+    if (scenario::sleepPersistenceOptions().mode >= 0) {
+        look.mode = sleep::Mode(scenario::sleepPersistenceOptions().mode);
+        look.design = sleep::legacyDesign(look.mode, look.tile);
+    }
 #endif
-    if (mode == sleep::Mode::Stock || !presentation->supportsSleepScreen() || !isVisible()
+    if (look.mode == sleep::Mode::Stock || !presentation->supportsSleepScreen() || !isVisible()
         || !foreground || pixels <= 0 || pixels > 4 * 1024 * 1024 || !readyForPresentation()
         || appearanceEdit.panelOpen() || session->temporaryTypography())
         return {};
-    const bool plain = mode == sleep::Mode::Plain;
-    const bool useCover = mode == sleep::Mode::Cover && !sleepCover.isNull();
     const QSize sleepSize = sleep::followsReading(preferences)
             ? page->size()
             : QSize(qMin(page->width(), page->height()), qMax(page->width(), page->height()));
-    QImage frame;
-    if (plain) {
-        // Designs without a cover draw the whole screen themselves.
-        frame = QImage(sleepSize, QImage::Format_RGB32);
-        frame.fill(Qt::white);
-    } else {
-        frame = useCover ? sleepCoverBackground(sleepCover, sleepSize) : page->snapshot(true);
-    }
-    if (frame.isNull())
+    sleep::Snapshot snapshot;
+    sleepBackdrop(look, sleepSize, snapshot, poweredOff);
+    if (snapshot.image.isNull())
         return {};
-    const bool useOverlay = mode == sleep::Mode::Overlay && !sleepOverlay.isNull();
-    if (useOverlay) {
-        dimSleepPage(frame, darkTheme);
-        sleep::drawOverlay(frame, sleepOverlay);
-    }
     // A book marked as finished is done, wherever its last page sits.
     const int percent = book->finishedHere() ? 100 : session->progressPercent();
-    sleep::Snapshot snapshot{ std::move(frame),
-                              kobalt::shownOrientation(QGuiApplication::primaryScreen()),
-                              strings::get("sleep.percent_read").arg(percent),
-                              sleepTimeLeft(book->estimates().bookMilliseconds,
-                                            remainingTime::approximate(preferences)),
-                              darkTheme,
-                              mode,
-                              !useCover && !useOverlay && !plain,
-                              percent,
-                              sleep::tile(preferences) };
-    snapshot.design = sleep::design(preferences);
-#ifdef KOBALT_SCENARIO_PLAYER
-    if (scenario::sleepPersistenceOptions().mode >= 0)
-        snapshot.design = sleep::legacyDesign(mode, snapshot.tile);
-#endif
+    snapshot.orientation = kobalt::shownOrientation(QGuiApplication::primaryScreen());
+    snapshot.progress = strings::get("sleep.percent_read").arg(percent);
+    snapshot.remaining = sleepTimeLeft(book->estimates().bookMilliseconds,
+                                       remainingTime::approximate(preferences));
+    snapshot.dark = darkTheme;
+    snapshot.percent = percent;
+    snapshot.tile = look.tile;
+    snapshot.design = look.design;
+    snapshot.place = sleep::place(preferences, book->sleepPositions(), look);
     snapshot.details = sleepDetails();
-    if (useCover)
-        snapshot.coverArea = sleep::coverArea(sleepCover.size(), sleepSize);
-    if (useCover && sleepCoverSource.isFile()) {
+    if (!snapshot.coverArea.isEmpty() && sleepCoverSource.isFile()) {
         snapshot.coverPath = sleepCoverSource.absoluteFilePath();
         snapshot.coverBytes = sleepCoverSource.size();
         snapshot.coverModified = sleepCoverSource.lastModified().toMSecsSinceEpoch();
@@ -761,8 +838,19 @@ void Reader::wakeReader()
     if (lifecycleHidden)
         wakePositionEpoch = book->advancePositionSaveEpoch();
     lifecycleHidden = false;
-    if (sleep::mode(preferences) == sleep::Mode::Overlay)
+    if (sleep::uses(preferences, sleep::Mode::Overlay))
         prepareSleepOverlay();
+    // A random wallpaper may change with every sleep. A named one is already
+    // decoded, so wake does not decode it again.
+    {
+        const auto custom = sleep::custom(preferences);
+        const auto random = [](const sleep::Layer &layer) {
+            return layer.backdrop == sleep::Mode::Wallpaper && layer.wallpaper.isEmpty();
+        };
+        if (sleep::design(preferences) == sleep::Design::Custom
+            && (random(custom.sleep) || (!custom.same && random(custom.off))))
+            prepareSleepWallpapers();
+    }
     QTimer::singleShot(0, this, [this] { synchronizeKosync(); });
     if (finishDialog)
         finishDialog->show();
@@ -2884,7 +2972,7 @@ void Reader::finishExit()
         closingTimes.started.start();
     diagnostic("exit-save-ready", { { "elapsed_ms", double(closingTimes.started.elapsed()) } });
     if (book->hideBookOnSleepScreen())
-        exitSleepSnapshot = privateSleepSnapshot();
+        exitSleepSnapshot = privateSleepSnapshot(true);
     exportRunning = true;
     dismissProgressChoice();
 #ifdef KOBALT_SCENARIO_PLAYER

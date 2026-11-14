@@ -357,16 +357,20 @@ void sealStatus(QPainter &painter, const QFont &font, const QColor &ink, const Q
             true);
 }
 
-QRectF sealBox(const Frame &frame, bool medallion)
+// The seal sits in a corner of the reader's choice, lower right by default.
+QRectF sealBox(const Frame &frame, bool medallion, sleep::Place place)
 {
     const qreal side = 38 * frame.u;
-    return { frame.right(medallion ? 6 : 5) - side, frame.bottom(medallion ? 5 : 4) - side, side,
-             side };
+    const qreal x = medallion ? 6 : 5, y = medallion ? 5 : 4;
+    const bool left = place == sleep::Place::TopLeft || place == sleep::Place::BottomLeft;
+    const bool top = place == sleep::Place::TopLeft || place == sleep::Place::TopRight;
+    return { left ? frame.x(x) : frame.right(x) - side, top ? frame.y(y) : frame.bottom(y) - side,
+             side, side };
 }
 
 void paintSeal(QPainter &painter, const Frame &frame, const Content &content, const Palette &colors)
 {
-    const auto box = sealBox(frame, false);
+    const auto box = sealBox(frame, false, content.shot.place);
     const qreal s = box.width() / 200;
     const QPointF centre = box.center();
     painter.save();
@@ -389,7 +393,7 @@ void paintSeal(QPainter &painter, const Frame &frame, const Content &content, co
 void paintMedallion(QPainter &painter, const Frame &frame, const Content &content,
                     const Palette &colors)
 {
-    const auto box = sealBox(frame, true);
+    const auto box = sealBox(frame, true, content.shot.place);
     const qreal s = box.width() / 200;
     const QPointF centre = box.center();
     painter.save();
@@ -438,7 +442,9 @@ PillLayout pillLayout(const Frame &frame, const Content &content)
         width += gap + batteryWidth(font, content.battery);
     width += 2 * pillPadding * frame.u;
     const qreal height = lineHeight(font) + 2 * 1.4 * frame.v;
-    const QRectF pill(frame.box.center().x() - width / 2, frame.bottom(6) - height, width, height);
+    const qreal top =
+            content.shot.place == sleep::Place::Top ? frame.y(6) : frame.bottom(6) - height;
+    const QRectF pill(frame.box.center().x() - width / 2, top, width, height);
     return { pill, height };
 }
 
@@ -511,24 +517,41 @@ QVector<QRect> pillAreas(const Frame &frame, const sleep::Snapshot &shot, QSize 
 struct CaptionLayout
 {
     qreal top = 0, titleTop = 0, detailTop = 0, bottom = 0;
-    std::unique_ptr<Block> title;
+    // The title's lines sit one font size apart, closer than Instrument
+    // Serif's own line height, so a long title reads as one block.
+    QStringList title;
+    qreal pitch = 0, titleHeight = 0;
 };
 
 CaptionLayout captionLayout(const Frame &frame, const sleep::Snapshot &shot)
 {
     CaptionLayout layout;
     const qreal width = 84 * frame.u;
-    layout.title =
-            titleBlock(shot.details.title, serif(9 * frame.u), width, 28 * frame.v, 9 * frame.u);
+    const QFont titleFont = serif(9 * frame.u);
+    layout.pitch = 9 * frame.u;
+    const int lines = 1 + qMax(0, int((28 * frame.v - lineHeight(titleFont)) / layout.pitch));
+    layout.title = wrapLines(shot.details.title, titleFont, qRound(width), lines);
+    if (!layout.title.isEmpty())
+        layout.titleHeight = (layout.title.size() - 1) * layout.pitch + lineHeight(titleFont);
     const QFont detail = sans(3 * frame.u);
     const QFont state = mono(2.2 * frame.u, 0.3);
+    if (shot.place == sleep::Place::Top) {
+        // The same lines read from the top edge down.
+        layout.top = frame.y(6);
+        layout.titleTop = layout.top + lineHeight(state) + 1 * frame.v;
+        layout.detailTop = shot.details.title.isEmpty()
+                ? layout.top + lineHeight(state) + 1.6 * frame.v
+                : layout.titleTop + layout.titleHeight + 1.6 * frame.v;
+        layout.bottom = layout.detailTop + lineHeight(detail);
+        return layout;
+    }
     layout.bottom = frame.bottom(6);
     layout.detailTop = layout.bottom - lineHeight(detail);
     if (shot.details.title.isEmpty()) {
         layout.titleTop = layout.detailTop;
         layout.top = layout.detailTop - 1.6 * frame.v - lineHeight(state);
     } else {
-        layout.titleTop = layout.detailTop - 1.6 * frame.v - layout.title->height;
+        layout.titleTop = layout.detailTop - 1.6 * frame.v - layout.titleHeight;
         layout.top = layout.titleTop - 1 * frame.v - lineHeight(state);
     }
     return layout;
@@ -536,8 +559,17 @@ CaptionLayout captionLayout(const Frame &frame, const sleep::Snapshot &shot)
 
 // The caption's fade belongs to its backdrop: it is drawn before the status
 // underlay is saved, so a battery change redraws only the text over it.
-void paintCaptionFade(QPainter &painter, const Frame &frame, QSize size)
+void paintCaptionFade(QPainter &painter, const Frame &frame, QSize size, sleep::Place place)
 {
+    if (place == sleep::Place::Top) {
+        const qreal bottom = frame.y(46);
+        QLinearGradient gradient(0, bottom, 0, 0);
+        gradient.setColorAt(0, QColor(0, 0, 0, 0));
+        gradient.setColorAt(0.45, QColor(0, 0, 0, 217));
+        gradient.setColorAt(1, Qt::black);
+        painter.fillRect(QRectF(0, 0, size.width(), bottom), gradient);
+        return;
+    }
     const qreal top = frame.bottom(46);
     QLinearGradient gradient(0, top, 0, size.height());
     gradient.setColorAt(0, QColor(0, 0, 0, 0));
@@ -557,8 +589,12 @@ void paintCaption(QPainter &painter, const Frame &frame, const Content &content)
             : content.word();
     text(painter, state, white, QRectF(frame.x(8), layout.top, 84 * frame.u, lineHeight(state)),
          heading.toUpper());
-    if (!content.shot.details.title.isEmpty())
-        drawBlock(painter, *layout.title, QPointF(frame.x(8), layout.titleTop), white);
+    const QFont title = serif(9 * frame.u);
+    for (int index = 0; index < layout.title.size(); ++index)
+        text(painter, title, white,
+             QRectF(frame.x(8), layout.titleTop + index * layout.pitch, 84 * frame.u,
+                    lineHeight(title)),
+             layout.title[index], Qt::AlignLeft | Qt::AlignTop);
     const QFont detail = sans(3 * frame.u);
     QString line = content.shot.progress;
     if (!content.shot.remaining.isEmpty())
@@ -1266,7 +1302,7 @@ QVector<QRect> letterAreas(const Frame &frame, QSize size)
 void paintGround(QPainter &painter, QSize size, const sleep::Snapshot &shot)
 {
     if (shot.design == Design::Caption)
-        paintCaptionFade(painter, Frame(size), size);
+        paintCaptionFade(painter, Frame(size), size, shot.place);
 }
 
 // Draws a design that is not tiled over a backdrop already on the painter.
@@ -1353,7 +1389,7 @@ QImage sleepDesignImage(QImage backdrop, const sleep::Snapshot &source, int batt
     if (sleep::tiled(snapshot.design) || backdrop.isNull())
         return sleepScreenImage(std::move(backdrop), snapshot.progress, snapshot.remaining,
                                 snapshot.dark, batteryPercent, status, snapshot.dimPage,
-                                snapshot.tile, snapshot.percent);
+                                snapshot.tile, snapshot.percent, snapshot.place);
     if (snapshot.dimPage)
         dimSleepPage(backdrop, snapshot.dark);
     {
@@ -1378,7 +1414,8 @@ QVector<QRect> sleepStatusAreas(QSize size, const sleep::Snapshot &source)
     if (size.isEmpty())
         return {};
     if (sleep::tiled(snapshot.design)) {
-        const auto area = sleepScreenCardRect(size, !snapshot.remaining.isEmpty(), snapshot.tile);
+        const auto area = sleepScreenCardRect(size, !snapshot.remaining.isEmpty(), snapshot.tile,
+                                              snapshot.place);
         return area.isEmpty() ? QVector<QRect>() : QVector<QRect>{ area };
     }
     const Frame frame(size);
@@ -1387,7 +1424,7 @@ QVector<QRect> sleepStatusAreas(QSize size, const sleep::Snapshot &source)
     switch (snapshot.design) {
     case Design::Seal:
     case Design::Medallion:
-        areas = { sealBox(frame, snapshot.design == Design::Medallion)
+        areas = { sealBox(frame, snapshot.design == Design::Medallion, snapshot.place)
                           .adjusted(-frame.u, -frame.u, frame.u, frame.u)
                           .toAlignedRect() };
         break;
@@ -1441,7 +1478,7 @@ QRect repaintSleepStatus(QImage &screen, const QVector<QImage> &underlay,
     if (sleep::tiled(snapshot.design)) {
         screen = sleepScreenImage(std::move(screen), snapshot.progress, snapshot.remaining,
                                   snapshot.dark, batteryPercent, status, false, snapshot.tile,
-                                  snapshot.percent);
+                                  snapshot.percent, snapshot.place);
         return areas.first();
     }
     // Each area is drawn into its own image, starting from the saved backdrop
@@ -1468,19 +1505,33 @@ QRect repaintSleepStatus(QImage &screen, const QVector<QImage> &underlay,
 }
 
 void paintSleepPreview(QPainter &painter, const QRectF &target, QSize size, const QImage &cover,
-                       const QImage &page, const QImage &overlay, const sleep::Snapshot &source)
+                       const QImage &page, const QImage &overlay, const sleep::Snapshot &source,
+                       const QImage &wallpaper, SleepStatus status)
 {
     const auto snapshot = displaySnapshot(source);
     if (snapshot.privateBook) {
         QJsonObject preferences;
-        sleep::setDesign(preferences, snapshot.design);
+        // A status over another backdrop than its own comes from a Custom screen.
+        bool custom = false;
+        for (const auto status : sleep::customStatuses)
+            custom = custom
+                    || (status == snapshot.design && snapshot.mode != sleep::Mode::Stock
+                        && snapshot.mode != sleep::backdrop(snapshot.design));
+        if (custom) {
+            sleep::Custom layers;
+            layers.sleep = { snapshot.mode, snapshot.design, {} };
+            sleep::setCustom(preferences, layers);
+            sleep::setDesign(preferences, Design::Custom);
+        } else {
+            sleep::setDesign(preferences, snapshot.design);
+        }
         preferences[sleep::greetingKey] = snapshot.details.greeting;
         if (snapshot.design == Design::Page || snapshot.design == Design::Overlay)
             preferences[sleep::tileKey] = sleep::value(snapshot.tile);
         auto shot = sleep::privateSnapshot(size, preferences, snapshot, true);
         if (snapshot.design == Design::Overlay && !overlay.isNull())
             sleep::drawOverlay(shot.image, overlay);
-        painter.drawImage(target, sleepDesignImage(shot.image, shot, -1, SleepStatus::Sleeping));
+        painter.drawImage(target, sleepDesignImage(shot.image, shot, -1, status));
         return;
     }
     if (size.isEmpty() || target.isEmpty())
@@ -1493,13 +1544,17 @@ void paintSleepPreview(QPainter &painter, const QRectF &target, QSize size, cons
     const QRect screen(QPoint(), size);
     const auto colors = palette(snapshot.dark);
     sleep::Snapshot shot = snapshot;
-    switch (sleep::backdrop(snapshot.design)) {
+    switch (snapshot.mode) {
     case sleep::Mode::Cover:
         painter.fillRect(screen, Qt::black);
         if (!cover.isNull()) {
             shot.coverArea = sleep::coverArea(cover.size(), size);
             painter.drawImage(shot.coverArea, cover);
         }
+        break;
+    case sleep::Mode::Wallpaper:
+        painter.fillRect(screen, Qt::white);
+        drawSleepWallpaper(painter, screen, wallpaper);
         break;
     case sleep::Mode::Page:
     case sleep::Mode::Overlay:
@@ -1508,7 +1563,7 @@ void paintSleepPreview(QPainter &painter, const QRectF &target, QSize size, cons
         else
             painter.fillRect(screen, colors.paper);
         painter.fillRect(screen, ui::themeColors(snapshot.dark).sleepDim);
-        if (snapshot.design == Design::Overlay && !overlay.isNull()) {
+        if (snapshot.mode == sleep::Mode::Overlay && !overlay.isNull()) {
             const QSize fitted = overlay.size().scaled(size, Qt::KeepAspectRatio);
             painter.drawImage(QRect(QPoint((size.width() - fitted.width()) / 2,
                                            (size.height() - fitted.height()) / 2),
@@ -1523,13 +1578,13 @@ void paintSleepPreview(QPainter &painter, const QRectF &target, QSize size, cons
     }
     if (sleep::tiled(snapshot.design)) {
         paintSleepTile(painter, size, snapshot.progress, snapshot.remaining, snapshot.dark, -1,
-                       SleepStatus::Sleeping, snapshot.tile, snapshot.percent);
+                       status, snapshot.tile, snapshot.percent, snapshot.place);
     } else {
         QImage tileCover;
         if (drawsCover(snapshot.design))
             tileCover = cover;
         paintGround(painter, size, shot);
-        paintDesign(painter, size, shot, tileCover, -1, SleepStatus::Sleeping);
+        paintDesign(painter, size, shot, tileCover, -1, status);
     }
     painter.restore();
 }

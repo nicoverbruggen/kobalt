@@ -17632,20 +17632,50 @@ private slots:
         auto *notice = fixture.widget("rrSleepOrientationNotice");
         QVERIFY(notice);
         notice->hide();
-        // Capture the hidden greeting editor on Night, on page three.
+        // Capture the hidden greeting editor on Night, the last entry on page three.
         while (fixture.widget("rrSleepGalleryPrevious")->isEnabled())
             QVERIFY(fixture.press("rrSleepGalleryPrevious"));
         for (int page = 0; page < 2; ++page)
             QVERIFY(fixture.press("rrSleepGalleryNext"));
         auto *grid = fixture.widget("rrSleepGalleryGrid");
         QVERIFY(grid);
-        const QPoint night(grid->width() / 4, grid->height() * 3 / 4);
+        const QPoint night(grid->width() * 3 / 4, grid->height() * 3 / 4);
         QTest::mousePress(grid, Qt::LeftButton, Qt::NoModifier, night);
         QTRY_VERIFY(fixture.visible("rrSleepGreeting"));
         QTest::mouseRelease(grid, Qt::LeftButton, Qt::NoModifier, night);
 
         QVERIFY(capture(fixture, name + "-sleep-greeting"));
         QVERIFY(fixture.press("rrSleepGreetingCancel"));
+        // Holding Seal, the first entry on the second row of page two, arranges it.
+        while (fixture.widget("rrSleepGalleryPrevious")->isEnabled())
+            QVERIFY(fixture.press("rrSleepGalleryPrevious"));
+        QVERIFY(fixture.press("rrSleepGalleryNext"));
+        const QPoint seal(grid->width() / 4, grid->height() * 3 / 4);
+        QTest::mousePress(grid, Qt::LeftButton, Qt::NoModifier, seal);
+        QTRY_VERIFY(fixture.visible("rrSleepArrange"));
+        QTest::mouseRelease(grid, Qt::LeftButton, Qt::NoModifier, seal);
+        QVERIFY(capture(fixture, name + "-sleep-arrange"));
+        QVERIFY(fixture.press("rrSleepEditorDone"));
+        QTRY_VERIFY(!fixture.visible("rrSleepArrange"));
+        // Custom is the second entry on page one. A tap opens its editor.
+        QVERIFY(fixture.press("rrSleepGalleryPrevious"));
+        QVERIFY(fixture.click(grid, QPoint(grid->width() * 3 / 4, grid->height() / 4)));
+        QTRY_VERIFY(fixture.visible("rrSleepEditor"));
+        QVERIFY(capture(fixture, name + "-sleep-custom"));
+        QVERIFY(fixture.press("rrSleepEditorHelp"));
+        QTRY_VERIFY(fixture.visible("rrSleepWallpaperHelpPopup"));
+        QVERIFY(capture(fixture, name + "-sleep-wallpaper-help"));
+        QVERIFY(fixture.press("rrSleepWallpaperHelpClose"));
+        QTRY_VERIFY(!fixture.visible("rrSleepWallpaperHelpPopup"));
+        QVERIFY(fixture.press("rrSleepEditorSame"));
+        QTRY_VERIFY(fixture.visible("rrSleepEditorPoweredOff"));
+        QVERIFY(fixture.press("rrSleepEditorStatusNext"));
+        QVERIFY(capture(fixture, name + "-sleep-custom-power-off"));
+        QVERIFY(fixture.press("rrSleepEditorSame"));
+        // Done saves Custom and returns to the list of lock screens.
+        QVERIFY(fixture.press("rrSleepEditorDone"));
+        QTRY_VERIFY(!fixture.visible("rrSleepEditor"));
+        QVERIFY(fixture.visible("rrSleepGallery"));
         QVERIFY(fixture.press("rrSleepGalleryClose"));
         QVERIFY(revealSettingsOption(fixture, "rrHideBookOnSleepScreen"));
         QVERIFY(fixture.press("rrHideBookOnSleepScreen"));
@@ -17668,6 +17698,9 @@ private slots:
         QVERIFY(capture(fixture, name + "-power-off-private", &preview));
         // Each private design retains its own anonymous layout and progress.
         for (const auto design : sleep::designs) {
+            // A private Custom screen is the private screen of its status.
+            if (design == sleep::Design::Custom)
+                continue;
             QJsonObject preferences;
             sleep::setDesign(preferences, design);
             auto privateShot = sleep::privateSnapshot(shot.image.size(), preferences, shot, true);

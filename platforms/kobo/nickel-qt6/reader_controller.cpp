@@ -1,5 +1,6 @@
 #include "display_format.h"
 #include "../common/diagnostics.h"
+#include "../common/sync_exclusion.h"
 #include "platforms/kobo/common/native_symbol.h"
 #include "support/qt_compat.h"
 #include "hooks.h"
@@ -265,6 +266,8 @@ bool uninstall()
     const auto remove = [](const char *path) { return ::unlink(path) == 0 || errno == ENOENT; };
     const bool active = remove(activePath);
     const bool startup = remove(startupPath);
+    // Give Kobalt's folder back to Nickel's library scan.
+    kobalt::nickel::excludeKobaltFolder(false);
     return remove(KOBALT_CONFIG_DIR "/uninstall") && active && startup;
 }
 #endif
@@ -564,6 +567,10 @@ int initialize()
 #  endif
 #endif
     kobalt::installDisplayFormatHook();
+    // Only on supported firmware: keep wallpapers and PNGs in Kobalt's folder
+    // out of My Books.
+    if (!kobalt::nickel::excludeKobaltFolder(true))
+        kobalt::diagnostic("sync-exclusion-failed", {}, kobalt::DiagnosticSeverity::Warning);
     kobalt::initializeNativeTileCoverProbe();
     auto *startup = new Startup(qApp);
     beginOpening = [startup](const void *volume, const void *context) {

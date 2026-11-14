@@ -266,7 +266,37 @@ QImage sleepCoverBackground(const QImage &cover, QSize size)
     return sleep::coverBackground(cover, size);
 }
 
-QRect sleepScreenCardRect(QSize size, bool showRemaining, sleep::Tile tile)
+void drawSleepWallpaper(QPainter &painter, const QRect &screen, const QImage &wallpaper)
+{
+    if (wallpaper.isNull() || screen.isEmpty())
+        return;
+    const QSize filled = wallpaper.size().scaled(screen.size(), Qt::KeepAspectRatioByExpanding);
+    const QRect area(screen.left() + (screen.width() - filled.width()) / 2,
+                     screen.top() + (screen.height() - filled.height()) / 2, filled.width(),
+                     filled.height());
+    painter.save();
+    painter.setClipRect(screen, Qt::IntersectClip);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    painter.drawImage(area, wallpaper);
+    painter.restore();
+}
+
+QImage sleepWallpaperBackground(const QImage &wallpaper, QSize size)
+{
+    if (wallpaper.isNull() || size.isEmpty()
+        || qint64(size.width()) * size.height() > 4 * 1024 * 1024)
+        return {};
+    QImage background(size, QImage::Format_RGB32);
+    if (background.isNull())
+        return {};
+    background.fill(Qt::white);
+    QPainter painter(&background);
+    drawSleepWallpaper(painter, background.rect(), wallpaper);
+    painter.end();
+    return background;
+}
+
+QRect sleepScreenCardRect(QSize size, bool showRemaining, sleep::Tile tile, sleep::Place place)
 {
     switch (tile) {
     case sleep::Tile::None:
@@ -274,8 +304,8 @@ QRect sleepScreenCardRect(QSize size, bool showRemaining, sleep::Tile tile)
     case sleep::Tile::Bookmark: {
         const int width = qMin(int(sleepMetrics::ribbonWidth), size.width() / 3);
         const int right = qMin(int(sleepMetrics::ribbonRight), size.width() / 10);
-        return { qMax(0, size.width() - right - width), 0, width,
-                 qMin(size.height(), RibbonLines().height()) };
+        const int left = place == sleep::Place::Left ? right : size.width() - right - width;
+        return { qMax(0, left), 0, width, qMin(size.height(), RibbonLines().height()) };
     }
     case sleep::Tile::Card:
         break;
@@ -286,8 +316,13 @@ QRect sleepScreenCardRect(QSize size, bool showRemaining, sleep::Tile tile)
     const int detailHeight = ui::interfaceLineHeight(detailFont());
     const int height = padding * 2 + titleHeight + int(sleepMetrics::gap) + detailHeight
             + (showRemaining ? detailHeight + int(sleepMetrics::lineGap) : 0);
-    return { inset, qMax(inset, size.height() - height - int(sleepMetrics::bottom)),
-             qMin(int(sleepMetrics::width), size.width() - 2 * inset), height };
+    const int width = qMin(int(sleepMetrics::width), size.width() - 2 * inset);
+    const bool right = place == sleep::Place::TopRight || place == sleep::Place::BottomRight;
+    const bool top = place == sleep::Place::TopLeft || place == sleep::Place::TopRight;
+    // The top corners keep the same distance from the edge as the bottom ones.
+    const int y = top ? qMin(int(sleepMetrics::bottom), qMax(0, size.height() - height))
+                      : qMax(inset, size.height() - height - int(sleepMetrics::bottom));
+    return { right ? qMax(inset, size.width() - inset - width) : inset, y, width, height };
 }
 
 void dimSleepPage(QImage &page, bool dark)
@@ -298,7 +333,7 @@ void dimSleepPage(QImage &page, bool dark)
 
 void paintSleepTile(QPainter &painter, QSize size, const QString &progress,
                     const QString &remaining, bool dark, int batteryPercent, SleepStatus status,
-                    sleep::Tile tile, int percent)
+                    sleep::Tile tile, int percent, sleep::Place place)
 {
     if (tile == sleep::Tile::None)
         return;
@@ -307,7 +342,7 @@ void paintSleepTile(QPainter &painter, QSize size, const QString &progress,
             poweredOff ? ui::themeColors(true).paper : ui::themeColors(dark).sleepPaper;
     const QColor ink = ui::themeColors(poweredOff || dark).ink;
     const Content content{ status, progress, remaining, percent, batteryPercent };
-    const QRect area = sleepScreenCardRect(size, !remaining.isEmpty(), tile);
+    const QRect area = sleepScreenCardRect(size, !remaining.isEmpty(), tile, place);
     switch (tile) {
     case sleep::Tile::Card:
         paintCard(painter, area, content, ink, paper, size.width());
@@ -323,7 +358,7 @@ void paintSleepTile(QPainter &painter, QSize size, const QString &progress,
 
 QImage sleepScreenImage(QImage page, const QString &progress, const QString &remaining, bool dark,
                         int batteryPercent, SleepStatus status, bool dimPage, sleep::Tile tile,
-                        int percent)
+                        int percent, sleep::Place place)
 {
     if (page.isNull())
         return page;
@@ -333,7 +368,7 @@ QImage sleepScreenImage(QImage page, const QString &progress, const QString &rem
         return page;
     QPainter painter(&page);
     paintSleepTile(painter, page.size(), progress, remaining, dark, batteryPercent, status, tile,
-                   percent);
+                   percent, place);
     painter.end();
     return page;
 }

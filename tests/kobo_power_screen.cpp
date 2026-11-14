@@ -358,6 +358,89 @@ private slots:
         QSqlDatabase::removeDatabase(connection);
     }
 
+    // Outside the reader, the last book Kobalt opened gets Kobalt's screen,
+    // drawn from current data with no saved image.
+    void homeScreenDrawsLastKobaltBook()
+    {
+        using namespace kobalt;
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const storage::Paths paths{ directory.path() };
+        const auto connection = Device::getCurrentDevice()->getDbName();
+        auto database = QSqlDatabase::addDatabase("QSQLITE", connection);
+        database.setDatabaseName(directory.path() + "/native.sqlite");
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        QVERIFY(query.exec("CREATE TABLE content (ContentID TEXT, ContentType INTEGER, "
+                           "DateLastRead TEXT, Title TEXT, Attribution TEXT, ImageId TEXT, "
+                           "___PercentRead INTEGER)"));
+        // Nickel's percentage wins over the one Kobalt saved.
+        QVERIFY(query.exec(
+                "INSERT INTO content VALUES ('kobalt-book', 6, "
+                "'2026-11-14T08:00:00Z', 'Type Tester', 'N. Farbridge', 'no-image', 42)"));
+        QJsonObject positions;
+        positions[sleep::value(sleep::Design::Seal)] = sleep::value(sleep::Place::TopLeft);
+        QVERIFY(storage::writeBookState(paths, "kobalt-book",
+                                        { { "book", "kobalt-book" },
+                                          { "percent", 40 },
+                                          { "sleep_positions", positions } }));
+        MainWindowView window;
+        window.resize(QGuiApplication::primaryScreen()->size());
+        AbstractPowerView power(&window);
+        power.setGeometry(window.rect());
+        window.show();
+        power.show();
+        nickel::HomeSleepScreen owner(paths, nullptr);
+        const auto choose = [&](sleep::Design design) {
+            QJsonObject preferences;
+            sleep::setDesign(preferences, design);
+            QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+        };
+        // Kobo's own screen stays Nickel's.
+        choose(sleep::Design::Stock);
+        QVERIFY(!owner.prepareHomeScreen());
+        // The seal sits where this book put it. Without a cached cover, the
+        // status stays on blank paper.
+        choose(sleep::Design::Seal);
+        QVERIFY(owner.prepareHomeScreen());
+        owner.present();
+        auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+        QVERIFY(frame);
+        QSize size = window.size();
+        size = QSize(qMin(size.width(), size.height()), qMax(size.width(), size.height()));
+        sleep::Snapshot expected;
+        expected.image = QImage(size, QImage::Format_RGB32);
+        expected.image.fill(Qt::white);
+        expected.orientation = Qt::PortraitOrientation;
+        expected.mode = sleep::Mode::Plain;
+        expected.design = sleep::Design::Seal;
+        expected.tile = sleep::Tile::None;
+        expected.place = sleep::Place::TopLeft;
+        expected.dimPage = false;
+        expected.percent = 42;
+        expected.progress = strings::get("sleep.percent_read").arg(42);
+        expected.details.title = "Type Tester";
+        expected.details.author = "N. Farbridge";
+        QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
+                 reader::sleepDesignImage(expected.image, expected, 67,
+                                          reader::SleepStatus::Charging));
+        owner.clear();
+        // Reading page dims what Nickel shows and keeps its bookmark over it.
+        choose(sleep::Design::Page);
+        QVERIFY(owner.prepareHomeScreen(true));
+        owner.present();
+        frame = power.findChild<QWidget *>("rrSleepFrame");
+        QVERIFY(frame);
+        QVERIFY(frame->grab().toImage()
+                != reader::sleepDesignImage(expected.image, expected, 67,
+                                            reader::SleepStatus::PoweredOff));
+        owner.clear();
+        // A last book Kobalt never opened keeps Nickel's screen.
+        QVERIFY(query.exec("UPDATE content SET ContentID = 'nickel-book'"));
+        QVERIFY(!owner.prepareHomeScreen());
+        database.close();
+    }
+
     void saveReadsCommittedTokenOffTheGuiThread()
     {
         QTemporaryDir directory;

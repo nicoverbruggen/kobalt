@@ -1368,6 +1368,34 @@ BookmarkLocations captureBookmarkLocations(Engine &engine, const QStringList &po
     return result;
 }
 
+void ReaderSession::sleepWallpapers(const QStringList &directories, const QStringList &wanted,
+                                    QSize bound,
+                                    std::function<void(QStringList, QVector<QImage>)> finished)
+{
+    const auto lease = lease_;
+    const QPointer<ReaderSession> guard(this);
+    kobalt::qt::invoke(
+            engineWorker(),
+            [guard, lease, directories, wanted, bound, finished = std::move(finished)] {
+                QStringList names;
+                QVector<QImage> images;
+                if (lease && !lease->revoked()) {
+                    names = storage::sleepWallpapers(directories);
+                    for (const auto &name : wanted)
+                        images.append(storage::loadSleepWallpaper(directories, name, bound));
+                }
+                kobalt::qt::invoke(
+                        qApp,
+                        [guard, lease, names = std::move(names), images = std::move(images),
+                         finished]() mutable {
+                            if (guard && guard->lease_ == lease && lease && !lease->revoked())
+                                finished(std::move(names), std::move(images));
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+
 void ReaderSession::bookmarkPages(QStringList positions, std::function<void(QVector<int>)> finished,
                                   bool rangeEndpoints)
 {

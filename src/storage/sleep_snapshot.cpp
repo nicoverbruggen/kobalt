@@ -236,6 +236,96 @@ QImage loadSleepOverlay(const QStringList &directories)
     return {};
 }
 
+namespace {
+QFileInfoList wallpaperFiles(const QStringList &directories)
+{
+    QFileInfoList files;
+    for (const auto &directory : directories) {
+        if (directory.isEmpty())
+            continue;
+        for (const auto &file : QDir(directory).entryInfoList(
+                     { QStringLiteral("*.png"), QStringLiteral("*.jpg"), QStringLiteral("*.jpeg"),
+                       QStringLiteral("*.PNG"), QStringLiteral("*.JPG"), QStringLiteral("*.JPEG") },
+                     QDir::Files | QDir::Readable | QDir::NoSymLinks, QDir::Name)) {
+            if (file.size() > 0 && file.size() <= maxBytes)
+                files.append(file);
+        }
+    }
+    return files;
+}
+
+QImage decodeWallpaper(const QString &path, QSize bound)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly) || file.size() > maxBytes)
+        return {};
+    QImageReader reader(&file);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 5, 0)
+    // Photos keep the orientation the camera recorded. Qt 5.2 cannot read it.
+    reader.setAutoTransform(true);
+#endif
+    const QSize size = reader.size();
+    // JPEG decodes straight at a smaller size. Other formats decode in full
+    // first, so their size is capped harder to bound the memory they take.
+    const bool jpeg = reader.format() == "jpeg" || reader.format() == "jpg";
+    if (size.isEmpty() || size.width() > 8192 || size.height() > 8192
+        || (!jpeg && qint64(size.width()) * size.height() > 4096 * 4096))
+        return {};
+    // Photos are often larger than the screen; decode them at screen size,
+    // and never above the image limit, whatever their shape.
+    QSize target = size;
+    if (!bound.isEmpty() && (size.width() > bound.width() || size.height() > bound.height()))
+        target = size.scaled(bound, Qt::KeepAspectRatioByExpanding).boundedTo(size);
+    const auto fitted = [](QSize value) {
+        const qint64 pixels = qint64(value.width()) * value.height();
+        if (pixels <= maxPixels)
+            return value;
+        const double scale = std::sqrt(double(maxPixels) / double(pixels));
+        return QSize(qMax(1, int(value.width() * scale)), qMax(1, int(value.height() * scale)));
+    };
+    target = fitted(target);
+    if (target != size)
+        reader.setScaledSize(target);
+    auto image = reader.read();
+    // A handler that ignores the scaled size returns the full image.
+    if (!image.isNull() && !validSize(image.size()))
+        image = image.scaled(fitted(image.size()), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    return validSize(image.size()) ? image : QImage();
+}
+} // namespace
+
+QStringList sleepWallpapers(const QStringList &directories)
+{
+    QStringList names;
+    for (const auto &file : wallpaperFiles(directories))
+        if (!names.contains(file.fileName()))
+            names.append(file.fileName());
+    std::sort(names.begin(), names.end(), [](const QString &a, const QString &b) {
+        return QString::localeAwareCompare(a, b) < 0;
+    });
+    return names;
+}
+
+QImage loadSleepWallpaper(const QStringList &directories, const QString &name, QSize bound)
+{
+    auto files = wallpaperFiles(directories);
+    if (!name.isEmpty())
+        for (const auto &file : files)
+            if (file.fileName() == name) {
+                auto image = decodeWallpaper(file.absoluteFilePath(), bound);
+                if (!image.isNull())
+                    return image;
+            }
+    std::mt19937 random(std::random_device{}());
+    std::shuffle(files.begin(), files.end(), random);
+    for (const auto &file : files) {
+        auto image = decodeWallpaper(file.absoluteFilePath(), bound);
+        if (!image.isNull())
+            return image;
+    }
+    return {};
+}
+
 void removeSleepSnapshot(const QString &path)
 {
     QFile::remove(path);

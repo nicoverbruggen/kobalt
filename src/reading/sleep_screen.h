@@ -6,18 +6,22 @@
 #include <QPair>
 #include <QRect>
 #include <QStringList>
+#include <QVector>
 
 namespace kobalt::sleep {
 // The backdrop. Plain is a blank page for designs that draw everything
-// themselves. It is never saved in the legacy `sleep_screen` preference.
-enum class Mode { Stock, Cover, Page, Overlay, Plain };
+// themselves. Wallpaper is one of the reader's own images, filling the screen.
+// Neither is ever saved in the legacy `sleep_screen` preference.
+enum class Mode { Stock, Cover, Page, Overlay, Plain, Wallpaper };
 // The status tile drawn over the backdrop. It is independent of the backdrop.
 enum class Tile { Card, Bookmark, None };
 // What the sleep screen looks like. `designs` below lists the gallery order. Stock
 // is Kobo's own screen. Bookmark, Card and Cover are the cover with today's
-// tiles; Page and Overlay keep the tile saved in `sleep_tile`.
+// tiles; Page and Overlay keep the tile saved in `sleep_tile`. Custom combines
+// a backdrop with a status of the reader's choice, see `Custom` below.
 enum class Design {
     Stock,
+    Custom,
     Bookmark,
     Card,
     Cover,
@@ -46,6 +50,10 @@ struct Details
     qint64 todayMilliseconds = -1;
 };
 
+// Where a design puts its status. Default is the design's own place. A design
+// accepts only the places `places()` lists for it.
+enum class Place { Default, TopLeft, TopRight, BottomLeft, BottomRight, Left, Right, Top, Bottom };
+
 // Native cover preferences, read by the Kobo host when opening the gallery.
 struct NativePreview
 {
@@ -67,7 +75,10 @@ struct Snapshot
     // Unknown in snapshots saved before the percentage was stored.
     int percent = -1;
     Tile tile = Tile::Bookmark;
+    // The design that draws the status. A Custom screen is captured as the
+    // status it chose, such as Seal, over its own `mode`.
     Design design = Design::Bookmark;
+    Place place = Place::Default;
     Details details{};
     // Where the fitted cover sits in a Cover backdrop; empty when unknown.
     QRect coverArea{};
@@ -152,6 +163,8 @@ inline QString value(Mode mode)
         return QStringLiteral("overlay");
     case Mode::Plain:
         return QStringLiteral("plain");
+    case Mode::Wallpaper:
+        return QStringLiteral("wallpaper");
     }
     return {};
 }
@@ -190,14 +203,14 @@ inline Tile savedTile(const QJsonObject &preferences)
     return Tile::Bookmark;
 }
 
-// The gallery's order: Kobo's own screen, the reading page, today's default,
-// then the rest.
-inline constexpr Design designs[] = { Design::Stock,     Design::Page,  Design::Bookmark,
-                                      Design::Card,      Design::Cover, Design::Seal,
-                                      Design::Medallion, Design::Pill,  Design::Caption,
-                                      Design::Widgets,   Design::Night, Design::Ring,
-                                      Design::Framed,    Design::Lines, Design::Letter,
-                                      Design::Overlay };
+// The gallery's order: Kobo's own screen, Custom, the reading page, today's
+// default, then the rest.
+inline constexpr Design designs[] = { Design::Stock,    Design::Custom,    Design::Page,
+                                      Design::Bookmark, Design::Card,      Design::Cover,
+                                      Design::Seal,     Design::Medallion, Design::Pill,
+                                      Design::Caption,  Design::Widgets,   Design::Night,
+                                      Design::Ring,     Design::Framed,    Design::Lines,
+                                      Design::Letter,   Design::Overlay };
 inline constexpr auto designKey = "sleep_design";
 inline constexpr auto followOrientationKey = "sleep_follow_orientation";
 
@@ -215,6 +228,8 @@ inline QString value(Design design)
     switch (design) {
     case Design::Stock:
         return QStringLiteral("stock");
+    case Design::Custom:
+        return QStringLiteral("custom");
     case Design::Bookmark:
         return QStringLiteral("bookmark");
     case Design::Card:
@@ -324,6 +339,7 @@ inline Design legacyDesign(Mode mode, Tile tile)
         return Design::Overlay;
     case Mode::Cover:
     case Mode::Plain:
+    case Mode::Wallpaper:
         break;
     }
     switch (tile) {
@@ -368,44 +384,317 @@ inline void setDesign(QJsonObject &preferences, Design design)
     preferences[tileKey] = value(pair.second);
 }
 
+// ---------------------------------------------------------------- Places
+
+inline constexpr auto placesKey = "sleep_positions";
+
+inline QString value(Place place)
+{
+    switch (place) {
+    case Place::Default:
+        return {};
+    case Place::TopLeft:
+        return QStringLiteral("top-left");
+    case Place::TopRight:
+        return QStringLiteral("top-right");
+    case Place::BottomLeft:
+        return QStringLiteral("bottom-left");
+    case Place::BottomRight:
+        return QStringLiteral("bottom-right");
+    case Place::Left:
+        return QStringLiteral("left");
+    case Place::Right:
+        return QStringLiteral("right");
+    case Place::Top:
+        return QStringLiteral("top");
+    case Place::Bottom:
+        return QStringLiteral("bottom");
+    }
+    return {};
+}
+
+// The places a design can move its status to, in the order the editor
+// offers them. Designs that cannot move return none.
+inline QVector<Place> places(Design design)
+{
+    switch (design) {
+    case Design::Seal:
+    case Design::Medallion:
+    case Design::Card:
+        return { Place::TopLeft, Place::TopRight, Place::BottomLeft, Place::BottomRight };
+    case Design::Bookmark:
+        return { Place::Left, Place::Right };
+    case Design::Pill:
+    case Design::Caption:
+        return { Place::Top, Place::Bottom };
+    default:
+        return {};
+    }
+}
+
+// Where a design puts its status when the reader has not moved it.
+inline Place defaultPlace(Design design)
+{
+    switch (design) {
+    case Design::Seal:
+    case Design::Medallion:
+        return Place::BottomRight;
+    case Design::Card:
+        return Place::BottomLeft;
+    case Design::Bookmark:
+        return Place::Right;
+    case Design::Pill:
+    case Design::Caption:
+        return Place::Bottom;
+    default:
+        return Place::Default;
+    }
+}
+
+// The saved place of `design` in a `sleep_positions` object, or Default.
+inline Place savedPlace(const QJsonObject &positions, Design design)
+{
+    const auto saved = positions.value(value(design));
+    for (const auto option : places(design))
+        if (saved == value(option))
+            return option;
+    return Place::Default;
+}
+
+// The book's own place wins over the global one. Default keeps the design's
+// own place.
+inline Place place(const QJsonObject &preferences, const QJsonObject &bookPositions, Design design)
+{
+    const auto own = savedPlace(bookPositions, design);
+    if (own != Place::Default)
+        return own;
+    return savedPlace(preferences.value(placesKey).toObject(), design);
+}
+
+// Saves `place` for `design` in a `sleep_positions` object. The design's
+// default place removes the entry.
+inline void setPlace(QJsonObject &positions, Design design, Place place)
+{
+    if (place == Place::Default || place == defaultPlace(design) || !places(design).contains(place))
+        positions.remove(value(design));
+    else
+        positions[value(design)] = value(place);
+}
+
+// ---------------------------------------------------------------- Custom
+
+// A Custom screen is a backdrop with one status over it. Sleeping and charging
+// use `sleep`. Power off uses `off` unless `same` is set.
+inline constexpr auto customKey = "sleep_custom";
+
+// The backdrops and statuses Custom offers, in the editor's order. The Cover
+// design stands for no status: it draws the backdrop alone.
+inline constexpr Mode customBackdrops[] = { Mode::Cover, Mode::Page, Mode::Overlay, Mode::Wallpaper,
+                                            Mode::Plain };
+inline constexpr Design customStatuses[] = { Design::Cover,  Design::Bookmark,  Design::Card,
+                                             Design::Seal,   Design::Medallion, Design::Pill,
+                                             Design::Caption };
+
+struct Layer
+{
+    Mode backdrop = Mode::Cover;
+    Design status = Design::Bookmark;
+    // A file name in the wallpaper folders. Empty picks one at random.
+    QString wallpaper{};
+
+    bool operator==(const Layer &other) const
+    {
+        return backdrop == other.backdrop && status == other.status && wallpaper == other.wallpaper;
+    }
+};
+
+struct Custom
+{
+    bool same = true;
+    Layer sleep{}, off{};
+};
+
+inline QString statusValue(Design status)
+{
+    return status == Design::Cover ? QStringLiteral("none") : value(status);
+}
+
+inline Layer layer(const QJsonObject &saved)
+{
+    Layer result;
+    const auto backdrop = saved.value("background");
+    for (const auto option : customBackdrops)
+        if (backdrop == value(option))
+            result.backdrop = option;
+    const auto status = saved.value("status");
+    for (const auto option : customStatuses)
+        if (status == statusValue(option))
+            result.status = option;
+    // A name, never a path: the folders are fixed by the host.
+    const auto name = saved.value("wallpaper").toString();
+    if (!name.contains(QLatin1Char('/')) && !name.contains(QLatin1Char('\\')) && name.size() <= 255)
+        result.wallpaper = name;
+    return result;
+}
+
+inline QJsonObject value(const Layer &layer)
+{
+    QJsonObject saved;
+    saved["background"] = value(layer.backdrop);
+    saved["status"] = statusValue(layer.status);
+    if (!layer.wallpaper.isEmpty())
+        saved["wallpaper"] = layer.wallpaper;
+    return saved;
+}
+
+// Missing or invalid fields use the defaults: the same screen for both, the
+// cover with the bookmark.
+inline Custom custom(const QJsonObject &preferences)
+{
+    const auto saved = preferences.value(customKey).toObject();
+    Custom result;
+    result.same = saved.value("same").toBool(true);
+    result.sleep = layer(saved.value("sleep").toObject());
+    result.off = saved.contains("off") ? layer(saved.value("off").toObject()) : result.sleep;
+    return result;
+}
+
+inline void setCustom(QJsonObject &preferences, const Custom &custom)
+{
+    QJsonObject saved;
+    saved["same"] = custom.same;
+    saved["sleep"] = value(custom.sleep);
+    saved["off"] = value(custom.same ? custom.sleep : custom.off);
+    preferences[customKey] = saved;
+}
+
+// A design that is a backdrop with one status, as Custom can show it.
+// Returns false for Kobo's screen, Custom and the designs that draw the whole screen.
+inline bool asLayer(Design design, Tile tile, Layer &result)
+{
+    switch (design) {
+    case Design::Bookmark:
+    case Design::Card:
+    case Design::Cover:
+    case Design::Seal:
+    case Design::Medallion:
+    case Design::Pill:
+    case Design::Caption:
+        result = { Mode::Cover, design, {} };
+        return true;
+    case Design::Page:
+    case Design::Overlay:
+        result = { design == Design::Page ? Mode::Page : Mode::Overlay,
+                   tile == Tile::Card           ? Design::Card
+                           : tile == Tile::None ? Design::Cover
+                                                : Design::Bookmark,
+                   {} };
+        return true;
+    default:
+        return false;
+    }
+}
+
+// ---------------------------------------------------------------- Look
+
+// What one state of the chosen screen draws: the status design, its backdrop
+// and, for the tiled designs, the tile.
+struct Look
+{
+    Design design = Design::Bookmark;
+    Mode mode = Mode::Cover;
+    Tile tile = Tile::Bookmark;
+};
+
+inline Tile tileFor(Design status)
+{
+    return status == Design::Bookmark ? Tile::Bookmark
+            : status == Design::Card  ? Tile::Card
+                                      : Tile::None;
+}
+
+// Charging uses the sleeping look; only power off can differ.
+inline Look look(const QJsonObject &preferences, bool poweredOff = false)
+{
+    const auto chosen = design(preferences);
+    if (chosen == Design::Custom) {
+        const auto saved = custom(preferences);
+        const auto &layer = poweredOff && !saved.same ? saved.off : saved.sleep;
+        return { layer.status, layer.backdrop, tileFor(layer.status) };
+    }
+    Tile tile = Tile::None;
+    switch (chosen) {
+    case Design::Bookmark:
+        tile = Tile::Bookmark;
+        break;
+    case Design::Card:
+        tile = Tile::Card;
+        break;
+    case Design::Page:
+    case Design::Overlay:
+    case Design::Stock:
+        tile = savedTile(preferences);
+        break;
+    default:
+        break;
+    }
+    return { chosen, backdrop(chosen), tile };
+}
+
+// The design whose place applies: the tile for Reading page, PNG over text
+// and the cover designs with a tile, otherwise the design itself.
+inline Design statusDesign(const Look &look)
+{
+    if (look.tile == Tile::Bookmark)
+        return Design::Bookmark;
+    if (look.tile == Tile::Card)
+        return Design::Card;
+    return look.design;
+}
+
+inline Place place(const QJsonObject &preferences, const QJsonObject &bookPositions,
+                   const Look &look)
+{
+    return place(preferences, bookPositions, statusDesign(look));
+}
+
+// The backdrop while sleeping.
 inline Mode mode(const QJsonObject &preferences)
 {
-    return backdrop(design(preferences));
+    return look(preferences).mode;
+}
+
+// Whether sleeping or power off draws over `mode`, so its image is prepared.
+inline bool uses(const QJsonObject &preferences, Mode mode)
+{
+    return look(preferences).mode == mode || look(preferences, true).mode == mode;
 }
 
 // The tile for the tiled designs; None for designs that draw their own status.
 inline Tile tile(const QJsonObject &preferences)
 {
-    const auto chosen = design(preferences);
-    switch (chosen) {
-    case Design::Bookmark:
-        return Tile::Bookmark;
-    case Design::Card:
-        return Tile::Card;
-    case Design::Page:
-    case Design::Overlay:
-    case Design::Stock:
-        return savedTile(preferences);
-    default:
-        return Tile::None;
-    }
+    return look(preferences).tile;
 }
 
 // Keep the design and anonymous reading statistics, discarding all book pixels
 // and identifying metadata. Stock needs a Kobalt fallback to cover Nickel's image.
+// A Custom screen keeps its status over the neutral backdrop; its wallpaper
+// and PNG are left out.
 inline Snapshot privateSnapshot(QSize size, const QJsonObject &preferences, Snapshot source = {},
-                                bool followReading = false)
+                                bool followReading = false, bool poweredOff = false)
 {
     auto snapshot = privateSnapshot(size, preferences.value("dark_mode").toBool(source.dark),
                                     followReading);
-    snapshot.design = design(preferences);
-    snapshot.tile = tile(preferences);
+    const auto chosen = look(preferences, poweredOff);
+    snapshot.design = chosen.design;
+    snapshot.tile = chosen.tile;
     if (snapshot.design == Design::Stock) {
         snapshot.design = Design::Card;
         snapshot.tile = Tile::Card;
     }
-    if (backdrop(snapshot.design) == Mode::Cover)
+    if (chosen.mode == Mode::Cover)
         snapshot.image.fill(Qt::black);
+    snapshot.place = source.place;
     snapshot.percent = source.percent;
     snapshot.progress = source.progress;
     snapshot.remaining = source.remaining;

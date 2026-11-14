@@ -109,6 +109,10 @@ bool ReaderController::resetBook(const QString &path)
     QJsonObject reset{ { "book", identity } };
     if (saved.object.value("hide_book_on_sleep_screen").toBool(false))
         reset["hide_book_on_sleep_screen"] = true;
+    // Moved sleep-screen positions belong to the book, like its privacy choice.
+    const auto positions = saved.object.value("sleep_positions").toObject();
+    if (!positions.isEmpty())
+        reset["sleep_positions"] = positions;
     return storage::writeBookState(paths, identity, reset);
 }
 

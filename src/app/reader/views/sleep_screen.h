@@ -23,22 +23,27 @@ QString sleepTimeLeft(qint64 milliseconds, bool approximate = false);
 QString sleepDuration(qint64 milliseconds, bool approximate = false);
 // Fits the cover without cropping. Unused space is always black.
 QImage sleepCoverBackground(const QImage &cover, QSize size);
+// Fills the screen with a wallpaper, cropping its longer side, centred.
+QImage sleepWallpaperBackground(const QImage &wallpaper, QSize size);
+void drawSleepWallpaper(QPainter &painter, const QRect &screen, const QImage &wallpaper);
 // The area a tile covers. It does not depend on the status, so a battery
-// update can repaint and refresh only this area.
-QRect sleepScreenCardRect(QSize size, bool showRemaining, sleep::Tile tile = sleep::Tile::Card);
+// update can repaint and refresh only this area. `place` moves the bookmark
+// to the left or the card to another corner.
+QRect sleepScreenCardRect(QSize size, bool showRemaining, sleep::Tile tile = sleep::Tile::Card,
+                          sleep::Place place = sleep::Place::Default);
 void dimSleepPage(QImage &page, bool dark);
 // Takes ownership of one background and paints in place. The caller
 // releases the completed frame to the host before the device suspends.
 // percent is the reading progress for tiles that draw it; -1 leaves it out.
 QImage sleepScreenImage(QImage page, const QString &progress, const QString &remaining, bool dark,
                         int batteryPercent = -1, SleepStatus status = SleepStatus::Sleeping,
-                        bool dimPage = true, sleep::Tile tile = sleep::Tile::Card,
-                        int percent = -1);
+                        bool dimPage = true, sleep::Tile tile = sleep::Tile::Card, int percent = -1,
+                        sleep::Place place = sleep::Place::Default);
 
 // Draws a tile on any painter, such as a scaled gallery preview.
 void paintSleepTile(QPainter &painter, QSize size, const QString &progress,
                     const QString &remaining, bool dark, int batteryPercent, SleepStatus status,
-                    sleep::Tile tile, int percent);
+                    sleep::Tile tile, int percent, sleep::Place place = sleep::Place::Default);
 
 // The chosen design over its backdrop: the cover fitted with black bars, the
 // page or a blank image for designs without a cover. Tiled designs draw the
@@ -56,6 +61,8 @@ QRect repaintSleepStatus(QImage &screen, const QVector<QImage> &underlay,
                          const sleep::Snapshot &snapshot, int batteryPercent, SleepStatus status);
 // A design drawn small for the gallery. The screen has `size`; `cover` is the
 // book's cover and `page` the current page, either of which may be null.
+// `snapshot.mode` chooses the backdrop; `wallpaper` is used for Wallpaper.
 void paintSleepPreview(QPainter &painter, const QRectF &target, QSize size, const QImage &cover,
-                       const QImage &page, const QImage &overlay, const sleep::Snapshot &snapshot);
+                       const QImage &page, const QImage &overlay, const sleep::Snapshot &snapshot,
+                       const QImage &wallpaper = {}, SleepStatus status = SleepStatus::Sleeping);
 } // namespace kobalt::reader

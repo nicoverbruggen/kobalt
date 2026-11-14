@@ -454,6 +454,10 @@ public:
                     QString preferredPath);
 
     void sleepOverlay(const QStringList &directories, std::function<void(QImage)> finished);
+    // Lists the wallpapers and decodes one image for each entry of `wanted`, a
+    // file name or empty for a random one, on the engine worker.
+    void sleepWallpapers(const QStringList &directories, const QStringList &wanted, QSize bound,
+                         std::function<void(QStringList, QVector<QImage>)> finished);
 
     QString chapterTitle() const { return frame.state.value("chapter_title").toString(); }
 

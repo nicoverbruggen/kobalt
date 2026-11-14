@@ -33,6 +33,10 @@ protected:
     void paintEvent(QPaintEvent *event) override;
 };
 
+// A Settings checkbox row: a square box before the label, with dividers.
+ui::DescribedOption *checklistOption(QWidget *parent, const QString &name, const QString &label,
+                                     const QString &description, bool first);
+
 // Settings tabs, in the order of the stacked pages.
 enum class SettingsPage {
     Display,

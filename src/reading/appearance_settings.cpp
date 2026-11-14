@@ -182,6 +182,11 @@ QJsonObject cleanPreferences(QJsonObject preferences)
     choice("sleep_screen", { "stock", "cover", "page", "overlay" });
     choice("sleep_tile", { "card", "bookmark", "none" });
     choice(sleep::designKey, sleep::designValues());
+    // The Custom screen and the moved statuses are objects; their fields fall
+    // back to defaults one by one when read.
+    for (const auto *key : { sleep::customKey, sleep::placesKey })
+        if (preferences.contains(key) && !preferences.value(key).isObject())
+            preferences.remove(key);
     if (preferences.contains(sleep::greetingKey)
         && (!preferences.value(sleep::greetingKey).isString()
             || preferences.value(sleep::greetingKey).toString().size() > sleep::greetingLength))

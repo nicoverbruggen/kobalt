@@ -862,6 +862,21 @@ int EngineDocument::turnTarget(int from, int delta) const
 
 bool EngineDocument::goTo(const QString &position)
 {
+    const int item = spineItemIndex(position);
+    if (engine_ && windowFirst_ >= 0 && slicePages_ > 0 && item >= 0
+        && (item < windowFirst_ || item > windowLast_)) {
+        // A saved position may refer to text that has changed. Resolve it in
+        // the spare chapter before replacing the page on screen.
+        const auto unit = unitFrom(item);
+        auto *next = openAhead(unit.first, {}, unit.second);
+        if (!next || item < next->windowFirst_ || item > next->windowLast_ || !next->goTo(position))
+            return false;
+        const qint64 loadMs = next->windowLoadMs_;
+        if (!adoptAhead(unit.first, unit.second))
+            return false;
+        windowLoadMs_ = loadMs;
+        return true;
+    }
     if (!engine_ || !showSpineItemOf(position) || !showSliceOf(position))
         return false;
     auto pointer = engine_->getDocument()->createXPointer(cre(position));

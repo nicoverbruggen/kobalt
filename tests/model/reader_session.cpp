@@ -220,6 +220,53 @@ static void hybridFontEdits(const QString &path, quint16 port)
     renderingMode::setOverride(-1);
 }
 
+static void chapterNavigation(const QString &path)
+{
+    const auto previous = qgetenv("KOBALT_CHAPTER_PAGES");
+    qputenv("KOBALT_CHAPTER_PAGES", "1");
+    renderingMode::setOverride(1);
+    QEventLoop loop;
+    ReaderSession hybrid(test::readerFonts(), test::readerPlaceholder());
+    auto lease = std::make_shared<SourceLease>();
+    hybrid.open(
+            { path, path, QSize(758, 900), {}, {}, {}, lease, localResourceFactory(path, lease) },
+            [&](OpeningResult result) {
+                require(result.ready(), qPrintable(openingMessage(result)));
+                loop.quit();
+            });
+    loop.exec();
+    hybrid.updated = [&] {
+        if (!hybrid.busy())
+            loop.quit();
+    };
+    require(hybrid.turn(1), "Cannot leave the opening page");
+    loop.exec();
+    const auto before = hybrid.image();
+    const auto anchor = hybrid.state().value("position");
+    const auto chapter = hybrid.chapterTitle();
+    const QString missing = QStringLiteral("/body/DocFragment[3]/body/MissingParagraph/text().0");
+    QString error;
+    require(hybrid.goToSyncedPosition(missing,
+                                      [&](QString result) {
+                                          error = result;
+                                          loop.quit();
+                                      }),
+            "Cannot submit a saved passage in another chapter");
+    loop.exec();
+    require(!error.isEmpty() && hybrid.state().value("position") == anchor
+                    && hybrid.image() == before && hybrid.chapterTitle() == chapter,
+            "An unavailable synced passage in another chapter must leave the reading page in place");
+    require(hybrid.goToChapter(2), "Cannot jump into the chapter from the refused import");
+    loop.exec();
+    require(hybrid.error().isEmpty() && hybrid.chapterTitle() != chapter,
+            "A refused import must leave a valid jump to the same chapter usable");
+    renderingMode::setOverride(-1);
+    if (previous.isNull())
+        qunsetenv("KOBALT_CHAPTER_PAGES");
+    else
+        qputenv("KOBALT_CHAPTER_PAGES", previous);
+}
+
 static void positionImportTransitions(const QString &path, const QString &replacement)
 {
     ReaderSession reader(test::readerFonts(), test::readerPlaceholder());
@@ -584,6 +631,7 @@ int run(int argc, char **argv)
             opened.exec();
             servedPath = path;
         }
+        chapterNavigation(path);
         positionImportTransitions(path, publisherPath);
         hybridFontEdits(path, server.serverPort());
         ReaderSession::drain([&] { opened.quit(); });

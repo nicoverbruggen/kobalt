@@ -10,6 +10,8 @@ My Words resolves a saved passage while Hybrid switches to whole-book pagination
 
 Native and synced position imports cancel outstanding page previews. An import interrupted by font edits must finish on the final frame, where its caller can save the position and turn the page. Replacing or revoking the source discards its old completion.
 
+A failed jump to a passage in another chapter must preserve the current anchor and pixels and allow a subsequent valid jump to that chapter.
+
 Label `reading`. Build `mac-tests`, then run `ctest --preset mac -L reading` from `platforms/desktop/`. `ctest --preset mac -N -L reading` lists its tests.
 
 These checks cover empty-library startup, opening books, rendered pages, page turns, saved positions, opening failures and cancellation, the feature tour, reader sessions, the opening cover, local resources and archives. [Test inventory](../validation.md#test-inventory) lists the desktop checks.

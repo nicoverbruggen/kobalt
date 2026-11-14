@@ -924,6 +924,14 @@ QJsonObject EngineDocument::windowSettings(int first, int last) const
     return saved;
 }
 
+bool EngineDocument::hasPageAt(const QString &position) const
+{
+    const auto pointer = engine_->getDocument()->createXPointer(cre(position));
+    // CREngine maps a hidden node to page zero. Only a laid-out position
+    // can carry the reader from a chapter into the whole book.
+    return !pointer.isNull() && pointer.toPoint().y >= 0;
+}
+
 bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, QSize size,
                                     OpeningProgress progress, const std::function<bool()> &current)
 {
@@ -951,7 +959,7 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
         const auto place = position();
         // Keep the chapter on screen if the prepared document cannot resolve
         // its place. A failed switch must never send the reader to page one.
-        if (!place.isEmpty() && !full_->goTo(place)) {
+        if (!full_->hasPageAt(place) || !full_->goTo(place)) {
             // The same build would refuse the same place again. Drop it and
             // do not build it again for this appearance.
             fullFailed_ = fullKey_;
@@ -999,6 +1007,8 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
                                      &error, std::move(progress))
                 : next.open(source_->bytes, viewport, saved, &error, std::move(progress));
         if (!opened || (current && !current()))
+            return false;
+        if (!fast && windowFirst_ >= 0 && !next.hasPageAt(position()))
             return false;
 #  ifdef KOBLAZE_CANCEL_CHECK
     } catch (const KoblazeRenderCancelled &) {
@@ -1439,7 +1449,7 @@ int EngineDocument::preparedSpreadTurn(int direction) const
         return -1;
     auto &whole = *full_->engine_;
     const auto pointer = whole.getDocument()->createXPointer(anchor.toString());
-    if (pointer.isNull())
+    if (pointer.isNull() || pointer.toPoint().y < 0 || !full_->hasPageAt(position()))
         return -1;
     // On a column containing only decoration, the bookmark can point to
     // nearby text. Keep the distance from that text to the displayed column.

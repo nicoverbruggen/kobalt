@@ -1852,6 +1852,39 @@ void chaptersMeasuredInIdle()
             "The book pages of the chapters must be measured in idle time");
 }
 
+// The previous chapter is a placeholder in chapter mode. Its class only
+// participates in the sibling selector when the whole book is laid out.
+void hiddenHeadingAtHandoff()
+{
+    auto files = test::engineBook(false, 2, 12);
+    for (const auto &name : { "OEBPS/c1.xhtml", "OEBPS/c2.xhtml" })
+        files[name].replace("<html ", "<html class='chapter' ");
+    files["OEBPS/c2.xhtml"].replace("</head>",
+                                    "<style>.chapter + .chapter h1 {display:none}</style></head>");
+
+    for (const bool prepared : { true, false }) {
+        EngineDocument model(test::readerFonts());
+        openResources(model, files, { { "font_pixels", 28 } });
+        model.setChapterSlices(6);
+        QString error;
+        require(model.showSpineItems(1, 1, &error) && model.go(0), qPrintable(error));
+        require(model.pageExcerpt(0).startsWith("Chapter 2"),
+                "The chapter heading must be visible");
+        require(model.turnInWindow(1), "Cannot turn past the heading");
+        const auto next = model.position();
+        require(model.turnInWindow(-1), "Cannot return to the chapter heading");
+        const auto heading = model.position();
+        if (prepared)
+            require(model.prepareFullDocument({}) == Engine::FullDocument::Ready,
+                    "Cannot prepare the whole book");
+        require(!model.setChapterMode(false, {}, {}),
+                "A heading hidden in the whole book must not move the reader to the cover");
+        require(model.bookFraction() >= 0 && model.position() == heading && model.turnInWindow(1)
+                        && model.position() == next,
+                "The next turn must reach the same passage in the chapter");
+    }
+}
+
 // Hybrid rendering builds the document of the whole book beside the chapter
 // that is shown, and then shows it: the same page, the pages of the whole
 // book, and no new load. A try that is stopped leaves nothing behind.
@@ -2719,6 +2752,9 @@ int main(int argc, char **argv)
         survey(QString::fromLocal8Bit(argv[1]), options);
         return 0;
     }
+#if __has_include(<koblaze.h>)
+    hiddenHeadingAtHandoff();
+#endif
     offscreenRangeEnd();
     savedPlaceOutsideOpeningWindow();
     returnToEvictedBookmark();

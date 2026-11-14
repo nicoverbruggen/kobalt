@@ -6,7 +6,11 @@ These checks cover the CREngine layout groups, publisher markup, the document ca
 
 ## Engine checks
 
-Hybrid regressions keep the chapter usable when a prepared document cannot resolve its reading position. They check interrupted chapter-place reads, publisher-font reuse across the whole-book build, parked-cache ownership and abandonment after a cached document opens. Rendering policy 5 rebuilds pagination that may contain another book's publisher-font metrics. Parsed-book data remains compatible and is retained.
+Hybrid regressions keep the chapter usable when a prepared document cannot resolve its reading position. Such a document is dropped and not built again for the same appearance. The session regression deliberately damages the prepared document and checks that the requested turn and later turns succeed in chapter mode without an error. In a long chapter, the text around a search hit must match the whole book, including when the part containing the hit has no layout.
+
+The session checks also request an appearance edit while the worker has adopted the whole book but has not published its frame. The edit must return to chapter rendering before reflow.
+
+The Hybrid checks also cover interrupted chapter-place reads, publisher-font reuse across the whole-book build, parked-cache ownership and abandonment after a cached document opens. Rendering policy 5 rebuilds pagination that may contain another book's publisher-font metrics. Parsed-book data remains compatible and is retained. Search-context resolution and refusal handling do not change either cache format.
 
 The restored `reader`, `publisher-markup`, `local-reader` and `document-word-count` checks keep the original assertions. Their focused EPUBs are generated offline in C++ with the original text, span IDs, markup and resource paths. `engine.document-cache` is a separate check, so `engine.reader` stays within the child deadline under parallel execution. `engine.reader` also links the portable Kobo position codec, but it does not load Nickel or inspect firmware symbols. Its variable-font cases need the pinned Amstelvar fixture and fail rather than skip without it.
 

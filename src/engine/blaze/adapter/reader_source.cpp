@@ -909,8 +909,13 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
         const auto place = position();
         // Keep the chapter on screen if the prepared document cannot resolve
         // its place. A failed switch must never send the reader to page one.
-        if (!place.isEmpty() && !full_->goTo(place))
+        if (!place.isEmpty() && !full_->goTo(place)) {
+            // The same build would refuse the same place again. Drop it and
+            // do not build it again for this appearance.
+            fullFailed_ = fullKey_;
+            full_.reset();
             return false;
+        }
         auto full = std::move(full_);
         if (externalChapters_) {
             full->setChapters(contents_, graph_);
@@ -1231,7 +1236,7 @@ struct EngineDocument::FullBuild
     QMutex mutex;
     QWaitCondition changed;
     State state = State::Parked;
-    bool abandoned = false;
+    std::atomic_bool abandoned{ false };
     // "Still current" of the job that lets the build run. False parks it.
     std::function<bool()> current;
     std::unique_ptr<EngineDocument> document;

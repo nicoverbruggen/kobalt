@@ -72,6 +72,8 @@ Native tile cover reuse is enabled at startup when all required capture and inva
 
 ## Desktop engine monitor
 
+`full-document-ready` reports that Hybrid has prepared the whole book, with its page count, cache status and number of pauses. It does not mean that the reader has adopted it. `full-document-refused` is a warning with the render ID when that document cannot restore the current position. The reader discards it, keeps chapter mode and continues the requested navigation. It does not retry the same build for the same appearance.
+
 Build `kobalt-desktop-tests` and run `ctest --preset mac -R '^desktop.engineMonitor'`. The focused checks cover event pairing, interruption labels, queue and paint timings, memory values, bounded history, pause/clear/close behavior, safe observer lifetime, timeline zoom, rendering slowdown, nested scopes and cancellation during the artificial wait. A Type Tester reading check verifies that real renderer and background events reach the window.
 
 Set `KOBALT_MONITOR_CAPTURE` to an absolute directory under the worktree's `build/screenshots/` when running `desktop.engineMonitorReading` to retain the desktop monitor and reader captures. This development window uses desktop geometry, separate from the reader's e-reader and phone captures. The checks do not establish timing equivalence with Kobo hardware.

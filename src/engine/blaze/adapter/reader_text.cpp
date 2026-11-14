@@ -2082,7 +2082,20 @@ QVector<SearchHit> EngineDocument::searchDetails(QVector<SearchHit> hits, Search
         return searchDetailsLoaded(std::move(hits), scope, origin);
     QVector<SearchHit> result;
     for (const auto &hit : hits) {
-        auto *document = documentFor(positionItem(hit.start));
+        const int item = positionItem(hit.start);
+        auto *document = documentFor(item);
+        // A long spine item has a layout for one part at a time, and only
+        // that part has the text around a hit. Another document shows the
+        // part of the hit: the one on screen keeps its part.
+        if (document && document->slices()) {
+            const int before = document->textBefore(hit.start);
+            if (before < document->sliceFirst_ || before >= document->sliceEnd_) {
+                if (document == this)
+                    document = openAhead(item, {});
+                if (document && document->slices() && !document->showSliceAt(before))
+                    document = nullptr;
+            }
+        }
         auto found = document ? document->searchDetailsLoaded({ hit }, scope, origin)
                               : QVector<SearchHit>();
         for (auto &one : found)

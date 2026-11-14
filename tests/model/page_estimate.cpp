@@ -108,7 +108,7 @@ struct ReaderLocationProbe
             body->removeLastChild();
     }
 
-    static void dropFullDocument(EngineDocument &model) { model.full_.reset(); }
+    static void forgetRefusedFullDocument(EngineDocument &model) { model.fullFailed_.clear(); }
 
     static void abandonFullBuild(EngineDocument &model) { model.dropSideDocuments(); }
 
@@ -998,6 +998,24 @@ void searchLongItem()
     const auto found = hits(model);
     require(found == expected, "Chapter mode must find the matches of the whole book");
     require(model.pageStart(model.page()) == shown, "The search must not move the page on screen");
+    // The list asks for the text around each hit later. A hit in a part
+    // that has no layout at that moment gets the same text as in the whole book.
+    const auto details = [&](EngineDocument &document) {
+        QVector<SearchHit> wanted;
+        for (const auto &start : expected)
+            wanted.append({ start, start, {}, {}, {} });
+        QStringList texts;
+        for (const auto &hit : document.searchDetails(wanted, SearchScope::Book, {}))
+            texts.append(hit.start + " | " + hit.before + " | " + hit.after);
+        return texts;
+    };
+    const auto wholeDetails = details(whole), chapterDetails = details(model);
+    require(wholeDetails.size() == expected.size() && !wholeDetails.first().contains("|  |"),
+            "The whole book must give the text around each hit");
+    require(chapterDetails == wholeDetails,
+            "Chapter mode must give the text around a hit as the whole book does");
+    require(model.pageStart(model.page()) == shown,
+            "The text around the hits must not move the page on screen");
 }
 
 // In a long spine item, a forward step to the first page of a slice that is
@@ -1594,9 +1612,15 @@ void fullDocument()
     require(Probe::view(model) == chapter && model.position() == beforeFailedSwitch
                     && model.image(model.page()) == beforeFailedImage,
             "A failed switch changed the reading page");
-    Probe::dropFullDocument(model);
+    // The same build would fail the same way: it is not offered or built
+    // again for this appearance.
+    require(!model.fullDocumentReady()
+                    && model.prepareFullDocument({}) == Engine::FullDocument::None,
+            "A refused whole-book document must not be offered again");
+    // The rest of the test goes on with a new build for the same pages.
+    Probe::forgetRefusedFullDocument(model);
     require(model.prepareFullDocument({}) == Engine::FullDocument::Ready,
-            "The whole book must build again after a failed switch");
+            "The whole book must build again once the refusal is forgotten");
     full = Probe::fullView(model);
     // The reader went on in the chapter meanwhile.
     require(model.turnInWindow(1), "The fixture is too short to read on");

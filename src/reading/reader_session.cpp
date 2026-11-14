@@ -872,11 +872,11 @@ void ReaderSession::requestAppearance(const appearance::Requested &settings, QSi
             : (frame.state.contains("book_fraction") ? 1 : 0);
     // Hybrid rendering: another appearance or page size goes back to the
     // chapter, which is quick, and the whole book follows in the background.
-    // The same appearance keeps what is shown. A caller that names no mode
-    // gets the same while the whole book is shown, so that a change in the
-    // menu or a rotation does not lay out the whole book first.
+    // The same appearance keeps what is shown. An automatic Hybrid edit
+    // requests chapter mode even when the last frame is still a chapter:
+    // the worker may have adopted the whole book before that frame arrives.
     if (chapterMode == hybridChapterMode
-        || (chapterMode < 0 && previousMode == 0 && renderingMode::countsInBackground()))
+        || (chapterMode < 0 && renderingMode::countsInBackground()))
         chapterMode = next != desired || resized ? 1 : -1;
     // A document that was prepared for the old appearance is of no use.
     if (next != desired || resized || chapterMode >= 0)
@@ -2621,24 +2621,34 @@ void ReaderSession::dispatch(bool pageTurn)
                 const bool modeChanged = mode >= 0 && (engine->bookFraction() >= 0) != (mode > 0);
                 const bool unchanged =
                         !modeChanged && appearance::same(before, requested) && oldSize == size;
-                if (!unchanged
-                    && !(modeChanged ? engine->setChapterMode(mode > 0,
-                                                              appearance::Patch(requested), size,
-                                                              progress,
-                                                              [latest, job, lease] {
-                                                                  return latest->load() == job
-                                                                          && lease
-                                                                          && !lease->revoked();
-                                                              })
-                                     : engine->applyAppearance(appearance::Patch(requested), size,
-                                                               progress)))
+                bool applied = unchanged
+                        || (modeChanged
+                                    ? engine->setChapterMode(mode > 0, appearance::Patch(requested),
+                                                             size, progress,
+                                                             [latest, job, lease] {
+                                                                 return latest->load() == job
+                                                                         && lease
+                                                                         && !lease->revoked();
+                                                             })
+                                    : engine->applyAppearance(appearance::Patch(requested), size,
+                                                              progress));
+                // The prepared document refused the place on screen. Nothing
+                // else was asked: the reader stays with the chapter, and the
+                // turn or jump of this render goes on there.
+                const bool refused = !applied && swap && modeChanged
+                        && appearance::same(before, requested) && oldSize == size;
+                if (refused) {
+                    applied = true;
+                    diagnostic("full-document-refused", { { "render_id", double(job) } },
+                               DiagnosticSeverity::Warning);
+                }
+                if (!applied)
                     result.error = strings::get("error.could_not_update_text");
                 else {
-                    appearanceChanged = !unchanged
-                            && ((modeChanged && !swap)
-                                || !appearance::same(before, engine->state())
+                    appearanceChanged = !unchanged && !refused
+                            && ((modeChanged && !swap) || !appearance::same(before, engine->state())
                                 || oldSize != engine->viewport());
-                    if (swap && modeChanged) {
+                    if (swap && modeChanged && !refused) {
                         // The same page in the document of the whole book:
                         // a page turn goes on from there as a page turn.
                         oldPage = engine->page();

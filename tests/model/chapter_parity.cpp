@@ -1488,6 +1488,23 @@ Book loadBook(const QString &name)
 {
     if (name == QLatin1String("links"))
         return { name, {}, test::linkBook() };
+    if (name == QLatin1String("bordered vertical text")) {
+        QByteArray body;
+        for (int group = 0; group < 8; ++group) {
+            body += "<div style='border:1px solid #333;padding:12px 8px'>";
+            for (int paragraph = 0; paragraph < 3; ++paragraph)
+                body += "<p>" + QByteArray("吾輩は猫である。名前はまだ無い。")
+                                        .repeated(18 + (group + paragraph) % 3)
+                        + "</p>";
+            body += "</div>";
+        }
+        auto chapter = test::publisherHtml(body);
+        chapter.replace("</head>", "<style>body{writing-mode:vertical-rl;"
+                                   "font-family:Noto Serif CJK JP}</style></head>");
+        return { name, {}, test::publisherPackage("ja", "Vertical paragraphs",
+                                                  { { "chapter.xhtml", chapter } },
+                                                  "<itemref idref='chapter.xhtml'/>") };
+    }
     if (name == QLatin1String("trevelyan"))
         return { name,
                  readFile(QStringLiteral(KOBALT_TEST_FIXTURES)

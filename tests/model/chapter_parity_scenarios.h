@@ -26,6 +26,14 @@ QVector<Scenario> scenarios()
         { "border above a chapter slice",
           "trevelyan",
           { chapterSlicePages(2), gotoChapter(3), setFontSize(2), turn(-2), turn(-2) } },
+        { "border before a vertical chapter slice",
+          "bordered vertical text",
+          { chapterSlicePages(2),
+            { "rotate to landscape", [](Reader &reader) -> QString {
+                 return reader.model->applyAppearance({}, { 1072, 758 }) ? QString()
+                                                                        : "error: rotation failed";
+             } },
+            turn(4), turn(1), turn(-1) } },
         { "line spacing on the final chapter slice",
           "trevelyan",
           { chapterSlicePages(7), setFontSize(8), gotoChapter(3), turn(-1),

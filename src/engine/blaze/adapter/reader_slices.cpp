@@ -685,9 +685,8 @@ bool EngineDocument::pageStartsBlock(int page, int *before) const
 
 bool EngineDocument::earlierContentOnPage(ldomNode *block, int page) const
 {
-    // Pages of vertical text advance along x.
-    if (engine_->isVerticalText())
-        return false;
+    // Page starts and block rectangles use document y in both writing modes.
+    // Drawing a vertical page maps that coordinate to screen x.
     const auto *list = engine_->getPageList();
     const int index = page * qMax(1, columns_);
     if (!list || index < 0 || index >= list->length())

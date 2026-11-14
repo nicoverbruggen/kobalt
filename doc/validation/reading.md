@@ -2,6 +2,8 @@
 
 The standalone opening bar reaches 60% when the engine finishes, 80% after window construction and 100% after presentation preparation. `desktop.openingProgressStages` checks this order with uncached text preset previews. Opening queues neighbour and estimate work after its completion callback. Preview requests can interrupt estimates without changing the session revision; the estimates resume after the preview. Deferred-image completion also resumes this idle work. The focused checks are `lifecycle.appearancePreviewInterruptsEstimate`, `lifecycle.pageImageDuringHold` and `session.reader-session`, including superseded whole-book-ready notifications.
 
+`session.reader-session` parks a whole-book build before each of two font increases and a decrease in the same Hybrid session. It checks that a turn during reflow is refused, then compares the new page, the following turn and the final whole-book handoff with an Accurate session at the same size.
+
 Label `reading`. Build `mac-tests`, then run `ctest --preset mac -L reading` from `platforms/desktop/`. `ctest --preset mac -N -L reading` lists its tests.
 
 These checks cover empty-library startup, opening books, rendered pages, page turns, saved positions, opening failures and cancellation, the feature tour, reader sessions, the opening cover, local resources and archives. [Test inventory](../validation.md#test-inventory) lists the desktop checks.

@@ -39,6 +39,59 @@ bool setFont(EngineDocument &model, int pixels)
 {
     return model.applyAppearance(appearance::Patch(QJsonObject{ { "font_pixels", pixels } }));
 }
+
+void interruptedViewportChange()
+{
+    QByteArray body;
+    for (int i = 0; i < 60; ++i)
+        body += "<p style='page-break-before:always'>Passage " + QByteArray::number(i) + ". "
+                + QByteArray("The chapter continues. ").repeated(20) + "</p>";
+    const auto files = test::publisherPackage("en", "Viewport changes",
+                                              { { "chapter.xhtml", test::publisherHtml(body) } },
+                                              "<itemref idref=\"chapter.xhtml\"/>");
+    EngineDocument model(test::readerFonts()), reference(test::readerFonts());
+    for (auto *reader : { &model, &reference }) {
+        open(*reader, files);
+        reader->setChapterSlices(3);
+        require(reader->showSpineItems(0, 0) && reader->go(0), "Cannot open the sliced chapter");
+        // With a single spine item, continuesBefore() can only mean a later slice.
+        while (!reader->continuesBefore())
+            require(reader->turnInWindow(1), "Cannot reach a later slice");
+        require(reader->turnInWindow(1), "Cannot go beyond the slice boundary");
+    }
+    const auto compare = [&] {
+        const auto start = reference.pageStart(reference.page());
+        require(!start.isEmpty() && model.pageStart(model.page()) == start
+                        && model.position() == reference.position(),
+                "The interrupted viewport change selected different text");
+        const auto image = reference.image(reference.page());
+        require(!image.isNull() && model.image(model.page()) == image,
+                "The interrupted viewport change painted a different page");
+    };
+    compare();
+    const auto anchor = reference.position();
+    const QSize narrow(460, 720), original(600, 800);
+    require(reference.applyAppearance({}, narrow), "Cannot resize the reference reader");
+    int checks = 0;
+    model.setLayoutInterrupt([&] { return ++checks == 3; });
+    require(!model.applyAppearance({}, narrow) && model.layoutInterrupted() && checks == 3,
+            "Resizing a later slice must stop when requested");
+    model.setLayoutInterrupt({});
+    require(model.resumeLayout() && !model.layoutInterrupted() && model.position() == anchor,
+            "Resuming the viewport change lost the saved position");
+    compare();
+    require(reference.applyAppearance({}, original) && model.applyAppearance({}, original)
+                    && model.position() == anchor,
+            "Returning to the original viewport lost the saved position");
+    compare();
+    for (const int direction : { 1, -1 }) {
+        for (int i = 0; i < 8; ++i) {
+            require(reference.turnInWindow(direction) && model.turnInWindow(direction),
+                    "Cannot retrace pages after the viewport change");
+            compare();
+        }
+    }
+}
 } // namespace
 
 // A layout that is stopped must leave the book usable: the next layout gives
@@ -48,6 +101,7 @@ int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
 #if __has_include(<koblaze.h>)
+    interruptedViewportChange();
     EngineDocument model(test::readerFonts());
     open(model, test::engineBook(false, 8, 120));
     require(model.go(model.pages() / 2), "Cannot go to the middle of the book");

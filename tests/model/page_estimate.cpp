@@ -31,10 +31,11 @@ namespace kobalt {
 struct ReaderLocationProbe
 {
     // Exercises the nested layout used during reflow and saved-position resolution.
-    static bool layoutSliceWithCancelledCaller(EngineDocument &model)
+    static bool layoutSliceWithCancelledCaller(EngineDocument &model, bool duringExtension)
     {
-        OpeningCallback caller(model.engine_, {}, [] { return true; });
-        return model.layoutSlice(0);
+        OpeningCallback caller(model.engine_, {},
+                               [&] { return !duringExtension || model.sliceExtra_ > 0; });
+        return model.layoutSlice(model.sliceFirst_, model.sliceForcedEnd_);
     }
 
     static bool callbacksDetached(const EngineDocument &model)
@@ -113,6 +114,19 @@ struct ReaderLocationProbe
     static bool layoutSlice(EngineDocument &model, int first) { return model.layoutSlice(first); }
 
     static const EngineDocument *ahead(const EngineDocument &model) { return model.ahead_.get(); }
+
+    static bool hasChapter(const EngineDocument &model, int item)
+    {
+        const auto contains = [item](const EngineDocument &document) {
+            return document.windowFirst_ <= item && item <= document.windowLast_;
+        };
+        if (contains(model) || (model.ahead_ && contains(*model.ahead_)))
+            return true;
+        for (const auto &unit : model.kept_)
+            if (contains(*unit.document))
+                return true;
+        return false;
+    }
 
     static const LVDocView *view(const EngineDocument &model) { return model.engine_.get(); }
 
@@ -1305,37 +1319,159 @@ void savedPlaceOutsideOpeningWindow()
 // that was interrupted must not wait for those layouts to finish.
 void nestedSliceHonorsCancellation()
 {
-    EngineDocument model(test::readerFonts());
-    const QByteArray paragraph = QByteArray("The reader turns the page. ").repeated(600);
+    // The opening paragraph needs an extension. Forced breaks later in the chapter
+    // give the layout whole pages on which to end that slice.
+    QByteArray body = "<p>" + QByteArray("The reader turns the page. ").repeated(600) + "</p>";
+    for (int i = 0; i < 40; ++i)
+        body += "<p style='page-break-before:always'>Page " + QByteArray::number(i) + ". "
+                + QByteArray("The chapter continues. ").repeated(30) + "</p>";
     test::BookFiles files;
-    files["text.xhtml"] = test::publisherHtml(("<p>" + paragraph + "</p>").repeated(4));
-    openFiles(model,
-              test::publisherPackage("en", "Reflow", files, "<itemref idref=\"text.xhtml\"/>"));
-    const int end = Probe::sliceEnd(model);
-    const int pages = model.pages();
-    const auto place = model.position();
-    require(!Probe::layoutSliceWithCancelledCaller(model) && model.layoutInterrupted(),
-            "A nested slice ignored its caller's cancellation");
-    require(model.resumeLayout() && !model.layoutInterrupted(),
-            "The interrupted slice must remain usable");
-    require(Probe::sliceEnd(model) == end && model.pages() == pages && model.position() == place,
-            "Resuming a long paragraph changed the slice boundary or reading position");
-    require(Probe::callbacksDetached(model), "The interrupted slice retained a callback");
+    files["text.xhtml"] = test::publisherHtml(body);
+    files = test::publisherPackage("en", "Reflow", files, "<itemref idref=\"text.xhtml\"/>");
+    EngineDocument model(test::readerFonts()), reference(test::readerFonts());
+    openFiles(model, files);
+    openFiles(reference, files);
+    const auto compare = [&] {
+        require(Probe::sliceFirst(model) == Probe::sliceFirst(reference)
+                        && Probe::sliceEnd(model) == Probe::sliceEnd(reference)
+                        && Probe::visiblePages(model) == Probe::visiblePages(reference)
+                        && model.pages() == reference.pages() && model.page() == reference.page(),
+                "Resumed layout differs from the uninterrupted slice or page");
+        const auto start = reference.pageStart(reference.page());
+        require(!start.isEmpty() && model.pageStart(model.page()) == start
+                        && model.position() == reference.position(),
+                "Resumed layout changed the page start or reading position");
+        const auto expected = reference.image(reference.page());
+        require(!expected.isNull() && model.image(model.page()) == expected,
+                "Resumed layout painted a different page");
+    };
+    const auto turn = [&](int direction) {
+        require(reference.turnInWindow(direction) && model.turnInWindow(direction),
+                "Cannot turn to the comparison page");
+        compare();
+    };
+    const auto interrupt = [&](bool duringExtension) {
+        require(!Probe::layoutSliceWithCancelledCaller(model, duringExtension)
+                        && model.layoutInterrupted(),
+                duringExtension ? "A nested slice failed to stop during extension"
+                                : "A nested slice ignored its caller's cancellation");
+        require(model.resumeLayout() && !model.layoutInterrupted(),
+                "A cancelled nested slice failed to resume");
+        require(Probe::callbacksDetached(model), "The interrupted slice retained a callback");
+        compare();
+    };
+    interrupt(false);
+    turn(1);
+    interrupt(true);
+    turn(-1);
+
+    const int boundary = Probe::sliceEnd(reference);
+    require(boundary > 0 && boundary < Probe::spineItemText(reference),
+            "The fixture must have a second slice");
+    const int lookAhead = Probe::visiblePages(reference);
+    require(lookAhead > 0 && reference.go(lookAhead) && model.go(lookAhead),
+            "The fixture must have a page laid out beyond the cut");
+    const int observations = Probe::map(model).observations();
+    bool stopped = false;
+    model.prepareAhead([&] {
+        stopped = stopped || Probe::sliceFirst(model) == boundary;
+        return !stopped;
+    });
+    require(stopped && !model.layoutInterrupted() && Probe::callbacksDetached(model),
+            "Preparing the next slice must stop and restore a usable layout");
+    require(Probe::map(model).observations() == observations,
+            "A cancelled predictive layout recorded an observation");
+    compare();
+    turn(-1);
+    require(reference.go(lookAhead) && model.go(lookAhead), "Cannot return to the look-ahead page");
+    reference.prepareAhead();
+    model.prepareAhead();
+    require(Probe::sliceFirst(reference) == boundary && reference.page() == 0,
+            "Preparing the next slice must enter its first page");
+    compare();
+    interrupt(false);
+    turn(-1);
+    require(Probe::sliceFirst(reference) == 0, "The reverse turn must cross the slice boundary");
+    turn(1);
+}
+
+void parkWholeBook(EngineDocument &model)
+{
+    int checks = 0;
+    require(model.prepareFullDocument([&] { return ++checks <= 5; })
+                            == Engine::FullDocument::Stopped
+                    && model.fullDocumentStarted() && !model.fullDocumentReady(),
+            "The whole-book build must have started and parked");
+}
+
+void returnToEvictedBookmark()
+{
+    const auto files = test::engineBook(false, 10, 36);
+    const QJsonObject settings{ { "font_pixels", 28 }, { "line_spacing_version", 1 } };
+    EngineDocument whole(test::readerFonts());
+    openResources(whole, files, settings);
+    const auto chapters = whole.chapters();
+    require(chapters.size() == 10 && whole.goTo(chapters[1].position) && whole.go(whole.page() + 2),
+            "Cannot choose a bookmark inside the second chapter");
+    const auto bookmark = whole.position();
+    auto saved = settings;
+    saved["koblaze_first_spine_item"] = 0;
+    saved["koblaze_last_spine_item"] = 0;
+    saved["position"] = bookmark;
+    EngineDocument model(test::readerFonts());
+    model.setChapterSlices(2);
+    openResources(model, files, saved);
+    require(model.position() == bookmark, "Opening did not restore the bookmark");
+    parkWholeBook(model);
+    for (int chapter = 2; chapter < chapters.size(); ++chapter)
+        require(model.goTo(chapters[chapter].position), "Cannot jump while pagination is parked");
+    require(!Probe::hasChapter(model, 1), "The bookmarked chapter must have been evicted");
+    require(model.goTo(bookmark) && model.position() == bookmark,
+            "Returning to an evicted bookmark changed its position");
+    for (int direction : { 0, -1, 1, 1 }) {
+        if (direction)
+            require(model.turnInWindow(direction) && whole.go(whole.page() + direction),
+                    "Cannot turn beside the restored bookmark");
+        require(model.pageStart(model.page()) == whole.pageStart(whole.page())
+                        && model.image(model.page()) == whole.image(whole.page()),
+                "The restored bookmark or its neighbouring page differs from the whole book");
+    }
+    const auto shown = model.position();
+    require(model.prepareFullDocument({}) == Engine::FullDocument::Ready
+                    && model.setChapterMode(false, {}, {}) && model.position() == shown
+                    && model.image(model.page()) == whole.image(whole.page()),
+            "Finishing the parked build moved the reader after the bookmark return");
 }
 
 void reopenAfterWholeBookPreparation()
 {
-    EngineDocument model(test::readerFonts());
-    openFiles(model, pagesBook());
-    require(model.prepareFullDocument({}) == Engine::FullDocument::Ready,
-            "Cannot prepare the first book");
-    openFiles(model, observedBook());
-    require(!model.fullDocumentStarted(), "Opening another book retained the previous pagination");
-    const auto first = model.image(0);
-    require(model.prepareFullDocument({}) == Engine::FullDocument::Ready
-                    && model.setChapterMode(false, {}, { 600, 800 }),
-            "Cannot switch to the second whole book");
-    require(model.image(0) == first, "The handoff displayed the first book");
+    const auto first = test::engineBook(false, 3, 15);
+    auto second = test::engineBook(false, 3, 30);
+    second["OEBPS/c1.xhtml"].replace("Chapter 1", "Another book");
+    EngineDocument reference(test::readerFonts());
+    openResources(reference, second, { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+    for (const bool parked : { false, true }) {
+        EngineDocument model(test::readerFonts());
+        openFiles(model, first);
+        require(model.image(0) != reference.image(0), "The books must have distinct first pages");
+        if (parked)
+            parkWholeBook(model);
+        else
+            require(model.prepareFullDocument({}) == Engine::FullDocument::Ready,
+                    "Cannot prepare the first book");
+        openFiles(model, second);
+        require(!model.fullDocumentStarted(),
+                "Opening another book retained its predecessor's pagination");
+        require(model.prepareFullDocument({}) == Engine::FullDocument::Ready
+                        && model.setChapterMode(false, {}, { 600, 800 }),
+                "Cannot switch to the second whole book");
+        require(model.pages() == reference.pages() && model.page() == 0,
+                "The handoff restored a page count or position from the first book");
+        for (const int page : { 0, 1, reference.pages() - 1 })
+            require(model.pageStart(page) == reference.pageStart(page)
+                            && model.image(page) == reference.image(page),
+                    "The replacement book differs from an independent opening");
+    }
 }
 
 // Only matched, visible unsupported writing modes on this page cause a warning.
@@ -2547,6 +2683,7 @@ int main(int argc, char **argv)
         return 0;
     }
     savedPlaceOutsideOpeningWindow();
+    returnToEvictedBookmark();
     reopenAfterWholeBookPreparation();
     nestedSliceHonorsCancellation();
     blocks();

@@ -18,7 +18,9 @@ The restored `reader`, `publisher-markup`, `local-reader` and `document-word-cou
 
 `engine.engine-contract` checks that callbacks stay with their view through chapter changes and detach when the view is destroyed. Nested layouts preserve their caller's cancellation and progress. A foreground layout with nested flows polls its own callback while a whole-book layout is parked.
 
-`engine.page-estimate` checks the reading position after chapter eviction, repeated font changes and whole-book handoff. An interrupted layout must resume with the same page count and slice boundary in a long paragraph. Opening another book on the same engine must discard the previous book's prepared pages. These changes keep the existing cache formats.
+`engine.page-estimate` restores a bookmark outside the initial chapter window, parks whole-book pagination, jumps until the bookmarked chapter is evicted, then returns. The bookmark, adjacent pages and final handoff must match an independent whole-book rendering. Opening a second book on the same engine must use the new book's pages and count whether the first book's pagination was parked or complete.
+
+The slice checks compare interrupted and uninterrupted readers at the start of layout, during extension of a long paragraph and at a slice boundary. Cancelling preparation of the next slice must preserve the visible page and allow both a reverse turn and a retry. `engine.layout-interrupt` also interrupts a viewport change in a later slice, returns to the original viewport and checks the page starts and pixels in both directions.
 
 ## Shared locations and the engine interface
 

@@ -49,6 +49,143 @@ struct ReaderLocationProbe
 };
 } // namespace kobalt
 
+// Compare the chapter frames with a separate session that always lays out the whole book.
+static void hybridFontEdits(const QString &path, quint16 port)
+{
+    QEventLoop frame;
+    ReaderSession whole(test::readerFonts(), test::readerPlaceholder());
+    ReaderSession hybrid(test::readerFonts(), test::readerPlaceholder());
+    ReaderSession *waiting = nullptr;
+    const auto rendered = [&](ReaderSession &reader) {
+        waiting = &reader;
+        if (reader.busy())
+            frame.exec();
+        waiting = nullptr;
+        require(reader.error().isEmpty(), "The requested frame must finish");
+    };
+    const auto open = [&](ReaderSession &reader, bool chapters) {
+        renderingMode::setOverride(chapters ? 2 : 0);
+        auto lease = std::make_shared<SourceLease>();
+        PositionCodec codec{ [](const Engine &, const QString &anchor, QString *) {
+                                return anchor;
+                            },
+                             [](const Engine &engine, QString *) { return engine.position(); },
+                             [](const QString &anchor) { return anchor; } };
+        if (chapters)
+            codec.encode = [](const Engine &engine, QString *) {
+                openedEngine = const_cast<Engine *>(&engine);
+                return engine.position();
+            };
+        reader.open({ path,
+                      path,
+                      QSize(758, 900),
+                      {},
+                      {},
+                      {},
+                      lease,
+                      nativeResourceFactory(path, port, lease),
+                      codec },
+                    [&](OpeningResult result) {
+                        require(result.ready(), qPrintable(openingMessage(result)));
+                        frame.quit();
+                    });
+        frame.exec();
+        require(reader.state().contains("book_fraction") == chapters,
+                "Reference and Hybrid sessions must open in their selected modes");
+        reader.updated = [&reader, &frame, &waiting] {
+            if (waiting == &reader && !reader.busy())
+                frame.quit();
+        };
+    };
+    open(whole, false);
+    open(hybrid, true);
+    const auto turn = [&](ReaderSession &reader) {
+        require(reader.turn(1), "The fixture must have a next page");
+        rendered(reader);
+    };
+    const auto page = [](ReaderSession &reader) {
+        QEventLoop summary;
+        QPair<QString, QString> result;
+        reader.pageSummary(reader.page(), [&](QString start, QString text) {
+            result = { start, text };
+            summary.quit();
+        });
+        summary.exec();
+        require(!result.first.isEmpty() && !result.second.isEmpty(),
+                "The page must have a source anchor and visible text");
+        return result;
+    };
+    const auto compare = [&] {
+        require(page(hybrid) == page(whole) && hybrid.image() == whole.image(),
+                "Hybrid must display the same source passage and pixels as the whole book");
+    };
+    for (auto *reader : { &whole, &hybrid }) {
+        require(reader->goToChapter(1), "Cannot start the reflows in a later chapter");
+        rendered(*reader);
+        turn(*reader);
+    }
+    compare();
+    const int base = hybrid.fontSize();
+    for (const int pixels : { base + 2, base + 4, base + 2 }) {
+        QEventLoop parked;
+        qt::invoke(
+                engineWorker(),
+                [&] {
+                    int checks = 0;
+                    require(openedEngine && !openedEngine->fullDocumentReady()
+                                    && openedEngine->prepareFullDocument([&] {
+                                           return ++checks <= 5;
+                                       }) == Engine::FullDocument::Stopped
+                                    && openedEngine->fullDocumentStarted(),
+                            "Each edit must interrupt a parked whole-book build for the displayed size");
+                    qt::invoke(qApp, [&] { parked.quit(); }, Qt::QueuedConnection);
+                },
+                Qt::QueuedConnection);
+        parked.exec();
+        const auto anchor = hybrid.state().value("position");
+        const appearance::Patch change(qt::object({ { "font_pixels", pixels } }));
+        hybrid.editAppearance(change);
+        require(hybrid.busy() && !hybrid.turn(1),
+                "A turn during a font edit must wait for the new frame");
+        rendered(hybrid);
+        whole.requestAppearance(whole.requestedAppearance().edited(change), {}, 0);
+        rendered(whole);
+        require(hybrid.state().contains("book_fraction") && hybrid.fontSize() == pixels
+                        && whole.fontSize() == pixels && hybrid.error().isEmpty()
+                        && hybrid.state().value("position") == anchor,
+                "A font edit must preserve the source position in chapter mode");
+        compare();
+        turn(whole);
+        turn(hybrid);
+        compare();
+    }
+    const int quiet = renderingMode::buildQuietMilliseconds();
+    renderingMode::setBuildQuietMilliseconds(0);
+    for (int i = 0; i < 2; ++i) {
+        turn(whole);
+        turn(hybrid);
+        compare();
+    }
+    QEventLoop ready;
+    QTimer poll;
+    QObject::connect(&poll, &QTimer::timeout, &ready, [&] {
+        if (hybrid.fullDocumentPending_)
+            ready.quit();
+    });
+    poll.start(10);
+    if (!hybrid.fullDocumentPending_)
+        ready.exec();
+    require(hybrid.state().contains("book_fraction"), "The chapter must stay visible until a turn");
+    turn(whole);
+    turn(hybrid);
+    require(!hybrid.state().contains("book_fraction") && hybrid.page() == whole.page()
+                    && hybrid.pages() == whole.pages(),
+            "The final turn must adopt the whole book at the current font size");
+    compare();
+    renderingMode::setBuildQuietMilliseconds(quiet);
+    renderingMode::setOverride(-1);
+}
+
 int run(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
@@ -311,6 +448,9 @@ int run(int argc, char **argv)
             opened.exec();
             servedPath = path;
         }
+        hybridFontEdits(path, server.serverPort());
+        ReaderSession::drain([&] { opened.quit(); });
+        opened.exec();
         // A stale ready notification must not turn into a synchronous whole
         // book load when its first frame is superseded by another request.
         for (const int scenario : { 0, 1, 2, 3 }) {

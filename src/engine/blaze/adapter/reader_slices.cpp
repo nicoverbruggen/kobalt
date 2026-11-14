@@ -1066,11 +1066,10 @@ QVector<int> EngineDocument::bookPages(const QStringList &positions,
             if (exclusive && fraction == 0 && item > 0) {
                 // The first character of a chapter excludes that whole chapter.
                 pages = qRound(map.pagesBefore(item)) - 1;
-                exclusive = true;
             } else {
-                exclusive = false;
                 if (exclusive)
                     fraction = qMax(0.0, textFraction(item, position, true, current));
+                exclusive = false;
                 pages = std::floor(map.pagesBefore(item)
                                    + map.pagesBefore(item, qRound(fraction * 1000000), 1000000));
             }

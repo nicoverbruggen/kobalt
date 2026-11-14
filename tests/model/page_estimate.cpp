@@ -921,6 +921,35 @@ void openFiles(EngineDocument &model, const test::BookFiles &files)
     require(model.go(0), "Cannot go to the first page");
 }
 
+// An exclusive highlight end at the next page start belongs to the preceding page,
+// including when that chapter's layout has left the window.
+void offscreenRangeEnd()
+{
+    QByteArray body;
+    for (int p = 0; p < 12; ++p)
+        body += "<p style='page-break-before:always'>" + QByteArray("A word. ").repeated(28)
+                + "End.</p>";
+    const auto files =
+            test::publisherPackage("en", "Range ends",
+                                   { { "front.xhtml", test::publisherHtml("<p>Front.</p>") },
+                                     { "text.xhtml", test::publisherHtml(body) } },
+                                   "<itemref idref='front.xhtml'/><itemref idref='text.xhtml'/>");
+    EngineDocument whole(test::readerFonts()), chapters(test::readerFonts());
+    openResources(whole, files, { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+    openFiles(chapters, files);
+    while (chapters.refinePageEstimate()) { }
+    while (chapters.turnInWindow(1))
+        chapters.roughPages();
+    while (chapters.turnInWindow(-1)) { }
+    require(Probe::windowLast(chapters) == 0, "The saved chapter must be off screen");
+    for (int p = 2; p < whole.pages(); ++p) {
+        const QStringList range{ whole.pageStart(p - 1), whole.pageStart(p) };
+        const auto expected = whole.bookPages(range, {}, true);
+        require(chapters.bookPages(range, {}, true).value(1) == expected.value(1),
+                "An offscreen highlight end included the next page");
+    }
+}
+
 // A spine item without text between two chapters: the forward turn past it
 // adds one page, also when the number shown is ahead of the estimate. The
 // second chapter is short, so that it shares a unit with the empty item, or
@@ -2682,6 +2711,7 @@ int main(int argc, char **argv)
         survey(QString::fromLocal8Bit(argv[1]), options);
         return 0;
     }
+    offscreenRangeEnd();
     savedPlaceOutsideOpeningWindow();
     returnToEvictedBookmark();
     reopenAfterWholeBookPreparation();

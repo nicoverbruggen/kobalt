@@ -1306,11 +1306,20 @@ void savedPlaceOutsideOpeningWindow()
 void nestedSliceHonorsCancellation()
 {
     EngineDocument model(test::readerFonts());
-    openFiles(model, pagesBook());
+    const QByteArray paragraph = QByteArray("The reader turns the page. ").repeated(600);
+    test::BookFiles files;
+    files["text.xhtml"] = test::publisherHtml(("<p>" + paragraph + "</p>").repeated(4));
+    openFiles(model,
+              test::publisherPackage("en", "Reflow", files, "<itemref idref=\"text.xhtml\"/>"));
+    const int end = Probe::sliceEnd(model);
+    const int pages = model.pages();
+    const auto place = model.position();
     require(!Probe::layoutSliceWithCancelledCaller(model) && model.layoutInterrupted(),
             "A nested slice ignored its caller's cancellation");
     require(model.resumeLayout() && !model.layoutInterrupted(),
             "The interrupted slice must remain usable");
+    require(Probe::sliceEnd(model) == end && model.pages() == pages && model.position() == place,
+            "Resuming a long paragraph changed the slice boundary or reading position");
     require(Probe::callbacksDetached(model), "The interrupted slice retained a callback");
 }
 

@@ -1204,7 +1204,7 @@ bool EngineDocument::resumeLayout()
     const auto anchor = anchor_;
     OpeningCallback callback(engine_, {}, interrupt_);
     engine_->requestRender();
-    if (!renderLayout())
+    if (!renderLayout() || !extendSlice())
         return false;
     observeLayout();
     return goTo(anchor);

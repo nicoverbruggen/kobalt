@@ -18,7 +18,7 @@ The restored `reader`, `publisher-markup`, `local-reader` and `document-word-cou
 
 `engine.engine-contract` checks that callbacks stay with their view through chapter changes and detach when the view is destroyed. Nested layouts preserve their caller's cancellation and progress.
 
-`engine.page-estimate` checks the reading position after chapter eviction, repeated font changes and whole-book handoff. These changes keep the existing cache formats.
+`engine.page-estimate` checks the reading position after chapter eviction, repeated font changes and whole-book handoff. An interrupted layout must resume with the same page count and slice boundary in a long paragraph. These changes keep the existing cache formats.
 
 ## Shared locations and the engine interface
 

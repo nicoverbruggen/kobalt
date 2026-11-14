@@ -2619,7 +2619,8 @@ void ReaderSession::dispatch(bool pageTurn)
                 // The prepared document can be gone, after a change that
                 // this render does not know. Loading the whole book here
                 // would make the page turn wait: keep the chapter then.
-                const bool swap = swapToFull && engine->fullDocumentReady();
+                const bool swap = swapToFull && oldSize == size
+                        && appearance::same(before, requested) && engine->fullDocumentReady();
                 // A numbered jump addresses the displayed chapter. Move there
                 // before adoption so the whole book restores that passage.
                 if (swap && target >= 0)

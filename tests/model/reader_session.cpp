@@ -453,7 +453,7 @@ int run(int argc, char **argv)
         opened.exec();
         // A stale ready notification must not turn into a synchronous whole
         // book load when its first frame is superseded by another request.
-        for (const int scenario : { 0, 1, 2, 3, 4, 5, 7 }) {
+        for (const int scenario : { 0, 1, 2, 3, 4, 5, 6, 7 }) {
             const bool prepared = scenario != 0;
             const bool refuse = scenario == 2;
             auto fast =
@@ -545,6 +545,15 @@ int run(int argc, char **argv)
                                         && fast->turnDirection() == 1,
                                 "Refusing the whole book must preserve the requested page turn");
                     }
+                } else if (scenario == 6) {
+                    const auto anchor = fast->state().value("position");
+                    const QSize landscape(900, 758);
+                    fast->resize(landscape);
+                    rendered.exec();
+                    require(fast->error().isEmpty() && fast->image().size() == landscape
+                                    && fast->state().value("position") == anchor
+                                    && fast->state().contains("book_fraction"),
+                            "Rotating with a prepared count must keep the chapter at the new viewport");
                 } else if (scenario == 5) {
                     const auto previousChapter = fast->chapterTitle();
                     const auto previousImage = fast->image();

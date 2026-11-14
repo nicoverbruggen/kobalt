@@ -33,6 +33,22 @@ struct ReaderFigureProbe
 } // namespace kobalt
 
 namespace {
+// Search yields after its time slice. Collect later batches before checking layout.
+QVector<SearchHit> search(EngineDocument &model, const QString &query, int maximum)
+{
+    QVector<SearchHit> hits;
+    SearchCursor cursor;
+    for (int batches = 0; hits.size() < maximum; ++batches) {
+        require(batches < 10000, "Figure search did not finish");
+        const auto batch = model.searchText(query, cursor, maximum - hits.size());
+        hits += batch.hits;
+        cursor = batch.cursor;
+        if (batch.done)
+            break;
+    }
+    return hits;
+}
+
 QVector<QRect> imageRegions(const QImage &image)
 {
     QVector<QRect> regions;
@@ -135,12 +151,11 @@ void check(const Fixture &fixture, int columns, bool dark, const QByteArray &png
                                 { "reduce_chapter_spacing", !keepMargins } };
     QString error;
     require(model.openResources(resources, lengths, viewport, settings, &error), qPrintable(error));
-    const auto hits = model.searchText("Caption marker", {}, 10).hits;
+    const auto hits = search(model, "Caption marker", 10);
     require(hits.size() == 1, "Caption text missing or duplicated");
     const auto anchor = hits.first().start;
-    const auto end =
-            model.searchText(fixture.captionLines ? "Caption end" : "Caption marker", {}, 10).hits;
-    const auto after = model.searchText("After figure", {}, 10).hits;
+    const auto end = search(model, fixture.captionLines ? "Caption end" : "Caption marker", 10);
+    const auto after = search(model, "After figure", 10);
     require(end.size() == 1 && after.size() == 1, "End of caption or following prose lost");
     QVector<int> sourceOrder;
     const auto pages =
@@ -219,8 +234,7 @@ void check(const Fixture &fixture, int columns, bool dark, const QByteArray &png
         require(model.go(pages[0]), "Return to caption link");
     }
     for (int i = 1; i < fixture.captionLines; ++i) {
-        const auto continuation =
-                model.searchText("Caption continuation " + QString::number(i), {}, 1).hits;
+        const auto continuation = search(model, "Caption continuation " + QString::number(i), 1);
         require(!continuation.isEmpty(), "Caption continuation lost");
         require(model.go(continuation.first().page), "Go to caption continuation");
         const auto continuationRects =
@@ -308,7 +322,7 @@ void floatFootprints()
                     qPrintable(error));
             require(model.pages() == 1, "Float footprint fixture unexpectedly paginated");
             const auto image = model.image(0);
-            const auto hits = model.searchText("Boundary", {}, 100).hits;
+            const auto hits = search(model, "Boundary", 100);
             require(hits.size() == 24, "Float footprint lost or duplicated text");
             const bool right = QByteArray(side) == "right";
             const QRect occupied(right ? 600 - count * 60 : 0, 0, count * 60, 160);
@@ -356,9 +370,9 @@ void reporterFigure(int columns, bool dark, const QByteArray &css = {}, bool ful
     model.setDocumentCache(cache.path(), "reporter-figure", "float-layout", 1024 * 1024);
     QString error;
     require(model.open(bytes, viewport, settings, &error), qPrintable(error));
-    const auto caption = model.searchText("Mr. Pickwick Addresses the Club", {}, 1).hits;
-    const auto following = model.searchText("Mr. Pickwick observed", {}, 1).hits;
-    const auto prose = model.searchText("The members gathered around the table", {}, 100).hits;
+    const auto caption = search(model, "Mr. Pickwick Addresses the Club", 1);
+    const auto following = search(model, "Mr. Pickwick observed", 1);
+    const auto prose = search(model, "The members gathered around the table", 100);
     require(caption.size() == 1 && following.size() == 1 && prose.size() == 8,
             "Reporter figure lost caption or following prose");
     QVector<QImage> rendered;
@@ -460,7 +474,7 @@ void reviewDocument(const QString &directory = {}, const QString &existingBook =
     EngineDocument reference(test::readerFonts());
     reference.setUserStyleSheet("figure { page-break-inside:auto !important; }");
     require(reference.open(bytes, viewport, settings, &error), qPrintable(error));
-    const auto detachedCaption = reference.searchText("Figure 1.", {}, 1).hits;
+    const auto detachedCaption = search(reference, "Figure 1.", 1);
     require(reference.pages() == 2 && detachedCaption.size() == 1
                     && detachedCaption.first().page == 1
                     && !imageRegions(reference.image(0)).isEmpty()
@@ -468,7 +482,7 @@ void reviewDocument(const QString &directory = {}, const QString &existingBook =
             "Figure review fixture no longer exercises image/caption separation");
     EngineDocument model(test::readerFonts());
     require(model.open(bytes, viewport, settings, &error), qPrintable(error));
-    const auto caption = model.searchText("Figure 1.", {}, 1).hits;
+    const auto caption = search(model, "Figure 1.", 1);
     require(caption.size() == 1 && caption.first().page == 1, "Review caption must be on page two");
     require(model.pages() == 2, "Review document must have exactly two pages");
     if (!directory.isEmpty()) {

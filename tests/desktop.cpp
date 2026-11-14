@@ -12382,6 +12382,35 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
     }
 
+    void settingsTextPresetLatestChoice()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, 1);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavText"));
+        QVERIFY(fixture.press("rrNavText"));
+        QTRY_VERIFY(fixture.visible("rrTextPresetToggle"));
+        QVERIFY(fixture.press("rrTextPresetToggle"));
+        QTRY_VERIFY(fixture.visible("rrTextPreset_modern"));
+        {
+            // The reader still shows Kobalt while the Modern preview is queued.
+            const auto gate = holdEngine();
+            const auto unblock = qScopeGuard([gate] { gate->release.release(); });
+            QTRY_VERIFY(gate->entered.load());
+            QVERIFY(fixture.press("rrTextPreset_modern"));
+            QVERIFY(fixture.press("rrTextPreset_kobalt"));
+            QVERIFY(fixture.press("rrPage"));
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(
+                !fixture.visible("rrFont") && !fixture.state().value("busy").toBool(), 30000);
+        QCOMPARE(fixture.state().value("font_face").toString(), QString("Libron"));
+    }
+
     void settingsTextPresetName()
     {
         Fixture fixture;

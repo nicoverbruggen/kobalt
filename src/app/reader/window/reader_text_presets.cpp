@@ -229,7 +229,8 @@ void Reader::applyTextPreset(const QString &id)
     if (!preset || session->temporaryTypography())
         return;
     book->setTextPreset(id);
-    if (textpresets::matches(*preset, textPresetSettings()->state())) {
+    // A pending preview can still show the preset we are switching back to.
+    if (!appearanceEdit.edited() && textpresets::matches(*preset, textPresetSettings()->state())) {
         syncTextPresets();
         refresh();
         return;

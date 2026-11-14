@@ -35,17 +35,34 @@ public:
 
     void OnFormatStart() override { report(OpeningStage::Pages, 0); }
 
-    void OnFormatProgress(int percent) override { report(OpeningStage::Pages, percent); }
+    void OnFormatProgress(int percent) override
+    {
+        // Each slice counts from zero. Only a higher percentage advances
+        // the progress of the operation that requested those slices.
+        if (percent <= lastPagePercent)
+            return;
+        lastPagePercent = percent;
+        if (!progress && previous)
+            previous->OnFormatProgress(percent);
+        else
+            report(OpeningStage::Pages, percent);
+    }
 
 #if __has_include(<koblaze.h>)
     // Asked after each block of text during layout.
-    bool OnRenderCancelRequested() override { return interrupt && interrupt(); }
+    bool OnRenderCancelRequested() override
+    {
+        // A slice can have its own stop check, but cannot resume work that
+        // its caller has already cancelled.
+        return (interrupt && interrupt()) || (previous && previous->OnRenderCancelRequested());
+    }
 #endif
 
 private:
     std::shared_ptr<ColumnView::CallbackTarget> target;
     LVDocViewCallback *previous = nullptr;
     OpeningProgress progress;
+    int lastPagePercent = -1;
     std::function<bool()> interrupt;
 
     void report(OpeningStage stage, int percent)

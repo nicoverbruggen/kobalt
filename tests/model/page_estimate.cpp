@@ -30,6 +30,13 @@ namespace kobalt {
 // Reads the spine items of an open book, for the comparison with real pages.
 struct ReaderLocationProbe
 {
+    // Exercises the nested layout used during reflow and saved-position resolution.
+    static bool layoutSliceWithCancelledCaller(EngineDocument &model)
+    {
+        OpeningCallback caller(model.engine_, {}, [] { return true; });
+        return model.layoutSlice(0);
+    }
+
     static bool callbacksDetached(const EngineDocument &model)
     {
         if (model.engine_ && model.engine_->getCallback())
@@ -1294,6 +1301,19 @@ void savedPlaceOutsideOpeningWindow()
     }
 }
 
+// Reflow and saved-position resolution open nested slice layouts. A caller
+// that was interrupted must not wait for those layouts to finish.
+void nestedSliceHonorsCancellation()
+{
+    EngineDocument model(test::readerFonts());
+    openFiles(model, pagesBook());
+    require(!Probe::layoutSliceWithCancelledCaller(model) && model.layoutInterrupted(),
+            "A nested slice ignored its caller's cancellation");
+    require(model.resumeLayout() && !model.layoutInterrupted(),
+            "The interrupted slice must remain usable");
+    require(Probe::callbacksDetached(model), "The interrupted slice retained a callback");
+}
+
 // Only matched, visible unsupported writing modes on this page cause a warning.
 void pageFormattingWarnings()
 {
@@ -2503,6 +2523,7 @@ int main(int argc, char **argv)
         return 0;
     }
     savedPlaceOutsideOpeningWindow();
+    nestedSliceHonorsCancellation();
     blocks();
     QFile file(QStringLiteral(KOBALT_TEST_FIXTURES) + "/trevelyans-type-tester.kepub.epub");
     require(file.open(QIODevice::ReadOnly), "Cannot read the book fixture");

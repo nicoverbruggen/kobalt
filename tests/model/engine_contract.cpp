@@ -61,6 +61,29 @@ void callbacksFollowViews()
     const auto book = createEngine(test::readerFonts());
     open(*book, test::engineBook());
     auto view = std::make_unique<ColumnView>();
+    {
+        QList<int> progress;
+        OpeningCallback outer(
+                view, [&](OpeningStage, int percent) { progress.append(percent); },
+                [] { return true; });
+        outer.OnFormatProgress(40);
+        {
+            OpeningCallback inner(view, {}, [] { return false; });
+            require(view->getCallback() == &inner, "The inner callback must receive rendering");
+            inner.OnFormatProgress(10);
+            inner.OnFormatProgress(70);
+            require(progress == QList<int>({ 40, 70 }),
+                    "Nested pagination must advance the caller's progress");
+            require(view->getCallback()->OnRenderCancelRequested(),
+                    "A nested layout ignored the outer cancellation request");
+        }
+        require(view->getCallback() == &outer,
+                "A nested layout discarded the outer opening callback");
+        require(view->getCallback()->OnRenderCancelRequested(),
+                "A nested layout lost the outer cancellation request");
+    }
+    require(!view->getCallback(), "The last callback must detach from the view");
+
     std::unique_ptr<ColumnView> retained;
     {
         OpeningCallback callback(view, {});

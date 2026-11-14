@@ -932,6 +932,14 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
                                      OpeningProgress progress)
 {
     const auto &settings = patch.fields();
+    if (windowFirst_ >= 0 && !inpageFootnotes_ && settings.value("inpage_footnotes").toBool()) {
+        const auto layout = pageNoteLayout();
+        if (layout == PageNoteLayout::Interrupted)
+            return false;
+        if (layout == PageNoteLayout::WholeBook)
+            return setChapterMode(false, patch, size, std::move(progress),
+                                  [this] { return !interrupt_ || !interrupt_(); });
+    }
     const int pixels = settings.value("font_pixels").toInt(pixels_);
     const int spacing = settings.value("line_spacing").toInt(spacing_);
     const int paragraphSpacing = settings.contains("paragraph_spacing")

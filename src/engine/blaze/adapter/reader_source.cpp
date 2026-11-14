@@ -684,7 +684,7 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
                 LVContainerRef(new ContentContainer(source->container, std::move(skippedFonts)));
         source->contentContainer = true;
     }
-    OpeningCallback callback(engine_, std::move(progress), openInterrupt_);
+    OpeningCallback callback(engine_, progress, openInterrupt_);
     if (openingFontSource_)
         source->fontIdentity = std::exchange(openingFontSource_, 0);
     source_ = std::move(source);
@@ -721,6 +721,17 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
         // A parsed document is rendered only after Render(); one restored
         // from the cache arrives rendered.
         openedFromCache_ = loaded && cache.enabled() && engine_->getDocument()->isRendered();
+    }
+    const auto notes = loaded && firstSpineItem >= 0 && inpageFootnotes_ ? pageNoteLayout()
+                                                                         : PageNoteLayout::Chapters;
+    if (notes == PageNoteLayout::Interrupted)
+        return fail(OpeningFailureKind::Cancelled, strings::key("error.opening_interrupted"));
+    if (notes == PageNoteLayout::WholeBook) {
+        auto whole = saved;
+        whole["koblaze_first_spine_item"] = -1;
+        whole["koblaze_last_spine_item"] = -1;
+        return openSource(source_, size, whole, error, std::move(progress), result,
+                          std::move(coverReady), {}, std::move(cacheReady));
     }
     openingTimes_["model_cache_hit"] = openedFromCache_;
     if (openedFromCache_ && cacheReady)

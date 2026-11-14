@@ -14,6 +14,8 @@ struct ReaderSource
     std::shared_ptr<ReaderSource> parent;
     // The full publication count also governs a preview of a font-free chapter.
     int embeddedFonts = -1;
+    // -1 before checking the spine for in-page note bodies.
+    int hasLinkedPageNotes = -1;
     QByteArray bytes;
     std::shared_ptr<ResourceCache> resources;
     QMap<QString, qint64> sizes;

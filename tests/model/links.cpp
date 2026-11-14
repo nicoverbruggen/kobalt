@@ -179,6 +179,96 @@ void inpageStyling()
     }
 }
 
+void chapterPageNotes()
+{
+    using namespace kobalt;
+    // Window the opening chapter, then compare both the window and the complete
+    // book using the same cross-chapter link. Empty and missing notes add no page.
+    for (const QByteArray &body :
+         { QByteArray("<aside id='café' epub:type='footnote'><p>Referenced note.</p></aside>"),
+           QByteArray("<aside id='café' epub:type='footnote'></aside>"),
+           QByteArray(
+                   "<aside id='café' epub:type='footnote' style='display:none'><p>Hidden note.</p></aside>"),
+           QByteArray("<aside id='elsewhere' epub:type='footnote'><p>Unlinked note.</p></aside>"),
+           QByteArray("<p id='café'>Ordinary passage.</p>") }) {
+        auto files = test::linkBook();
+        files["OEBPS/first.xhtml"] =
+                "<html xmlns='http://www.w3.org/1999/xhtml'><body><p>Read <a href='Notes/foot%20notes.xhtml#caf%C3%A9'>1</a> now.</p></body></html>";
+        files["OEBPS/Notes/foot notes.xhtml"] =
+                "<html xmlns='http://www.w3.org/1999/xhtml' xmlns:epub='http://www.idpf.org/2007/ops'><body>"
+                + body + "</body></html>";
+        QTemporaryDir dir;
+        require(test::writeBook(dir.path(), "notes.epub", files), "Cannot write chapter notes");
+        QFile file(dir.filePath("notes.epub"));
+        require(file.open(QIODevice::ReadOnly), "Cannot read chapter notes");
+        const auto book = file.readAll();
+        QString error;
+        const auto image = [&](bool window, bool enableAfterOpen) {
+            EngineDocument document(test::readerFonts());
+            QJsonObject settings{ { "font_pixels", 28 },
+                                  { "inpage_footnotes", !enableAfterOpen },
+                                  { "koblaze_first_spine_item", window ? 0 : -1 },
+                                  { "koblaze_last_spine_item", window ? 0 : -1 } };
+            require(document.open(book, { 600, 800 }, settings, &error), qPrintable(error));
+            const auto anchor = document.position();
+            if (enableAfterOpen) {
+                require(document.applyAppearance(
+                                appearance::Patch({ { "inpage_footnotes", true } })),
+                        "Cannot turn on chapter notes");
+                require(document.position() == anchor, "Turning on chapter notes moved the reader");
+            }
+            if (window
+                && (body.contains("elsewhere") || body.contains("Ordinary")
+                    || body.contains("footnote'></aside>")))
+                require(document.bookFraction() >= 0,
+                        "An unlinked or empty note loaded the whole book");
+            const bool displaysNote = body.contains("Referenced");
+            require((ReaderFootnoteProbe::view(document)
+                             .getPageList()
+                             ->operator[](0)
+                             ->footnotes.length()
+                     > 0) == displaysNote,
+                    "Missing or unexpected page-note text");
+            return document.image(0);
+        };
+        const auto accurate = image(false, false);
+        require(image(true, false) == accurate && image(true, true) == accurate,
+                "Cold and enabled chapter notes must match the complete book");
+    }
+}
+
+void interruptPageNoteCheck()
+{
+    using namespace kobalt;
+    auto files = test::linkBook();
+    files["OEBPS/first.xhtml"] =
+            "<html xmlns='http://www.w3.org/1999/xhtml'><body><p>Current chapter.</p></body></html>";
+    files["OEBPS/Notes/foot notes.xhtml"] = "<html xmlns='http://www.w3.org/1999/xhtml'><body>"
+            + QByteArray("<p>A longer chapter of ordinary prose.</p>").repeated(100000)
+            + "</body></html>";
+    QTemporaryDir dir;
+    require(test::writeBook(dir.path(), "large.epub", files), "Cannot write no-note book");
+    QFile file(dir.filePath("large.epub"));
+    require(file.open(QIODevice::ReadOnly), "Cannot read no-note book");
+    const auto book = file.readAll();
+    QString error;
+    const QJsonObject chapter{ { "koblaze_first_spine_item", 0 },
+                               { "koblaze_last_spine_item", 0 } };
+    EngineDocument document(test::readerFonts());
+    require(document.open(book, { 600, 800 }, chapter, &error), qPrintable(error));
+    const auto anchor = document.position();
+    const auto pixels = document.image(0);
+    int checks = 0;
+    document.setLayoutInterrupt([&] { return ++checks == 4; });
+    const appearance::Patch enable({ { "inpage_footnotes", true } });
+    require(!document.applyAppearance(enable) && checks == 4, "A cancelled note scan kept running");
+    require(document.position() == anchor && document.image(0) == pixels,
+            "A cancelled note scan changed the visible chapter");
+    document.setLayoutInterrupt({});
+    require(document.applyAppearance(enable) && document.bookFraction() >= 0,
+            "Retrying a note-free book must keep chapter rendering");
+}
+
 // Exercise the engine's actual note fragments, not just a changed stylesheet.
 void inpageFootnotes()
 {
@@ -723,6 +813,8 @@ int main(int argc, char **argv)
     inpageMarkup();
     inpageStyling();
     inpageFootnotes();
+    chapterPageNotes();
+    interruptPageNoteCheck();
     noteMatching();
     linksOutsideCurrentLayout();
     const auto origin = model.position();

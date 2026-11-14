@@ -341,6 +341,8 @@ private:
                                    const QString &position) const;
     int chapterEndPage(const ChapterLink &next) const;
     void markKoboLinkDecorations();
+    enum class PageNoteLayout { Chapters, WholeBook, Interrupted };
+    PageNoteLayout pageNoteLayout();
     void markPageNotes();
     EngineFontInputs fonts_;
     friend class nickel::NickelPositionCodec;

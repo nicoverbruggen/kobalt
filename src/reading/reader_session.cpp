@@ -2328,12 +2328,15 @@ void ReaderSession::resize(QSize size)
 void ReaderSession::setChapters(QVector<ChapterTarget> contents, QVector<ChapterTarget> graph)
 {
     const auto positions = positions_;
+    const auto lease = lease_;
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, job, contents, graph, positions] {
+            [engine, guard, job, contents, graph, positions, lease] {
+                if (!lease || lease->revoked())
+                    return;
                 EngineJob activity;
                 auto resolved = resolveChapterTargets(*engine, positions, contents, graph);
                 engine->setChapters(std::move(resolved.contents), std::move(resolved.graph));
@@ -2341,10 +2344,11 @@ void ReaderSession::setChapters(QVector<ChapterTarget> contents, QVector<Chapter
                 captureChapters(result, *engine);
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, job, result] {
+                        [guard, job, result, lease] {
                             // A later page or layout job captures these chapters itself. This
                             // metadata update must not cancel a search or replace a newer frame.
-                            if (!guard || guard->revision != job || guard->running)
+                            if (!guard || guard->lease_ != lease || lease->revoked()
+                                || guard->revision != job || guard->running)
                                 return;
                             guard->frame.chapters = result.chapters;
                             guard->frame.chapterGraph = result.chapterGraph;

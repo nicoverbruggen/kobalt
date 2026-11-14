@@ -1804,6 +1804,29 @@ int run(int argc, char **argv)
         require(replacementStarted && replacementFinished && !staleFinished
                         && !session->image().isNull(),
                 "Old queued opening completion reached a newer source generation");
+        for (const bool hostRevokes : { false, true }) {
+            ReaderSession metadata(test::readerFonts(), test::readerPlaceholder());
+            auto access = std::make_shared<SourceLease>();
+            metadata.open({ path, path, QSize(758, 900), {}, {}, {}, access,
+                            localResourceFactory(path, access), firstPositions },
+                          [&](OpeningResult result) {
+                              require(result.ready(), qPrintable(openingMessage(result)));
+                              opened.quit();
+                          });
+            opened.exec();
+            bool published = false;
+            metadata.updated = [&] { published = true; };
+            metadata.setChapters({ { "Ended source", "chapter", 0, 42 } }, {});
+            if (hostRevokes)
+                access->revoke();
+            else
+                metadata.cancelSource();
+            ReaderSession::drain([&] { drained.quit(); });
+            drained.exec();
+            require(!published && (metadata.chapters().isEmpty()
+                                   || metadata.chapters().first().title != "Ended source"),
+                    "Chapter metadata reached the reader after its source ended");
+        }
         // A source can end while the worker draws its next frame. A host may revoke
         // the lease directly, without notifying the facade first.
         enum class Pending { Font, Rotation, Turn };

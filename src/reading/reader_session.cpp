@@ -1694,6 +1694,11 @@ void ReaderSession::intersectingRanges(const QString &start, const QString &end,
             Qt::QueuedConnection);
 }
 
+bool ReaderSession::currentSourceFrame(quint64 job) const
+{
+    return revision == job && lease_ && !lease_->revoked();
+}
+
 void ReaderSession::annotationPageEdges(std::function<void(AnnotationPageEdges)> finished)
 {
     auto engine = engine_;
@@ -1708,7 +1713,7 @@ void ReaderSession::annotationPageEdges(std::function<void(AnnotationPageEdges)>
                         qApp,
                         [guard, job, result, finished] {
                             if (guard)
-                                finished(guard->revision == job && !guard->running
+                                finished(guard->currentSourceFrame(job) && !guard->running
                                                  ? result
                                                  : AnnotationPageEdges{});
                         },
@@ -1734,7 +1739,7 @@ void ReaderSession::annotationTokenAt(QPoint point, std::function<void(Annotatio
                         qApp,
                         [guard, job, result, finished] {
                             if (guard) {
-                                finished(guard->revision == job && !guard->running
+                                finished(guard->currentSourceFrame(job) && !guard->running
                                                  ? result
                                                  : AnnotationToken());
                             }
@@ -1765,7 +1770,7 @@ void ReaderSession::annotationRange(const QString &startTokenStart, const QStrin
                         qApp,
                         [guard, job, result, finished] {
                             if (guard) {
-                                finished(guard->revision == job ? result : TextRange());
+                                finished(guard->currentSourceFrame(job) ? result : TextRange());
                             }
                         },
                         Qt::QueuedConnection);
@@ -1788,7 +1793,7 @@ void ReaderSession::annotationRange(const QString &start, const QString &end,
                         qApp,
                         [guard, job, result, finished] {
                             if (guard) {
-                                finished(guard->revision == job ? result : TextRange());
+                                finished(guard->currentSourceFrame(job) ? result : TextRange());
                             }
                         },
                         Qt::QueuedConnection);
@@ -1842,7 +1847,7 @@ void ReaderSession::wordAt(QPoint point, std::function<void(WordSelection)> fini
                 kobalt::qt::invoke(
                         qApp,
                         [guard, job, result, finished] {
-                            if (guard && guard->revision == job && !guard->running)
+                            if (guard && guard->currentSourceFrame(job) && !guard->running)
                                 finished(result);
                         },
                         Qt::QueuedConnection);
@@ -1866,8 +1871,9 @@ void ReaderSession::imageAt(QPoint point, std::function<void(QImage)> finished)
                         qApp,
                         [guard, job, image, finished] {
                             if (guard)
-                                finished(guard->revision == job && !guard->running ? image
-                                                                                   : QImage());
+                                finished(guard->currentSourceFrame(job) && !guard->running
+                                                 ? image
+                                                 : QImage());
                         },
                         Qt::QueuedConnection);
             },
@@ -1889,7 +1895,7 @@ void ReaderSession::linkDetails(const QString &source, std::function<void(LinkDe
                 kobalt::qt::invoke(
                         qApp,
                         [guard, job, result, finished] {
-                            if (guard && guard->revision == job && !guard->running)
+                            if (guard && guard->currentSourceFrame(job) && !guard->running)
                                 finished(result);
                         },
                         Qt::QueuedConnection);
@@ -2214,7 +2220,7 @@ void ReaderSession::annotationGeometry(const QString &start, const QString &end,
                 kobalt::qt::invoke(
                         qApp,
                         [guard, job, geometry, finished] {
-                            if (guard && guard->revision == job && !guard->running) {
+                            if (guard && guard->currentSourceFrame(job) && !guard->running) {
                                 finished(geometry);
                             }
                         },
@@ -2239,7 +2245,7 @@ void ReaderSession::rangeRects(const QString &start, const QString &end,
                 kobalt::qt::invoke(
                         qApp,
                         [guard, job, result, finished] {
-                            if (guard && guard->revision == job && !guard->running)
+                            if (guard && guard->currentSourceFrame(job) && !guard->running)
                                 finished(result);
                         },
                         Qt::QueuedConnection);
@@ -2267,7 +2273,7 @@ void ReaderSession::rangeRects(QVector<QPair<QString, QString>> ranges,
                 kobalt::qt::invoke(
                         qApp,
                         [guard, job, rectangles, finished] {
-                            if (guard && guard->revision == job && !guard->running) {
+                            if (guard && guard->currentSourceFrame(job) && !guard->running) {
                                 finished(rectangles);
                             }
                         },
@@ -2308,7 +2314,7 @@ void ReaderSession::rangeRectGroups(QVector<QPair<QString, QString>> ranges,
                 kobalt::qt::invoke(
                         qApp,
                         [guard, job, groups, finished] {
-                            if (guard && guard->revision == job && !guard->running) {
+                            if (guard && guard->currentSourceFrame(job) && !guard->running) {
                                 finished(groups);
                             }
                         },

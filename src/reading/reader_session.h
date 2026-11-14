@@ -483,6 +483,7 @@ public:
     void setChapters(QVector<ChapterTarget> contents, QVector<ChapterTarget> graph);
 
 private:
+    bool currentSourceFrame(quint64 job) const;
     // `requests` is engineWorkRequests() from when this step was queued:
     // work that was announced after that is in the queue behind this step,
     // or will be, and goes first.

@@ -1914,6 +1914,29 @@ int run(int argc, char **argv)
                               opened.quit();
                           });
             opened.exec();
+            require(metadata.go(2), "Cannot open the text for a pending selection");
+            metadata.updated = [&] {
+                if (!metadata.busy())
+                    opened.quit();
+            };
+            opened.exec();
+            AnnotationPageEdges live;
+            metadata.annotationPageEdges([&](AnnotationPageEdges edges) {
+                live = edges;
+                opened.quit();
+            });
+            opened.exec();
+            require(!live.first.rectangles.isEmpty() && !live.last.end.isEmpty(),
+                    "Expected selectable text on the displayed page");
+            int emptyReplies = 0;
+            metadata.annotationPageEdges(
+                    [&](AnnotationPageEdges edges) { emptyReplies += edges.first.text.isEmpty(); });
+            metadata.annotationRange(live.first.start, live.last.end, [&](TextRange range) {
+                emptyReplies += range.text.isEmpty();
+            });
+            metadata.annotationTokenAt(
+                    live.first.rectangles.first().center(),
+                    [&](AnnotationToken token) { emptyReplies += token.text.isEmpty(); });
             bool published = false;
             metadata.updated = [&] { published = true; };
             metadata.setChapters({ { "Ended source", "chapter", 0, 42 } }, {});
@@ -1923,6 +1946,7 @@ int run(int argc, char **argv)
                 metadata.cancelSource();
             ReaderSession::drain([&] { drained.quit(); });
             drained.exec();
+            require(emptyReplies == 3, "An ended source returned a pending text selection");
             require(!published && (metadata.chapters().isEmpty()
                                    || metadata.chapters().first().title != "Ended source"),
                     "Chapter metadata reached the reader after its source ended");

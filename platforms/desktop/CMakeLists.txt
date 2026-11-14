@@ -71,6 +71,7 @@ file(GLOB_RECURSE shared CONFIGURE_DEPENDS
     "${source}/dictionaries/*.cpp" "${source}/engine/*.cpp"
     "${source}/library/*.cpp" "${source}/render/*.cpp"
     "${source}/reading/*.cpp" "${source}/storage/*.cpp" "${source}/sync/*.cpp")
+list(FILTER shared EXCLUDE REGEX "/src/engine/blaze/")
 add_library(kobalt-core OBJECT ${shared} display.cpp ../standalone/native_image.cpp
     "${source}/platform/qt/export_file.cpp"
     "${source}/platform/posix/diagnostics.cpp"

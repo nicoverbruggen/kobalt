@@ -22,6 +22,7 @@ endif()
 # into evaluation packages, and the Library belongs to the standalone apps.
 file(GLOB_RECURSE kobo_shared_sources ${kobo_glob_options} "${kobo_source}/*.cpp" "${kobo_source}/*.h")
 list(FILTER kobo_shared_sources EXCLUDE REGEX "/src/scenario/")
+list(FILTER kobo_shared_sources EXCLUDE REGEX "/src/engine/blaze/")
 list(FILTER kobo_shared_sources EXCLUDE REGEX "/(library|app/library)/")
 # The adapters of this SDK's firmware.
 file(GLOB kobo_adapter_sources ${kobo_glob_options}

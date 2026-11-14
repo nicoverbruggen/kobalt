@@ -1,5 +1,8 @@
 # Third-party code keeps its upstream format.
 dependencies/**
+src/engine/blaze/crengine/**
+src/engine/blaze/utils/**
+src/engine/blaze/tests/**
 platforms/kobo/toolchains/**
 # Hand-kept icon geometry; keep it exactly as it is.
 src/ui/controls/reader_icon_vectors.h

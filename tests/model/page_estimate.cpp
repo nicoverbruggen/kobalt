@@ -2815,6 +2815,7 @@ int main(int argc, char **argv)
         handoffWalk(file.readAll(), slicePages);
     };
     walkFixture("overflowing-float-bookmarks.epub", 3);
+    walkFixture("heading-after-floats.epub", 1);
     hiddenHeadingOnChapterReflow();
     hiddenHeadingAtHandoff();
 #endif

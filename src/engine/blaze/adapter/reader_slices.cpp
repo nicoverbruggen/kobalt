@@ -744,6 +744,11 @@ bool EngineDocument::earlierContentOnPage(ldomNode *block, int page) const
     // block.
     ldomXPointerEx previous(block, 0);
     if (previous.prevVisibleText()) {
+        // The slice lays out the preceding block to collapse its bottom
+        // margin. Preserve any float that affected that block's lines.
+        auto previousBlock = previous;
+        if (previousBlock.ensureFinal() && hasFloatFootprint(previousBlock.getNode()))
+            return true;
         previous.setOffset(qMax(0, int(previous.getNode()->getText().length()) - 1));
         lvRect rect;
         if (previous.getRect(rect) && rect.bottom > top)

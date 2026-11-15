@@ -225,6 +225,7 @@ QString EngineDocument::estimateKey(const QJsonObject &settings) const
     key["slice_pages"] = slicePages_;
     if (slicePages_ > 0)
         key["slice_offsets"] = 1;
+    key["rendering_policy"] = QString::fromLatin1(KOBALT_RENDERING_POLICY);
     key["policy"] = QString::fromUtf8(documentCachePolicy());
     return QString::fromLatin1(
             QCryptographicHash::hash(QJsonDocument(key).toJson(QJsonDocument::Compact),

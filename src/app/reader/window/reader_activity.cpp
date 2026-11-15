@@ -262,8 +262,7 @@ void Reader::mapActivityBook(const QString &key)
         positions << item.startPosition << item.endPosition;
     ActivityOpenBook open;
     open.book = key;
-    open.percent =
-            book->finishedHere() ? 100 : pageProgressPercent(session->page(), session->pages());
+    open.percent = book->finishedHere() ? 100 : session->progressPercent();
     open.remainingMilliseconds = book->estimates().bookMilliseconds;
     activityView->setOpenBook(open);
     if (positions.isEmpty())
@@ -272,7 +271,7 @@ void Reader::mapActivityBook(const QString &key)
     session->bookmarkPages(positions, [guard, sessions, open](QVector<int> pages) mutable {
         if (!guard || !guard->activityView || pages.size() != 2 * sessions.size())
             return;
-        const int total = guard->session->pages();
+        const int total = guard->session->bookPages();
         for (int index = 0; index < sessions.size(); ++index) {
             const int start = pages[2 * index], end = pages[2 * index + 1];
             if (start < 0 || end < 0 || total <= 0)

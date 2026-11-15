@@ -83,17 +83,14 @@ NativeBook readNativeBook(const QString &path, const QString &identity)
         database.setConnectOptions("QSQLITE_OPEN_READONLY;QSQLITE_BUSY_TIMEOUT=100");
         if (database.open()) {
             QSqlQuery query(database);
-            query.prepare("SELECT Title, Attribution, ImageId, ___PercentRead FROM content "
+            query.prepare("SELECT Title, Attribution, ImageId, ___PercentRead, ReadStatus FROM content "
                           "WHERE ContentID = ? AND ContentType = 6 LIMIT 1");
             query.addBindValue(identity);
             if (query.exec() && query.next()) {
                 book.title = query.value(0).toString();
                 book.author = query.value(1).toString();
                 book.imageId = query.value(2).toString();
-                bool valid = false;
-                const int percent = query.value(3).toInt(&valid);
-                if (valid && !query.value(3).isNull())
-                    book.percent = qBound(0, percent, 100);
+                book.percent = nativeSleepPercent(query.value(4), query.value(3));
             }
         }
         database.close();
@@ -382,9 +379,9 @@ bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIde
             !finished.isEmpty() && finished == state.object.value("position").toString();
     // Nickel's percentage matches My Books, also after reading in Nickel.
     if (completed || book.percent >= 0 || state.object.value("percent").isDouble()) {
-        shot.percent = completed    ? 100
-                : book.percent >= 0 ? book.percent
-                                    : qBound(0, state.object.value("percent").toInt(), 100);
+        shot.percent = book.percent >= 0 ? book.percent
+                : completed          ? 100
+                                     : qBound(0, state.object.value("percent").toInt(), 100);
         shot.progress = strings::get("sleep.percent_read").arg(shot.percent);
     }
     shot.details.title = book.title;

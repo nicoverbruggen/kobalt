@@ -4224,6 +4224,10 @@ private slots:
 
     void homeSleepScreenRequiresUnambiguousLastBook()
     {
+        QCOMPARE(nickel::nativeSleepPercent(0, 100), 0);
+        QCOMPARE(nickel::nativeSleepPercent(1, 27), 27);
+        QCOMPARE(nickel::nativeSleepPercent(2, 94), 100);
+        QCOMPARE(nickel::nativeSleepPercent({}, {}), -1);
         const auto name = QStringLiteral("sleep-latest-book-test");
         {
             auto database = QSqlDatabase::addDatabase("QSQLITE", name);

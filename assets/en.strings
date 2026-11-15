@@ -1143,6 +1143,7 @@
 "activity.welcome_description" = "Activity shows your reading time and reading stats on this device. It doesn't sync, so if you also read on another device, your streaks and totals here won't include that reading.";
 "activity.loading" = "Loading reading history…";
 "activity.unavailable" = "Reading history is unavailable right now.";
+"activity.change_not_saved" = "Could not save the change to your reading history.";
 "activity.empty" = "Your reading time appears here after your first reading session.";
 "activity.no_books" = "Books you read appear here.";
 "activity.tab_overview" = "OVERVIEW";

@@ -708,6 +708,7 @@ private:
     void openActivity();
     void closeActivity();
     void loadActivity();
+    void finishActivityEdit(bool ok);
     void mapActivityBook(const QString &book);
     void loadActivityCovers(const QVector<kobalt::activity::BookTotal> &books, QSize size);
     kobalt::WordList *wordList = nullptr, *allWords = nullptr;

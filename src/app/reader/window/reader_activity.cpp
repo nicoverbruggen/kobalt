@@ -85,9 +85,9 @@ void Reader::hideActivityBook(const QString &key, bool hidden)
     if (!activityRecords || !book)
         return;
     QPointer<Reader> guard(this);
-    activityRecords->hide(key, hidden, [guard](bool) {
+    activityRecords->hide(key, hidden, [guard](bool ok) {
         if (guard)
-            guard->loadActivity();
+            guard->finishActivityEdit(ok);
     });
 }
 
@@ -119,9 +119,9 @@ void Reader::deleteActivityBook(const QString &key, const QString &title)
             return;
         if (guard->activityView)
             guard->activityView->closeBook();
-        guard->activityRecords->remove(key, guard->book->readingOpeningId(), [guard](bool) {
+        guard->activityRecords->remove(key, guard->book->readingOpeningId(), [guard](bool ok) {
             if (guard)
-                guard->loadActivity();
+                guard->finishActivityEdit(ok);
         });
     };
     connect(choice->secondaryButton(), &QPushButton::clicked, choice, [finish] { finish(false); });
@@ -134,6 +134,14 @@ void Reader::deleteActivityBook(const QString &key, const QString &title)
     choice->show();
     choice->raise();
     refresh();
+}
+
+void Reader::finishActivityEdit(bool ok)
+{
+    if (!ok && activityView)
+        showNotice({ strings::get("activity.title"), strings::get("activity.change_not_saved"),
+                     QStringLiteral("rrActivityWriteError") });
+    loadActivity();
 }
 
 void Reader::openActivity()

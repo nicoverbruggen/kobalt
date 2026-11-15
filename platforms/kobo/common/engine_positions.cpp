@@ -6,6 +6,7 @@
 #include <QRegularExpression>
 #include <QXmlStreamReader>
 #include <QUrl>
+#include <algorithm>
 
 namespace kobalt::nickel {
 namespace {
@@ -408,8 +409,10 @@ bool unitsBefore(ldomNode *element, ldomNode *target, int offset, int &units, QS
 }
 
 bool nativeText(ldomDocument *doc, const QString &path, const QString &id, ldomNode *element,
-                QString &sourceText, QString *error, bool *unusableAnchor = nullptr)
+                QString &sourceText, QVector<int> &engineUnits, QString *error,
+                bool *unusableAnchor = nullptr)
 {
+    engineUnits.clear();
     if (unusableAnchor) {
         *unusableAnchor = false;
     }
@@ -428,6 +431,8 @@ bool nativeText(ldomDocument *doc, const QString &path, const QString &id, ldomN
         return fail(strings::get("error.native_chapter_source_is_incomplete"));
     QXmlStreamReader parser(xml);
     sourceText.clear();
+    // Whitespace on opposite sides of inline markup can survive separately.
+    QVector<int> textEnds;
     int matches = 0, depth = 0, targetDepth = 0;
     while (!parser.atEnd()) {
         parser.readNext();
@@ -437,6 +442,7 @@ bool nativeText(ldomDocument *doc, const QString &path, const QString &id, ldomN
                 targetDepth = depth;
         } else if (parser.isCharacters() && targetDepth) {
             sourceText += parser.text();
+            textEnds.append(sourceText.size());
         } else if (parser.isEndElement()) {
             if (depth == targetDepth)
                 targetDepth = 0;
@@ -449,7 +455,32 @@ bool nativeText(ldomDocument *doc, const QString &path, const QString &id, ldomN
         return fail(strings::get(
                 "error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
     }
-    if (sourceText != qstring(element->getText())) {
+    const auto engineText = qstring(element->getText());
+    if (sourceText != engineText) {
+        // Only accept XML whitespace normalization when the complete result
+        // matches the engine. Keep a boundary for every source UTF-16 unit;
+        // using the original offset in collapsed text would move the passage.
+        QString collapsed;
+        QVector<int> offsets;
+        offsets.reserve(sourceText.size() + 1);
+        int begin = 0;
+        for (const int end : textEnds) {
+            bool space = false;
+            for (int i = begin; i < end; ++i) {
+                offsets.append(collapsed.size());
+                const auto ch = sourceText[i];
+                const bool white = ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+                if (!white || !space)
+                    collapsed += white ? QChar(' ') : ch;
+                space = white;
+            }
+            begin = end;
+        }
+        if (collapsed == engineText) {
+            offsets.append(collapsed.size());
+            engineUnits = std::move(offsets);
+            return true;
+        }
         if (unusableAnchor) {
             *unusableAnchor = true;
         }
@@ -553,11 +584,12 @@ QString NickelPositionCodec::decode(const Engine &other, const QString &location
         element = doc->getNodeById(doc->getAttrValueIndex(cre(internalId).c_str()));
         if (!element)
             return fail(strings::get("error.native_text_anchor_is_not_in_the_publication"));
-        // TENG offsets count UTF-16 units in the source DOM. CREngine uses
-        // UTF-32 and can normalize whitespace. Reject a changed text stream
-        // rather than turning the same number into a position in different text.
+        // TENG offsets count UTF-16 units in the source DOM. The engine uses
+        // UTF-32 and can collapse XML whitespace, so translate those offsets
+        // only after checking the complete text stream.
         bool unusableAnchor = false;
-        if (!nativeText(doc, path, id, element, sourceText, error, &unusableAnchor)) {
+        QVector<int> engineUnits;
+        if (!nativeText(doc, path, id, element, sourceText, engineUnits, error, &unusableAnchor)) {
             // CREngine drops the whitespace between block children, so an ID
             // on a section around paragraphs without IDs fails this check. A
             // native point still names its own element, which can match even
@@ -566,6 +598,11 @@ QString NickelPositionCodec::decode(const Engine &other, const QString &location
                 return {};
             if (error)
                 error->clear();
+        } else if (!engineUnits.isEmpty()) {
+            if (offset > sourceText.size())
+                return fail(strings::get("error.native_text_offset_exceeds_its_anchor"));
+            offset = engineUnits[offset];
+            sourceText = qstring(element->getText());
         }
     }
     if (offset > sourceText.size())
@@ -678,7 +715,8 @@ QString NickelPositionCodec::encode(const Engine &other, QString *error)
     const auto id = internalId.mid(prefix.size());
     QString sourceText;
     bool unusableAnchor = false;
-    if (!nativeText(doc, path, id, element, sourceText, error, &unusableAnchor)) {
+    QVector<int> engineUnits;
+    if (!nativeText(doc, path, id, element, sourceText, engineUnits, error, &unusableAnchor)) {
         if (!unusableAnchor)
             return {};
         if (error)
@@ -701,6 +739,12 @@ QString NickelPositionCodec::encode(const Engine &other, QString *error)
     int units = 0;
     if (!unitsBefore(element, target, pointer.getOffset(), units, error))
         return {};
+    // Several source boundaries can collapse onto one engine boundary. Prefer
+    // the last one, just before the next retained character (or the text end).
+    if (!engineUnits.isEmpty())
+        units = int(std::upper_bound(engineUnits.begin(), engineUnits.end(), units)
+                    - engineUnits.begin())
+                - 1;
     return encodedPath + '#' + QString::fromLatin1(QUrl::toPercentEncoding(id)) + ':'
             + QString::number(units);
 }

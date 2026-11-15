@@ -10,6 +10,8 @@ The Reader and the standalone Library share `reader-settings.json`. Each applies
 
 ## Saved reading data
 
+Native position mapping accepts collapsed XML whitespace for unique IDs only when the normalized source text matches the engine text. Import translates source UTF-16 offsets to engine offsets; export chooses the last source boundary for a collapsed run. Existing exact mappings, duplicate-ID checks and structural fallbacks retain their behavior. This changes no saved-data or parsed-book format, and requires no cache invalidation.
+
 `page_animations` retains the user’s configured preference in both themes. On the older i.MX display backend, dark mode suppresses the animation at runtime without saving a different value. Returning to light mode restores the preference. Settings schema 1 and reading-data and cache formats stay unchanged.
 
 The optional global `activity_welcome_seen` Boolean records that Activity's first-opening alert was shown; it is written through the profile writer and defaults to false. The graph button and Settings share the existing global `dense_stats_chart` Boolean. The graph button writes it through the profile writer and restores the saved mode if the write fails. No saved-data or cache format changes.

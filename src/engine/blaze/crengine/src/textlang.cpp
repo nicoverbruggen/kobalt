@@ -285,17 +285,20 @@ void TextLangMan::resetCounters() {
 }
 
 // Blaze: Save and restore per-language quote depth when a parked layout yields to another document.
-int TextLangMan::koblazeQuoteLevels( int * levels, int size ) {
-    for ( int i=0; i<_lang_cfg_list.length() && i<size; i++ ) {
-        levels[i] = _lang_cfg_list[i]->_quote_nesting_level;
+TextLangMan::QuoteLevels TextLangMan::koblazeQuoteLevels() {
+    QuoteLevels levels;
+    for ( int i=0; i<_lang_cfg_list.length(); i++ ) {
+        const TextLangCfg * cfg = _lang_cfg_list[i];
+        if ( cfg->_quote_nesting_level )
+            levels.emplace_back(cfg->_lang_tag, cfg->_quote_nesting_level);
     }
-    return _lang_cfg_list.length();
+    return levels;
 }
 
-void TextLangMan::koblazeSetQuoteLevels( const int * levels, int count ) {
-    for ( int i=0; i<_lang_cfg_list.length() && i<count; i++ ) {
-        _lang_cfg_list[i]->_quote_nesting_level = levels[i];
-    }
+void TextLangMan::koblazeSetQuoteLevels( const QuoteLevels & levels ) {
+    resetCounters();
+    for ( const auto & level : levels )
+        getTextLangCfg(level.first, true)->_quote_nesting_level = level.second;
 }
 
 // TextLangCfg object: per language holder of language specificities

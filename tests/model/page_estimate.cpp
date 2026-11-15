@@ -20,9 +20,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSet>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <lvdocview.h>
+#include <textlang.h>
 
 using namespace kobalt;
 
@@ -2207,6 +2209,30 @@ void parkedPublisherFonts()
                        });
 }
 
+void parkedQuoteLevels()
+{
+    TextLangMan::resetCounters();
+    const auto tag = [](int i) { return lString32(U"en-x-") + lString32::itoa(i); };
+    for (int i = 0; i < 70; ++i) {
+        auto *language = TextLangMan::getTextLangCfg(tag(i), true);
+        for (int depth = 0; depth <= i; ++depth)
+            language->getOpeningQuote();
+    }
+    const auto saved = TextLangMan::koblazeQuoteLevels();
+    require(saved.size() == 70, "All open quote levels must be saved");
+    TextLangMan::resetCounters();
+    for (int i = 69; i >= 0; --i)
+        TextLangMan::getTextLangCfg(tag(i), true);
+    TextLangMan::getTextLangCfg(U"fr", true)->getOpeningQuote();
+    TextLangMan::koblazeSetQuoteLevels(saved);
+    auto restored = TextLangMan::koblazeQuoteLevels();
+    require(restored.size() == saved.size(), "A parked language was lost");
+    for (const auto &level : saved)
+        require(std::find(restored.begin(), restored.end(), level) != restored.end(),
+                "A preview changed quote nesting");
+    TextLangMan::resetCounters();
+}
+
 void parkedVariableFont()
 {
     const auto book = pagesBook();
@@ -2884,6 +2910,7 @@ int main(int argc, char **argv)
     fullDocumentKeepsPublisherFonts();
     parkedPublisherFonts();
     parkedVariableFont();
+    parkedQuoteLevels();
     fullDocumentPixels();
     fullDocumentFromCache(bytes);
     abandonedOpenedDocument(bytes);

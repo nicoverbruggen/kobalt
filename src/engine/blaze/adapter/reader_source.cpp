@@ -1382,8 +1382,7 @@ struct EngineDocument::FullBuild
         // document: the stop check, the quote levels of the languages and
         // the cache of parsed books. A chapter that has the engine meanwhile
         // must not write to that cache.
-        int levels[64];
-        const int count = qMin(64, TextLangMan::koblazeQuoteLevels(levels, 64));
+        const auto levels = TextLangMan::koblazeQuoteLevels();
         const int fontWeight = LVRendGetBaseFontWeight();
         const float opticalSize = LVRendGetFontOpticalSize();
         const bool pairKerning = koblazePairKerning();
@@ -1412,7 +1411,7 @@ struct EngineDocument::FullBuild
 #  endif
         ldomDocCache::koblazeSuspend(false);
         koblazeSwapCancelScopes(&noCancel, &parserCanStop);
-        TextLangMan::koblazeSetQuoteLevels(levels, count);
+        TextLangMan::koblazeSetQuoteLevels(levels);
         LVRendSetBaseFontWeight(fontWeight);
         LVRendSetFontOpticalSize(opticalSize);
         koblazeSetPairKerning(pairKerning);

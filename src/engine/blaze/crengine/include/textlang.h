@@ -2,6 +2,8 @@
 #define __TEXTLANG_H_INCLUDED__
 
 #include "crsetup.h"
+#include <utility>
+#include <vector>
 
 #if USE_HARFBUZZ==1
 #include <hb.h>
@@ -223,12 +225,11 @@ public:
     static HyphMethod * getMainLangHyphMethod(); // For HyphMan::hyphenate()
 
     static void resetCounters();
-    /// Blaze: the quote nesting levels of the language configurations, in
-    /// their order. A host that pauses work on one document to work on
-    /// another saves them before and restores them after. Stores at most
-    /// `size` levels and returns how many there are.
-    static int koblazeQuoteLevels( int * levels, int size );
-    static void koblazeSetQuoteLevels( const int * levels, int count );
+    // Only languages with open quotes need a record. Another document
+    // can add languages or change their lookup order while layout is parked.
+    typedef std::vector<std::pair<lString32, int>> QuoteLevels;
+    static QuoteLevels koblazeQuoteLevels();
+    static void koblazeSetQuoteLevels( const QuoteLevels & levels );
 
     // For frontend info about TextLangMan status and seen langs
     static LVPtrVector<TextLangCfg> * getLangCfgList() {

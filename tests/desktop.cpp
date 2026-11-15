@@ -2530,6 +2530,9 @@ void grabThemeViews(Fixture &fixture, QVector<ThemeView> *views)
     QTRY_VERIFY(!fixture.visible("rrChapter1"));
     QVERIFY(fixture.press("rrNavStats"));
     QTRY_VERIFY(fixture.visible("rrChapterGraph"));
+    // The Activity caption arrives from the profile writer after Stats opens.
+    if (auto *row = fixture.widget("rrGraphActivity"); row && row->isVisible())
+        QTRY_VERIFY_WITH_TIMEOUT(!row->accessibleDescription().isEmpty(), 10000);
     grab("stats");
     QVERIFY(fixture.press("rrNavStats"));
     QTRY_VERIFY(!fixture.visible("rrChapterGraph"));

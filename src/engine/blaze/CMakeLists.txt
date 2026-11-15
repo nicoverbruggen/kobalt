@@ -24,6 +24,8 @@ set(CRE_SRCS
     crengine/src/epubfmt.cpp
     extensions/layout_control.cpp
     extensions/spine_window.cpp
+    extensions/shaping_options.cpp
+    extensions/word_cache.cpp
     crengine/src/fb3fmt.cpp
     crengine/src/hist.cpp
     crengine/src/hyphman.cpp

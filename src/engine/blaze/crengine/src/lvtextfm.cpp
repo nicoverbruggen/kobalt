@@ -492,24 +492,6 @@ void LFormattedText::AddSourceObject(
     //   width) and can better apply values in %
 }
 
-// koblaze: see koblaze.h.
-static int koblaze_plain_joiner = -1;
-
-void koblazeSetPlainJoiner(bool enabled)
-{
-    koblaze_plain_joiner = enabled ? 1 : 0;
-}
-
-bool koblazePlainJoiner()
-{
-    // Until a host chooses, KOBLAZE_PLAIN_JOINER=1 in the environment turns it on.
-    if ( koblaze_plain_joiner < 0 ) {
-        const char * value = getenv("KOBLAZE_PLAIN_JOINER");
-        koblaze_plain_joiner = value && value[0] == '1' ? 1 : 0;
-    }
-    return koblaze_plain_joiner == 1;
-}
-
 class LVFormatter {
 public:
     //LVArray<lUInt16>  widths_buf;

@@ -1,5 +1,6 @@
 #include "check.h"
 #include "engine_fixtures.h"
+#include "engine/blaze/extensions/word_cache.h"
 #include "reader_inputs.h"
 #include "engine/blaze/adapter/engine_document.h"
 #include <QGuiApplication>
@@ -10,6 +11,43 @@ using kobalt::EngineDocument;
 
 namespace {
 const QSize viewport(800, 1136);
+
+void checkWordCache()
+{
+    blaze::WordCache cache;
+    const auto english = hb_language_from_string("en", -1);
+    const auto turkish = hb_language_from_string("tr", -1);
+    cache.selectLanguage(english);
+    const auto first = cache.findOrAdd(U"ink", 3, 42);
+    const auto collision = cache.findOrAdd(U"pen", 3, 42);
+    require(first.inserted && collision.inserted && first.offset != collision.offset,
+            "Different words with the same hash must have separate records");
+    cache.record(first.offset)[blaze::word::KW_LAST_ADVANCE] = 17;
+
+    // Grow past the initial table's load limit, then revisit both collided words.
+    for (unsigned int i = 0; i < 2100; ++i) {
+        const lChar32 letter = 0x3000 + i;
+        cache.findOrAdd(&letter, 1, i);
+    }
+    cache.selectLanguage(turkish);
+    const auto other = cache.findOrAdd(U"ink", 3, 42);
+    require(other.inserted, "A new language must shape the word for itself");
+    cache.record(other.offset)[blaze::word::KW_LAST_ADVANCE] = 23;
+    cache.selectLanguage(english);
+    const auto ink = cache.findOrAdd(U"ink", 3, 42);
+    const auto pen = cache.findOrAdd(U"pen", 3, 42);
+    require(!ink.inserted && !pen.inserted && ink.offset == first.offset
+                    && pen.offset == collision.offset
+                    && cache.record(ink.offset)[blaze::word::KW_LAST_ADVANCE] == 17,
+            "Changing language and growing the table must preserve earlier word metrics");
+
+    cache.clear();
+    for (const auto language : { english, turkish }) {
+        cache.selectLanguage(language);
+        require(cache.findOrAdd(U"ink", 3, 42).inserted,
+                "Clearing the face must discard records in every language");
+    }
+}
 
 void open(EngineDocument &model, int characters, const QString &face)
 {
@@ -64,6 +102,7 @@ void compare(EngineDocument &automatic, EngineDocument &reference)
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    checkWordCache();
     for (const auto &face : { QStringLiteral("Libron"), kobalt::test::alternateReadingFace(),
                               kobalt::test::headingReadingFace() }) {
         for (int characters : { 8000, 249999, 250000 }) {

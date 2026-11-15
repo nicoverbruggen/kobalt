@@ -4,7 +4,7 @@ Blaze is Kobalt’s rendering engine, a hard fork of KOReader’s CREngine. Koba
 
 The initial import is the library portion of the local koblaze fork at `6d3946edf08ef69afe19a3c457b88af126ae64aa`, based on `koreader/crengine` commit `4ce1aed17e9d7852e047e0b9b0bf6a637486fd97`. These are the same source bytes used by the preceding Mac and Qt5 test builds. The original checkout and its Git history remain separate and unchanged. The import copies source files, not Git history.
 
-The import holds the library sources and headers, the image scaler, the default style sheets and the license notices. It leaves out the CoolReader applications and their packaging, the bundled third-party libraries that Kobalt does not build, and the upstream lint setup, test scripts and development notes. Kobalt supplies its enabled third-party libraries through `dependencies/`. `src/engine/blaze/CMakeLists.txt` is the upstream build file without its lint targets; Kobalt configures it with `AUTO=OFF`.
+The import holds the library sources and headers, the image scaler, the default style sheets and the license notices. It leaves out the CoolReader applications and their packaging, the bundled third-party libraries that Kobalt does not build, and the upstream lint setup, test scripts and development notes. Kobalt supplies its enabled third-party libraries through `dependencies/`. Kobalt configures `src/engine/blaze/CMakeLists.txt` with `AUTO=OFF`. It builds the imported source and Blaze extensions into the same library.
 
 The engine knows a fixed list of hyphenation pattern names. `src/engine/blaze/data/hyphenation-patterns.txt` holds that list. The pattern files themselves are not part of the engine source: Kobalt ships its own selection from `assets/hyph`.
 
@@ -15,6 +15,8 @@ Preserve the GPLv2 notice in `src/engine/blaze/README.TXT`, the license text in 
 Compare the upstream change with the recorded KOReader base. In `crengine/`, keep upstream file names, indentation and declaration style. Kobalt’s [.clang-format-ignore](../../.clang-format-ignore) excludes these files. Format the adapter under `adapter/` with Kobalt’s Qt style.
 
 Blaze keeps its cancellation and pause callbacks and its chapter-window selection in `src/engine/blaze/extensions/`. They compile into the engine library and use the declarations in `crengine/include/koblaze.h`. The EPUB import loop still decides when parsing can stop and inserts an empty fragment for each skipped spine item so saved positions keep their fragment indices.
+
+Each font face owns a word cache. The [cache](../../src/engine/blaze/extensions/word_cache.cpp) stores shaped words and kerning by language. The font face in `lvfntman.cpp` still chooses the shaping path, checks it against HarfBuzz and clears the cache when font settings change. Shaping overrides live in `extensions/shaping_options.cpp`.
 
 For a change to text layout, check both `lvtextfm.cpp` and `lvtextfm_vert.cpp`. The first includes the second in the same translation unit. In `lvfntman.cpp`, check the Blaze word-shaping paths as well as the original HarfBuzz path. Changes to block layout or the DOM also need testing with a chapter window and a complete document. Use the [layout regressions](../validation/layout.md) to compare them.
 

@@ -74,6 +74,7 @@
 #if USE_HARFBUZZ==1
 #include <hb.h>
 #include <hb-ft.h>
+#include "../../extensions/word_cache.h"
 #include <hb-ot.h>
 #include <string>
 #include <unordered_map>
@@ -1116,58 +1117,6 @@ public:
     }
 };
 
-// koblaze: see koblaze.h.
-static int koblaze_pair_kerning = -1;
-
-void koblazeSetPairKerning(bool enabled)
-{
-    koblaze_pair_kerning = enabled ? 1 : 0;
-}
-
-bool koblazePairKerning()
-{
-    // Until a host chooses, KOBLAZE_PAIR_KERNING=1 in the environment turns it on.
-    if ( koblaze_pair_kerning < 0 ) {
-        const char * value = getenv("KOBLAZE_PAIR_KERNING");
-        koblaze_pair_kerning = value && value[0] == '1' ? 1 : 0;
-    }
-    return koblaze_pair_kerning == 1;
-}
-
-static int koblaze_word_widths = -1;
-
-void koblazeSetWordWidths(bool enabled)
-{
-    koblaze_word_widths = enabled ? 1 : 0;
-}
-
-bool koblazeWordWidths()
-{
-    // Until a host chooses, KOBLAZE_WORD_WIDTHS=1 in the environment turns it on.
-    if ( koblaze_word_widths < 0 ) {
-        const char * value = getenv("KOBLAZE_WORD_WIDTHS");
-        koblaze_word_widths = value && value[0] == '1' ? 1 : 0;
-    }
-    return koblaze_word_widths == 1;
-}
-
-static int koblaze_word_pairs = -1;
-
-void koblazeSetWordPairs(bool enabled)
-{
-    koblaze_word_pairs = enabled ? 1 : 0;
-}
-
-bool koblazeWordPairs()
-{
-    // Until a host chooses, KOBLAZE_WORD_PAIRS=1 in the environment turns it on.
-    if ( koblaze_word_pairs < 0 ) {
-        const char * value = getenv("KOBLAZE_WORD_PAIRS");
-        koblaze_word_pairs = value && value[0] == '1' ? 1 : 0;
-    }
-    return koblaze_word_pairs == 1;
-}
-
 class LVFreeTypeFace;
 
 static LVFontGlyphCacheItem * newItem( LVFontLocalGlyphCache * local_cache, lChar32 ch, FT_GlyphSlot slot ) // , bool drawMonochrome
@@ -1797,51 +1746,12 @@ protected:
     // The face stops using the memory when a check against HarfBuzz fails.
     bool _koblaze_kern_failed = false;
     unsigned int _koblaze_kern_runs = 0;
-    // koblaze: word widths from memory. See koblazeMeasureWords().
-    // A word is a record of ints in _koblaze_words; _koblaze_word_table
-    // holds the offset of each record plus one, by the hash of its text.
-    enum {
-        KW_HASH, KW_LEN, KW_USABLE,
-        KW_FIRST_GLYPH, KW_FIRST_END,   // the first glyph and the end of its cluster
-        KW_LAST_GLYPH, KW_LAST_CLUSTER, // the last glyph and the character that holds its advance
-        KW_LAST_ADVANCE,
-        KW_KERN_AFTER,  // added to the advance of the last glyph before a space
-        KW_KERN_BEFORE, // added to the advance of a space before this word
-        KW_TEXT         // then for each character: text, 26.6 advance, pixel advance, bits
-    };
+    blaze::WordCache _word_cache;
     enum { KW_BIT_GLYPH = 1, KW_BIT_ADVANCE = 2 };
-    enum { KW_UNKNOWN = INT_MIN, KW_UNUSABLE = INT_MIN + 1 };
-    enum { KW_MAX_LEN = 48, KW_MAX_WORDS = 50000 };
-    std::vector<int> _koblaze_words;
-    std::vector<unsigned int> _koblaze_word_table;
-    unsigned int _koblaze_word_count = 0;
-    // The kerning of each glyph before and after a space, by glyph.
-    std::vector<int> _koblaze_space_kern[2];
-    // koblaze: words built from pairs. See koblazeBuildWord(). The glyph
-    // and advance of each character alone, and what each pair of
-    // characters adds to the advance of its first glyph.
-    enum { KW_CHARS = 0x250 + 0x203B - 0x2010 };
-    std::vector<int> _koblaze_char_glyph;
-    std::vector<int> _koblaze_char_advance;
-    std::unordered_map<unsigned int, int> _koblaze_pair_kern;
+    enum { KW_MAX_LEN = 48, KW_CHARS = 0x250 + 0x203B - 0x2010 };
     bool _koblaze_build_failed = false;
     unsigned int _koblaze_built_words = 0;
     std::vector<int> _koblaze_built_check;
-    // The memory of each other language of this face. A font can have
-    // other glyphs and kerning for another language.
-    struct KoblazeWordMemory {
-        hb_language_t language;
-        std::vector<int> words;
-        std::vector<unsigned int> table;
-        unsigned int count;
-        std::vector<int> space_kern[2];
-        std::vector<int> char_glyph;
-        std::vector<int> char_advance;
-        std::unordered_map<unsigned int, int> pair_kern;
-    };
-    enum { KW_MAX_LANGUAGES = 8 };
-    std::vector<KoblazeWordMemory> _koblaze_word_memories;
-    hb_language_t _koblaze_word_language = HB_LANGUAGE_INVALID;
     bool _koblaze_words_failed = false;
     unsigned int _koblaze_word_runs = 0;
     // The result that the next comparison with HarfBuzz expects.
@@ -2311,59 +2221,12 @@ public:
         koblazeShape(_hb_buffer, 0, len, script, language, flags, _hb_features);
     }
 
-    // Exchanges the memory in use with the one in `memory`.
-    void koblazeSwapWords( KoblazeWordMemory & memory ) {
-        std::swap(memory.language, _koblaze_word_language);
-        memory.words.swap(_koblaze_words);
-        memory.table.swap(_koblaze_word_table);
-        std::swap(memory.count, _koblaze_word_count);
-        memory.space_kern[0].swap(_koblaze_space_kern[0]);
-        memory.space_kern[1].swap(_koblaze_space_kern[1]);
-        memory.char_glyph.swap(_koblaze_char_glyph);
-        memory.char_advance.swap(_koblaze_char_advance);
-        memory.pair_kern.swap(_koblaze_pair_kern);
-    }
-
-    // Makes the memory of `language` the one in use.
-    void koblazeUseWords( hb_language_t language ) {
-        if ( language == _koblaze_word_language )
-            return;
-        size_t found = 0;
-        while ( found < _koblaze_word_memories.size() && _koblaze_word_memories[found].language != language )
-            found++;
-        if ( found == _koblaze_word_memories.size() ) {
-            // A new language takes the place of the oldest one when there are many.
-            if ( found >= KW_MAX_LANGUAGES )
-                _koblaze_word_memories.erase(_koblaze_word_memories.begin());
-            KoblazeWordMemory empty;
-            empty.language = language;
-            empty.count = 0;
-            _koblaze_word_memories.push_back(empty);
-            found = _koblaze_word_memories.size() - 1;
-        }
-        koblazeSwapWords(_koblaze_word_memories[found]);
-    }
-
     void koblazeClearWords() {
-        _koblaze_word_memories.clear();
-        _koblaze_word_language = HB_LANGUAGE_INVALID;
-        koblazeForgetWords();
+        _word_cache.clear();
         _koblaze_words_failed = false;
         _koblaze_word_runs = 0;
         _koblaze_build_failed = false;
         _koblaze_built_words = 0;
-    }
-
-    // Empties the memory in use.
-    void koblazeForgetWords() {
-        _koblaze_words.clear();
-        _koblaze_word_table.clear();
-        _koblaze_word_count = 0;
-        _koblaze_space_kern[0].clear();
-        _koblaze_space_kern[1].clear();
-        _koblaze_char_glyph.clear();
-        _koblaze_char_advance.clear();
-        _koblaze_pair_kern.clear();
     }
 
     // What a character can be in a word that is measured from memory:
@@ -2407,53 +2270,20 @@ public:
         hb_buffer_set_content_type(_koblaze_buffer, HB_BUFFER_CONTENT_TYPE_UNICODE);
         hb_buffer_set_direction(_koblaze_buffer, HB_DIRECTION_LTR);
         hb_buffer_set_script(_koblaze_buffer, HB_SCRIPT_LATIN);
-        hb_buffer_set_language(_koblaze_buffer, _koblaze_word_language);
+        hb_buffer_set_language(_koblaze_buffer, _word_cache.language());
         hb_shape(_hb_font, _koblaze_buffer, _hb_features.ptr(), (unsigned int)_hb_features.length());
     }
 
     // koblaze: the record of a word, shaped at its first use. Returns its
-    // offset in _koblaze_words, which stays valid until the memory is
-    // cleared; pointers into _koblaze_words do not.
+    // offset in the word cache, which stays valid until the memory is
+    // cleared; pointers into records do not.
     unsigned int koblazeWord( const lChar32 * text, int len, unsigned int hash ) {
-        if ( _koblaze_word_table.empty() )
-            _koblaze_word_table.assign(4096, 0);
-        unsigned int mask = (unsigned int)_koblaze_word_table.size() - 1;
-        unsigned int slot = hash & mask;
-        for ( ; _koblaze_word_table[slot]; slot = (slot + 1) & mask ) {
-            const int * word = &_koblaze_words[_koblaze_word_table[slot] - 1];
-            if ( word[KW_HASH] != (int)hash || word[KW_LEN] != len )
-                continue;
-            int k = 0;
-            while ( k < len && word[KW_TEXT + 4 * k] == (int)text[k] )
-                k++;
-            if ( k == len )
-                return _koblaze_word_table[slot] - 1;
-        }
-        // A new word.
-        const unsigned int offset = (unsigned int)_koblaze_words.size();
-        _koblaze_words.resize(offset + KW_TEXT + 4 * len, 0);
-        _koblaze_word_table[slot] = offset + 1;
-        _koblaze_word_count++;
-        if ( _koblaze_word_count * 2 > _koblaze_word_table.size() ) {
-            std::vector<unsigned int> table(_koblaze_word_table.size() * 2, 0);
-            mask = (unsigned int)table.size() - 1;
-            for ( size_t old = 0; old < _koblaze_word_table.size(); old++ ) {
-                if ( !_koblaze_word_table[old] )
-                    continue;
-                unsigned int to = (unsigned int)_koblaze_words[_koblaze_word_table[old] - 1 + KW_HASH] & mask;
-                while ( table[to] )
-                    to = (to + 1) & mask;
-                table[to] = _koblaze_word_table[old];
-            }
-            _koblaze_word_table.swap(table);
-        }
-        int * word = &_koblaze_words[offset];
-        word[KW_HASH] = (int)hash;
-        word[KW_LEN] = len;
-        word[KW_KERN_AFTER] = KW_UNKNOWN;
-        word[KW_KERN_BEFORE] = KW_UNKNOWN;
-        for ( int k = 0; k < len; k++ )
-            word[KW_TEXT + 4 * k] = (int)text[k];
+        using namespace blaze::word;
+        const auto entry = _word_cache.findOrAdd(text, len, hash);
+        const unsigned int offset = entry.offset;
+        if ( !entry.inserted )
+            return offset;
+        int * word = _word_cache.record(offset);
         if ( _koblaze_build_failed || !koblazeWordPairs() || !koblazeBuildWord(text, len, word) ) {
             koblazeFillWord(text, len, word);
             return offset;
@@ -2487,9 +2317,11 @@ public:
     // fewer glyphs than characters, other glyphs in the pair than alone,
     // or a glyph that moves. HarfBuzz then shapes the word.
     bool koblazeBuildWord( const lChar32 * text, int len, int * word ) {
-        if ( _koblaze_char_glyph.empty() ) {
-            _koblaze_char_glyph.assign(KW_CHARS, KW_UNKNOWN);
-            _koblaze_char_advance.assign(KW_CHARS, 0);
+        using namespace blaze::word;
+        auto & cached = _word_cache.glyphs();
+        if ( cached.char_glyph.empty() ) {
+            cached.char_glyph.assign(KW_CHARS, KW_UNKNOWN);
+            cached.char_advance.assign(KW_CHARS, 0);
         }
         int index = 0, glyph = 0, advance = 0;
         for ( int t = len - 1; t >= 0; t-- ) {
@@ -2500,25 +2332,25 @@ public:
                 return false;
             const int next_index = index, next_glyph = glyph, next_advance = advance;
             index = c < 0x250 ? (int)c : (int)c - 0x2010 + 0x250;
-            if ( _koblaze_char_glyph[index] == KW_UNKNOWN ) {
+            if ( cached.char_glyph[index] == KW_UNKNOWN ) {
                 koblazeShapeWord(&c, 1);
                 unsigned int glyphs = 0;
                 const hb_glyph_info_t * info = hb_buffer_get_glyph_infos(_koblaze_buffer, &glyphs);
                 const hb_glyph_position_t * pos = hb_buffer_get_glyph_positions(_koblaze_buffer, NULL);
                 const bool plain = glyphs == 1 && info[0].codepoint != 0 && !pos[0].y_advance && !pos[0].x_offset && !pos[0].y_offset;
-                _koblaze_char_glyph[index] = plain ? (int)info[0].codepoint : KW_UNUSABLE;
-                _koblaze_char_advance[index] = plain ? pos[0].x_advance : 0;
+                cached.char_glyph[index] = plain ? (int)info[0].codepoint : KW_UNUSABLE;
+                cached.char_advance[index] = plain ? pos[0].x_advance : 0;
             }
-            glyph = _koblaze_char_glyph[index];
-            advance = _koblaze_char_advance[index];
+            glyph = cached.char_glyph[index];
+            advance = cached.char_advance[index];
             if ( glyph == KW_UNUSABLE )
                 return false;
             int raw = advance;
             if ( t + 1 < len ) {
                 const unsigned int key = (unsigned int)index * KW_CHARS + (unsigned int)next_index;
-                std::unordered_map<unsigned int, int>::const_iterator found = _koblaze_pair_kern.find(key);
+                std::unordered_map<unsigned int, int>::const_iterator found = cached.pair_kern.find(key);
                 int kern;
-                if ( found != _koblaze_pair_kern.end() ) {
+                if ( found != cached.pair_kern.end() ) {
                     kern = found->second;
                 }
                 else {
@@ -2531,7 +2363,7 @@ public:
                             && !pos[0].y_advance && !pos[1].y_advance && !pos[0].x_offset && !pos[0].y_offset
                             && !pos[1].x_offset && !pos[1].y_offset;
                     kern = plain ? pos[0].x_advance - advance : KW_UNUSABLE;
-                    _koblaze_pair_kern[key] = kern;
+                    cached.pair_kern[key] = kern;
                 }
                 if ( kern == KW_UNUSABLE )
                     return false;
@@ -2556,6 +2388,7 @@ public:
     // gives for it. The record stays unusable when the word is not plain
     // enough to measure from memory.
     void koblazeFillWord( const lChar32 * text, int len, int * word ) {
+        using namespace blaze::word;
         koblazeShapeWord(text, len);
         unsigned int glyphs = 0;
         const hb_glyph_info_t * info = hb_buffer_get_glyph_infos(_koblaze_buffer, &glyphs);
@@ -2605,7 +2438,8 @@ public:
     // or when anything else moves.
     int koblazeWordKern( const lChar32 * left_text, int left_len, int left, const lChar32 * right_text,
                          int right_len, int right, bool space_is_left ) {
-        std::vector<int> & known = _koblaze_space_kern[space_is_left ? 1 : 0];
+        using namespace blaze::word;
+        std::vector<int> & known = _word_cache.glyphs().space_kern[space_is_left ? 1 : 0];
         const size_t glyph = (size_t)(space_is_left ? right : left);
         if ( glyph >= known.size() )
             known.resize(glyph + 256, KW_UNKNOWN);
@@ -2616,6 +2450,7 @@ public:
 
     int koblazeShapePair( const lChar32 * left_text, int left_len, int left, const lChar32 * right_text,
                           int right_len, int right ) {
+        using namespace blaze::word;
         hb_position_t alone[2];
         for ( int side = 0; side < 2; side++ ) {
             koblazeShapeWord(side ? right_text : left_text, side ? right_len : left_len);
@@ -2646,6 +2481,7 @@ public:
     // false when the run does not qualify; measureText() then shapes it.
     bool koblazeMeasureWords( const lChar32 * text, int len, lUInt16 * widths, lUInt8 * flags, int max_width,
                               TextLangCfg * lang_cfg, int letter_spacing, lUInt32 hints, lUInt16 & last_fit ) {
+        using namespace blaze::word;
         if ( _koblaze_words_failed || !koblazeWordWidths() )
             return false;
         if ( hints & (LFNT_HINT_IS_VERTICAL | LFNT_HINT_DIRECTION_IS_RTL | LFNT_HINT_DIRECTION_IS_TTB | LFNT_HINT_IS_FALLBACK_FONT) )
@@ -2656,9 +2492,7 @@ public:
         if ( _hb_features_is_vertical != 0 )
             setupHBFeatures(false);
         const hb_language_t language = lang_cfg ? lang_cfg->getHBLanguage() : hb_language_get_default();
-        koblazeUseWords(language);
-        if ( _koblaze_word_count > KW_MAX_WORDS )
-            koblazeForgetWords();
+        _word_cache.selectLanguage(language);
         if ( !_koblaze_buffer )
             _koblaze_buffer = hb_buffer_create();
         static const lChar32 space = ' ';
@@ -2689,7 +2523,7 @@ public:
                     return false;
             }
             offset = koblazeWord(text + from, end - from, hash);
-            return _koblaze_words[offset + KW_USABLE] != 0;
+            return _word_cache.record(offset)[KW_USABLE] != 0;
         };
         int start = 0, end = 0, next_end = 0;
         unsigned int offset = 0, next_offset = 0;
@@ -2702,28 +2536,28 @@ public:
             // The kerning between this word and the next one.
             int kern = 0;
             if ( more ) {
-                const int * word = &_koblaze_words[offset];
-                const int * next = &_koblaze_words[next_offset];
+                const int * word = _word_cache.record(offset);
+                const int * next = _word_cache.record(next_offset);
                 if ( text[end] == space ) {
                     if ( word[KW_KERN_AFTER] == KW_UNKNOWN ) {
                         const int kerned = koblazeWordKern(text + start + word[KW_LAST_CLUSTER], end - start - word[KW_LAST_CLUSTER],
                                                            word[KW_LAST_GLYPH], &space, 1, next[KW_FIRST_GLYPH], false);
-                        _koblaze_words[offset + KW_KERN_AFTER] = kerned;
+                        _word_cache.record(offset)[KW_KERN_AFTER] = kerned;
                     }
-                    kern = _koblaze_words[offset + KW_KERN_AFTER];
+                    kern = _word_cache.record(offset)[KW_KERN_AFTER];
                 }
                 else {
                     if ( next[KW_KERN_BEFORE] == KW_UNKNOWN ) {
                         const int kerned = koblazeWordKern(&space, 1, word[KW_LAST_GLYPH], text + end, next[KW_FIRST_END],
                                                            next[KW_FIRST_GLYPH], true);
-                        _koblaze_words[next_offset + KW_KERN_BEFORE] = kerned;
+                        _word_cache.record(next_offset)[KW_KERN_BEFORE] = kerned;
                     }
-                    kern = _koblaze_words[next_offset + KW_KERN_BEFORE];
+                    kern = _word_cache.record(next_offset)[KW_KERN_BEFORE];
                 }
                 if ( kern == KW_UNUSABLE )
                     return false;
             }
-            const int * word = &_koblaze_words[offset];
+            const int * word = _word_cache.record(offset);
             if ( kern && ( !word[KW_LAST_ADVANCE] || !(word[KW_LAST_ADVANCE] + kern) ) )
                 return false;
             const int * record = word + KW_TEXT;

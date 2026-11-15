@@ -219,10 +219,13 @@ bool ReadingBook::readingSavePending() const
     return bridge && bridge->readingSavePending();
 }
 
-void ReadingBook::retryFailedReadingSave()
+void ReadingBook::retryFailedReadingSave(std::function<void(NativeActivityResult)> done,
+                                         ReadingSaveRetry mode)
 {
     if (bridge)
-        bridge->retryFailedReadingSave();
+        bridge->retryFailedReadingSave(std::move(done), mode);
+    else if (done)
+        done(NativeActivityResult::NotRequired);
 }
 
 void ReadingBook::observeReading(bool learnPace)
@@ -790,12 +793,17 @@ NativeSaveResult ReadingBook::writeNative(const QString &location, const QString
             const double percent = session_->progressPercent();
             const bool preserveFinished = finishedHere();
             diagnostic("native-save-start");
+            const auto activity = readingActivity();
+            const auto epoch = positionSaveEpoch;
             nativeWriteback = bridge->write(current, timeOnly ? QString() : location, percent,
-                                            preserveFinished, readingActivity());
+                                            preserveFinished, activity);
             error = nativeWriteback.message();
             if (nativeWriteback.saved()) {
                 baseline = nativeWriteback.baseline();
                 reconciliation.reset(baseline);
+                if (!timeOnly && nativeWriteback.status() == NativeSaveResult::Status::Saved
+                    && positionSaved)
+                    positionSaved(activity.position, epoch);
             } else {
                 // A commit can lose a race after the earlier read. Ask about
                 // that update before letting the window finish its exit.

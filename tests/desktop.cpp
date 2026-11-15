@@ -16436,6 +16436,12 @@ private slots:
             QVERIFY(failure->card()->height() < reader->height());
             QVERIFY(capture(fixture, name + (retried ? "-save-retry-failed" : "-save-failed")));
         }
+        SaveErrorView wakeFailure(reader);
+        wakeFailure.setGeometry(reader->rect());
+        wakeFailure.show();
+        wakeFailure.raise();
+        QVERIFY(wakeFailure.card()->height() < reader->height());
+        QVERIFY(capture(fixture, name + "-sleep-save-failed"));
     }
 
     void finish_data() { screenshotVariants(); }

@@ -22,6 +22,8 @@ struct HostProgress
     bool holdFinish = false, failFinish = false, finishPending = false;
     bool rejectWriteWhileFinishing = false;
     int finishAttempts = 0;
+    int saveRetries = 0;
+    std::function<void(bool)> retryDone;
     int stopAttempts = 0, destroyed = 0;
     // Minute ticks that asked the platform for its reading pace.
     int minuteTicks = 0;
@@ -153,6 +155,17 @@ public:
         };
         if (!progress->holdFinish)
             progress->completeFinish(!progress->failFinish);
+    }
+
+    void retryFailedReadingSave(std::function<void(NativeActivityResult)> done,
+                                ReadingSaveRetry) override
+    {
+        if (done) {
+            ++progress->saveRetries;
+            progress->retryDone = [done = std::move(done)](bool saved) {
+                done(saved ? NativeActivityResult::Completed : NativeActivityResult::Failed);
+            };
+        }
     }
 
     bool readingSavePending() const override { return progress->finishPending; }

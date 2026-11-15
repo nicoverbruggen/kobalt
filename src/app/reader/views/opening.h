@@ -16,7 +16,10 @@ std::unique_ptr<ReaderOpeningView> createOpeningSurface(QWidget *parent, bool da
 class SaveErrorView final : public ui::ChoiceModal
 {
 public:
-    SaveErrorView(QWidget *parent, const QString &error, bool retried);
+    // A failed reading-time save can be retried while the reader stays open.
+    explicit SaveErrorView(QWidget *parent);
+    enum class Cause { Failed, TimedOut };
+    SaveErrorView(QWidget *parent, const QString &error, bool retried, Cause cause = Cause::Failed);
 
     QPushButton *quitButton() const { return quit; }
 

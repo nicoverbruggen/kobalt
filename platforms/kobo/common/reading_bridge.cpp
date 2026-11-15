@@ -94,7 +94,19 @@ public:
 
     bool readingSavePending() const override { return reading_.savePending(); }
 
-    void retryFailedReadingSave() override { reading_.retryFailedSave(); }
+    void retryFailedReadingSave(std::function<void(NativeActivityResult)> done,
+                                ReadingSaveRetry mode) override
+    {
+        if (!done) {
+            reading_.retryFailedSave();
+            return;
+        }
+        reading_.retryFailedSave(
+                [done = std::move(done)](bool saved) {
+                    done(saved ? NativeActivityResult::Completed : NativeActivityResult::Failed);
+                },
+                mode);
+    }
 
 private:
     // Page events keep one lookup of Nickel's record until Nickel signals a

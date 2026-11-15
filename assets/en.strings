@@ -588,6 +588,12 @@
 "opening.may_take_a_while" = "This may take a while";
 "closing.failed" = "Couldn't save your progress";
 "closing.failed_detail" = "Your progress couldn’t be saved, so the book is still open. Please try again. If this keeps happening, back up your data.";
+"closing.timeout" = "Saving is taking longer than usual";
+"closing.timeout_detail" = "The save may still finish. You can keep reading or try closing the book again.";
+"sleep.reading_time_failed" = "Couldn't save reading time";
+"sleep.reading_time_failed_detail" = "The reading time from before sleep could not be saved. You can retry here without leaving this page.";
+"sleep.reading_time_retry_failed" = "Reading time still couldn’t be saved. You can try again or keep reading.";
+"sleep.retry_save" = "Retry save";
 "closing.retry" = "Retry save and close";
 "closing.quit" = "Quit without saving";
 "closing.quit_warning" = "Quitting now may lose unsaved progress or annotations.";

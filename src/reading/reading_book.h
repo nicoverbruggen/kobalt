@@ -77,7 +77,8 @@ public:
     // Drain native writes without completing the local session retained by sleep.
     void drainReadingSave(std::function<void(NativeActivityResult)> done);
     bool readingSavePending() const;
-    void retryFailedReadingSave();
+    void retryFailedReadingSave(std::function<void(NativeActivityResult)> done = {},
+                                ReadingSaveRetry mode = ReadingSaveRetry::Explicit);
     bool checkpointReadingHistory(bool background = false);
     bool activitySaveDue(int intervalMilliseconds = 300000) const;
     bool activitySaveCoolingDown() const;

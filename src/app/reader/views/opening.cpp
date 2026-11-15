@@ -727,13 +727,25 @@ std::unique_ptr<ReaderOpeningView> createOpeningSurface(QWidget *parent, bool da
     return std::make_unique<OpeningView>(parent, preferences, std::move(presentation), false, true);
 }
 
-SaveErrorView::SaveErrorView(QWidget *parent, const QString &error, bool retried)
+SaveErrorView::SaveErrorView(QWidget *parent)
+    : ui::ChoiceModal(parent,
+                      { strings::get("sleep.reading_time_failed_detail"),
+                        strings::get("sleep.reading_time_failed"),
+                        {} },
+                      { strings::get("closing.return"), "rrSleepSaveReturn" },
+                      { strings::get("sleep.retry_save"), "rrSleepSaveRetry" })
+{
+    setObjectName("rrSleepSaveError");
+}
+
+SaveErrorView::SaveErrorView(QWidget *parent, const QString &error, bool retried, Cause cause)
     : ui::ChoiceModal(
               parent,
-              { strings::get("closing.failed_detail")
+              { strings::get(cause == Cause::TimedOut ? "closing.timeout_detail"
+                                                      : "closing.failed_detail")
                         + (error.isEmpty() ? QString() : "\n\n" + error)
                         + (retried ? "\n\n" + strings::get("closing.quit_warning") : QString()),
-                strings::get("closing.failed"),
+                strings::get(cause == Cause::TimedOut ? "closing.timeout" : "closing.failed"),
                 {} },
               { strings::get("closing.return"), "rrCloseSaveReturn" },
               { strings::get("closing.retry"), "rrCloseSaveRetry" })

@@ -283,6 +283,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "loading-splash", "Opening with the Kobalt logo" },
         { "loading-splash-reopening", "Reopening with the Kobalt logo" },
         { "save-failed", "Saving failed" },
+        { "sleep-save-failed", "Reading time save failed" },
         { "save-retry-failed", "Saving retry failed" },
         { "search", "Search results" },
         { "search-empty", "Search this book" },

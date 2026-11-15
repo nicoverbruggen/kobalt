@@ -85,7 +85,13 @@ public:
     // reports it with saves::settled(), so a waiting close continues at once.
     virtual bool readingSavePending() const { return false; }
 
-    virtual void retryFailedReadingSave() { }
+    // Retry the saved interval without ending the interval now being read.
+    virtual void retryFailedReadingSave(std::function<void(NativeActivityResult)> done,
+                                        ReadingSaveRetry)
+    {
+        if (done)
+            done(NativeActivityResult::NotRequired);
+    }
 
     // Called on the GUI thread when a background pace refresh changes estimates.
     std::function<void()> estimatesChanged;

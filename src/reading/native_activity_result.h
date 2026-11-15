@@ -5,6 +5,8 @@ namespace kobalt {
 // adapter decision, not evidence that native storage was written.
 enum class NativeActivityResult { NotRequired, Completed, Failed, Abandoned };
 
+enum class ReadingSaveRetry { Explicit, Background };
+
 inline bool activityCompleted(NativeActivityResult result)
 {
     return result == NativeActivityResult::NotRequired || result == NativeActivityResult::Completed;

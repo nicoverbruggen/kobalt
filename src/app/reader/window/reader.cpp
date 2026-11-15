@@ -559,11 +559,14 @@ void Reader::sleepReader()
     }
     if (pageScrubber)
         pageScrubber->cancel();
-    if (lifecycleHidden)
+    if (lifecycleHidden || closing)
         return;
+    // Sleep takes over the save. Its eventual reply must not resume the old Exit on wake.
     const auto sleepRequest = ++closeRequest;
-    exportRunning = false;
-    setEnabled(true);
+    sleepSaveRequest = sleepRequest;
+    sleepSave = SleepSave::Waiting;
+    sleepSavePosition = session->state().value("position").toString();
+    clearPendingExit();
     setProperty("reader_sleep_clean_pending", true);
     session->cancelPendingTurn();
     book->sleepReading(preferences);
@@ -614,10 +617,17 @@ void Reader::sleepReader()
         connect(this, &QObject::destroyed, &loop, &QEventLoop::quit);
         auto completed = std::make_shared<bool>(false);
         book->drainReadingSave(
-                [completed, waiting = QPointer<QEventLoop>(&loop)](NativeActivityResult) {
+                [guard, sleepRequest, completed,
+                 waiting = QPointer<QEventLoop>(&loop)](NativeActivityResult result) {
                     *completed = true;
                     if (waiting)
                         waiting->quit();
+                    if (guard && guard->sleepSaveRequest == sleepRequest
+                        && guard->sleepSave == SleepSave::Waiting) {
+                        guard->sleepSave = result == NativeActivityResult::Failed ? SleepSave::Retry
+                                                                                  : SleepSave::Idle;
+                        guard->recoverSleepSave();
+                    }
                 });
         if (!*completed) {
             timeout.start(2500);
@@ -748,6 +758,8 @@ void Reader::wakeReader()
     sleepImage = {};
     presentation->clearSleepScreen();
     setProperty("reader_sleep_clean_pending", false);
+    if (lifecycleHidden)
+        wakePositionEpoch = book->advancePositionSaveEpoch();
     lifecycleHidden = false;
     if (sleep::mode(preferences) == sleep::Mode::Overlay)
         prepareSleepOverlay();
@@ -858,7 +870,8 @@ QVector<QWidget *> Reader::popups() const
              annotationErrorDialog.data(),
              formattingWarningDialog.data(),
              settingsWriteErrorDialog.data(),
-             wordNotice };
+             wordNotice,
+             closeSaveError.data() };
 }
 
 bool Reader::popup(QObject *object) const
@@ -2702,7 +2715,7 @@ void Reader::scriptedPageButton(int direction)
 
 void Reader::pageButton(int direction, quint32 sourceTime, bool userInput, int physicalKey)
 {
-    if (resizePending)
+    if (resizePending || closeSaveError)
         return;
     if (imageViewer && imageViewer->isVisible())
         return;
@@ -2744,7 +2757,7 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, ui::Inp
     if (pageScrubber)
         pageScrubber->cancel();
     kobalt::diagnosticInput();
-    if (positionPromptOpen() || annotationErrorDialog || formattingWarningDialog
+    if (positionPromptOpen() || closeSaveError || annotationErrorDialog || formattingWarningDialog
         || settingsWriteErrorDialog || !session->canTurn() || closing || exitPending
         || lifecycleHidden || services.suspended() || book->deviceTransition()
         || appearanceEdit.panelOpen() || appearanceEdit.applying())
@@ -2886,6 +2899,18 @@ void Reader::finishExit()
     setEnabled(false);
     closeStage.start();
     const auto request = ++closeRequest;
+    // Invalidate this close attempt on timeout. A native write that has already
+    // started still owns its completion and may have committed the reading time.
+    qt::later(7000, this, [this, request] {
+        if (request != closeRequest || !exportRunning || closing || lifecycleHidden)
+            return;
+        diagnostic("exit-save-timeout",
+                   { { "request", double(request) },
+                     { "native_time_pending", book->readingSavePending() },
+                     { "local_save_pending", book->savesPending() } },
+                   DiagnosticSeverity::Warning);
+        failExit(request, {}, SaveErrorView::Cause::TimedOut);
+    });
     saveExit(request);
 }
 
@@ -3025,7 +3050,7 @@ void Reader::transitionSaveError(std::function<void()> retry, std::function<void
         textRefresh(widget);
 }
 
-void Reader::failExit(quint64 request, const QString &error)
+void Reader::failExit(quint64 request, const QString &error, SaveErrorView::Cause cause)
 {
     if (request != closeRequest || lifecycleHidden)
         return;
@@ -3034,7 +3059,8 @@ void Reader::failExit(quint64 request, const QString &error)
     setEnabled(true);
     if (closeSaveError)
         return;
-    auto *notice = new SaveErrorView(this, error, closeSaveRetried);
+    auto *notice = new SaveErrorView(
+            this, error, closeSaveRetried && cause == SaveErrorView::Cause::Failed, cause);
     closeSaveError = notice;
     notice->setObjectName("rrCloseSaveError");
     notice->setGeometry(rect());
@@ -3076,14 +3102,86 @@ void Reader::failExit(quint64 request, const QString &error)
         textRefresh(widget);
 }
 
-void Reader::cancelExit()
+void Reader::recoverSleepSave()
 {
+    if ((sleepSave != SleepSave::Retry && sleepSave != SleepSave::Failed) || lifecycleHidden
+        || services.suspended() || !isVisible() || closing || exitPending
+        || book->deviceTransition() || closeSaveError)
+        return;
+    if (sleepSave == SleepSave::Retry) {
+        sleepSave = SleepSave::Waiting;
+        const QPointer<Reader> guard(this);
+        book->retryFailedReadingSave(
+                [guard, request = sleepSaveRequest](NativeActivityResult result) {
+                    if (!guard || guard->sleepSaveRequest != request
+                        || guard->sleepSave != SleepSave::Waiting)
+                        return;
+                    guard->sleepSave = result == NativeActivityResult::Failed ? SleepSave::Failed
+                                                                              : SleepSave::Idle;
+                    guard->recoverSleepSave();
+                },
+                ReadingSaveRetry::Background);
+        return;
+    }
+    auto *notice = new SaveErrorView(this);
+    closeSaveError = notice;
+    notice->setGeometry(rect());
+    auto dismiss = [this, notice] {
+        sleepSave = SleepSave::Idle;
+        notice->hide();
+        notice->deleteLater();
+        closeSaveError.clear();
+    };
+    notice->dismissed = dismiss;
+    connect(notice->secondaryButton(), &QPushButton::clicked, this, dismiss);
+    connect(notice->primaryButton(), &QPushButton::clicked, this, [this, notice, dismiss] {
+        notice->primaryButton()->setEnabled(false);
+        const QPointer<Reader> guard(this);
+        const QPointer<SaveErrorView> dialog(notice);
+        book->retryFailedReadingSave([guard, dialog, dismiss](NativeActivityResult result) {
+            if (!guard || !dialog || guard->closeSaveError.data() != dialog.data())
+                return;
+            if (result == NativeActivityResult::Failed) {
+                dialog->descriptionLabel()->setText(
+                        strings::get("sleep.reading_time_retry_failed"));
+                dialog->fitCard();
+                dialog->primaryButton()->setEnabled(true);
+                dialog->primaryButton()->setFocus();
+            } else {
+                dismiss();
+            }
+        });
+    });
+    notice->show();
+    notice->raise();
+    notice->primaryButton()->setFocus();
+    for (auto *widget : notice->findChildren<QWidget *>())
+        textRefresh(widget);
+}
+
+void Reader::clearPendingExit()
+{
+    if (finishDialog && finishChoiceForExit) {
+        finishDialog->hide();
+        finishDialog->deleteLater();
+        finishDialog.clear();
+    }
+    if (closeSaveError) {
+        closeSaveError->hide();
+        closeSaveError->deleteLater();
+        closeSaveError.clear();
+    }
     closeSaveRetried = false;
-    ++closeRequest;
     exitPending = exportRunning = false;
     finishChoiceResolved = false;
     setEnabled(true);
     closingTimes = {};
+}
+
+void Reader::cancelExit()
+{
+    ++closeRequest;
+    clearPendingExit();
     observeReading();
     refresh();
 }

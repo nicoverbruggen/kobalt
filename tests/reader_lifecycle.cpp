@@ -6485,14 +6485,16 @@ private slots:
         QTest::addColumn<bool>("markFinished");
         QTest::addColumn<bool>("exitRequested");
         QTest::addColumn<bool>("suppress");
-        QTest::newRow("suppress-still-reading") << false << false << true;
-        QTest::newRow("suppress-mark-finished") << true << false << true;
-        QTest::newRow("suppress-exit-still-reading") << false << true << true;
-        QTest::newRow("suppress-exit-mark-finished") << true << true << true;
-        QTest::newRow("still-reading") << false << false << false;
-        QTest::newRow("mark-finished") << true << false << false;
-        QTest::newRow("exit-still-reading") << false << true << false;
-        QTest::newRow("exit-mark-finished") << true << true << false;
+        QTest::addColumn<bool>("closeFirst");
+        QTest::newRow("suppress-still-reading") << false << false << true << false;
+        QTest::newRow("suppress-mark-finished") << true << false << true << false;
+        QTest::newRow("suppress-exit-still-reading") << false << true << true << false;
+        QTest::newRow("suppress-exit-mark-finished") << true << true << true << false;
+        QTest::newRow("still-reading") << false << false << false << false;
+        QTest::newRow("mark-finished") << true << false << false << false;
+        QTest::newRow("exit-still-reading") << false << true << false << false;
+        QTest::newRow("exit-mark-finished") << true << true << false << false;
+        QTest::newRow("exit-opens-prompt") << false << true << false << true;
     }
 
     void finishChoiceSurvivesSleepAndRequiresActiveReader()
@@ -6500,6 +6502,7 @@ private slots:
         QFETCH(bool, markFinished);
         QFETCH(bool, exitRequested);
         QFETCH(bool, suppress);
+        QFETCH(bool, closeFirst);
         QTemporaryDir root;
         QVERIFY(root.isValid());
         auto paths = testPaths();
@@ -6525,7 +6528,10 @@ private slots:
         QTRY_VERIFY(!host.session()->busy());
         QVERIFY(host.session()->go(host.session()->pages() - 1));
         QTRY_VERIFY(!host.session()->busy());
-        host.window()->pageButton(1);
+        if (closeFirst)
+            QVERIFY(!host.window()->close());
+        else
+            host.window()->pageButton(1);
         QPointer<QWidget> dialog;
         QTRY_VERIFY((dialog = host.window()->findChild<QWidget *>("rrFinishBook"))
                     && dialog->isVisible());
@@ -6550,15 +6556,22 @@ private slots:
         QCOMPARE(host.progress->current.status, 1);
         suspended = false;
         host.window()->sleepReader();
-        QVERIFY(dialog->isHidden());
+        QVERIFY(!dialog || dialog->isHidden());
         host.window()->sleepViewReady();
         host.window()->wakeReader();
+        if (closeFirst) {
+            host.window()->pageButton(-1);
+            QTRY_VERIFY(!host.session()->busy()
+                        && host.session()->page() == host.session()->pages() - 2);
+            QVERIFY(!dialog || !dialog->isVisible());
+            return;
+        }
         QTRY_VERIFY(dialog && dialog->isVisible());
         choice->click();
-        if (markFinished || exitRequested)
+        if (markFinished)
             QVERIFY(host.window()->closingTiming().started.isValid());
         QTRY_VERIFY(!dialog);
-        if (markFinished || exitRequested) {
+        if (markFinished) {
             QTRY_VERIFY_WITH_TIMEOUT(host.idle(), 10000);
             QCOMPARE(host.progress->current.status, markFinished ? 2 : 1);
         } else {
@@ -8942,6 +8955,300 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 10000);
         QCOMPARE(storage::readBookState(paths, identity).object.value("position"),
                  saved.value("position"));
+    }
+
+    void slowCloseSave_data()
+    {
+        QTest::addColumn<bool>("keepReading");
+        QTest::newRow("return-after-wake") << true;
+        QTest::newRow("retry-while-writing") << false;
+    }
+
+    // A pending close save offers recovery without replaying a native reading interval.
+    void slowCloseSave()
+    {
+        QFETCH(bool, keepReading);
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.progress = std::make_shared<test::HostProgress>();
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+        host.positions = nickel::positionCodec();
+        QSignalSpy opened(&host, &ReaderFixture::opened), closed(&host, &ReaderFixture::closed);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        if (keepReading) {
+            host.window()->sleepReader();
+            host.window()->sleepViewReady();
+            host.window()->wakeReader();
+            QTRY_VERIFY(!host.session()->busy());
+        }
+        const auto attempts = host.progress->finishAttempts;
+        host.progress->holdFinish = true;
+        const auto release = qScopeGuard([&] {
+            host.progress->holdFinish = false;
+            if (host.progress->finishDone)
+                host.progress->completeFinish(true);
+        });
+        host.window()->close();
+        QTRY_VERIFY(host.progress->finishDone);
+        QVERIFY(!host.window()->isEnabled());
+        QTRY_VERIFY_WITH_TIMEOUT(host.window()->findChild<QPushButton *>("rrCloseSaveReturn"),
+                                 9500);
+        QCOMPARE(closed.count(), 0);
+        QVERIFY(!host.window()->findChild<QPushButton *>("rrCloseSaveQuit"));
+        const int page = host.session()->page();
+        const int positionWrites = host.progress->writes;
+        auto *choice = host.window()->findChild<QPushButton *>(keepReading ? "rrCloseSaveReturn"
+                                                                           : "rrCloseSaveRetry");
+        QVERIFY(click(canvas, choice));
+        if (keepReading) {
+            host.window()->pageButton(1);
+            QTRY_VERIFY(host.session()->page() != page);
+            QTRY_VERIFY(!host.session()->busy());
+        }
+        host.progress->holdFinish = false;
+        host.progress->completeFinish(true);
+        QCOMPARE(host.progress->finishAttempts, attempts + 1);
+        if (keepReading) {
+            QVERIFY(host.window()->isEnabled());
+            QCOMPARE(closed.count(), 0);
+            host.window()->close();
+        }
+        QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 10000);
+        QCOMPARE(host.progress->writes, positionWrites + 1);
+    }
+
+    void sleepCancelsPendingExit_data()
+    {
+        QTest::addColumn<bool>("waitForCloseNotice");
+        QTest::newRow("save-in-flight") << false;
+        QTest::newRow("timeout-notice-open") << true;
+    }
+
+    void sleepCancelsPendingExit()
+    {
+        QFETCH(bool, waitForCloseNotice);
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress = std::make_shared<test::HostProgress>();
+        host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+        host.positions = nickel::positionCodec();
+        QSignalSpy opened(&host, &ReaderFixture::opened), closed(&host, &ReaderFixture::closed);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        const int page = host.session()->page();
+
+        host.progress->holdFinish = true;
+        host.progress->rejectWriteWhileFinishing = true;
+        host.window()->close();
+        QTRY_VERIFY(host.progress->finishDone);
+        QVERIFY(!host.window()->isEnabled());
+        if (waitForCloseNotice)
+            QTRY_VERIFY_WITH_TIMEOUT(host.window()->findChild<QWidget *>("rrCloseSaveError"), 9500);
+        host.window()->sleepReader();
+        host.window()->sleepViewReady();
+        host.window()->wakeReader();
+        host.window()->pageButton(1);
+        QVERIFY(host.window()->isEnabled());
+        auto *notice = host.window()->findChild<QWidget *>("rrCloseSaveError");
+        QVERIFY(!notice || !notice->isVisible());
+        QTRY_VERIFY(!host.session()->busy() && host.session()->page() == page + 1);
+        QVERIFY(host.progress->finishDone);
+
+        host.progress->holdFinish = false;
+        host.progress->completeFinish(true);
+        test::skipPageTurnWindow();
+        host.window()->pageButton(1);
+        QTRY_VERIFY(host.session() && !host.session()->busy()
+                    && host.session()->page() == page + 2);
+        QCOMPARE(closed.count(), 0);
+        QCOMPARE(host.progress->finishAttempts, 1);
+        host.window()->close();
+        QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 10000);
+    }
+
+    // An older local close can report its saved position after the reader has woken.
+    void preSleepCloseAcknowledgedAfterWake()
+    {
+        bool closeSaved = false;
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.progress = std::make_shared<test::HostProgress>();
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+        host.positions = nickel::positionCodec();
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy() && !host.book()->savesPending());
+
+        QSemaphore release;
+        storage::RecordWriter blocker;
+        blocker.post(
+                [&] {
+                    release.acquire();
+                    return true;
+                },
+                {});
+        const auto unblock = qScopeGuard([&] { release.release(); });
+        host.book()->checkpointForClose([&](bool saved) { closeSaved = saved; });
+        const int originalPage = host.session()->page();
+        test::skipPageTurnWindow();
+        host.window()->pageButton(1);
+        QTRY_COMPARE(host.session()->page(), originalPage + 1);
+        QTRY_VERIFY(!host.session()->busy());
+
+        // Complete storage without dispatching its queued GUI acknowledgement.
+        QSemaphore writerFinished;
+        storage::RecordWriter marker;
+        marker.post([] { return true; }, [&](bool) { writerFinished.release(); });
+        release.release();
+        QVERIFY(writerFinished.tryAcquire(1, 3000));
+        QVERIFY(!closeSaved);
+        host.progress->failFinish = true;
+        const auto restore = qScopeGuard([&] { host.progress->failFinish = false; });
+        host.window()->sleepReader();
+        host.window()->sleepViewReady();
+        host.window()->wakeReader();
+        QTRY_VERIFY(closeSaved);
+        QVERIFY(host.progress->retryDone);
+        host.progress->retryDone(false);
+        QVERIFY(host.window()->findChild<QPushButton *>("rrSleepSaveRetry"));
+    }
+
+    void retryFailedSaveAfterWake_data()
+    {
+        QTest::addColumn<bool>("failAsleep");
+        QTest::addColumn<bool>("autoSucceeds");
+        QTest::addColumn<QString>("newSave");
+        QTest::newRow("failure-after-page-turn") << false << false << QString();
+        QTest::newRow("failure-before-wake") << true << false << QString();
+        QTest::newRow("background-retry-succeeds") << true << true << QString();
+        QTest::newRow("new-save-before-original-reply") << false << false << QString("original");
+        QTest::newRow("new-save-before-retry-reply") << false << false << QString("retry");
+    }
+
+    void retryFailedSaveAfterWake()
+    {
+        QFETCH(bool, failAsleep);
+        QFETCH(bool, autoSucceeds);
+        QFETCH(QString, newSave);
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress = std::make_shared<test::HostProgress>();
+        host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+        host.positions = nickel::positionCodec();
+        QSignalSpy opened(&host, &ReaderFixture::opened), closed(&host, &ReaderFixture::closed);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        const int initial = host.session()->page();
+        host.progress->holdFinish = host.progress->rejectWriteWhileFinishing = true;
+        host.window()->close();
+        QTRY_VERIFY(host.progress->finishDone);
+        host.window()->sleepReader();
+        host.window()->sleepViewReady();
+        if (failAsleep) {
+            host.progress->completeFinish(false);
+            QCOMPARE(host.progress->saveRetries, 0);
+        }
+        host.window()->wakeReader();
+        const auto advance = [&] {
+            const int page = host.session()->page();
+            test::skipPageTurnWindow();
+            host.window()->pageButton(1);
+            return QTest::qWaitFor(
+                    [&] { return !host.session()->busy() && host.session()->page() == page + 1; },
+                    1500);
+        };
+        const auto saveCurrentPage = [&] {
+            const auto position = host.session()->state().value("position").toString();
+            host.book()->saveReadingActivity();
+            return QTest::qWaitFor([&] { return !host.book()->savesPending(); }, 3000)
+                    && storage::readBookState(testPaths(), identity)
+                               .object.value("position")
+                               .toString()
+                    == position;
+        };
+        if (!failAsleep) {
+            QVERIFY(advance());
+            if (newSave == "original")
+                QVERIFY(saveCurrentPage());
+            host.progress->completeFinish(false);
+        }
+        const auto retryButton = [&] {
+            return host.window()->findChild<QPushButton *>("rrSleepSaveRetry");
+        };
+        if (newSave != "original") {
+            QTRY_VERIFY_WITH_TIMEOUT(host.progress->retryDone, 800);
+            QVERIFY(!retryButton());
+            QVERIFY(advance());
+            if (newSave == "retry")
+                QVERIFY(saveCurrentPage());
+            auto complete = std::move(host.progress->retryDone);
+            complete(autoSucceeds);
+        }
+        const int page = host.session()->page();
+        const auto position = host.session()->state().value("position").toString();
+        QVERIFY(page > initial && !position.isEmpty());
+        if (autoSucceeds || !newSave.isEmpty()) {
+            QVERIFY(!retryButton());
+            QCOMPARE(host.progress->saveRetries, newSave == "original" ? 0 : 1);
+        } else {
+            QPointer<QPushButton> retry;
+            QTRY_VERIFY_WITH_TIMEOUT((retry = retryButton()) && retry->isVisible(), 1500);
+            const int stops = host.progress->stopAttempts;
+            test::skipPageTurnWindow();
+            host.window()->pageButton(1);
+            QVERIFY(!host.session()->busy());
+            QCOMPARE(host.session()->page(), page);
+            for (bool saved : { false, true }) {
+                QVERIFY(click(canvas, retry));
+                QVERIFY(host.progress->retryDone);
+                QVERIFY(!retry->isEnabled());
+                auto complete = std::move(host.progress->retryDone);
+                complete(saved);
+                if (!saved)
+                    QTRY_VERIFY(retry && retry->isVisible() && retry->isEnabled());
+            }
+            QTRY_VERIFY(!retry || !retry->isVisible());
+            QCOMPARE(host.progress->saveRetries, 3);
+            QCOMPARE(host.progress->stopAttempts, stops);
+        }
+        QCOMPARE(host.session()->state().value("position").toString(), position);
+        QCOMPARE(closed.count(), 0);
+        QVERIFY(advance());
+        const auto latest = host.session()->state().value("position").toString();
+        host.progress->holdFinish = false;
+        host.window()->close();
+        QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 10000);
+        QCOMPARE(storage::readBookState(testPaths(), identity).object.value("position").toString(),
+                 latest);
     }
 
     // Checks that at close the native position write waits for the native reading-time write.

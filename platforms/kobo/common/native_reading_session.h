@@ -4,6 +4,7 @@
 #include "reading_estimates.h"
 #include "reading_pace_cache.h"
 #include "native_reading_save.h"
+#include "reading/native_activity_result.h"
 
 namespace kobalt {
 // Construct only after firmwareSupported() accepts Nickel, on the GUI thread.
@@ -22,7 +23,20 @@ public:
     void stop();
     void finish(std::function<void(bool)> done);
 
-    void retryFailedSave() { saves.retryFailed(); }
+    void retryFailedSave(std::function<void(bool)> done = {},
+                         ReadingSaveRetry mode = ReadingSaveRetry::Explicit)
+    {
+        saves.retryFailed();
+        if (!done)
+            return;
+        // A deferred stop still owns the old interval. Never stop a new, running interval.
+        if (ending && mode == ReadingSaveRetry::Explicit)
+            stop();
+        if (ending)
+            done(false);
+        else
+            saves.finish(std::move(done));
+    }
 
     bool savePending() const
     {

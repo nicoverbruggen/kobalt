@@ -4,6 +4,7 @@
 #include "platforms/kobo/common/native_database_wait.h"
 #include "platforms/kobo/common/native_event_save.h"
 #include "platforms/kobo/common/native_reading_session.h"
+#include "platforms/kobo/common/native_save_trace.h"
 #include "platforms/kobo/common/native_session_volume.h"
 #include "support/diagnostics.h"
 #include "support/main_thread.h"
@@ -147,18 +148,28 @@ bool workerReady()
 
 // Run only on the event worker. The default database is also the one used
 // by savePendingEvents() and EventManager's transient cache.
-bool saveEvents(QObject *engine)
+bool saveEvents(QObject *engine, const nickel::NativeSaveTrace &trace)
 {
     mainthread::BlockingOperation operation("nickel-events-save");
     const QString db;
+    trace.stage("connection");
     NativeDatabaseWait wait(api().connection(db, true), 2000);
     return wait.ready()
-            && nickel::saveNativeEvents([&] { return api().begin(db); },
-                                        [&] {
-                                            api().saveEvents(engine);
-                                            return api().flushEvents(db);
-                                        },
-                                        [&](bool commit) { return api().commit(db, commit); });
+            && nickel::saveNativeEvents(
+                    [&] {
+                        trace.stage("begin");
+                        return api().begin(db);
+                    },
+                    [&] {
+                        trace.stage("save-pending-events");
+                        api().saveEvents(engine);
+                        trace.stage("flush-events");
+                        return api().flushEvents(db);
+                    },
+                    [&](bool commit) {
+                        trace.stage(commit ? "commit" : "rollback");
+                        return api().commit(db, commit);
+                    });
 }
 
 // Saves the events of a session that just started, on the EventEngine
@@ -169,16 +180,18 @@ void flushStart(std::function<void()> done)
 {
     auto *engine = api().engine();
     auto completion = std::make_shared<std::function<void()>>(std::move(done));
+    const nickel::NativeSaveTrace trace("start-events");
     if (!kobalt::qt::invoke(
                 engine,
-                [engine, completion] {
+                [engine, completion, trace] {
+                    trace.stage("worker-start");
                     DiagnosticOperation operation("nickel-session-start-flush");
                     QElapsedTimer timer;
                     timer.start();
                     bool saved = false;
-                    if (NativeLifecycle::nativeSessionSaveAllowed() && api().open()) {
-                        saved = saveEvents(engine);
-                    }
+                    if (NativeLifecycle::nativeSessionSaveAllowed() && api().open())
+                        saved = saveEvents(engine, trace);
+                    trace.stage("finished");
                     QSettings settings("/mnt/onboard/.kobo/Kobo/Kobo eReader.conf",
                                        QSettings::IniFormat);
                     const bool sideload =
@@ -196,7 +209,8 @@ void flushStart(std::function<void()> done)
 
 // A successful commit consumes the delta even when independent readback is
 // temporarily unavailable. Further attempts only verify that same write.
-bool addTime(const QString &book, int seconds, nickel::NativeReadingTime &write)
+bool addTime(const QString &book, int seconds, nickel::NativeReadingTime &write,
+             const nickel::NativeSaveTrace &trace)
 {
     kobalt::mainthread::BlockingOperation blockingOperation("nickel-reading-time");
     if (seconds <= 0 || seconds >= 86400)
@@ -205,13 +219,16 @@ bool addTime(const QString &book, int seconds, nickel::NativeReadingTime &write)
     if (!NativeLifecycle::nativeSessionSaveAllowed() || !a.open())
         return false;
     const auto db = a.dbName(a.device());
+    trace.stage("connection");
     NativeDatabaseWait wait(a.connection(db, true), true);
     if (!wait.ready())
         return false;
     return write.save(
             [&](QVariantMap &expected) {
+                trace.stage("begin");
                 if (!a.begin(db))
                     return false;
+                trace.stage("read-volume");
                 auto volume = a.get(book, db);
                 const auto before = a.values(&volume);
                 if (before.value("ContentID").toString() != book) {
@@ -230,7 +247,9 @@ bool addTime(const QString &book, int seconds, nickel::NativeReadingTime &write)
                     if (it.value() != before.value(it.key()))
                         changed.insert(it.key(), it.value());
                 // A fresh Volume and a field-only update preserve incoming bookmarks.
+                trace.stage("update-time");
                 const bool updated = a.update(book, changed, { { "ContentID", book } }, db);
+                trace.stage(updated ? "commit" : "rollback");
                 const bool committed = a.commit(db, updated);
                 if (!updated || !committed) {
                     // endTransaction(false) is the rollback when update failed. When
@@ -244,6 +263,7 @@ bool addTime(const QString &book, int seconds, nickel::NativeReadingTime &write)
                 return true;
             },
             [&](const QVariantMap &expected) {
+                trace.stage("verify");
                 bool verified = false;
                 {
                     auto check = QSqlDatabase::addDatabase("QSQLITE", "kobalt-session-check");
@@ -280,22 +300,25 @@ void flushLater(const std::weak_ptr<NativeReadingSession *> &guard, std::functio
     // This is the same EventEngine thread used by flush(). No firmware
     // wrappers or GUI-owned Volume instances move to a different thread.
     auto completion = std::make_shared<std::function<void(bool)>>(std::move(done));
+    const nickel::NativeSaveTrace trace("stop-events");
     if (!kobalt::qt::invoke(
                 engine,
-                [engine, guard, completion] {
+                [engine, guard, completion, trace] {
+                    trace.stage("worker-start");
                     DiagnosticOperation operation("nickel-session-stop-flush");
                     bool saved = false;
                     if (!guard.expired() && NativeLifecycle::nativeSessionSaveAllowed()
                         && api().open()) {
                         QElapsedTimer timer;
                         timer.start();
-                        saved = saveEvents(engine);
+                        saved = saveEvents(engine, trace);
                         diagnostic("reading-session-flush",
                                    kobalt::qt::object({ { "saved", saved },
                                                         { "milliseconds", timer.elapsed() } }),
                                    saved ? DiagnosticSeverity::Activity
                                          : DiagnosticSeverity::Error);
                     }
+                    trace.stage("finished");
                     kobalt::qt::invoke(
                             qApp, [completion, saved] { (*completion)(saved); },
                             Qt::QueuedConnection);
@@ -317,14 +340,16 @@ void writeLater(const std::weak_ptr<NativeReadingSession *> &guard, const QStrin
         return;
     }
     auto completion = std::make_shared<std::function<void(bool)>>(std::move(done));
+    const nickel::NativeSaveTrace trace("reading-time");
     if (!kobalt::qt::invoke(
                 engine,
-                [guard, book, seconds, write, completion] {
+                [guard, book, seconds, write, completion, trace] {
+                    trace.stage("worker-start");
                     bool saved = false;
                     if (!guard.expired()) {
                         QElapsedTimer timer;
                         timer.start();
-                        saved = addTime(book, seconds, *write);
+                        saved = addTime(book, seconds, *write, trace);
                         diagnostic("reading-session-end",
                                    kobalt::qt::object({ { "seconds", seconds },
                                                         { "persisted", saved },
@@ -335,6 +360,7 @@ void writeLater(const std::weak_ptr<NativeReadingSession *> &guard, const QStrin
                                    saved ? DiagnosticSeverity::Activity
                                          : DiagnosticSeverity::Error);
                     }
+                    trace.stage("finished");
                     kobalt::qt::invoke(
                             qApp, [completion, saved] { (*completion)(saved); },
                             Qt::QueuedConnection);

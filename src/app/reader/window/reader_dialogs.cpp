@@ -432,6 +432,7 @@ void Reader::showFinishChoice()
             { strings::get("finish.still_reading"), "rrStillReading" },
             { strings::get("finish.mark_finished"), "rrMarkFinished" });
     finishDialog = choice;
+    finishChoiceForExit = exitPending;
     finishDialog->setObjectName("rrFinishBook");
     finishDialog->setGeometry(rect());
     auto *card = finishDialog->card();

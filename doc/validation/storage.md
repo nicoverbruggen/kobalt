@@ -35,6 +35,12 @@ The Kobo adapters reserve their own default-database transaction before they cal
 
 The profile ownership marker can be empty, because the OS-lock implementation also uses an empty marker normally. Symlink, directory and FIFO markers are refused. A failed recovery releases ownership so another process can retry. The marker stays after a normal release, so another process cannot lock a replacement inode while a contender holds the original one.
 
+`lifecycle.slowCloseSave` holds the native reading-time callback through the close deadline. After sleep and wake, Keep reading allows a page turn while the write is pending. The late reply leaves the book open. Retry while the writer is pending closes the book once the writer finishes. Both rows check the final native position write.
+
+`lifecycle.sleepCancelsPendingExit` puts the reader to sleep while an ordinary close is waiting, both before and after the timeout notice appears. The first page turn on wake succeeds with the native save still pending. The test delivers the late reply, turns another page, then checks that a fresh Exit closes the book.
+
+`lifecycle.retryFailedSaveAfterWake` fails the pending reading-time save before wake and after the first page turn. It holds the automatic retry while the reader turns another page. A successful retry stays silent. A failed retry offers manual recovery unless a newer position has already been saved. The test also commits a newer page before the original reply, checks that no retry starts, and verifies the final position at close. `lifecycle.preSleepCloseAcknowledgedAfterWake` holds the acknowledgement of an earlier local close across a page turn and sleep. A failed native retry still shows its warning after that acknowledgement arrives.
+
 Close performance checks separate the visible return to the Library from the end of teardown. Measure normal-use timings with diagnostics disabled, because durable diagnostic events sync their log and change storage costs.
 
 ## Limits

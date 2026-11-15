@@ -447,6 +447,16 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
             updateSleepBattery();
         });
     }
+    book->onPositionSaved([this](const QString &position, quint64 epoch) {
+        if (sleepSave == SleepSave::Idle || epoch != wakePositionEpoch || lifecycleHidden || closing
+            || exitPending || position.isEmpty() || position == sleepSavePosition)
+            return;
+        // The newer position is on storage. Retire the wake prompt; Nickel still
+        // owns any uncommitted time and any write already in flight.
+        if (sleepSave == SleepSave::Failed && closeSaveError)
+            closeSaveError->dismissed();
+        sleepSave = SleepSave::Idle;
+    });
     book->onCheckpointFailed([this] { localSaveDue = true; });
     connectPageInput();
     // Android can suspend the app without hiding the embedded reader widget.

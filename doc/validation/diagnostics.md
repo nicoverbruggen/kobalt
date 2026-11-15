@@ -18,6 +18,8 @@ Normal logging, as in release builds, writes one `setting-changed` event for eac
 
 Native position export and save events include a safe `error_code`; native saves also include `mapping_error_code` when mapping failed. Codes identify known errors without recording arbitrary error text. Book checkpoints retain the latest failure under `native_writeback_failure`, including after a successful save. State and session reports remain replacement snapshots, and the event log retains its existing rotation limits.
 
+`exit-save-timeout` records the ordinary close request number and whether local saves or native reading time are pending when the reader offers recovery. In detailed logs, group `nickel-session-save-stage` by process and `job_id`. Each event marks entry to the named stage. Compare `queued` with `worker-start` for the worker queue delay. Compare successive stages on that worker to time the transaction, event flush, reading-time update, commit and verification. When available, `thread_cpu_ms` gives cumulative CPU time on the emitting thread. A large elapsed interval with little worker CPU time can include I/O, lock waits or time waiting to be scheduled.
+
 ## Page-turn diagnostics
 
 Opening diagnostics split synchronous presentation setup (`reader-presentation-setup`) from its total asynchronous wait (`reader-presentation-wait`). Nested spans cover annotation preparation, text preset preparation and the hidden preset gallery probe. `page-estimate-words` and `page-estimate-chapters` separate word counting and chapter-page publication from the estimate steps. These spans use the existing detailed `operation-start` and `operation-end` records. Their durations can overlap; do not add nested durations together.

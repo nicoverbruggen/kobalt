@@ -99,6 +99,7 @@
 #include <QSlider>
 #include <QStyle>
 #include <QTemporaryDir>
+#include <QSettings>
 #include <QTest>
 #include <QThread>
 #include <QTimer>
@@ -4892,14 +4893,33 @@ private slots:
         QVERIFY(own.match(".adds/kobalt/wallpapers").hasMatch());
         QVERIFY(own.match(".adds/kobalt").hasMatch());
         QVERIFY(!own.match(".adds/nm").hasMatch() && !own.match("Books").hasMatch());
-        QVERIFY(withoutKobaltFolder(withKobaltFolder({})).isEmpty());
+
         // A reader's calibre exclusion keeps working beside Kobalt's.
         const QString calibre = QStringLiteral("calibre");
         const auto both = withKobaltFolder(calibre);
         const QRegularExpression merged(QStringLiteral("^(?:") + both + QStringLiteral(")$"));
         QVERIFY(merged.match("calibre").hasMatch() && merged.match(".adds/kobalt/x").hasMatch());
         QCOMPARE(withKobaltFolder(both), both);
-        QCOMPARE(withoutKobaltFolder(both), calibre);
+        QTemporaryDir root;
+        QSettings settings(root.filePath("nickel.ini"), QSettings::IniFormat);
+        const QString key = QStringLiteral("FeatureSettings/ExcludeSyncFolders");
+        const QString original = QStringLiteral(R"((books)/\1)");
+        settings.setValue(key, original);
+        QVERIFY(excludeKobaltFolder(settings, true));
+        const QRegularExpression expression(settings.value(key).toString());
+        QVERIFY(expression.match("books/books").hasMatch());
+        QVERIFY(excludeKobaltFolder(settings, true));
+        QVERIFY(excludeKobaltFolder(settings, false));
+        QCOMPARE(settings.value(key).toString(), original);
+        settings.setValue(key, both);
+        QVERIFY(excludeKobaltFolder(settings, true));
+        QVERIFY(excludeKobaltFolder(settings, false));
+        QCOMPARE(settings.value(key).toString(), both);
+        settings.remove(key);
+        QVERIFY(excludeKobaltFolder(settings, true));
+        settings.setValue(key, "custom");
+        QVERIFY(excludeKobaltFolder(settings, false));
+        QCOMPARE(settings.value(key).toString(), QStringLiteral("custom"));
         // The installer's dot-folder rule already covers Kobalt's folder.
         const QString dots = QStringLiteral(R"((\.(?!kobo|adobe).+|([^.][^/]*/)+\..+))");
         // As Nickel reads it, after QSettings unescapes the file.

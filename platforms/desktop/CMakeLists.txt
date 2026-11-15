@@ -397,6 +397,7 @@ if(BUILD_TESTING)
         LABELS "build;fast" TIMEOUT 35)
     add_custom_target(kobalt-fast-tests DEPENDS kobalt-desktop-tests kobalt-eval-compare)
     add_executable(kobalt-reader-lifecycle-tests "${KOBALT_ROOT}/tests/reader_lifecycle.cpp"
+        "${KOBALT_ROOT}/platforms/kobo/common/sync_exclusion.cpp"
         "${KOBALT_ROOT}/platforms/kobo/common/engine_positions.cpp")
     target_link_libraries(kobalt-reader-lifecycle-tests PRIVATE kobalt-desktop kobalt-core Qt6::Test Qt6::GuiPrivate)
     target_include_directories(kobalt-reader-lifecycle-tests PRIVATE "${KOBALT_ROOT}/tests")

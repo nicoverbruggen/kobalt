@@ -98,14 +98,14 @@ bool readDays(QSqlDatabase &db, const QString &excludeOpening, ActivityRecords *
         if (parts.size() != 2 || parts[1] == excludeOpening || query.value(1).toInt() != 1)
             continue;
         const auto date = QDate::fromString(parts[0], Qt::ISODate);
-        const double milliseconds = QJsonDocument::fromJson(query.value(2).toByteArray())
-                                            .object()
-                                            .value("milliseconds")
-                                            .toDouble(-1);
+        const auto payload = QJsonDocument::fromJson(query.value(2).toByteArray()).object();
+        const double milliseconds = payload.value("milliseconds").toDouble(-1);
         if (!date.isValid() || !std::isfinite(milliseconds) || milliseconds < 0
             || milliseconds > 9007199254740991.0)
             continue;
         records->days[date] += qint64(milliseconds);
+        if (!payload.value("book").toString().isEmpty())
+            records->recordedDays[date] += qint64(milliseconds);
     }
     return true;
 }

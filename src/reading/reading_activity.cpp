@@ -97,17 +97,26 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
     summary.today = today;
     summary.hours = QVector<qint64>(24, 0);
     summary.days = records.days;
+    // Old sessions can share an upgrade date with newly recorded time. Compare
+    // them only with the anonymous totals from older builds.
+    QMap<QDate, qint64> legacy, certain;
+    for (const auto &session : records.sessions) {
+        if (!session.hours.isEmpty())
+            continue;
+        visitHours(session, [&](const QDate &date, int, qint64 milliseconds) {
+            legacy[date] += milliseconds;
+            if (localDate(session.started) == localDate(session.observed))
+                certain[date] += milliseconds;
+        });
+    }
+    for (auto it = legacy.cbegin(); it != legacy.cend(); ++it) {
+        const auto recorded = records.recordedDays.value(it.key());
+        const auto anonymous = records.days.value(it.key()) - recorded;
+        summary.days[it.key()] =
+                recorded + (anonymous ? qMax(anonymous, certain.value(it.key())) : it.value());
+    }
     for (auto it = unsaved.cbegin(); it != unsaved.cend(); ++it)
         summary.days[it.key()] += it.value();
-    // Sessions from before daily totals existed still fill their dates.
-    QMap<QDate, qint64> fallback;
-    for (const auto &session : records.sessions) {
-        const auto date = localDate(session.started);
-        if (!summary.days.contains(date))
-            fallback[date] += session.milliseconds;
-    }
-    for (auto it = fallback.cbegin(); it != fallback.cend(); ++it)
-        summary.days.insert(it.key(), it.value());
     // Nothing after today belongs to the summary, even after a clock change.
     for (auto it = summary.days.begin(); it != summary.days.end();)
         it = it.key() > today ? summary.days.erase(it) : std::next(it);

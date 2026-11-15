@@ -1,6 +1,7 @@
 #include "platforms/kobo/common/native_keyboard.h"
 #include <QApplication>
 #include <QLineEdit>
+#include <QTextEdit>
 #include <QMetaType>
 #include <QVariant>
 #include <cstdio>
@@ -14,12 +15,19 @@ class KeyboardReceiver final : public QObject
     Q_OBJECT
 public:
     KeyboardReceiver(QLineEdit *editor, bool password);
+    KeyboardReceiver(QTextEdit *editor, bool password);
     char padding[36 - sizeof(QObject)];
 };
 
 KeyboardReceiver::KeyboardReceiver(QLineEdit *editor, bool password) : QObject(editor)
 {
     setProperty("password", password);
+}
+
+KeyboardReceiver::KeyboardReceiver(QTextEdit *editor, bool password) : QObject(editor)
+{
+    setProperty("password", password);
+    setProperty("text", true);
 }
 
 class SearchKeyboardController final : public QObject
@@ -160,7 +168,25 @@ int main(int argc, char **argv)
     delete nested;
     require(host.property("reader_keyboard_bounds").toRect().isEmpty(),
             "host destruction retained bounds");
-    std::puts("PASS: native keyboard construction, ownership, submission, language and cleanup");
+    {
+        // A note uses Nickel's receiver for a text box of several lines.
+        QTextEdit text(&host);
+        text.show();
+        kobalt::NativeKeyboard textKeyboard(&host, &text);
+        require(textKeyboard.show(), "text box keyboard did not open");
+        // The first keyboard's frame is still a child of the host.
+        SearchKeyboardController *textController = nullptr;
+        for (auto *frame : host.findChildren<KeyboardFrame *>("rrSearchKeyboard"))
+            for (auto *controller : frame->findChildren<SearchKeyboardController *>())
+                if (controller->receiver && controller->receiver->parent() == &text)
+                    textController = controller;
+        require(textController, "text box receiver was not attached");
+        require(textController->receiver->property("text").toBool(),
+                "text box used the single-line receiver");
+        textKeyboard.hide();
+    }
+    std::puts("PASS: native keyboard construction, ownership, submission, language, text box and "
+              "cleanup");
 }
 
 #include "keyboard.moc"

@@ -3,7 +3,6 @@
 #include <QPointer>
 #include <QString>
 #include <functional>
-class QLineEdit;
 class QWidget;
 enum KeyboardScript : int;
 
@@ -11,12 +10,13 @@ namespace kobalt {
 extern void (*nativeKeyboardRepaint)(QWidget *, bool);
 void styleNativeKeyboard(QWidget *frame);
 
-// Used only after firmwareSupported() accepts Nickel.
+// Used only after firmwareSupported() accepts Nickel. The editor is a
+// QLineEdit or a QTextEdit; Nickel has a keyboard receiver for each.
 class NativeKeyboard : public QObject
 {
     Q_OBJECT
 public:
-    NativeKeyboard(QWidget *parent, QLineEdit *editor);
+    NativeKeyboard(QWidget *parent, QWidget *editor);
     ~NativeKeyboard() override;
     bool show();
     void hide();
@@ -34,7 +34,7 @@ private slots:
 
 private:
     QPointer<QWidget> frame;
-    QPointer<QLineEdit> editor;
+    QPointer<QWidget> editor;
     QPointer<QWidget> host, window;
     QObject *boundsOwner = nullptr; // Identity only; never dereferenced.
     int script = 0;

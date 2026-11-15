@@ -4665,7 +4665,7 @@ int main(int argc, char **argv)
         };
 
         Keyboard *keyboard = nullptr;
-        kobalt::DictionaryPanel panel(&reader, [&](QWidget *host, QLineEdit *) {
+        kobalt::DictionaryPanel panel(&reader, [&](QWidget *host, QWidget *) {
             require(host == &reader,
                     "The keyboard must belong to the reader, separately from the dictionary sheet");
             auto value = std::make_unique<Keyboard>(host);

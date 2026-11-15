@@ -62,7 +62,7 @@ These checks leave device gaps. Full loader removal and restart after a failed s
 
 The Qt5 native allocations were checked against the ARM32 libraries from firmware 4.38.23828, 4.45.23697 and 4.46.23836. The constructors and native allocation sites agree with the light, dictionary and settings storage that the adapters use. ContentSettings has a 72-byte array stride, including alignment padding. This inspection found no allocation mismatch. Each adapter checks its required symbols and available type metadata before use.
 
-`pewter.keyboard` exercises native keyboard allocation, receiver ownership, submission, language switching, placement and cleanup in both SDKs. A queued language change must not reopen a dismissed keyboard, and the next explicit opening must use the chosen language. Its synthetic widgets test the adapter contract, not Nickel’s key layout. Check letters, numbers, symbols, focus and both themes in firmware before deploying a keyboard change.
+`pewter.keyboard` exercises native keyboard allocation, receiver ownership, submission, language switching, placement and cleanup in both SDKs. It also checks that a text box gets the `QTextEdit` receiver. A queued language change must not reopen a dismissed keyboard, and the next explicit opening must use the chosen language. Its synthetic widgets test the adapter contract, not Nickel’s key layout. Check letters, numbers, symbols, focus and both themes in firmware before deploying a keyboard change.
 
 ## Battery benchmark API
 

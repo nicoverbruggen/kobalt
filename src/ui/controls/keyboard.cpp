@@ -17,6 +17,7 @@
 #include <QKeyEvent>
 #include <QElapsedTimer>
 #include <QLineEdit>
+#include <QTextEdit>
 #include <QLocale>
 #include <QPointer>
 #include <QPushButton>
@@ -96,10 +97,48 @@ QString accents(const QString &letter)
     return result;
 }
 
+// The editor is a QLineEdit or a QTextEdit.
+QString editorText(const QWidget *editor)
+{
+    if (auto *line = qobject_cast<const QLineEdit *>(editor))
+        return line->text();
+    if (auto *text = qobject_cast<const QTextEdit *>(editor))
+        return text->toPlainText();
+    return {};
+}
+
+bool editorHasSelection(const QWidget *editor)
+{
+    if (auto *line = qobject_cast<const QLineEdit *>(editor))
+        return line->hasSelectedText();
+    if (auto *text = qobject_cast<const QTextEdit *>(editor))
+        return text->textCursor().hasSelection();
+    return false;
+}
+
+void editorInsert(QWidget *editor, const QString &value)
+{
+    if (auto *line = qobject_cast<QLineEdit *>(editor))
+        line->insert(value);
+    else if (auto *text = qobject_cast<QTextEdit *>(editor))
+        text->insertPlainText(value);
+}
+
+void editorBackspace(QWidget *editor)
+{
+    if (auto *line = qobject_cast<QLineEdit *>(editor)) {
+        line->backspace();
+    } else if (auto *text = qobject_cast<QTextEdit *>(editor)) {
+        auto cursor = text->textCursor();
+        cursor.deletePreviousChar();
+        text->setTextCursor(cursor);
+    }
+}
+
 class WidgetKeyboard final : public QObject, public KeyboardController
 {
 public:
-    WidgetKeyboard(QWidget *parent, QLineEdit *editor)
+    WidgetKeyboard(QWidget *parent, QWidget *editor)
         : editor(editor), panel(new QWidget(parent)), window(panel->window())
     {
         panel->setObjectName("widgetKeyboard");
@@ -217,7 +256,7 @@ public:
             closeAccents();
             endShiftTap();
             if (this->editor)
-                this->editor->backspace();
+                editorBackspace(this->editor);
         });
         QObject::connect(done, &QPushButton::clicked, this, [this] {
             const auto callback = submitted;
@@ -234,6 +273,9 @@ public:
         panel->installEventFilter(this);
         if (editor)
             editor->installEventFilter(this);
+        // A text box receives taps on its viewport.
+        if (auto *text = qobject_cast<QTextEdit *>(editor))
+            text->viewport()->installEventFilter(this);
         QObject::connect(panel, &QObject::destroyed, this,
                          [this, owner = panel.data()] { clearBounds(owner); });
     }
@@ -351,8 +393,10 @@ private:
                 }
             }
         }
-        if (object == editor && event->type() == QEvent::MouseButtonRelease
-            && editor->isVisible()) {
+        const bool tapEditor = object == editor
+                || (qobject_cast<QTextEdit *>(editor)
+                    && object == static_cast<QTextEdit *>(editor.data())->viewport());
+        if (tapEditor && event->type() == QEvent::MouseButtonRelease && editor->isVisible()) {
             show();
             if (!guard)
                 return true;
@@ -488,13 +532,13 @@ private:
         if (!editor)
             return;
         QPointer<WidgetKeyboard> guard(this);
-        const auto before = editor->text();
-        const bool selected = editor->hasSelectedText();
-        editor->insert(text);
+        const auto before = editorText(editor);
+        const bool selected = editorHasSelection(editor);
+        editorInsert(editor, text);
         if (!guard)
             return;
         if (editor && consumeShift && caseMode == Case::Once
-            && (editor->text() != before || (selected && !editor->hasSelectedText()))) {
+            && (editorText(editor) != before || (selected && !editorHasSelection(editor)))) {
             caseMode = Case::Lower;
             render();
         }
@@ -553,7 +597,7 @@ private:
     }
 
     QPointer<Button> done;
-    QPointer<QLineEdit> editor;
+    QPointer<QWidget> editor;
     QPointer<QWidget> panel;
     QPointer<QWidget> window;
     QPointer<QWidget> popup;
@@ -563,7 +607,7 @@ private:
 };
 } // namespace
 
-std::unique_ptr<KeyboardController> makeWidgetKeyboard(QWidget *parent, QLineEdit *editor)
+std::unique_ptr<KeyboardController> makeWidgetKeyboard(QWidget *parent, QWidget *editor)
 {
     return std::make_unique<WidgetKeyboard>(parent, editor);
 }

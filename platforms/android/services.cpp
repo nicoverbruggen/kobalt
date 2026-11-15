@@ -21,7 +21,7 @@ namespace {
 class Keyboard final : public KeyboardController
 {
 public:
-    explicit Keyboard(QLineEdit *editor) : editor(editor) { }
+    explicit Keyboard(QWidget *editor) : editor(editor) { }
 
     bool show() override
     {
@@ -37,7 +37,7 @@ public:
     void place() override { }
 
 private:
-    QPointer<QLineEdit> editor;
+    QPointer<QWidget> editor;
 };
 
 class Presentation final : public WindowPresentation
@@ -140,9 +140,7 @@ ReaderHostServices readerHostServices()
                 QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
                 + "/user-folders/dictionaries");
     };
-    result.keyboard = [](QWidget *, QLineEdit *editor) {
-        return std::make_unique<Keyboard>(editor);
-    };
+    result.keyboard = [](QWidget *, QWidget *editor) { return std::make_unique<Keyboard>(editor); };
     result.presentation = [](QWidget *) { return std::make_unique<Presentation>(); };
     return result;
 }

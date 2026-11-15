@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QGraphicsEffect>
 #include <QLineEdit>
+#include <QTextEdit>
 #include <QLocale>
 #include <QMetaType>
 #include <QEvent>
@@ -24,6 +25,9 @@ struct Api
             "_ZN13KeyboardFrame14createKeyboardE14KeyboardScriptRK7QLocale");
     void (*receiver)(void *, QLineEdit *,
                      bool) = symbol<decltype(receiver)>("_ZN16KeyboardReceiverC1EP9QLineEditb");
+    // The same receiver class for a text box of several lines.
+    void (*textReceiver)(void *, QTextEdit *, bool) =
+            symbol<decltype(textReceiver)>("_ZN16KeyboardReceiverC1EP9QTextEditb");
     void (*attach)(QObject *, QObject *, bool) = symbol<decltype(attach)>(
             "_ZN24SearchKeyboardController11setReceiverEP16KeyboardReceiverb");
     void (*goText)(QObject *, const QString &) =
@@ -42,7 +46,7 @@ const Api &api()
 }
 } // namespace
 
-NativeKeyboard::NativeKeyboard(QWidget *parent, QLineEdit *editor)
+NativeKeyboard::NativeKeyboard(QWidget *parent, QWidget *editor)
     : QObject(parent),
       editor(editor),
       host(parent),
@@ -50,6 +54,9 @@ NativeKeyboard::NativeKeyboard(QWidget *parent, QLineEdit *editor)
       submitText(strings::get("search_panel.search"))
 {
     editor->installEventFilter(this);
+    // A text box receives taps on its viewport.
+    if (auto *text = qobject_cast<QTextEdit *>(editor))
+        text->viewport()->installEventFilter(this);
 }
 
 NativeKeyboard::~NativeKeyboard()
@@ -61,7 +68,9 @@ NativeKeyboard::~NativeKeyboard()
 
 bool NativeKeyboard::create()
 {
-    if (!api().valid() || !editor || !host)
+    auto *line = qobject_cast<QLineEdit *>(editor);
+    auto *text = qobject_cast<QTextEdit *>(editor);
+    if (!api().valid() || !editor || !host || (!line && !(text && api().textReceiver)))
         return false;
     if (!frame) {
         // The native deleting destructor releases the frame and its QObject
@@ -90,7 +99,10 @@ bool NativeKeyboard::create()
         return false;
     void *storage = ::operator new(Api::receiverBytes);
     try {
-        api().receiver(storage, editor, false);
+        if (line)
+            api().receiver(storage, line, false);
+        else
+            api().textReceiver(storage, text, false);
     } catch (...) {
         ::operator delete(storage);
         return false;
@@ -185,8 +197,10 @@ bool NativeKeyboard::eventFilter(QObject *object, QEvent *event)
         clearBounds();
     if (!guard)
         return false;
-    if (object == editor
-        && (event->type() == QEvent::FocusIn || event->type() == QEvent::MouseButtonRelease))
+    const bool viewport = qobject_cast<QTextEdit *>(editor)
+            && object == static_cast<QTextEdit *>(editor.data())->viewport();
+    if (((object == editor && event->type() == QEvent::FocusIn)
+         || ((object == editor || viewport) && event->type() == QEvent::MouseButtonRelease)))
         kobalt::qt::later(0, this, [this] {
             if (host && host->isVisible() && editor && editor->hasFocus())
                 show();

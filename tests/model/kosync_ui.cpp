@@ -371,7 +371,7 @@ int main(int argc, char **argv)
                 ui::applyReaderPalette(&host, ui::readerPalette(host.palette(), dark));
                 ui::readerStyle(&host, ui::styles::reader());
                 int destroyed = 0;
-                reader::KosyncPage page(&host, &host, [&](QWidget *parent, QLineEdit *) {
+                reader::KosyncPage page(&host, &host, [&](QWidget *parent, QWidget *) {
                     return std::make_unique<Keyboard>(destroyed, parent);
                 });
                 host.resize(ui::px(800), ui::px(2000));
@@ -456,7 +456,7 @@ int main(int argc, char **argv)
     int destroyed = 0;
     Keyboard *keyboard = nullptr;
     reader::SettingsPanelInputs inputs;
-    inputs.keyboard = [&](QWidget *host, QLineEdit *) {
+    inputs.keyboard = [&](QWidget *host, QWidget *) {
         auto controller = std::make_unique<Keyboard>(destroyed, host);
         keyboard = controller.get();
         return controller;

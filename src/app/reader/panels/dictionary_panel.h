@@ -10,6 +10,7 @@
 #include <QLabel>
 #include "ui/dialogs/modals.h"
 #include <QPointer>
+class QLineEdit;
 
 namespace kobalt {
 // A sheet across the full width, fixed to the screen edge away from the word.

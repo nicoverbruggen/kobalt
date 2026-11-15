@@ -2,7 +2,6 @@
 #include <functional>
 #include <memory>
 class QWidget;
-class QLineEdit;
 class QString;
 
 namespace kobalt {
@@ -22,5 +21,6 @@ public:
     std::function<void()> submitted;
 };
 
-using KeyboardFactory = std::function<std::unique_ptr<KeyboardController>(QWidget *, QLineEdit *)>;
+// The editor is a QLineEdit, or a QTextEdit for text of several lines.
+using KeyboardFactory = std::function<std::unique_ptr<KeyboardController>(QWidget *, QWidget *)>;
 } // namespace kobalt

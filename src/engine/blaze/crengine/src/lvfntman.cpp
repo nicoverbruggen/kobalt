@@ -9048,6 +9048,24 @@ public:
     // Font instances will be created as need from the LVFontDef name or buf.
     // (The similar functions do most of the same work, and some code
     // could be factorized between them.)
+    virtual bool RegisterStaticFontFace(lString8 name, int index, lString8 family,
+                                       int weight, bool italic)
+    {
+        FONT_MAN_GUARD
+        if (name.empty() || family.empty() || index < 0)
+            return false;
+        LVFontFace face;
+        face.file_path = name;
+        face.face_index = index;
+        face.typeface = family;
+        face.css_family = css_ff_sans_serif;
+        face.is_italic = italic;
+        face.setAxisInfo(LVFONT_TAG_WGHT, weight, weight);
+        face.setAxisInfo(LVFONT_TAG_ITAL, italic ? 1.0f : 0.0f, italic ? 1.0f : 0.0f);
+        face.setAxisInfo(LVFONT_TAG_WDTH, 100.0f, 100.0f);
+        return tryRegisterFace(face);
+    }
+
     virtual bool RegisterFont( lString8 name )
     {
         FONT_MAN_GUARD

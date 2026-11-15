@@ -785,6 +785,11 @@ public:
     virtual LVFontRef GetFallbackFont(int size, int weight=400, bool italic=false, lString8 forFaceName=lString8::empty_str ) { return LVFontRef(); }
     /// registers font by name
     virtual bool RegisterFont( lString8 name ) = 0;
+    /// Registers known static face metadata without opening the font file.
+    /// The face has no variable axes, math, emoji or small-cap capabilities.
+    /// Its file is opened only when a font instance is requested.
+    virtual bool RegisterStaticFontFace(lString8 /*name*/, int /*index*/, lString8 /*family*/,
+                                       int /*weight*/, bool /*italic*/) { return false; }
     /// registers font by name and face
     virtual bool RegisterExternalFont(int /*documentId*/, lString32 /*name*/, lString8 /*face*/, int /*weight*/, int /*width*/, bool /*italic*/, int /*docFragmentIdx*/ = -1) { return false; }
     /// registers document font

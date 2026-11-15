@@ -12,6 +12,8 @@ Font pages reuse their cells. A cell that shows another font repaints completely
 
 ## Font memory and crash context
 
+The reading engine registers the pinned CJK collection from its known static face metadata. It opens the collection only when the font selector requests a CJK face. English text does not need to map this large file during font-manager startup. The reader regression checks that Latin text opens without the collection, that a later CJK glyph request loads it, and that the declared face metadata and cache hash match eager registration of the pinned collection.
+
 Font pickers render each visible font-name preview when its label first paints. The renderer opens a regular face from its file, renders the label, then closes the face. It uses a separate FreeType library and does not register preview fonts with Qt or keep their bytes in the private text renderer. Characters that the face lacks use the bundled fallback faces, which are also opened from their files. A page therefore shows all its samples in the same screen update. The Publisher Fonts row uses a Libron sample. A font that cannot render its name keeps the interface-font label. Nothing generates the whole catalogue at startup.
 
 A cache miss renders on the GUI thread while the page paints. Hardware validation must confirm one display update for cold and cached openings and for paging on the Clara BW. A bounded disk cache for previews, with generation timing and invalidation, is deferred. Broader memory-pressure, performance and energy measurements remain separate work.

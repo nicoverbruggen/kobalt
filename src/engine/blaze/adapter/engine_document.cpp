@@ -1,4 +1,5 @@
 #include "column_view.h"
+#include "assets/bundled_fonts.h"
 #include <cmath>
 #include "render/image_damage.h"
 #include "support/qt_compat.h"
@@ -402,12 +403,25 @@ bool EngineDocument::initializeFonts()
     // The generic monospace family for code, also under a chosen reading font,
     // and fallback faces for characters that a reading font lacks. The picker
     // offers script fallbacks when they match the document language.
-    for (const auto &file : fonts_.fallbackFiles)
-        if (!fontMan->RegisterFont(lString8(file.toUtf8().constData()))) {
+    for (const auto &file : fonts_.fallbackFiles) {
+        bool registered = true;
+        if (QFileInfo(file).fileName() == "NotoSerifCJK-Regular.ttc") {
+            // This pinned collection contains static regular faces. Their
+            // metadata is enough for the catalogue and font selector. Opening
+            // the large collection waits until text actually requests a face.
+            for (size_t index = 0; index < cjkFallbackFontFaces.size(); ++index)
+                registered &= fontMan->RegisterStaticFontFace(
+                        lString8(file.toUtf8().constData()), int(index),
+                        lString8(cjkFallbackFontFaces[index]), 400, false);
+        } else {
+            registered = fontMan->RegisterFont(lString8(file.toUtf8().constData()));
+        }
+        if (!registered) {
             readingFonts.clear();
             ShutdownFontManager();
             return false;
         }
+    }
     // Bundled dictionaries hyphenate by language. A language whose dictionary
     // is not bundled keeps the engine's algorithmic hyphenation.
     HyphMan::initDictionaries(cre(fonts_.hyphenationDirectory + '/'));

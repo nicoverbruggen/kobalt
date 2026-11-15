@@ -1231,9 +1231,72 @@ static void checkChapterArtPositions()
             "Chapter-art fallback did not round trip");
 }
 
+static void checkDeferredCjkFont()
+{
+    auto inputs = kobalt::test::readerFonts();
+    QString collection;
+    for (const auto &file : inputs.fallbackFiles)
+        if (QFileInfo(file).fileName() == "NotoSerifCJK-Regular.ttc")
+            collection = file;
+    require(!collection.isEmpty(), "Missing CJK collection fixture");
+
+    // Keep the declared metadata tied to the pinned collection. A replacement
+    // collection must not silently change face order, weights or cache hashes.
+    require(InitFontManager(lString8()), "Cannot initialize eager font metadata check");
+    require(fontMan->RegisterFont(lString8(collection.toUtf8().constData())),
+            "Cannot inspect the pinned CJK collection");
+    const auto eagerHash = fontMan->GetFontListHash(-1);
+    lString32Collection eagerFaces;
+    fontMan->getFaceList(eagerFaces);
+    ShutdownFontManager();
+    require(InitFontManager(lString8()), "Cannot initialize deferred font metadata check");
+    for (size_t index = 0; index < kobalt::cjkFallbackFontFaces.size(); ++index)
+        require(fontMan->RegisterStaticFontFace(
+                        lString8(collection.toUtf8().constData()), int(index),
+                        lString8(kobalt::cjkFallbackFontFaces[index]), 400, false),
+                "Cannot register deferred CJK metadata");
+    lString32Collection deferredFaces;
+    fontMan->getFaceList(deferredFaces);
+    require(eagerHash == fontMan->GetFontListHash(-1)
+                    && eagerFaces.length() == deferredFaces.length(),
+            "Deferred CJK metadata differs from the pinned collection");
+    for (int index = 0; index < eagerFaces.length(); ++index)
+        require(eagerFaces[index] == deferredFaces[index],
+                "Deferred CJK family names differ from the pinned collection");
+    ShutdownFontManager();
+
+    QTemporaryDir directory;
+    require(directory.isValid(), "Cannot create deferred-font fixture directory");
+    const auto delayed = directory.filePath("NotoSerifCJK-Regular.ttc");
+    inputs.fallbackFiles.replaceInStrings(collection, delayed);
+    {
+        kobalt::EngineDocument reader(inputs);
+        QString error;
+        QList<QPair<QByteArray, QByteArray>> members;
+        const auto book = kobalt::test::engineBook();
+        for (auto at = book.cbegin(); at != book.cend(); ++at)
+            members.append({ at.key().toUtf8(), at.value() });
+        require(reader.open(storedEpub(members), QSize(600, 800), {}, &error), qPrintable(error));
+        require(reader.pages() > 0 && !reader.image(0).isNull(),
+                "Latin text required the unopened CJK collection");
+        const auto before = fontMan->GetFontListHash(-1);
+        require(QFile::copy(collection, delayed), "Cannot supply the deferred CJK file");
+        for (const auto *family : kobalt::cjkFallbackFontFaces) {
+            auto font = fontMan->GetFont(32, 400, false, css_ff_serif, lString8(family), 0, -1);
+            LVFont::glyph_info_t glyph{};
+            require(!font.isNull() && font->getTypeFace() == lString8(family)
+                            && font->getGlyphInfo(0x65e5, &glyph),
+                    "A deferred CJK face did not load when its glyph was requested");
+        }
+        require(before == fontMan->GetFontListHash(-1),
+                "Loading a deferred CJK face changed parsed-book compatibility");
+    }
+}
+
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    checkDeferredCjkFont();
     checkNativeWhitespace();
     checkChapterArtPositions();
     checkPageFormat();

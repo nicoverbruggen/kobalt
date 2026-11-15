@@ -4,6 +4,11 @@
 #include "font_catalog.h"
 
 namespace kobalt {
+// Face order in the checksum-pinned, static regular CJK collection.
+inline constexpr std::array<const char *, 5> cjkFallbackFontFaces{
+    "Noto Serif CJK JP", "Noto Serif CJK KR", "Noto Serif CJK SC", "Noto Serif CJK TC",
+    "Noto Serif CJK HK"
+};
 inline constexpr std::array<const char *, 4> serifFallbackFontFiles{ "NotoSerif-Regular.ttf",
                                                                      "NotoSerif-Bold.ttf",
                                                                      "NotoSerif-Italic.ttf",

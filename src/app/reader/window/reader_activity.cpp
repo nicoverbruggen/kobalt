@@ -117,11 +117,12 @@ void Reader::deleteActivityBook(const QString &key, const QString &title)
         modal->deleteLater();
         if (!remove || !guard || !guard->activityRecords || !guard->book)
             return;
-        if (guard->activityView)
-            guard->activityView->closeBook();
-        guard->activityRecords->remove(key, guard->book->readingOpeningId(), [guard](bool ok) {
-            if (guard)
-                guard->finishActivityEdit(ok);
+        guard->activityRecords->remove(key, guard->book->readingOpeningId(), [guard, key](bool ok) {
+            if (!guard)
+                return;
+            if (ok && guard->activityView)
+                guard->activityView->closeBook(key);
+            guard->finishActivityEdit(ok);
         });
     };
     connect(choice->secondaryButton(), &QPushButton::clicked, choice, [finish] { finish(false); });

@@ -12263,11 +12263,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrActivityConfirmDelete"));
         QTRY_VERIFY(fixture.visible("rrActivityWriteError"));
         QVERIFY(fixture.press("rrActivityWriteErrorConfirm"));
-        QTRY_VERIFY(fixture.visible("rrActivityBooks"));
-        QCOMPARE(fixture.widget("rrActivityBook1")->accessibleName(), QString("War and Peace"));
-        QVERIFY(changeSql("DROP TRIGGER refuse_history"));
-        QVERIFY(fixture.press("rrActivityBook1"));
         QTRY_VERIFY(fixture.visible("rrActivityBookPage"));
+        QVERIFY(changeSql("DROP TRIGGER refuse_history"));
         QVERIFY(fixture.press("rrActivityDeleteBook"));
         QTRY_VERIFY(fixture.visible("rrActivityDelete"));
         QVERIFY(fixture.press("rrActivityConfirmDelete"));

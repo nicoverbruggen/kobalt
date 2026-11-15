@@ -2568,7 +2568,7 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
     back->hide();
     connect(back, &QPushButton::clicked, this, [this] {
         if (detail == Detail::Book) {
-            closeBook();
+            closeBook(bookKey);
             return;
         }
         detail = Detail::None;
@@ -2742,9 +2742,9 @@ void ActivityView::openBook(const QString &book)
         bookRequested(book);
 }
 
-void ActivityView::closeBook()
+void ActivityView::closeBook(const QString &book)
 {
-    if (detail != Detail::Book)
+    if (detail != Detail::Book || book != bookKey)
         return;
     detail = bookReturn;
     bookReturn = Detail::None;

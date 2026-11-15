@@ -51,7 +51,7 @@ public:
     void showSection(Section section);
     void openBook(const QString &book);
     // Leaves a book's page for where it opened from.
-    void closeBook();
+    void closeBook(const QString &book);
 
     Section section() const { return current; }
 

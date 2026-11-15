@@ -996,6 +996,16 @@ static const cjk_width_adjustment_table_t japanese_cjk_width_adjustment_table = 
 // or start a new quote after the full stop...)
 
 
+HyphMethod * TextLangCfg::getDefaultHyphMethod() const {
+    if ( !_hyph_method ) {
+        lString32 tag = _lang_tag;
+        _hyph_method = TextLangMan::getHyphMethodForLang(tag.lowercase());
+        if ( _use_grapheme_based_hyphenation && _hyph_method == TextLangMan::_algo_hyph_method )
+            _hyph_method = TextLangMan::_grapheme_hyph_method;
+    }
+    return _hyph_method;
+}
+
 // Instantiate a new TextLangCfg with properties adequate to the provided lang_tag
 TextLangCfg::TextLangCfg( lString32 lang_tag ) {
     if ( TextLangMan::_no_hyph_method == NULL ) {
@@ -1016,9 +1026,6 @@ TextLangCfg::TextLangCfg( lString32 lang_tag ) {
     // Lowercase it for our tests
     lang_tag.lowercase(); // (used by langStartsWith(…) macros)
 
-    // Get hyph method/dictionary from _hyph_dict_table
-    _hyph_method = TextLangMan::getHyphMethodForLang(lang_tag);
-
     // Cleanup if we got "en#@something" from legacy HyphMan methods
     int h_pos = lang_tag.pos("#");
     if ( h_pos > 0 ) {
@@ -1026,8 +1033,8 @@ TextLangCfg::TextLangCfg( lString32 lang_tag ) {
         hb_lang_tag = hb_lang_tag.substr(0, h_pos); // Also clean the one for HB
     }
     #ifdef DEBUG_LANG_USAGE
-    printf("TextLangCfg %s created (%s %s)\n", UnicodeToLocal(_lang_tag).c_str(),
-                    UnicodeToLocal(lang_tag).c_str(), UnicodeToLocal(_hyph_method->getId()).c_str());
+    printf("TextLangCfg %s created (%s)\n", UnicodeToLocal(_lang_tag).c_str(),
+                    UnicodeToLocal(lang_tag).c_str());
     #endif
 
     // https://drafts.csswg.org/css-text-3/#script-tagging
@@ -1114,9 +1121,6 @@ TextLangCfg::TextLangCfg( lString32 lang_tag ) {
     }
 #endif
 #endif
-    if ( _use_grapheme_based_hyphenation && _hyph_method == TextLangMan::_algo_hyph_method ) {
-        _hyph_method = TextLangMan::_grapheme_hyph_method;
-    }
 
     // getCssLbCharSub(), possibly called on each glyph, has some different behaviours with 'ja' and 'zh'
     _is_ja_zh = false;

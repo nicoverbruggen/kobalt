@@ -250,7 +250,7 @@ class TextLangCfg
 {
     friend class TextLangMan;
     lString32 _lang_tag;
-    HyphMethod * _hyph_method;
+    mutable HyphMethod * _hyph_method = NULL;
 
     lString32 _open_quote1;
     lString32 _close_quote1;
@@ -284,7 +284,7 @@ public:
 
     HyphMethod * getHyphMethod() const {
         if ( !TextLangMan::_overridden_hyph_method )
-            return _hyph_method;
+            return getDefaultHyphMethod();
         if ( !TextLangMan::_hyphenation_enabled )
             return TextLangMan::_no_hyph_method;
         if ( TextLangMan::_hyphenation_soft_hyphens_only )
@@ -293,11 +293,9 @@ public:
             return _use_grapheme_based_hyphenation ? TextLangMan::_grapheme_hyph_method
                                                    : TextLangMan::_algo_hyph_method;
         // Should not be reached
-        return _hyph_method;
+        return getDefaultHyphMethod();
     }
-    HyphMethod * getDefaultHyphMethod() const {
-        return _hyph_method;
-    }
+    HyphMethod * getDefaultHyphMethod() const;
 
     lString32 & getOpeningQuote( bool update_level=true );
     lString32 & getClosingQuote( bool update_level=true );

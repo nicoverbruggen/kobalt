@@ -504,11 +504,15 @@ int main(int argc, char **argv)
     {
         // A German book uses the German dictionary.
         kobalt::EngineDocument model(kobalt::test::readerFonts());
-        require(model.open(read(argv[2]), size, kobalt::qt::object({ { "hyphenation", "on" } }),
+        require(model.open(read(argv[2]), size, kobalt::qt::object({ { "hyphenation", "off" } }),
                            &error),
                 qPrintable(error));
         require(text(TextLangMan::getMainLang()) == "de",
                 "The German package language was not applied");
+        require(text(TextLangMan::getTextLangCfg()->getDefaultHyphMethod()->getId())
+                        == "German.pattern",
+                "An explicit dictionary request must work with hyphenation off");
+        require(model.setHyphenation("on"), "Cannot enable hyphenation while reading");
         require(text(TextLangMan::getTextLangCfg()->getHyphMethod()->getId()) == "German.pattern",
                 "German does not use its dictionary");
         // Long compounds must break inside words at a narrow width.

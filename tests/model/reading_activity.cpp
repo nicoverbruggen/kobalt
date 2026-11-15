@@ -444,7 +444,7 @@ void upgradeAndSleep()
             "Deletion changed the other book or left part of the deleted book");
 }
 
-void deleteAnonymousOvernight()
+void deleteAnonymousOvernight(bool survivorHasHourlyRecords)
 {
     storage::closeProfile();
     QTemporaryDir root;
@@ -456,11 +456,24 @@ void deleteAnonymousOvernight()
         sql(root.path(), "INSERT INTO profile_state VALUES(?,1,0,?)",
             { "reading-day:" + day.addDays(i).toString(Qt::ISODate) + ":anonymous",
               QString("{\"milliseconds\":%1}").arg((i ? 5 : 10) * minute) });
+    sql(root.path(),
+        "INSERT INTO reading_sessions VALUES('two','other','other','','','','',?,?,?,'','','completed')",
+        { at(day, 9), at(day, 9, 20), 20 * minute });
+    if (survivorHasHourlyRecords)
+        sql(root.path(), "INSERT INTO profile_state VALUES(?,1,0,?)",
+            { "reading-hours:two:" + day.toString(Qt::ISODate),
+              QStringLiteral("{\"9\":1200000}") });
+    const auto survivor = survivorHasHourlyRecords
+            ? QStringLiteral("{\"milliseconds\":1200000,\"book\":\"other\"}")
+            : QStringLiteral("{\"milliseconds\":1200000}");
+    sql(root.path(), "INSERT INTO profile_state VALUES(?,1,0,?)",
+        { "reading-day:" + day.toString(Qt::ISODate) + ":other", survivor });
     require(ActivityRecordStore::remove(root.path(), "only", QString()),
             "Cannot remove overnight history");
     ActivityRecords records;
-    require(ActivityRecordStore::read(root.path(), {}, &records) && records.days.isEmpty(),
-            "The only book left anonymous time on the first day");
+    require(ActivityRecordStore::read(root.path(), {}, &records) && records.days.size() == 1
+                    && records.days.value(day) == 20 * minute,
+            "Deleting the overnight book should keep only the other book's time");
 }
 } // namespace
 
@@ -477,7 +490,8 @@ int main(int argc, char **argv)
     hideAndRemove();
     deleteEdgeCases();
     upgradeAndSleep();
-    deleteAnonymousOvernight();
+    deleteAnonymousOvernight(true);
+    deleteAnonymousOvernight(false);
     storage::closeProfile();
     return 0;
 }

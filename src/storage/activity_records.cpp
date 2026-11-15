@@ -12,6 +12,7 @@
 #include <QVariant>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 
 namespace kobalt {
@@ -204,7 +205,7 @@ void addByDate(QMap<QString, qint64> &dates, qint64 started, qint64 observed, qi
 // totals existed has no total for the deleted session. The open opening's
 // total is never changed; a total that reaches zero is deleted.
 bool reduceDay(QSqlDatabase &db, const QString &date, qint64 removed, qint64 remaining,
-               const QString &keepOpening, const QString &book, bool onlyBook)
+               const QString &keepOpening, const QString &book, qint64 maximumRemaining)
 {
     const QString prefix = "reading-day:" + date + ':';
     QSqlQuery query(db);
@@ -250,7 +251,8 @@ bool reduceDay(QSqlDatabase &db, const QString &date, qint64 removed, qint64 rem
         if (!write.exec())
             return false;
     }
-    qint64 take = onlyBook ? sum : sum - qMax(sum - removed, qMin(sum, remaining));
+    const auto estimatedRemaining = qMax(sum - removed, qMin(sum, remaining));
+    qint64 take = sum - qMin(estimatedRemaining, maximumRemaining);
     for (auto &total : totals) {
         if (take <= 0)
             break;
@@ -371,20 +373,26 @@ bool ActivityRecordStore::remove(const QString &directory, const QString &book,
             recordedDates.insert(it.key());
         recordedDates.unite(overnightDates);
         for (const auto &date : recordedDates) {
-            bool onlyBook = false;
+            qint64 maximumRemaining = std::numeric_limits<qint64>::max();
             if (overnightDates.contains(date)) {
                 const auto day = QDate::fromString(date, Qt::ISODate);
                 QSqlQuery others(db);
                 others.prepare(
-                        "SELECT 1 FROM reading_sessions WHERE started<? AND observed>=? LIMIT 1");
+                        "SELECT s.active_ms FROM reading_sessions s WHERE s.started<? AND s.observed>=? "
+                        "AND NOT EXISTS (SELECT 1 FROM profile_state h WHERE h.format=1 AND "
+                        "h.name>=('reading-hours:'||s.id||':') AND h.name<('reading-hours:'||s.id||';'))");
                 others.addBindValue(QDateTime(day.addDays(1), QTime(0, 0)).toMSecsSinceEpoch());
                 others.addBindValue(QDateTime(day, QTime(0, 0)).toMSecsSinceEpoch());
                 if (!others.exec())
                     return false;
-                onlyBook = !others.next();
+                // A survivor with hourly records already owns its daily totals. Only
+                // older sessions can account for any of the anonymous time left.
+                maximumRemaining = 0;
+                while (others.next())
+                    maximumRemaining += clampedActive(others.value(0).toLongLong());
             }
             if (!reduceDay(db, date, removed.value(date), remaining.value(date), keepOpening, book,
-                           onlyBook))
+                           maximumRemaining))
                 return false;
         }
         QSet<QString> hidden;

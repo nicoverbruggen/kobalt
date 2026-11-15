@@ -1456,6 +1456,8 @@ void Reader::buildSettings()
     settingsInputs.downloadableDictionaries = services.downloadableDictionaries;
     settingsInputs.animationSupport = services.animationSupport();
     settingsInputs.lightSupported = services.lightAvailable();
+    settingsInputs.screenBrightness = light->hasSystemBrightness();
+    settingsInputs.showNativeReaderOptions = services.showNativeReaderOptions;
     settingsInputs.warmthSupported = warmthSupported;
     settingsInputs.sleepScreenSupported = presentation->supportsSleepScreen();
     settingsInputs.automaticBookOpeningSupported =

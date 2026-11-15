@@ -14,6 +14,9 @@ public:
 
     virtual bool hasAutomaticBrightness() const { return false; }
 
+    // The automatic option follows the host's policy instead of a reader-owned sensor.
+    virtual bool hasSystemBrightness() const { return false; }
+
     virtual bool automaticBrightness() const { return false; }
 
     virtual bool setAutomaticBrightness(bool) { return false; }

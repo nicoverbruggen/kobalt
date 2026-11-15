@@ -34,6 +34,7 @@
 #include <QStackedLayout>
 #include <QProgressBar>
 #include "platforms/android/boox_frame_queue.h"
+#include "platforms/android/light.h"
 #include "app/library/library_view.h"
 #include "library/library_store.h"
 #include "library/book_metadata.h"
@@ -4798,6 +4799,90 @@ void buttonMapping(Fixture &fixture, const QString &name, bool volume)
                      .toString(),
              QString("future_action"));
     QVERIFY(fixture.press("rrSettingsClose"));
+}
+
+void checkAndroidBrightness(int preset, bool dark, bool screenshots = false)
+{
+    struct State
+    {
+        int level = 40;
+        bool system = true;
+    };
+
+    auto state = std::make_shared<State>();
+    Fixture fixture(dark, false, false, true, false, false, [state](ReaderHostServices &services) {
+        services.showNativeReaderOptions = false;
+        services.lightAvailable = [] { return true; };
+        services.light = [state](QWidget *) {
+            return std::make_unique<android::Light>([state](int op, int type, int value) {
+                if (type != 7)
+                    return -1;
+                switch (op) {
+                case 0:
+                    return state->level;
+                case 1:
+                    return 100;
+                case 2:
+                    state->system = false;
+                    return state->level = value;
+                case 3:
+                    return 1;
+                case 4:
+                    return state->system ? 1 : 0;
+                case 5:
+                case 7:
+                    state->system = value;
+                    return 1;
+                case 6:
+                    return 1;
+                default:
+                    return -1;
+                }
+            });
+        };
+    });
+    QVERIFY(fixture.prepared);
+    selectPreview(fixture, preset);
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(book);
+    QTRY_COMPARE(opened.count(), 1);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    openPrologueBody(fixture);
+    QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrNavLight"));
+    QTRY_VERIFY(fixture.visible("rrLightPanel"));
+    auto *option = qobject_cast<QCheckBox *>(fixture.widget("rrAutomaticBrightness"));
+    QVERIFY(option && option->isVisible() && option->isChecked());
+    QCOMPARE(option->text(), QString("Follow system brightness"));
+    QVERIFY(!fixture.visible("rrWarmth"));
+    auto *panel = fixture.widget("rrLightPanel");
+    QVERIFY(fixture.window.readerWindow()->rect().contains(panel->geometry()));
+    for (const char *name : { "rrBrightness", "rrAutomaticBrightness", "rrLightDarkMode" }) {
+        auto *widget = fixture.widget(name);
+        QVERIFY(widget->visibleRegion().boundingRect().contains(widget->rect()));
+    }
+    const auto name = screenshotVariant(preset, dark);
+    if (screenshots)
+        QVERIFY(capture(fixture, name + "-android-brightness"));
+    QVERIFY(fixture.press("rrBrightnessMore"));
+    QVERIFY(!state->system && state->level > 40);
+    QVERIFY(!option->isChecked());
+    QVERIFY(fixture.press("rrAutomaticBrightness"));
+    QVERIFY(state->system && option->isChecked());
+    QVERIFY(fixture.press("rrNavLight"));
+    QVERIFY(fixture.press("rrSettings"));
+    QVERIFY(fixture.press("rrSettingsControls"));
+    QVERIFY(revealSettingsOption(fixture, "rrEdgeLight"));
+    auto *edge = qobject_cast<QCheckBox *>(fixture.widget("rrEdgeLight"));
+    QVERIFY(edge && edge->isEnabled());
+    QCOMPARE(edge->text(), QString("Swipe along the left edge to adjust brightness"));
+    if (screenshots)
+        capturePages(fixture, name + "-android-brightness-controls", "rrSettingsOptions");
+    QVERIFY(fixture.press("rrSettingsSystem"));
+    QVERIFY(fixture.widget("rrAutomaticBookOpening")->isHidden());
+    QVERIFY(!fixture.widget("rrSystemIntegrationSection"));
+    if (screenshots)
+        capturePages(fixture, name + "-android-brightness-system", "rrSettingsOptions");
 }
 
 class DesktopTests final : public QObject
@@ -11653,6 +11738,15 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     }
 
     // Checks that turning automatic opening off in Kobalt asks first and turning it on does not.
+    void settingsAndroidBrightness_data() { screenshotVariants(); }
+
+    void settingsAndroidBrightness()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        checkAndroidBrightness(preset, dark);
+    }
+
     void settingsAutomaticOpening()
     {
         auto opening = std::make_shared<bool>(true);
@@ -15812,6 +15906,15 @@ class ScreenshotTests final : public QObject
 {
     Q_OBJECT
 private slots:
+    void androidBrightness_data() { screenshotVariants(); }
+
+    void androidBrightness()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        checkAndroidBrightness(preset, dark, true);
+    }
+
 
     void resourceFolders_data() { screenshotVariants(); }
 

@@ -759,18 +759,23 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                     strings::get("settings.minimal_annotation_mode_description"));
     minimalAnnotationOption->hide();
     section(controlsPage, controlsRows, "rrControlsLightSection",
-            strings::get("settings.section_frontlight"));
+            strings::get(inputs.screenBrightness ? "light_panel.brightness"
+                                                 : "settings.section_frontlight"));
     const bool lightSupported = inputs.lightSupported;
-    edgeLightOption = check(controlsPage, "rrEdgeLight", strings::get("reader.edge_light"),
-                            !lightSupported ? strings::get("settings.unsupported_description")
-                                    : inputs.warmthSupported
-                                    ? strings::get("settings.edge_light_description")
-                                    : strings::get("settings.edge_brightness_description"));
+    edgeLightOption = check(
+            controlsPage, "rrEdgeLight",
+            strings::get(inputs.screenBrightness ? "reader.edge_brightness" : "reader.edge_light"),
+            !lightSupported ? strings::get("settings.unsupported_description")
+                    : inputs.warmthSupported
+                    ? strings::get("settings.edge_light_description")
+                    : strings::get("settings.edge_brightness_description"));
     edgeLightOption->setEnabled(lightSupported);
     controlsRows->addWidget(edgeLightOption);
-    lightGestureFeedbackOption = check(controlsPage, "rrLightGestureFeedback",
-                                       strings::get("settings.light_gesture_feedback"),
-                                       strings::get("settings.light_gesture_feedback_description"));
+    lightGestureFeedbackOption =
+            check(controlsPage, "rrLightGestureFeedback",
+                  strings::get(inputs.screenBrightness ? "settings.brightness_gesture_feedback"
+                                                       : "settings.light_gesture_feedback"),
+                  strings::get("settings.light_gesture_feedback_description"));
     lightGestureFeedbackOption->setEnabled(lightSupported);
     controlsRows->addWidget(lightGestureFeedbackOption);
     controlsRows->addStretch(1);
@@ -906,14 +911,16 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     auto *systemRows = new QVBoxLayout(systemPage);
     systemRows->setContentsMargins(0, 0, 0, 0);
     systemRows->setSpacing(0);
-    section(systemPage, systemRows, "rrSystemIntegrationSection",
-            strings::get("settings.section_system_integration"));
+    if (inputs.showNativeReaderOptions)
+        section(systemPage, systemRows, "rrSystemIntegrationSection",
+                strings::get("settings.section_system_integration"));
     automaticOpeningOption = check(
             systemPage, "rrAutomaticBookOpening", strings::get("settings.automatic_book_opening"),
             inputs.automaticBookOpeningSupported
                     ? strings::get("settings.automatic_book_opening_description")
                     : strings::get("settings.unsupported_description"));
     automaticOpeningOption->setEnabled(inputs.automaticBookOpeningSupported);
+    automaticOpeningOption->setVisible(inputs.showNativeReaderOptions);
     systemRows->addWidget(automaticOpeningOption);
     if (inputs.automaticBookOpeningSupported) {
         // Turning automatic opening off sends every later book to Kobo's

@@ -3,6 +3,7 @@ package org.kobalt.android;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.os.BatteryManager;
 import android.net.Uri;
@@ -10,7 +11,13 @@ import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
+import android.view.WindowManager;
+import android.util.Log;
 import android.database.Cursor;
+import android.database.ContentObserver;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Build;
 import android.view.View;
 import android.view.KeyEvent;
@@ -41,6 +48,11 @@ public class KobaltActivity extends QtActivity {
     private final ExecutorService importer = Executors.newSingleThreadExecutor();
     private final AtomicLong request = new AtomicLong();
     private BooxDevice boox;
+    private ScreenBrightness screenBrightness;
+    private boolean nativeLight;
+    private volatile int systemBrightness = 50;
+    private ContentObserver brightnessObserver;
+    private final ExecutorService brightnessWriter = Executors.newSingleThreadExecutor();
     private BooxRefresh booxRefresh;
     private boolean resumed;
     private boolean ready = false;
@@ -88,8 +100,24 @@ public class KobaltActivity extends QtActivity {
         volumeButtons = (KeyCharacterMap.deviceHasKey(KeyEvent.KEYCODE_VOLUME_UP) ? 1 : 0)
             | (KeyCharacterMap.deviceHasKey(KeyEvent.KEYCODE_VOLUME_DOWN) ? 2 : 0);
         boox = new BooxDevice();
+        nativeLight = boox.available();
+        SharedPreferences brightness = getSharedPreferences("screen-brightness", MODE_PRIVATE);
+        int savedBrightness;
+        try { savedBrightness = brightness.getInt("level", -1); }
+        catch (ClassCastException error) { savedBrightness = -1; }
+        screenBrightness = new ScreenBrightness(savedBrightness, () -> systemBrightness,
+                () -> runOnUiThread(this::applyScreenBrightness),
+                level -> brightnessWriter.execute(() -> {
+                    if (!brightness.edit().putInt("level", level).commit())
+                        Log.w("KobaltBrightness", "Could not save screen brightness");
+                }));
         booxRefresh = new BooxRefresh();
         super.onCreate(state);
+        brightnessObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
+            @Override public void onChange(boolean selfChange) { readSystemBrightness(); }
+        };
+        getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS), false, brightnessObserver);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
         View decor = getWindow().getDecorView();
         HashSet<WindowInsetsAnimation> barAnimations = new HashSet<>();
@@ -198,6 +226,7 @@ public class KobaltActivity extends QtActivity {
         }
     }
     private void immersive() {
+        applyScreenBrightness();
         if (Build.VERSION.SDK_INT >= 30) {
             getWindow().setDecorFitsSystemWindows(false);
             WindowInsetsController controller = getWindow().getInsetsController();
@@ -239,7 +268,13 @@ public class KobaltActivity extends QtActivity {
         int percent = Math.min(100, level * 100 / scale);
         return percent + (battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0 ? 256 : 0);
     }
-    @Override protected void onResume() { super.onResume(); resumed = true; KosyncWork.setActive(this, true); }
+    @Override protected void onResume() {
+        super.onResume();
+        readSystemBrightness();
+        applyScreenBrightness();
+        resumed = true;
+        KosyncWork.setActive(this, true);
+    }
     @Override protected void onPause() {
         resumed = false;
         KosyncWork.setActive(this, false);
@@ -250,8 +285,21 @@ public class KobaltActivity extends QtActivity {
     public boolean readerPrepareRefresh(int[] regions, boolean clean) {
         return booxRefresh != null && booxRefresh.prepare(regions, clean);
     }
-    public boolean readerLightAvailable() { return boox != null && boox.available(); }
-    public int readerLight(int operation, int type, int value) { return boox == null ? -1 : boox.light(operation, type, value); }
+    private void applyScreenBrightness() {
+        if (nativeLight || screenBrightness == null) return;
+        WindowManager.LayoutParams attributes = getWindow().getAttributes();
+        attributes.screenBrightness = reading ? screenBrightness.override() : -1.0f;
+        getWindow().setAttributes(attributes);
+    }
+    private void readSystemBrightness() {
+        systemBrightness = Math.round(Settings.System.getInt(getContentResolver(),
+                Settings.System.SCREEN_BRIGHTNESS, 128) * 100.0f / 255);
+    }
+    public boolean readerLightAvailable() { return nativeLight ? boox.available() : screenBrightness != null; }
+    public int readerLight(int operation, int type, int value) {
+        if (nativeLight) return operation == 3 ? 0 : boox.light(operation, type, value);
+        return screenBrightness == null ? -1 : screenBrightness.light(operation, type, value);
+    }
     public int readerDensity() { return getResources().getDisplayMetrics().densityDpi; }
     public void readerReady() {
         ready = true;
@@ -566,9 +614,11 @@ public class KobaltActivity extends QtActivity {
     public void exitReader() { finishAndRemoveTask(); }
     @Override protected void onDestroy() {
         ready = false;
+        if (brightnessObserver != null) getContentResolver().unregisterContentObserver(brightnessObserver);
         if (booxRefresh != null) booxRefresh.cancel();
         request.incrementAndGet();
         importer.shutdownNow();
+        brightnessWriter.shutdown();
         super.onDestroy();
     }
 }

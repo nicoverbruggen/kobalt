@@ -117,3 +117,4 @@ endforeach()
 set_target_properties(kobalt_android PROPERTIES QT_ANDROID_PACKAGE_SOURCE_DIR "${package_source}")
 
 configure_file("${KOBALT_ROOT}/tests/android/KosyncWorkTest.java" "${package_source}/tests/org/kobalt/android/KosyncWorkTest.java" COPYONLY)
+configure_file("${KOBALT_ROOT}/tests/android/ScreenBrightnessTest.java" "${package_source}/tests/org/kobalt/android/ScreenBrightnessTest.java" COPYONLY)

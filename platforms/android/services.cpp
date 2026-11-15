@@ -73,6 +73,7 @@ ReaderHostServices readerHostServices()
         result.deviceName = QStringLiteral("Android");
     result.colorDisplay = [] { return true; };
     result.systemRotation = true;
+    result.showNativeReaderOptions = false;
     result.browserAvailable = [] { return true; };
     result.openBrowser = [](const QUrl &url, QWidget *) {
         return url.isValid() && !url.host().isEmpty()

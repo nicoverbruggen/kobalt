@@ -17,6 +17,20 @@ public:
 
     bool initialize() override { return read(7) >= 0 && maximum(7) > 0; }
 
+    bool hasSystemBrightness() const override { return device(3, 7, 0) == 1; }
+
+    bool hasAutomaticBrightness() const override { return hasSystemBrightness(); }
+
+    bool automaticBrightness() const override
+    {
+        return hasSystemBrightness() && device(4, 7, 0) == 1;
+    }
+
+    bool setAutomaticBrightness(bool enabled) override
+    {
+        return hasSystemBrightness() && device(5, 7, enabled ? 1 : 0) == 1;
+    }
+
     bool hasWarmth() const override { return read(6) >= 0 && maximum(6) > 0; }
 
     bool hasAutomaticWarmth() const override { return false; }
@@ -41,6 +55,7 @@ public:
     {
         if (original >= 0)
             return true;
+        originalAutomatic = automaticBrightness();
         original = read(7);
         return original >= 0;
     }
@@ -57,8 +72,16 @@ public:
     void finishGesture(bool save) override
     {
         const int previous = std::exchange(original, -1);
-        if (!save && previous >= 0)
+        if (previous < 0)
+            return;
+        if (save) {
+            if (hasSystemBrightness())
+                device(6, 7, 0);
+        } else {
             device(2, 7, previous);
+            if (originalAutomatic)
+                device(7, 7, 1);
+        }
     }
 
     int brightness() const override
@@ -72,6 +95,7 @@ public:
 private:
     Device device;
     int original = -1;
+    bool originalAutomatic = false;
 
     int read(int type) const { return device(0, type, 0); }
 

@@ -7,3 +7,5 @@ These checks cover the brightness and warmth gestures, light feedback, saved lig
 These native checks do not verify firmware light persistence or physical e-ink refresh.
 
 The Light panel keeps compact described-row padding so its controls fit between the toolbar and navigation in phone landscape. The dark-mode shortcut gallery check verifies the panel bounds and complete control visibility.
+
+`model.android-light` exercises the Android adapter’s gesture commit and cancellation, restoration of system policy, repeated gesture updates and BOOX command routing. The Android Gradle unit tests exercise window brightness state, persistence callbacks, follow-system selection, invalid saved values and unsupported warmth. They do not verify Android window attributes or actual screen output on hardware.

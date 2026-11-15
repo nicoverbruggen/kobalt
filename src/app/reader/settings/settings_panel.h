@@ -56,6 +56,8 @@ struct SettingsPanelInputs
     KeyboardFactory keyboard;
     PageAnimationSupport animationSupport = PageAnimationSupport::Unavailable;
     bool lightSupported = false, warmthSupported = false;
+    bool screenBrightness = false;
+    bool showNativeReaderOptions = true;
     bool debugProgressAvailable = false;
     bool downloadableDictionaries = true;
     bool sleepScreenSupported = false;

@@ -90,6 +90,7 @@ struct ReaderHostServices
     // or previews a device that does.
     bool readerStandbySupported = false;
     bool systemRotation = false;
+    bool showNativeReaderOptions = true;
     bool downloadableDictionaries = true;
     // Optional host-resolved high-resolution cover. The reader decodes it on
     // its worker and falls back to the publication cover if it is unusable.

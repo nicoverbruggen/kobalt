@@ -556,6 +556,8 @@
 
 /* light_panel */
 "light_panel.automatic_brightness" = "Automatic brightness";
+"light_panel.system_brightness" = "Follow system brightness";
+"light_panel.system_brightness_description" = "Use Android's brightness setting. Manual adjustments are remembered for reading.";
 "light_panel.automatic_brightness_description" = "Uses the ambient light sensor. Manual adjustments turn this off.";
 "light_panel.automatic_warmth" = "Follow Kobo warmth schedule";
 "light_panel.automatic_warmth_description" = "Uses the bedtime set in Kobo settings. Manual warmth adjustments turn this off.";
@@ -644,6 +646,8 @@
 "settings.light_gesture_feedback" = "Show frontlight gesture pop-up";
 "settings.light_gesture_feedback_description" = "Show the level after a pause in swiping. Turn off to adjust the light without a pop-up or its cleanup refresh.";
 "reader.edge_light" = "Swipe along edges to adjust frontlight";
+"reader.edge_brightness" = "Swipe along the left edge to adjust brightness";
+"settings.brightness_gesture_feedback" = "Show brightness gesture pop-up";
 "reader.enable_page_animations" = "Page turn animations";
 "reader.exit" = "Exit Kobalt";
 "reader.fail_next_native_save" = "Fail next native save";

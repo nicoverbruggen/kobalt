@@ -285,6 +285,8 @@ For a local release build, set `KOBALT_ANDROID_RELEASE=1`, `KOBALT_RELEASE_VERSI
 
 Extract the archive and run the documented build commands from its `application/` folder. `source-info.json` retains the source commit and release version without a Git checkout. An explicit `KOBALT_RELEASE_VERSION` still overrides that version. The `upstream/` folder is inside the application tree so container builds can use it through their normal mount. Install the prepared SDK or pull its pinned image first; the bundle does not include a compiled SDK or Android Gradle packages. Run `bash platforms/ci/check-source-archive.sh` to verify a generated archive's Qt6 configuration with networking disabled. CI runs this check before retaining the source artifact.
 
+The Android build also runs the Gradle unit tests for its selected debug or release variant, including deferred KOSync reconciliation and request ownership. WorkManager is pinned to `androidx.work:work-runtime:2.11.2`.
+
 Android uses dynamically linked Qt libraries. To use a modified compatible Qt SDK, prepare it through `kobuild`, then rebuild Kobalt with that SDK and sign the APK with your own key. A different key cannot update an official installation. Use the separate debug application ID for testing, or back up app data before removing the official installation.
 
 Successful tag builds assemble a draft GitHub release with the three packages, source archive, build metadata and `SHA256SUMS`. They do not publish it. An existing published release cannot be overwritten. Review the draft and its signing report before publishing. Branch builds retain workflow artifacts only.

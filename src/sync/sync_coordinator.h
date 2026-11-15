@@ -72,6 +72,8 @@ public:
 
     Progress candidate() const { return progress_.candidate(); }
 
+    QJsonObject deferredBaseline() const { return progress_.deferredBaseline(); }
+
     void keepLocal() { progress_.keepLocal(); }
 
     void acceptRemote(const QString &position) { progress_.acceptRemote(position); }

@@ -69,6 +69,8 @@ public:
 
     Progress candidate() const { return pending_; }
 
+    QJsonObject deferredBaseline() const;
+
     void keepLocal()
     {
         pending_ = {};
@@ -144,7 +146,7 @@ public:
     bool setManualExplanation(bool enabled);
     bool logout();
 
-    QDateTime lastSync() const { return lastSync_; }
+    QDateTime lastSync() const;
 
     bool recordSyncSuccess();
     // Sleep and closing checkpoint the informational timestamp without
@@ -154,6 +156,7 @@ public:
     // for a sync that ends while the reader sleeps. The time stays unconfirmed
     // until the next persistSyncTime(), which then only reads the file.
     void queueSyncTime();
+    QJsonObject deferredAccount() const;
     void cancel();
     void pull(const QByteArray &document, std::function<void(Progress, QString)> done,
               bool retryTransient = true);

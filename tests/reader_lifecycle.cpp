@@ -7172,6 +7172,72 @@ private slots:
         QVERIFY(input->text().isEmpty());
     }
 
+    void kosyncPause_data()
+    {
+        QTest::addColumn<bool>("automatic");
+        QTest::addColumn<bool>("signedIn");
+        QTest::newRow("automatic") << true << true;
+        QTest::newRow("manual") << false << true;
+        QTest::newRow("signed-out") << true << false;
+    }
+
+    // Pause hands off saved progress and reconciliation evidence only for an automatic account.
+    void kosyncPause()
+    {
+        QFETCH(bool, automatic);
+        QFETCH(bool, signedIn);
+        const auto paths = testPaths();
+        if (signedIn)
+            QVERIFY(storage::writeJson(paths.syncAccount(),
+                                       { { "schema", 1 },
+                                         { "server", "https://127.0.0.1:9" },
+                                         { "username", "fixture" },
+                                         { "key", QString(32, 'a') },
+                                         { "device_id", "fixture-device" },
+                                         { "automatic", automatic },
+                                         { "sync_on_open", false },
+                                         { "sync_on_close", false } }));
+        bool suspended = false;
+        QJsonObject queued;
+        QString persisted;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.suspended = [&] { return suspended; };
+            services.deferKosync = [&](const QJsonObject &job) {
+                queued = job;
+                persisted = storage::readBookState(paths, host.book()->identity())
+                                    .object.value("position")
+                                    .toString();
+            };
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        host.window()->checkpoint();
+        QVERIFY(queued.isEmpty());
+        QVERIFY(host.session()->go(1));
+        QTRY_VERIFY(!host.session()->busy());
+        const auto position = host.session()->state().value("position").toString();
+        suspended = true;
+        host.window()->checkpoint();
+        if (!automatic || !signedIn) {
+            QVERIFY(queued.isEmpty());
+            return;
+        }
+        QCOMPARE(queued.value("progress").toString(), position);
+        QCOMPARE(persisted, position);
+        QCOMPARE(queued.value("account_path").toString(), paths.syncAccount());
+        QCOMPARE(queued.value("account").toObject().value("key_sha256").toString().size(), 64);
+        QVERIFY(!queued.contains("key"));
+        QVERIFY(!queued.value("baseline").toObject().value("pending").toBool());
+    }
+
     void kosyncSleepSavesSyncTime_data()
     {
         QTest::addColumn<bool>("sleepSync");

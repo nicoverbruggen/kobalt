@@ -50,6 +50,9 @@ fi
         echo "Configure: $((SECONDS - started)) seconds"
         started=$SECONDS
         cmake --build --preset android --parallel "$1"
+        test_variant=Debug
+        if [[ $KOBALT_ANDROID_RELEASE == 1 ]]; then test_variant=Release; fi
+        (cd "/work/build/android-$KOBALT_ANDROID_HOST_ARCH/android-build" && ./gradlew "test${test_variant}UnitTest" --no-daemon)
         if [[ $KOBALT_ANDROID_RELEASE == 1 ]]; then
             apk="/work/build/android-$KOBALT_ANDROID_HOST_ARCH/android-build/build/outputs/apk/release/android-build-release-unsigned.apk"
             [[ -f $apk ]] || { echo "Missing unsigned release APK: $apk" >&2; exit 1; }

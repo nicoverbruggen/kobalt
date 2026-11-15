@@ -133,6 +133,29 @@ void Reader::checkpoint()
     if (services.suspended())
         book->sleepReading(preferences);
     save(true);
+    if (services.deferKosync && services.suspended()) {
+        QJsonObject snapshot = book->checkpointState();
+        // Only hand off a position that reached local storage. A repeated
+        // unchanged checkpoint does not write its row.
+        if (book->checkpoint(&snapshot) && !book->usesNativeCloudSync() && kosyncAutomatic()
+            && kosyncClient->signedIn() && !book->pendingProgress() && !book->deviceTransition()
+            && !session->busy() && !session->temporaryTypography()
+            && !syncCoordinator->pendingProgress() && session->pages() > 0) {
+            cancelKosync();
+            auto job = kosyncClient->deferredAccount();
+            job["document"] = QString::fromLatin1(kosyncDocument());
+            job["progress"] = session->state().value("position").toString();
+            job["percentage"] =
+                    session->pages() > 1 ? double(session->page()) / (session->pages() - 1) : 0;
+            job["baseline"] = syncCoordinator->deferredBaseline();
+            job["device"] = kosyncClient->deviceName();
+            if (kosyncClient->sendMetadata())
+                job["metadata"] = qt::object({ { "filename", session->syncFilename() },
+                                               { "title", session->title().trimmed() },
+                                               { "authors", session->author().trimmed() } });
+            services.deferKosync(job);
+        }
+    }
 }
 
 void Reader::observeReading()

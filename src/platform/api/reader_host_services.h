@@ -160,6 +160,8 @@ struct ReaderHostServices
     KeyboardFactory keyboard;
     // Optional on hosts whose operating system already supplies connectivity.
     SyncNetworkFactory syncNetwork;
+    // Optional durable handoff after a successful local checkpoint on app pause.
+    std::function<void(const QJsonObject &)> deferKosync;
     // Optional HTTP access for KOSync requests; tests replace it. Hosts leave
     // it empty, and the KOSync client then uses its own.
     std::function<std::unique_ptr<QNetworkAccessManager>()> kosyncHttp;

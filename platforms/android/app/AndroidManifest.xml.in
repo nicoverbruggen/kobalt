@@ -6,6 +6,7 @@
     android:versionName="-- %%INSERT_VERSION_NAME%% --">
     <!-- KOSync and dictionary downloads use the network. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- %%INSERT_FEATURES -->
     <supports-screens
         android:anyDensity="true"
@@ -47,6 +48,15 @@
                 android:name="android.app.arguments"
                 android:value="-- %%INSERT_APP_ARGUMENTS%% --" />
         </activity>
+
+        <receiver
+            android:name="org.kobalt.android.KosyncBootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.core.content.FileProvider"

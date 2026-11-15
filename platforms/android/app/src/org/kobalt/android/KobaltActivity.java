@@ -239,9 +239,10 @@ public class KobaltActivity extends QtActivity {
         int percent = Math.min(100, level * 100 / scale);
         return percent + (battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0 ? 256 : 0);
     }
-    @Override protected void onResume() { super.onResume(); resumed = true; }
+    @Override protected void onResume() { super.onResume(); resumed = true; KosyncWork.setActive(this, true); }
     @Override protected void onPause() {
         resumed = false;
+        KosyncWork.setActive(this, false);
         if (booxRefresh != null) booxRefresh.cancel();
         super.onPause();
     }

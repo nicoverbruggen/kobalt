@@ -1,5 +1,6 @@
 #include "kosync.h"
 #include "support/main_thread.h"
+#include "support/qt_compat.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include "storage/reader_storage.h"
@@ -21,6 +22,12 @@
 #include <atomic>
 #include <cmath>
 #include <memory>
+#include <utility>
+#ifdef Q_OS_ANDROID
+#  include <QJniObject>
+#  include <QCoreApplication>
+#  include <QtCore/qnativeinterface.h>
+#endif
 
 namespace kobalt::kosync {
 namespace {
@@ -292,6 +299,52 @@ Reconciler::Action Reconciler::observe(const Progress &remote, const QString &po
     else if (remote.position == position)
         uploaded_ = position;
     return position.isEmpty() || position == uploaded_ ? Action::Current : Action::Upload;
+}
+
+QJsonObject Reconciler::deferredBaseline() const
+{
+    return qt::object({ { "found", observed_.found },
+                        { "position", observed_.position },
+                        { "device_id", observed_.deviceId },
+                        { "timestamp", double(observed_.timestamp) },
+                        { "uploaded", uploaded_ },
+                        { "pending", pending() } });
+}
+
+QDateTime Client::lastSync() const
+{
+#ifdef Q_OS_ANDROID
+    const QString identity =
+            server() + QChar(0) + username_ + QChar(0) + deviceId_ + QChar(0)
+            + QString::fromLatin1(
+                    QCryptographicHash::hash(key_, QCryptographicHash::Sha256).toHex());
+    const auto stamp = QJniObject::callStaticMethod<jlong>(
+            "org/kobalt/android/KosyncWork", "lastSync",
+            "(Landroid/content/Context;Ljava/lang/String;)J",
+            QNativeInterface::QAndroidApplication::context().object(),
+            QJniObject::fromString(identity).object<jstring>());
+    if (stamp > 0 && (!lastSync_.isValid() || stamp > lastSync_.toMSecsSinceEpoch()))
+        return QDateTime::fromMSecsSinceEpoch(stamp).toUTC();
+#endif
+    return lastSync_;
+}
+
+QJsonObject Client::deferredAccount() const
+{
+    // Informational last_sync writes do not revoke queued progress. Account
+    // identity and policy edits do. Never copy the authentication key to jobs.
+    const auto account = qt::object(
+            { { "server", server() },
+              { "username", username_ },
+              { "device_id", deviceId_ },
+              { "device_name", deviceName_ },
+              { "key_sha256",
+                QString::fromLatin1(
+                        QCryptographicHash::hash(key_, QCryptographicHash::Sha256).toHex()) },
+              { "automatic", automatic_ },
+              { "match_method", filenameMatching_ ? "filename" : "binary" },
+              { "send_metadata", sendMetadata_ } });
+    return qt::object({ { "account_path", accountPath_ }, { "account", account } });
 }
 
 Client::Client(QString accountPath, QObject *parent, QNetworkAccessManager *network,
@@ -626,6 +679,26 @@ void Client::request(const QByteArray &method, const QString &path, const QUrl &
         done(0, {}, message("kosync.busy"));
         return;
     }
+#ifdef Q_OS_ANDROID
+    // The worker owns its complete GET/PUT exchange. Never block the GUI
+    // thread behind it. Keep this lease through chained response callbacks.
+    if (!QJniObject::callStaticMethod<jboolean>("org/kobalt/android/KosyncWork", "beginNative")) {
+        done(0, {}, message("kosync.busy"));
+        return;
+    }
+    auto lease = std::shared_ptr<bool>(new bool(true), [](bool *held) {
+        if (*held)
+            QJniObject::callStaticMethod<void>("org/kobalt/android/KosyncWork", "endNative");
+        delete held;
+    });
+    done = [lease, callback = std::move(done)](int status, QJsonObject body, QString error) {
+        callback(status, std::move(body), std::move(error));
+        // A finished reply may await deleteLater while Qt is suspended.
+        // Chained requests have already acquired their own lease.
+        if (std::exchange(*lease, false))
+            QJniObject::callStaticMethod<void>("org/kobalt/android/KosyncWork", "endNative");
+    };
+#endif
     networkUse().activity.start();
     requestElapsed_.start();
     requestAttempt(method, path, server, username, key, body, std::move(done),

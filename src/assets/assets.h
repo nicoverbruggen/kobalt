@@ -22,6 +22,7 @@ public:
     bool verify(const std::function<bool()> &current = {});
     bool hasFilesystemRecoveryFiles() const;
     void invalidate();
+    QMap<QString, QByteArray> verifiedFontDigests() const;
     QString file(const QString &name) const;
     QByteArray fontData(const QString &name) const;
     // Capture verified metadata without retaining font bytes or this bundle.

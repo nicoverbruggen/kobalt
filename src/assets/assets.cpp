@@ -128,6 +128,17 @@ QString AssetBundle::file(const QString &name) const
     return data->root + '/' + name;
 }
 
+QMap<QString, QByteArray> AssetBundle::verifiedFontDigests() const
+{
+    QMutexLocker lock(&data->mutex);
+    QMap<QString, QByteArray> result;
+    const auto directory = file("fonts") + '/';
+    for (const auto &entry : data->checked)
+        if (entry.path.startsWith(directory))
+            result.insert(entry.path, entry.digest);
+    return result;
+}
+
 bool AssetBundle::hasFilesystemRecoveryFiles() const
 {
     const QFileInfo root(data->root);

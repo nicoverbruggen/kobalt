@@ -572,6 +572,7 @@ private:
     // The values of state() without the page estimate.
     QJsonObject settingsState() const;
     // A digest of everything that decides the pages, from settingsState().
+    QString layoutFontDigest() const;
     QString estimateKey(const QJsonObject &settings) const;
     // The key of a prepared document of the whole book. Unlike estimateKey()
     // it also holds the settings that change pixels only: a document made

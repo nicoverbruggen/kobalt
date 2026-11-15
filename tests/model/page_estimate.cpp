@@ -32,6 +32,12 @@ namespace kobalt {
 // Reads the spine items of an open book, for the comparison with real pages.
 struct ReaderLocationProbe
 {
+    static QString estimateLayout(EngineDocument &model)
+    {
+        require(model.initializeFonts(), "Cannot register estimate test fonts");
+        return model.estimateKey(model.settingsState());
+    }
+
     // Exercises the nested layout used during reflow and saved-position resolution.
     static bool layoutSliceWithCancelledCaller(EngineDocument &model, bool duringExtension)
     {
@@ -2879,6 +2885,25 @@ int main(int argc, char **argv)
     hiddenHeadingOnChapterReflow();
     hiddenHeadingAtHandoff();
 #endif
+    {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("Amstelvar.ttf");
+        require(QFile::copy(QStringLiteral(KOBALT_TEST_FIXTURES) + "/AmstelvarAlpha-VF.ttf", path),
+                "Cannot copy the estimate test font");
+        auto inputs = test::readerFonts();
+        inputs.sources.sideloadDirectory = directory.path();
+        const auto layout = [&] {
+            EngineDocument model(inputs);
+            return ReaderLocationProbe::estimateLayout(model);
+        };
+        const auto before = layout();
+        require(layout() == before, "Reopening with the same font changed the layout key");
+        QFile font(path);
+        require(font.open(QIODevice::Append) && font.write("x", 1) == 1,
+                "Cannot change the estimate test font");
+        font.close();
+        require(layout() != before, "Replacing a font under the same family kept the layout key");
+    }
     offscreenRangeEnd();
     savedPlaceOutsideOpeningWindow();
     returnToEvictedBookmark();

@@ -42,6 +42,7 @@ kobalt::EngineFontInputs kobalt::engineFontInputs(const AssetBundle &assets,
     EngineFontInputs inputs;
     if (!assets.available())
         return inputs;
+    inputs.verifiedFontDigests = assets.verifiedFontDigests();
     inputs.sources = { bundledFontFiles(assets), std::move(systemDirectory),
                        std::move(sideloadDirectory) };
     for (const auto *name : serifFallbackFontFiles) {

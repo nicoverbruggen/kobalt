@@ -1,4 +1,5 @@
 #pragma once
+#include <QMap>
 #include <QStringList>
 #include <QVector>
 #include <cmath>
@@ -46,6 +47,7 @@ struct EngineFontInputs
     FontSources sources;
     QStringList fallbackFiles;
     QString hyphenationDirectory;
+    QMap<QString, QByteArray> verifiedFontDigests = {};
     bool operator==(const EngineFontInputs &other) const;
 };
 

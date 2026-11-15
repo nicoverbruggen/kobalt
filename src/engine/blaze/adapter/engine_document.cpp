@@ -19,6 +19,7 @@
 #include "render/page_content.h"
 #include "page_pixels.h"
 #include <QCryptographicHash>
+#include <QFile>
 #include <QFileInfo>
 #include <QElapsedTimer>
 #include <QJsonArray>
@@ -45,6 +46,7 @@ namespace {
 std::atomic<unsigned> liveDocuments{ 0 };
 bool fontsReady = false;
 EngineFontInputs activeFonts;
+QString registeredFontDigest;
 QVector<ReadingFont> readingFonts;
 QStringList readingFontFaces;
 QVector<ReadingFont> readingFontCatalog;
@@ -367,6 +369,7 @@ EngineDocument::~EngineDocument()
         readingFontFaces.clear();
         readingFontCatalog.clear();
         fontFacesReady = fontCatalogReady = false;
+        registeredFontDigest.clear();
         activeFonts = {};
     }
 }
@@ -420,6 +423,30 @@ bool EngineDocument::initializeFonts()
     fontsReady = true;
     activeFonts = fonts_;
     return true;
+}
+
+// The font manager and its registered files are shared by every live document.
+QString EngineDocument::layoutFontDigest() const
+{
+    if (!fontsReady || !registeredFontDigest.isEmpty())
+        return registeredFontDigest;
+    QCryptographicHash catalog(QCryptographicHash::Sha256);
+    QStringList files;
+    for (const auto &font : readingFonts)
+        files.append(font.files);
+    files.append(activeFonts.fallbackFiles);
+    for (const auto &path : files) {
+        auto digest = activeFonts.verifiedFontDigests.value(path);
+        if (digest.isEmpty()) {
+            QFile file(path);
+            QCryptographicHash hash(QCryptographicHash::Sha256);
+            if (file.open(QIODevice::ReadOnly) && hash.addData(&file))
+                digest = hash.result().toHex();
+        }
+        catalog.addData(digest + '\n');
+    }
+    registeredFontDigest = QString::fromLatin1(catalog.result().toHex());
+    return registeredFontDigest;
 }
 
 QStringList EngineDocument::fontFaces()

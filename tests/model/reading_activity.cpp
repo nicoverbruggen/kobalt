@@ -87,6 +87,7 @@ void weekAndMonths()
                          session("b", QDate(2026, 11, 10), 21, 50),
                          session("a", today, 7, 20, "November") };
     records.sessions.last().identity = "file:///books/a-renamed.epub";
+    records.sessions.last().sourceKey = "/books/a-renamed.epub";
     records.percent.insert("file:///books/a-renamed.epub", 22);
     records.percent.insert("file:///books/b.epub", 100);
     records.finished.insert("file:///books/b.epub");
@@ -98,6 +99,12 @@ void weekAndMonths()
     require(summary.weekMilliseconds == 100 * minute, "The week total was wrong");
     require(summary.months.size() == 2 && summary.months[0].month == QDate(2026, 11, 1),
             "Months were not newest first");
+    const auto &october = summary.months[1].books.first();
+    require(october.identity == records.sessions.last().identity
+                    && october.sourceKey == records.sessions.last().sourceKey
+                    && october.percent == 22 && october.milliseconds == 40 * minute
+                    && october.sessions == 1,
+            "October must use the renamed book without including November's reading time");
     const auto &november = summary.months[0];
     require(november.books.size() == 2 && november.books[0].book == "a"
                     && november.books[0].milliseconds == 50 * minute

@@ -31,19 +31,19 @@ void add(BookTotal &total, const ActivitySession &session, qint64 milliseconds)
         total.book = session.book;
         total.first = session.started;
     }
-    // The newest snapshot names and finds the book, as it is shown now.
-    total.identity = session.identity;
-    total.sourceKey = session.sourceKey;
-    total.title = session.title;
-    total.author = session.author;
     total.milliseconds += milliseconds;
     ++total.sessions;
     total.first = qMin(total.first, session.started);
     total.last = qMax(total.last, session.observed);
 }
 
-void describe(BookTotal &total, const ActivityRecords &records)
+void describe(BookTotal &total, const ActivitySession &session, const ActivityRecords &records)
 {
+    // The newest snapshot names and finds the book, as it is shown now.
+    total.identity = session.identity;
+    total.sourceKey = session.sourceKey;
+    total.title = session.title;
+    total.author = session.author;
     total.percent = records.percent.value(total.identity, -1);
     total.finished = records.finished.contains(total.identity);
 }
@@ -155,11 +155,13 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
     QSet<QString> todayBooks, allBooks, monthBooks, bestDayBooks;
     QMap<QDate, QHash<QString, BookTotal>> months;
     QHash<QString, BookTotal> hiddenBooks;
+    QHash<QString, const ActivitySession *> latest;
     for (const auto &session : records.sessions) {
-        if (!countsAsSession(session))
-            continue;
         const auto date = localDate(session.started);
         if (date > today)
+            continue;
+        latest.insert(session.book, &session);
+        if (!countsAsSession(session))
             continue;
         ++summary.sessions;
         allBooks.insert(session.book);
@@ -207,7 +209,7 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
         --it;
         MonthBooks month{ it.key(), 0, {} };
         for (auto book : it.value()) {
-            describe(book, records);
+            describe(book, *latest.value(book.book), records);
             month.milliseconds += book.milliseconds;
             month.books.append(book);
         }
@@ -221,7 +223,7 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
     }
 
     for (auto book : hiddenBooks) {
-        describe(book, records);
+        describe(book, *latest.value(book.book), records);
         summary.hiddenBooks.append(book);
     }
     std::sort(summary.hiddenBooks.begin(), summary.hiddenBooks.end(),
@@ -297,10 +299,16 @@ QMap<QDate, qint64> bookDays(const ActivityRecords &records, const QString &book
 BookTotal bookTotal(const ActivityRecords &records, const QString &book, const QDate &today)
 {
     BookTotal total;
-    for (const auto &session : records.sessions)
-        if (session.book == book && countsAsSession(session) && localDate(session.started) <= today)
+    const ActivitySession *latest = nullptr;
+    for (const auto &session : records.sessions) {
+        if (session.book != book || localDate(session.started) > today)
+            continue;
+        latest = &session;
+        if (countsAsSession(session))
             add(total, session, session.milliseconds);
-    describe(total, records);
+    }
+    if (total.sessions)
+        describe(total, *latest, records);
     return total;
 }
 } // namespace kobalt::activity

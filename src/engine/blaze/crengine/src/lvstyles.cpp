@@ -448,6 +448,7 @@ bool css_style_rec_t::serialize( SerialBuf & buf )
     ST_PUT_ENUM(float_);
     ST_PUT_ENUM(clear);
     ST_PUT_ENUM(direction);
+    // Blaze: Keep the vertical style fields in the same order in deserialize(). Cached pages need the warning state too.
     ST_PUT_ENUM(writing_mode);
     ST_PUT_ENUM(writing_mode_warning);
     ST_PUT_ENUM(text_orientation);

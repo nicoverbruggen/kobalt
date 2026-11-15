@@ -202,7 +202,7 @@ private:
     int _pseudo_elem; // from enum LVCssSelectorPseudoElement, or 0
     LVCssSelector * _next;
     LVRef<LVCssSelectorRule> _rules;
-    // koblaze: the element names and classes that ancestors of a matching
+    // Blaze: the element names and classes that ancestors of a matching
     // node must have, from the rules after a child or descendant combinator.
     // Set from the rules after parsing.
     std::vector<lUInt16> _ancestorIds;
@@ -217,7 +217,7 @@ public:
     lUInt16 getElementNameId() const { return _id; }
     bool check( const ldomNode * node, bool allow_cache=true ) const;
     bool quickClassCheck(const lUInt32 *classHashes, size_t size) const;
-    /// koblaze: false when the ancestors of the node lack an element name
+    /// Blaze: false when the ancestors of the node lack an element name
     /// or a class that the selector requires of them, so it cannot match.
     bool quickAncestorCheck( LVCssAncestors & ancestors ) const;
     void applyToPseudoElement( const ldomNode * node, css_style_rec_t * style ) const;

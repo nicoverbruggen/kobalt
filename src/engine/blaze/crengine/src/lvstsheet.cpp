@@ -8421,6 +8421,7 @@ bool LVCssSelector::parse( const char * &str, lxmlDocBase * doc, bool useragent_
     }
 exit:
     _rules = start;
+    // Blaze: Build the ancestor filter from the parsed rule chain so apply() can skip impossible matches.
     initAncestorRequirements();
     return res;
 }
@@ -8645,7 +8646,7 @@ void LVStyleSheet::apply( const ldomNode * node, css_style_rec_t * style ) const
     const lString32 &v = node->getEffectiveAttributeValue(attr_class);
     appendCssClassHashes(v, class_hash_array);
 
-    // koblaze: a cloneNode is checked as its source node, which has other
+    // Blaze: a cloneNode is checked as its source node, which has other
     // ancestors.
     LVCssAncestors ancestors( node );
     bool check_ancestors = node->getNodeId() != el_cloneNode;

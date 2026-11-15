@@ -253,7 +253,7 @@ void ReadEpubNavToc( ldomDocument * doc, ldomNode * mapRoot, LVTocItem * baseToc
                     ldomNode * target = doc->getNodeById(doc->getAttrValueIndex(href.substr(1).c_str()));
                     int id = file.pos(U'#');
                     if ( !target && koblazeSpineWindowSet() && id > 0 ) {
-                        // koblaze: the id is in a spine item without its text.
+                        // Blaze: the id is in a spine item without its text.
                         // Point to the start of that spine item, as the NCX
                         // reader does for an id that does not exist.
                         file = appender.convertHref(file.substr(0, id));
@@ -911,7 +911,7 @@ public:
 
     void setIdpfManglingKey(lString32 key) {
         _idpfFontManglingKey.clear();
-        // EPUB removes XML whitespace throughout the unique identifier before
+        // Blaze: remove XML whitespace throughout the unique identifier before
         // hashing its UTF-8 bytes, including whitespace inside the identifier.
         for (int i = key.length() - 1; i >= 0; --i) {
             lChar32 c = key[i];
@@ -1670,7 +1670,7 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                 appender.setNonLinearFlag(spineItems[i]->nonlinear);
                 appender.setFragmentType(); // unset
                 if ( !koblazeSpineItemLoaded((int)i) ) {
-                    // Keep the DocFragment of this spine item, without its text.
+                    // Blaze: keep an empty DocFragment so saved positions retain their spine indices.
                     LVStreamRef mstream = LVCreateMemoryStream();
                     lString8 s("<html><body></body></html>");
                     mstream->Write(s.c_str(), s.length(), NULL);
@@ -1682,7 +1682,7 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                 CRLog::debug("Checking fragment: %s", LCSTR(name));
                 LVStreamRef stream = m_arc->OpenStream(name.c_str(), LVOM_READ);
                 if ( !stream.isNull() ) {
-                    // koblaze: a host can stop the load of a chapter.
+                    // Blaze: a host can stop the load of a chapter.
                     KoblazeParserCanStop canStop;
                     LVHTMLParser parser(stream, &appender);
                     if ( parser.CheckFormat() && parser.Parse() && appender.hasMetBaseTag() ) {

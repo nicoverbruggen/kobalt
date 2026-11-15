@@ -152,7 +152,7 @@ typedef struct {
     bool draw_body_background;
     lvRect body_background_clip;
     lvRect content_overflow_clip;
-    // For vertical-rl: the column anchor right boundary.
+    // Blaze: the right edge anchors a vertical-rl column during drawing.
     // content_overflow_clip.right may be widened to allow ruby annotations to
     // draw into the right margin, but the column anchor must stay at the original
     // clip.right so that all columns (including ruby groups) are positioned correctly.
@@ -220,7 +220,7 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
 void LVRendSetBaseFontWeight(int weight);
 int LVRendGetBaseFontWeight();
 
-// A positive value overrides optical size in points; zero follows CSS.
+// Blaze: a positive reader setting overrides optical size in points. Zero follows CSS.
 void LVRendSetFontOpticalSize(float points);
 float LVRendGetFontOpticalSize();
 

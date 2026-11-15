@@ -1651,6 +1651,7 @@ void LVColorDrawBuf::Draw( LVImageSourceRef img, int x, int y, int width, int he
     //fprintf( stderr, "LVColorDrawBuf::Draw( img(%d, %d), %d, %d, %d, %d\n", img->GetWidth(), img->GetHeight(), x, y, width, height );
     LVImageScaledDrawCallback drawcb( this, img, x, y, width, height, dither, _invertImages, _smoothImages );
     img->Decode( &drawcb );
+    // Blaze: Report visible image ink to the host after clipping and alpha handling.
     OnImageDrawn(drawcb.hasVisiblePixels());
     _drawnImagesCount++;
     _drawnImagesSurface += width*height;

@@ -585,7 +585,7 @@ public:
     void requestRender();
     /// restore the alternate layout and invalidate view-derived navigation data
     bool swapLayout();
-    /// koblaze: see ldomDocument::koblazeSaveLayout() and koblazeRestoreLayout().
+    /// Blaze: see ldomDocument::koblazeSaveLayout() and koblazeRestoreLayout().
     bool koblazeSaveLayout();
     bool koblazeRestoreLayout();
     /// invalidate document data, request reload
@@ -625,9 +625,7 @@ public:
     void setPageMargins( const lvRect & rc );
     /// returns page margins
     lvRect getPageMargins() const { return m_pageMargins; }
-    /// returns true if the document uses vertical-rl or vertical-lr writing mode
-    /// Phase 1: document-level flag only; mixed horizontal/vertical elements not yet supported.
-    /// TODO (Phase 2): per-element writing mode for mixed-mode documents.
+    /// Blaze: true if any rendered page uses vertical writing. Before layout, check the body style.
     bool isVerticalText() const;
     /// In vertical-rl mode, returns the screen-X anchor for columns on a given page:
     ///   page_right = pageRect.right - margin.right - centering_offset

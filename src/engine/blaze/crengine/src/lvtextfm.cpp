@@ -20,7 +20,7 @@
 #include "../include/lvfnt.h"
 #include "../include/lvtextfm.h"
 #include "../../extensions/vertical/lvlogical.h"
-#include "../../extensions/vertical/lvfntman_vert.h"   // fork-only: JFM class + glue/kern helpers
+#include "../../extensions/vertical/lvfntman_vert.h"   // Blaze: JFM class + glue/kern helpers
 #include "../../extensions/vertical/lvtextfm_vert_diag.h"
 #include "../include/lvdrawbuf.h"
 #include "../include/fb2def.h"
@@ -311,7 +311,7 @@ void lvtextAddSourceLine( formatted_text_fragment_t * pbuffer,
     pline->color = color;
     pline->bgcolor = bgcolor;
     pline->letter_spacing = letter_spacing;
-    pline->vert_inline_box_depth = 0; // fork: only meaningful for ruby inline-box objects
+    pline->vert_inline_box_depth = 0; // Blaze: only meaningful for ruby inline-box objects
 }
 
 void lvtextAddSourceObject(
@@ -346,7 +346,7 @@ void lvtextAddSourceObject(
     pline->interval = interval;
     pline->valign_dy = valign_dy;
     pline->letter_spacing = letter_spacing;
-    pline->vert_inline_box_depth = 0; // fork: set later by measureText for ruby inline boxes
+    pline->vert_inline_box_depth = 0; // Blaze: set later by measureText for ruby inline boxes
     if ( !lang_cfg )
         lang_cfg = TextLangMan::getTextLangCfg(); // use main_lang
     pline->lang_cfg = lang_cfg;
@@ -1664,7 +1664,7 @@ public:
                             // a space following a \n be allowed to collapse.
                     }
 
-                    // Fork (vertical-rl): Enclosed Alphanumerics (U+2460-24FF,
+                    // Blaze: Enclosed Alphanumerics (U+2460-24FF,
                     // ①②③ etc.) are treated as CJK only in vertical mode so they
                     // render upright in their em column instead of the render+rotate
                     // Latin path (whose rotated buffer overflows the column edge).
@@ -1791,7 +1791,7 @@ public:
                         // we don't need to invoke expensive fribidi processing below (which
                         // may add a 50% duration increase to the text rendering phase).
                         if ( !has_rtl ) {
-                            // koblaze: U+FEFF has no direction of its own; lStr_isRTL()
+                            // Blaze: U+FEFF has no direction of its own; lStr_isRTL()
                             // counts it with the Arabic forms around it.
                             has_rtl = lStr_isRTL(c) && !( c == 0xFEFF && joiner_is_plain );
                         }
@@ -2235,12 +2235,8 @@ public:
                         // too long line
                         int newlen = chars_measured;
                         if (newlen == 0) {
-                            // measureText returned 0 — advance at least 1 to avoid infinite loop.
-                            // Fork note: this is the one fork edit in this file that is NOT
-                            // vertical-gated.  It is reachable only on a measure result upstream
-                            // would spin on forever (0 chars consumed while chars remain), so it
-                            // is a strict, deliberate bugfix kept active for horizontal mode too
-                            // rather than re-introducing the hang behind a vertical gate.
+                            // Blaze: consume one character when measurement returns zero. Retrying
+                            // the same character here would stall either writing mode.
                             newlen = 1;
                             chars_measured = 1;
                             widths[0] = 0;
@@ -2452,7 +2448,7 @@ public:
                                 already_rendered = true;
                             }
                         }
-                        // Fork: extracted vertical ruby inline-box metrics to lvtextfm_vert.cpp.
+                        // Blaze: extracted vertical ruby inline-box metrics to lvtextfm_vert.cpp.
                         VertRubyInlineBoxMetrics rbm = computeVertRubyInlineBoxMetrics(m_pbuffer, node, lastFont);
                         bool vert_inline_box      = rbm.vert_inline_box;
                         bool is_ruby_inline_pre   = rbm.is_ruby_inline_pre;
@@ -3579,7 +3575,7 @@ void alignLineHorizontal( LVFormatter* fmt, formatted_line_t * frmline, int alig
                 }
             }
         }
-        // Fork: extracted IB-positioning + vertical-mode post-pass (Phase 5
+        // Blaze: extracted IB-positioning + vertical-mode post-pass (Phase 5
         // LuaTeX-ja JFM mirror) into lvtextfm_vert.cpp so this function stays
         // close to upstream.  Runs for any line with inline boxes OR any
         // vertical-mode line (the Phase 5 mirror must run on every vertical
@@ -5174,7 +5170,7 @@ void addLineHorizontal( LVFormatter* fmt, int start, int end, int x, src_text_fr
             fmt->activateInitialLetterInlineBoxExclusion(frmline, word);
         }
 
-        // Fork: extracted vertical frmline dimensions fixup to lvtextfm_vert.cpp.
+        // Blaze: extracted vertical frmline dimensions fixup to lvtextfm_vert.cpp.
         applyVerticalFrmlineDimensions(fmt, frmline);
 
         // Get ready for next line
@@ -6468,7 +6464,7 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
     buf->GetClipRect( &clip );
     const lChar32 * str;
     bool is_vertical = (css_wm_is_vertical(m_pbuffer->writing_mode));
-    // Fork: extracted Y=X swap + line_x setup to lvtextfm_vert.cpp.
+    // Blaze: extracted Y=X swap + line_x setup to lvtextfm_vert.cpp.
     int line_x = initVerticalDrawSetup(m_pbuffer, buf, x, y, clip);
     if ( !is_vertical )
         line_x = x;
@@ -6516,7 +6512,7 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
     // Counters accessible via doc._document:resetVertBleedCounters() /
     // getVertBleedStats().
     //
-    // Fork: bundle all per-column vertical state into one struct so we can
+    // Blaze: bundle all per-column vertical state into one struct so we can
     // pass it by reference to applyVerticalWordDraw() / inline-box draw.
     VerticalDrawState vstate;
 
@@ -6598,7 +6594,7 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
             // to appear on both prev and next pages.)
             bool restore_orig_clip = false;
             lvRect origClip;
-            // Fork: reset per-column vertical state.  See VerticalDrawState
+            // Blaze: reset per-column vertical state.  See VerticalDrawState
             // in lvtextfm_fork.h for member documentation.
             vstate.resetForNewFrmline();
             bool vertical_line_has_image = false;
@@ -6933,7 +6929,7 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
                         bool is_mirrored = word->flags & LTEXT_WORD_DIRECTION_IS_RTL; // will be drawn as if on the other side
                         ldomNode * node = (ldomNode *) srcline->object;
                         if (is_vertical) {
-                            // Fork: extracted to lvtextfm_vert.cpp.
+                            // Blaze: extracted to lvtextfm_vert.cpp.
                             drawVerticalPadBorders(buf, m_pbuffer, frmline, srcline, word, j,
                                 y, line_x, node, is_right_pad, is_mirrored);
                         } else {
@@ -7062,7 +7058,7 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
                         if ( img.isNull() )
                             img = LVCreateDummyImageSource( node, word->width, word->o.height );
                         if (is_vertical) {
-                            // Fork: extracted to lvtextfm_vert.cpp.
+                            // Blaze: extracted to lvtextfm_vert.cpp.
                             int x0, y0;
                             int column_clip_right = draw_extra_info && draw_extra_info->vert_column_clip_right
                                     ? draw_extra_info->vert_column_clip_right : clip.right;
@@ -7175,7 +7171,7 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
                         // x0_inline carries the vertical (Y-screen) position:
                         //   y_child = x0_inline = y + node_x (vertical offset + parent top)
                         //
-                        // Fork: extracted to lvtextfm_vert.cpp.
+                        // Blaze: extracted to lvtextfm_vert.cpp.
                         applyVerticalInlineBoxDraw(frmline, srcline, word, node_x, node_y,
                             x, y, vstate, x0, y0, doc_x_ib, doc_y_ib);
                         if ( verticalTextDebugEnabled() ) {
@@ -7326,7 +7322,7 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
                     }
                     else {
                         if ( is_vertical ) {
-                            // Fork: extracted to lvtextfm_vert.cpp.  Sets x0/y0/
+                            // Blaze: extracted to lvtextfm_vert.cpp.  Sets x0/y0/
                             // vert_skip_draw + drawFlags vertical bits + word_is_*
                             // flags, and updates vstate (vert_min_next_x etc.).
                             applyVerticalWordDraw(m_pbuffer, frmline, srcline, word, font,
@@ -7509,12 +7505,12 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
                             buf->SetClipRect(&word_orig_clip);
                         if ( word_is_exact_hanging )
                             ltext_vert_exact_hanging_regular_bottom = -1;
-                        // Fork: extracted post-draw state update for Latin-in-vertical.
+                        // Blaze: extracted post-draw state update for Latin-in-vertical.
                         if (word_is_latin_in_vertical) {
                             applyVerticalLatinPostDraw(_adv, (int)word->width, vstate, clip, y);
                         }
                     }
-                    // Fork: extracted vertical-mode emphasis marks (kenten/bouten).
+                    // Blaze: extracted vertical-mode emphasis marks (kenten/bouten).
                     if ( is_vertical && !vert_skip_draw ) {
                         drawVerticalEmphasisMarks(buf, frmline, srcline, word, font,
                             y, line_x, clip, vstate);
@@ -7676,6 +7672,7 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
 
 
 
+// Blaze: Compile the vertical formatter with the private LVFormatter class defined here.
 #include "../../extensions/vertical/lvtextfm_vert.cpp"
 
 #endif

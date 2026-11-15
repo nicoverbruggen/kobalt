@@ -290,7 +290,7 @@ public:
     /// Constructor
     LVStream() { }
 
-    // Resource containers can provide image dimensions without reading pixels.
+    // Blaze: resource containers can provide image dimensions before the reader requests pixels.
     virtual LVImageSource *CreateImageSource(ldomDocument *, ldomNode *) { return NULL; }
     /// Destructor
     virtual ~LVStream() { }

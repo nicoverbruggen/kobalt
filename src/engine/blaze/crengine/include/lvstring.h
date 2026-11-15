@@ -227,7 +227,7 @@ inline bool lStr_isCJK( lChar32 c, bool ignore_punctuation=false, bool ignore_fu
     //       { 0xE0100,  0xE01EF,  91}, // Variation Selectors Supplement
     //       { 0xF0000,  0xFFFFD,  90}, // Private Use (plane 15)
     //       {0x100000, 0x10FFFD,  90}, // Private Use (plane 16)
-    // Note (fork): Enclosed Alphanumerics (U+2460-24FF, ①②③ etc.) are NOT
+    // Blaze: Enclosed Alphanumerics (U+2460-24FF, ①②③ etc.) are NOT
     // classified as CJK here — that would change word segmentation and CJK
     // line-break opportunities for HORIZONTAL documents too.  They are treated
     // as CJK only in vertical mode, at the copyText() call site in lvtextfm.cpp

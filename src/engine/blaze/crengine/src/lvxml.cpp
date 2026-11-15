@@ -3005,7 +3005,7 @@ bool LVXMLParser::Parse()
     {
         if ( m_stopped )
              break;
-        // koblaze: a host can stop a load in the background.
+        // Blaze: a host can stop a load in the background.
         if ( (++koblazeSteps & 63) == 0 )
             koblazeCheckCancelInParser();
         // load next portion of data if necessary

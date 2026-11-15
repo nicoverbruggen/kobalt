@@ -223,7 +223,7 @@ public:
     static HyphMethod * getMainLangHyphMethod(); // For HyphMan::hyphenate()
 
     static void resetCounters();
-    /// koblaze: the quote nesting levels of the language configurations, in
+    /// Blaze: the quote nesting levels of the language configurations, in
     /// their order. A host that pauses work on one document to work on
     /// another saves them before and restores them after. Stores at most
     /// `size` levels and returns how many there are.

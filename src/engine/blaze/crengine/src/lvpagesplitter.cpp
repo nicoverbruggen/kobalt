@@ -49,7 +49,7 @@ int LVRendPageList::FindNearestPage( int y, int direction )
     return length()-1;
 }
 
-// A whole-book layout can park while another thread lays out a chapter.
+// Blaze: a whole-book layout can park while another thread lays out a chapter.
 // Nested flows report to the layout running on their own thread.
 static thread_local LVRendPageContext * main_context = NULL;
 
@@ -194,7 +194,7 @@ void LVRendPageContext::AddLine( int starty, int endy, int flags )
     #ifdef DEBUG_PAGESPLIT
         printf("PS: AddLine (%x, #%d): %d > %d (%d)\n", this, lines.length(), starty, endy, flags);
     #endif
-    // koblaze: see koblazeSkipLinesUntil().
+    // Blaze: see koblazeSkipLinesUntil().
     if ( koblaze_started && !*koblaze_started && curr_note == NULL )
         return;
     if ( curr_note!=NULL )
@@ -836,7 +836,7 @@ public:
     int cur_page_nb_footnotes_lines_rtl;
     int cur_page_flow;
     int prev_page_flow;
-    // FORK: per-page mixed writing mode. When mixed is true, page_height is set
+    // Blaze: per-page mixed writing mode. When mixed is true, page_height is set
     // per page from the page's first line's writing mode (vertical pages use
     // stride_vertical = page_width, horizontal pages use stride_horizontal =
     // page_h). When false, page_height stays the single value passed in and the
@@ -882,7 +882,7 @@ public:
         cur_page_seen_footnotes.reset();
     }
 
-    // FORK: page-split stride for a writing mode (mixed documents only).
+    // Blaze: page-split stride for a writing mode (mixed documents only).
     inline int strideForMode( int wm ) {
         return css_wm_is_vertical(wm) ? stride_vertical : stride_horizontal;
     }
@@ -941,7 +941,7 @@ public:
             page->flow = cur_page_flow < 0 ? prev_page_flow : cur_page_flow;
             prev_page_flow = page->flow;
 
-            // FORK: record the page's writing mode (mixed documents) so draw and
+            // Blaze: record the page's writing mode (mixed documents) so draw and
             // coordinate conversion can dispatch per page.
             if ( cur_page_writing_mode >= 0 )
                 page->writing_mode = (lUInt8)cur_page_writing_mode;
@@ -972,7 +972,7 @@ public:
         bool push_delayed_footnotes = false; // done only in one specific case below
         int start_if_new_page = -1;
         int orig_start = start; // to not ignore footnotes on lines discarded at start
-        // FORK: in a mixed-writing-mode document, set the page-split stride from
+        // Blaze: in a mixed-writing-mode document, set the page-split stride from
         // the writing mode of the lines being added (each addLinesToPage call
         // carries lines of a single mode, since the layout forces page breaks at
         // mode boundaries).  Done before the fit check below so it uses the right
@@ -1071,7 +1071,7 @@ public:
                 // bug in lvrend.cpp non-linear-flow/sequence handling.)
                 cur_page_flow = line->flow;
             }
-            if ( cur_page_writing_mode < 0 ) // FORK: page mode from its first line
+            if ( cur_page_writing_mode < 0 ) // Blaze: page mode from its first line
                 cur_page_writing_mode = line->writing_mode;
             int line_bottom = line->getEnd();
             if ( line_bottom <= getCurPageMaxBottom() ) {
@@ -1394,7 +1394,7 @@ void LVRendPageContext::split()
     #endif
 
 #ifndef USE_LEGACY_PAGESPLITTER
-    // FORK: for mixed writing-mode documents, give the splitter both strides so
+    // Blaze: for mixed writing-mode documents, give the splitter both strides so
     // it can pick per page (vertical pages = page_width, horizontal = page_h).
     // stride_vertical falls back to split_page_h when vert_split_page_h is unset
     // (e.g. a horizontal-primary document that contains a vertical fragment).
@@ -1403,6 +1403,7 @@ void LVRendPageContext::split()
                       vert_split_page_h > 0 ? vert_split_page_h : split_page_h,
                       page_h);
     s.splitToPages();
+    // Blaze: Record spacing gaps after page breaks are final, while the source lines still exist.
     collectJustificationLines();
     page_list->setHasMixedWritingModes( has_mixed_writing_modes );
 
@@ -1495,7 +1496,7 @@ bool LVRendPageList::deserialize( SerialBuf & buf )
     buf >> len;
     clear();
     reserve(len);
-    int first_wm = -1; // FORK: detect mixed writing modes from per-page modes
+    int first_wm = -1; // Blaze: detect mixed writing modes from per-page modes
     for (lUInt32 i = 0; i < len; i++) {
         LVRendPageInfo * item = new LVRendPageInfo();
         item->deserialize( buf );
@@ -1522,7 +1523,8 @@ bool LVRendPageInfo::serialize( SerialBuf & buf )
     buf << (lUInt16)height; /// height of page, does not include footnotes
     buf << (lUInt8) flags;  /// RN_PAGE_*
     buf << (lUInt16)flow;   /// flow the page belongs to
-    buf << (lUInt8) writing_mode; /// FORK: per-page writing mode
+    // Blaze: cached pages need their writing mode and spacing data for drawing and hit testing.
+    buf << (lUInt8) writing_mode;
     buf << (lUInt16)justificationLines.length();
     for (int i=0; i<justificationLines.length(); ++i)
         buf << (lUInt16)justificationLines[i].x << (lUInt16)justificationLines[i].y;

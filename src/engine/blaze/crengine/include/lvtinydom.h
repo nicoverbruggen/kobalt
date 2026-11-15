@@ -314,7 +314,7 @@ public:
     virtual void OnFormatEnd() { }
     /// format progress, called with values 0..100
     virtual void OnFormatProgress(int /*percent*/) { }
-    /// koblaze: asked after each final block during layout. Return true to
+    /// Blaze: asked after each final block during layout. Return true to
     /// stop the layout: ldomDocument::render() then throws
     /// KoblazeRenderCancelled, and the document needs a full render.
     virtual bool OnRenderCancelRequested() { return false; }
@@ -560,7 +560,7 @@ private:
     int _tinyElementCount;
     int _itemCount;
     int _docIndex;
-    // koblaze: a font of the document was listed and not read.
+    // Blaze: a font of the document was listed and not read.
     bool _koblazeListedFonts = false;
 
 protected:
@@ -760,7 +760,7 @@ public:
 
     inline int getFontContextDocIndex()
     {
-        // koblaze: with the fonts of the document off, fonts that a style
+        // Blaze: with the fonts of the document off, fonts that a style
         // asks for are still read. See ldomDocument::koblazeReadFontsFor().
         return ((_docFlags & DOC_FLAG_ENABLE_DOC_FONTS) || _koblazeListedFonts)
                 && (_docFlags & DOC_FLAG_ENABLE_INTERNAL_STYLES) ? _docIndex : -1;
@@ -821,7 +821,7 @@ public:
 
 
 #if BUILD_LITE!=1
-    /// koblaze: frees the nodes that are not in persistent storage. For the
+    /// Blaze: frees the nodes that are not in persistent storage. For the
     /// destructor of the document, while the document is still registered.
     void destroyNodes();
     /// put all object into persistent storage
@@ -1323,7 +1323,7 @@ public:
 
     /// for display:list-item node, get marker
     bool getNodeListMarker( int & counterValue, lString32 & marker, int & markerWidth );
-    /// koblaze: for a list node, the number of each of its list items, as
+    /// Blaze: for a list node, the number of each of its list items, as
     /// getNodeListMarker() computes it, keyed by data index.
     void getListItemCounters( std::unordered_map<lUInt32, int> & counters );
     /// returns true if text node contains only plain whitespace
@@ -2725,7 +2725,7 @@ class ListNumberingProps
 public:
     int maxCounter;
     int maxWidth;
-    /// koblaze: the number of each list item, keyed by data index. Without
+    /// Blaze: the number of each list item, keyed by data index. Without
     /// it, every item counts its previous siblings again.
     std::unordered_map<lUInt32, int> counters;
     ListNumberingProps( int c, int w )
@@ -2781,11 +2781,11 @@ private:
     int _koblazeSliceLast = 0;
     int _koblazeSpineItemChars = 0;
     bool _koblazeSliceHasFloats = false;
-    // koblaze: the first block that a slice lays out, when the slice does
+    // Blaze: the first block that a slice lays out, when the slice does
     // not start at the start of the spine item.
     ldomNode * _koblazeFirstBlock = NULL;
     bool _koblazeDropEmptyPages = false;
-    // koblaze: the characters of text below a node, by data index, and for
+    // Blaze: the characters of text below a node, by data index, and for
     // a parent the characters before each of its children. The text of a
     // loaded document does not change, so each node is counted once.
     std::unordered_map<lUInt32, int> _koblazeTextLengths;
@@ -2807,6 +2807,7 @@ private:
         css_style_ref_t style;
         lvdom_element_render_method method;
     };
+    // Blaze: Alternate layouts retain styles as well as geometry. Chapter-slice snapshots below reuse the current styles.
     struct LayoutSnapshot {
         std::vector<LayoutNode> nodes;
         SerialBuf pages;
@@ -2816,7 +2817,7 @@ private:
         LayoutSnapshot(int pageBytes) : pages(pageBytes, false), elements(0), texts(0), bytes(0) {}
     };
     std::unique_ptr<LayoutSnapshot> _alternateLayout;
-    // koblaze: the layout that koblazeSaveLayout() kept: the geometry and
+    // Blaze: the layout that koblazeSaveLayout() kept: the geometry and
     // the layout method of every element, the pages and the slice. The
     // styles are not part of it: they stay as they are.
     struct KoblazeSavedLayout {
@@ -2860,7 +2861,7 @@ private:
     LVHashTable<lUInt32, ListNumberingPropsRef> lists;
 
     LVEmbeddedFontList _fontList;
-    // koblaze: the fonts that were listed and not read, because the host
+    // Blaze: the fonts that were listed and not read, because the host
     // turned the fonts of the document off. See koblazeReadFontsFor().
     LVEmbeddedFontList _koblazeUnreadFonts;
     bool _koblazeReadingFont = false;
@@ -2907,7 +2908,7 @@ public:
 
 #if BUILD_LITE!=1
     lUInt32 getDocumentRenderingHash() { return _doc_rendering_hash; }
-    /// koblaze: lay out only a slice of the text of each spine item in the
+    /// Blaze: lay out only a slice of the text of each spine item in the
     /// layouts that follow. A block is in the slice when the number of
     /// characters of the spine item's text before it is at least `first` and
     /// less than `last`. The other blocks get no layout and are not drawn.
@@ -2918,29 +2919,29 @@ public:
         _koblazeSliceFirst = first > 0 ? first : 0;
         _koblazeSliceLast = last;
     }
-    /// koblaze: leave out pages without height in the layouts that follow.
+    /// Blaze: leave out pages without height in the layouts that follow.
     /// See the comment in ldomDocument::render().
     void setKoblazeDropEmptyPages( bool drop ) { _koblazeDropEmptyPages = drop; }
-    /// koblaze: the characters of the spine item that was laid out last, as
+    /// Blaze: the characters of the spine item that was laid out last, as
     /// the slices count them. Valid after a layout.
     int getKoblazeSpineItemChars() const { return _koblazeSpineItemChars; }
     /// A block float in the last slice can extend beyond its main text.
     bool koblazeSliceHasFloats() const { return _koblazeSliceHasFloats; }
-    /// koblaze: keeps the current layout aside. False when the document has
+    /// Blaze: keeps the current layout aside. False when the document has
     /// no layout. A full style pass drops what was kept.
     bool koblazeSaveLayout();
-    /// koblaze: brings back the layout that koblazeSaveLayout() kept, after
+    /// Blaze: brings back the layout that koblazeSaveLayout() kept, after
     /// a layout with the same styles was stopped or is not wanted. False
     /// when nothing was kept or the tree changed; render again then.
     bool koblazeRestoreLayout( LVRendPageList * pages );
     void koblazeDropSavedLayout() { _koblazeSavedLayout.reset(); }
-    /// koblaze: the characters of text below a node, the same number as
+    /// Blaze: the characters of text below a node, the same number as
     /// getText().length().
     int koblazeTextLength( ldomNode * node );
-    /// koblaze: the characters of text below `root` that come before
+    /// Blaze: the characters of text below `root` that come before
     /// `target` in document order, or -1 when `target` is not below `root`.
     int koblazeTextBefore( ldomNode * root, ldomNode * target );
-    /// koblaze: true when a block without text at `start` characters is in the slice.
+    /// Blaze: true when a block without text at `start` characters is in the slice.
     bool koblazeEmptyBlockInSlice( int start ) const;
     /// koblaze, for the layout only: true when the next block after `node`,
     /// which ends at `end` characters, is a table that ends where the slice
@@ -2952,7 +2953,7 @@ public:
     /// koblaze, for the layout only: changes the layout method of a node and
     /// records the method it had, for koblazeRelayout().
     void koblazeChangeRendMethod( ldomNode * node, lvdom_element_render_method method );
-    /// koblaze: lay out again in the next render, with the styles of the last
+    /// Blaze: lay out again in the next render, with the styles of the last
     /// layout, for example after a change of the layout slice. Restores the
     /// layout methods that the last layouts changed. The render still checks
     /// the settings and computes the styles again when they changed. False
@@ -2996,7 +2997,7 @@ public:
     /// register a font declared by a parsed @font-face CSS rule, as a side-effect
     /// of CSS parsing; appends to the embedded font list only on success
     bool registerFontFace(lString32 url, lString8 face, int weight, int width, bool italic, bool isLocal);
-    /// koblaze: reads the unread fonts of the document whose family is in
+    /// Blaze: reads the unread fonts of the document whose family is in
     /// `families`, a font_name of a style, before a font is chosen for it.
     void koblazeReadFontsFor( const lString8 & families );
 #endif
@@ -3147,7 +3148,7 @@ public:
         return rerendering_delayed;
     }
     bool partialRender( ldomNode * node );
-    /// koblaze: how many more documents can exist. The engine gives a new
+    /// Blaze: how many more documents can exist. The engine gives a new
     /// document no place when there is no room, and that document then
     /// shares the nodes of another one. A host that keeps several
     /// documents asks first.
@@ -3526,7 +3527,7 @@ public:
     static bool clear();
     /// returns true if cache is enabled (successfully initialized)
     static bool enabled();
-    /// koblaze: hides the cache from other documents while its document is parked
+    /// Blaze: hides the cache from other documents while its document is parked
     static void koblazeSuspend( bool suspended );
 };
 

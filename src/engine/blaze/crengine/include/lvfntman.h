@@ -762,6 +762,7 @@ protected:
     int _monospaceSizeScale;
     bool _fallbackFontSizesAdjusted;
 public:
+    // Blaze: Check the uncompressed size before opening a font from the EPUB container.
     static constexpr lvsize_t MaxEmbeddedFontBytes = 16 * 1024 * 1024;
 
     /// garbage collector frees unused fonts

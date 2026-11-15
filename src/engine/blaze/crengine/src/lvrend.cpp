@@ -2632,10 +2632,11 @@ LVFontRef getFont(ldomNode * node, css_style_rec_t * style, int documentId, int 
     // wght/ital are passed via the weight/italic params below, not here:
     // GetFont's computeVariations() derives those from weight/italic and
     // ignores requested.wght/requested.ital.
+    // Blaze: Use the same width and optical size for ordinary text and Bold Reading prefixes.
     LVFontVariations variations = blaze::fontVariations(style, sz);
     if (docFragmentIdx == DOC_FRAGMENT_IDX_UNKNOWN)
         docFragmentIdx = (documentId != -1) ? node->getDocFragmentIdx() : -1;
-    // koblaze: a font of the book that was not read is read now.
+    // Blaze: a font of the book that was not read is read now.
     if (documentId != -1 && node && node->getDocument())
         node->getDocument()->koblazeReadFontsFor(style->font_name);
     LVFontRef fnt = fontMan->GetFont(
@@ -3483,7 +3484,7 @@ lString32 renderListItemMarker( ldomNode * enode, int & marker_width, int * fina
             sibling = sibling->getUnboxedNextSibling(true); // skip text nodes
         }
         listProps = ListNumberingPropsRef( new ListNumberingProps(counterValue, maxWidth) );
-        // koblaze: number the items once, for getNodeListMarker() below.
+        // Blaze: number the items once, for getNodeListMarker() below.
         parent->getListItemCounters( listProps->counters );
         doc->setNodeNumberingProps( parent->getDataIndex(), listProps );
     }
@@ -6257,7 +6258,7 @@ public:
             if ( (css_wm_is_vertical(writing_mode)) && page_width > 0 ) {
                 context.setVerticalSplitPageHeight( page_width );
             }
-            // FORK (mixed writing modes): establish the document's primary mode
+            // Blaze: establish the document's primary mode
             // as the page context baseline, so lines added before any
             // per-fragment switch are tagged correctly and a later switch to a
             // different mode flags the document as mixed.
@@ -6318,7 +6319,7 @@ public:
         return css_wm_is_vertical(writing_mode);
     }
     int getWritingMode() { return writing_mode; }
-    // FORK (mixed writing modes): switch the flow's writing mode for a
+    // Blaze: switch the flow's writing mode for a
     // DocFragment subtree whose mode differs from the document's primary mode
     // (e.g. a horizontal author-bio fragment inside a vertical book).  Returns
     // the previous mode (so the caller can restore it after the subtree).
@@ -7358,7 +7359,7 @@ public:
         int prev_c_y = c_y;
         if (dy > 0) { // moving forward
             c_y += dy;
-            // FORK (vertical-rl): keep c_x (column progression) in lockstep with
+            // Blaze: keep c_x (column progression) in lockstep with
             // c_y so every flow advance — sub-flow/table-cell margins, post-table
             // moveDown, FlowState entry with y0>0 — moves the column too. This is
             // the single point that keeps the c_x==c_y invariant; per-site c_x
@@ -8185,7 +8186,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
     if (m == erm_invisible) // don't render invisible blocks
         return;
 
-    // koblaze: leave out the blocks of a spine item outside the layout slice.
+    // Blaze: leave out the blocks of a spine item outside the layout slice.
     if ( flow->isMainFlow() && !enode->getDocument()->koblazeEnterBlock(
                 enode, enode->getNodeId() == el_DocFragment, m == erm_block ) ) {
         enode->getDocument()->koblazeChangeRendMethod(enode, erm_invisible);
@@ -9564,7 +9565,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                         if ( CssPageBreak2Flags( child_style->page_break_before ) == RN_SPLIT_ALWAYS )
                             child_clear = css_c_both;
                         flow->clearFloats( child_clear );
-                        // FORK (mixed writing modes): a child DocFragment may switch the
+                        // Blaze: a child DocFragment may switch the
                         // flow's writing mode for its subtree; remember the mode before and
                         // restore it after so following siblings continue in our mode.
                         int fork_wm_before = flow->getWritingMode();
@@ -10115,6 +10116,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                 // We have lines of text in 'txform', that we should register
                 // into flow/context for later page splitting.
                 int count = txform->GetLineCount();
+                // Blaze: Classify each block before tagging its lines for page spacing after pagination.
                 const blaze::BlockSpacing spacing(enode, flow->isVertical());
                 int orphans = (int)(style->orphans) - (int)(css_orphans_widows_1) + 1;
                 int widows = (int)(style->widows) - (int)(css_orphans_widows_1) + 1;

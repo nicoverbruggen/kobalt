@@ -203,6 +203,7 @@ struct css_style_rec_tag {
     css_float_t            float_; // "float" is a C++ keyword...
     css_clear_t            clear;
     css_direction_t        direction;
+    // Blaze: These writing-mode fields participate in style matching, hashing and cache serialization.
     css_writing_mode_t     writing_mode;
     css_writing_mode_warning_t writing_mode_warning;
     css_text_orientation_t text_orientation;

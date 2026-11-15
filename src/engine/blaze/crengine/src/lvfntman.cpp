@@ -19,7 +19,7 @@
 #include <stdio.h>
 
 #include "../include/lvfntman.h"
-#include "../../extensions/vertical/lvfntman_vert.h"  // fork-only: TTB glyph metrics cache
+#include "../../extensions/vertical/lvfntman_vert.h"  // Blaze: TTB glyph metrics cache
 #include "../../extensions/vertical/lvfntman_vert_buffer.h"
 #include "../../extensions/vertical/lvtextfm_vert_diag.h"
 #include "../include/lvstream.h"
@@ -1712,7 +1712,7 @@ protected:
     LVFontGlyphSignedMetricCache     _lsbcache; // glyph left side bearing cache
     LVFontGlyphSignedMetricCache     _rsbcache; // glyph right side bearing cache
     LVFontLocalGlyphCache            _glyph_cache;
-    // Fork-only: per-face TTB metrics cache for vertical-rl/lr rendering.
+    // Blaze: per-face TTB metrics cache for vertical-rl/lr rendering.
     LVFontVertGlyphMetricsCache      _vert_metrics_cache;
     LVFontVertBodyMetricsCache       _vert_body_metrics_cache;
     bool           _drawMonochrome;
@@ -1733,7 +1733,7 @@ protected:
     hb_font_t* _hb_font;
     hb_buffer_t* _hb_buffer;
     LVArray<hb_feature_t> _hb_features;
-    // koblaze: pair kerning from memory. See koblazeKernRun().
+    // Blaze: pair kerning from memory. See koblazeKernRun().
     struct KoblazeKern {
         hb_position_t advance; // added to the advance of the first glyph
         bool usable;           // false: this pair needs the whole run shaped
@@ -1757,7 +1757,7 @@ protected:
     // The result that the next comparison with HarfBuzz expects.
     std::vector<lUInt16> _koblaze_check_widths;
     std::vector<lUInt8> _koblaze_check_flags;
-    // Fork (vertical-rl): tracks the is_vertical state _hb_features was built
+    // Blaze: tracks the is_vertical state _hb_features was built
     // for, so the hot paths (measureText/DrawTextString) only rebuild the
     // feature list when the vertical state actually changes. -1 = never built.
     int _hb_features_is_vertical = -1;
@@ -3181,7 +3181,7 @@ public:
         // measure character widths
 
     #if USE_HARFBUZZ==1
-        // koblaze: plain Latin runs are measured from the memory of their
+        // Blaze: plain Latin runs are measured from the memory of their
         // words. A sample of them is also shaped, for comparison.
         bool koblaze_measured = false;
         bool koblaze_check = false;
@@ -4793,7 +4793,7 @@ public:
             if ( _hb_features_is_vertical != (is_vertical_draw ? 1 : 0) )
                 setupHBFeatures(is_vertical_draw);
 
-            // Fork-only: switch HarfBuzz to TTB direction for vertical text so the
+            // Blaze: switch HarfBuzz to TTB direction for vertical text so the
             // shaper uses vmtx-based positioning (matching measureText), and we can
             // read y_advance / y_offset for proper TTB-context placement.  Override
             // the LTR/RTL direction that may have been set above from flags.
@@ -5053,7 +5053,7 @@ public:
                             w_64 = glyph_pos[i].x_advance + _synth_weight_strength;
                             w = FONT_METRIC_TO_PX(w_64);
                         }
-                        // Fork-only: TTB shaping in vertical mode carries the
+                        // Blaze: TTB shaping in vertical mode carries the
                         // advance in y_advance (negative, y-up) instead of
                         // x_advance. Override w with abs(y_advance) when present.
                         if (is_vertical_draw && glyph_pos[i].y_advance) {
@@ -5140,7 +5140,7 @@ public:
                                     ? draw_x + item->origin_x
                                     : x + item->origin_x + FONT_METRIC_TO_PX(glyph_pos[i].x_offset);
                                 int gy = y + _baseline - item->origin_y - FONT_METRIC_TO_PX(glyph_pos[i].y_offset);
-                                // Fork-only: vertical-rl/lr placement.
+                                // Blaze: vertical-rl/lr placement.
                                 //
                                 // Virtual-body / central-baseline model (JLReq 2.1.1,
                                 // LuaTeX-ja's capsule_glyph_tate): ordinary CJK is put in a
@@ -5913,6 +5913,7 @@ public:
 };
 
 #if USE_HARFBUZZ==1
+// Blaze: The shaping methods use the private FreeType face and its HarfBuzz buffers.
 #include "../../extensions/fast_shaping.inc"
 #endif
 
@@ -7980,7 +7981,7 @@ public:
         // Release all cached font instances before touching the glyph cache or
         // library: LVFreeTypeFace destructors call FT_Done_Face and flush their
         // local glyph cache, both of which require these to still be alive.
-        // koblaze: a font holds its fallback fonts, and a fallback font can
+        // Blaze: a font holds its fallback fonts, and a fallback font can
         // hold the first one again. Such a ring keeps itself alive after
         // the cache lets go of it. Take the links apart first.
         _instance_cache.forEachFont([](LVFontRef & font) { font->clearFontRefs(); });
@@ -8765,6 +8766,7 @@ public:
     }
     */
 
+    // Blaze: Chapter documents share font bytes until the reader switches books.
     blaze::EmbeddedFontCache _embeddedFontCache;
 
     void koblazeForgetFontData() {

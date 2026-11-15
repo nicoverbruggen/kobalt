@@ -962,7 +962,7 @@ bool LVPngImageSource::Decode( LVImageDecoderCallback * callback )
 
         const size_t rowbytes = png_get_rowbytes(png_ptr, info_ptr);
         if (interlace_type == PNG_INTERLACE_NONE) {
-            // The drawing callback consumes each row before returning. Ordinary
+            // Blaze: the drawing callback consumes each row before returning. Ordinary
             // PNGs need one row, regardless of their decoded height.
             storage = (unsigned char *) malloc(rowbytes);
             if (!storage)
@@ -2094,7 +2094,7 @@ static LVImageSourceRef lunasvgGetImageSource(lunasvg::external_context_t * xcon
         ldomNode * node = ((LVNodeImageSource *)xcontext->external_object)->GetSourceNode();
         LVStream *source = ((LVNodeImageSource *)xcontext->external_object)->GetSourceStream();
         lString32 reference = Utf8ToUnicode(url);
-        // External SVG references are relative to the SVG, not the spine XHTML
+        // Blaze: external SVG references are relative to the SVG, not the spine XHTML
         // or package directory. Inline SVG and data URLs retain document lookup.
         if (source && source->GetName() && *source->GetName()
                 && reference.pos(U":") < 0 && !reference.startsWith(U"#")
@@ -2193,7 +2193,7 @@ static bool lunasvgDrawImageHelper(lunasvg::external_context_t * xcontext, const
     return true;
 }
 
-// External SVG images can point back to an image already being rendered.
+// Blaze: external SVG images can point back to an image already being rendered.
 // Keep the source alive in each caller and stop cycles before another bitmap
 // or decoder is created. The depth bound also covers unnamed data streams.
 class SVGRenderScope {

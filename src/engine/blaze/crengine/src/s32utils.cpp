@@ -14,6 +14,7 @@
 
 // lvfonttest.cpp
 
+// Blaze: CMake supplies crsetup.h from the build directory.
 #include "crsetup.h"
 #ifdef __SYMBIAN32__
 

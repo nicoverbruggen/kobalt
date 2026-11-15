@@ -102,7 +102,7 @@ extern const int gDOMVersionCurrent = DOM_VERSION_CURRENT;
 
 /// change in case of incompatible changes in swap/cache file format to avoid using incompatible swap file
 // increment to force complete reload/reparsing of old file
-// vwm4: style-cache records now persist writing-mode-related properties.
+// Blaze: vwm4 style-cache records now persist writing-mode-related properties.
 // Older records hash those properties but do not serialize them, making every
 // vertical document fail style restoration and trigger a full render.
 #define CACHE_FILE_FORMAT_VERSION "3.05.84k-vwm4"
@@ -3503,7 +3503,7 @@ void ldomDataStorageManager::compact( lUInt32 reservedSpace, const ldomTextStora
 						// Keep the chunk in memory when the cache file cannot take it.
 						sumsize += p->_bufsize;
 					}
-					// koblaze: each chunk is packed and written. Other
+					// Blaze: each chunk is packed and written. Other
 					// work can have the engine between two of them.
 					koblazePausePoint();
 				}
@@ -5179,7 +5179,7 @@ ldomDocument::~ldomDocument()
     clearRendBlockCache();
     clearAlternateLayout();
 #endif
-    // koblaze: free the nodes that are not packed away while the document
+    // Blaze: free the nodes that are not packed away while the document
     // is still registered. After that a node no longer finds its document,
     // and its cleanup does nothing. A document that is destroyed before
     // its first layout has such nodes.
@@ -5878,7 +5878,7 @@ bool ldomDocument::render( LVRendPageList * pages, LVDocViewCallback * callback,
 
         _rendered = false;
     }
-    // koblaze: koblazeRelayout() asks for a layout with the current styles.
+    // Blaze: koblazeRelayout() asks for a layout with the current styles.
     bool relayout = _koblazeRelayout;
     _koblazeRelayout = false;
     if ( !_rendered || relayout ) {
@@ -5930,7 +5930,7 @@ bool ldomDocument::render( LVRendPageList * pages, LVDocViewCallback * callback,
         gc();
         CRLog::trace("finalizing... fonts.length=%d", _fonts.length());
         context.Finalize();
-        // koblaze: two forced page breaks with nothing between them give a
+        // Blaze: two forced page breaks with nothing between them give a
         // page without height: an empty page before a chapter. The first
         // page of a document never is one, so a host that loads a book in
         // parts would show such a page for some parts only. It asks for
@@ -9696,7 +9696,7 @@ ldomNode * ldomDocumentWriter::OnTagOpen( const lChar32 * nsname, const lChar32 
 
 ldomDocumentWriter::~ldomDocumentWriter()
 {
-    // koblaze: this finishes the document, with passes that have stop checks.
+    // Blaze: this finishes the document, with passes that have stop checks.
     KoblazeNoCancel noCancel;
     while (_currNode)
         _currNode = pop( _currNode, _currNode->getElement()->getNodeId() );
@@ -16844,7 +16844,7 @@ lString32 ldomXRange::getHRef()
 }
 
 
-// koblaze: deletes a document when a stop unwinds the stack. Declare it
+// Blaze: deletes a document when a stop unwinds the stack. Declare it
 // before the writer of the document, so that the writer goes first.
 struct KoblazeStoppedDocument {
     ldomDocument * doc;
@@ -16871,7 +16871,7 @@ ldomDocument * LVParseXMLStream( LVStreamRef stream,
 
     /// FB2 format
     LVFileFormatParser * parser = new LVXMLParser(stream, &writer);
-    // koblaze: a host can stop a load here. Do not leak the parser, and
+    // Blaze: a host can stop a load here. Do not leak the parser, and
     // see KoblazeStoppedDocument for the document: the engine has few slots.
     try {
         if ( parser->CheckFormat() ) {
@@ -16913,7 +16913,7 @@ ldomDocument * LVParseHTMLStream( LVStreamRef stream,
 
     /// FB2 format
     LVFileFormatParser * parser = new LVHTMLParser(stream, &writerFilter);
-    // koblaze: a host can stop a load here. Do not leak the parser, and
+    // Blaze: a host can stop a load here. Do not leak the parser, and
     // see KoblazeStoppedDocument for the document: the engine has few slots.
     try {
         if ( parser->CheckFormat() ) {
@@ -19184,7 +19184,7 @@ lUInt32 tinyNodeCollection::calcStyleHash(bool already_rendered, lUInt32 force_n
             ldomNode * buf = _elemList[i];
             if ( !buf ) continue; // avoid clang-tidy warning
             for ( int j=0; j<sz; j++ ) {
-                // koblaze: a host can stop work in the background.
+                // Blaze: a host can stop work in the background.
                 if ( (j & 127) == 0 )
                     koblazeCheckCancel();
                 if ( buf[j].isElement() ) {
@@ -19877,7 +19877,7 @@ public:
 };
 
 static ldomDocCacheImpl * _cacheInstance = NULL;
-// koblaze: set while a document that uses the cache is parked and other
+// Blaze: set while a document that uses the cache is parked and other
 // documents have the engine. Those must not reach the cache of the parked one.
 static bool koblaze_doc_cache_suspended = false;
 
@@ -20252,7 +20252,7 @@ void ldomNode::destroy()
     getDocument()->recycleTinyNode( _handle._dataIndex );
 }
 
-// koblaze: the index of a child with the masked `dataIndex` in `children`,
+// Blaze: the index of a child with the masked `dataIndex` in `children`,
 // or -1. A node is the child of one parent, once, so at most one entry
 // matches. Walks over siblings ask for the index of the child next to the
 // one asked last, so the entries beside the last result are tried before
@@ -21208,7 +21208,7 @@ void ldomNode::recurseElementsDeepFirst( void (*pFun)( ldomNode * node ) )
 #if BUILD_LITE!=1
 static void updateRendMethod( ldomNode * node )
 {
-    // koblaze: a host can stop work in the background.
+    // Blaze: a host can stop work in the background.
     static unsigned koblazeSteps = 0;
     if ( (++koblazeSteps & 63) == 0 )
         koblazeCheckCancel();
@@ -21245,7 +21245,7 @@ static void updateStyleDataRecursive( ldomNode * node, LVDocViewCallback * progr
 {
     if ( !node->isElement() )
         return;
-    // koblaze: a host can stop a style pass in the background.
+    // Blaze: a host can stop a style pass in the background.
     static unsigned koblazeSteps = 0;
     if ( (++koblazeSteps & 31) == 0 )
         koblazeCheckCancel();
@@ -22168,7 +22168,7 @@ bool ldomNode::getNodeListMarker( int & counterValue, lString32 & marker, int & 
                 break;
             }
 
-            // koblaze: the numbers of the list, when the layout has them.
+            // Blaze: the numbers of the list, when the layout has them.
             ListNumberingPropsRef listProps = getDocument()->getNodeNumberingProps( parent->getDataIndex() );
             if ( !listProps.isNull() ) {
                 std::unordered_map<lUInt32, int>::const_iterator known = listProps->counters.find( getDataIndex() );
@@ -22984,7 +22984,7 @@ bool ldomDocument::registerFontFace(lString32 url, lString8 face, int weight, in
     if (url.empty() || face.empty())
         return false;
     int docFragIdx = _parsingDocFragmentIdx;
-    // koblaze: the host does not use the fonts of this document. List the
+    // Blaze: the host does not use the fonts of this document. List the
     // font, and do not read its file.
     if ( !getDocFlag(DOC_FLAG_ENABLE_DOC_FONTS) && !_koblazeReadingFont ) {
         if ( !_fontList.findByUrlAndDocFragment(url, docFragIdx) ) {

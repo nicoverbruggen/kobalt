@@ -426,6 +426,7 @@ class LFormattedText
     friend class LGrayDrawBuf;
 private:
     formatted_text_fragment_t * m_pbuffer;
+    // Blaze: Bold Reading runs point into this text until the formatted block is cleared.
     LVArray<lString32> m_readingTexts;
 public:
     formatted_text_fragment_t * GetBuffer() { return m_pbuffer; }

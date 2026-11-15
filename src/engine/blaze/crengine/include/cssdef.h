@@ -347,7 +347,7 @@ enum css_direction_t {
     css_dir_rtl
 };
 
-/// writing-mode property values
+/// Blaze: computed writing modes for horizontal and vertical layout.
 enum css_writing_mode_t {
     css_wm_inherit,
     css_wm_horizontal_tb,
@@ -502,7 +502,7 @@ enum css_generic_value_t {
 // the right things to avoid any overflow.
 #define CSS_CR_HINT_NO_CAP_IMAGE_SIZE       0x00000020 // -cr-hint: no-cap-image-size
 
-// Marks a user-agent paragraph text-indent as a reading default rather than
+// Blaze: marks a user-agent paragraph text-indent as a reading default rather than
 // authored document geometry. It remains available for unstyled prose, but
 // yields to a non-initial text-indent authored on an ancestor and intended to
 // inherit into the paragraph. This hint itself is not inherited.

@@ -225,7 +225,7 @@ public:
 /// rendered page splitting info
 class LVRendPageInfo {
 public:
-    // Source boxes and the boundaries at which extra leading is allowed.
+    // Blaze: keep the source boxes and gaps used to space lines on the finished page.
     // Fixed groups share one offset, including their adjacent margins.
     LVArray<lvPoint> justificationLines;
     LVArray<int> justificationGaps;
@@ -244,7 +244,7 @@ public:
     lUInt8 flags;  /// RN_PAGE_*
     CompactArray<LVPageFootNoteInfo, 1, 4> footnotes; /// footnote fragment list for page
     lUInt16 flow;
-    lUInt8 writing_mode; /// FORK: css_writing_mode_t of this page's content (per-page mixed writing mode)
+    lUInt8 writing_mode; /// Blaze: css_writing_mode_t of this page's content (per-page mixed writing mode)
     LVRendPageInfo(int pageStart, lUInt16 pageHeight, int pageIndex)
     : start(pageStart), index(pageIndex), height(pageHeight), flags(RN_PAGE_TYPE_NORMAL), flow(0), writing_mode(0) {}
     LVRendPageInfo(lUInt16 coverHeight)
@@ -258,7 +258,7 @@ public:
 class LVRendPageList : public LVPtrVector<LVRendPageInfo>
 {
     bool has_nonlinear_flows;
-    bool has_mixed_writing_modes; // FORK: pages have differing writing modes
+    bool has_mixed_writing_modes; // Blaze: pages have differing writing modes
 public:
     LVRendPageList() : has_nonlinear_flows(false), has_mixed_writing_modes(false) {}
     int FindNearestPage( int y, int direction );
@@ -289,7 +289,7 @@ class LVRendLineInfo {
 public:
     lUInt32 flags;          // split rules and page-spacing classification
     lUInt16 flow;           // 2 bytes (should be enough)
-    lUInt8 writing_mode;    // FORK: css_writing_mode_t of the content that produced this line
+    lUInt8 writing_mode;    // Blaze: css_writing_mode_t of the content that produced this line
     int getSplitBefore() const { return (flags>>RN_SPLIT_BEFORE)&7; }
     int getSplitAfter() const { return (flags>>RN_SPLIT_AFTER)&7; }
 /*
@@ -452,7 +452,7 @@ class LVRendPageContext
     int max_flow;
     // to know if current flow got some lines
     bool current_flow_empty;
-    // FORK: per-page mixed writing-mode support.
+    // Blaze: per-page mixed writing-mode support.
     // current_writing_mode is stamped onto every AddLine()d line; the layout
     // (FlowState) updates it when it switches mode for a DocFragment.  When two
     // different modes are ever seen, has_mixed_writing_modes is set, which makes
@@ -576,7 +576,7 @@ class LVRendPageContext
 public:
 
 
-    /// koblaze: while `*started` is null, lines are not added. A slice that
+    /// Blaze: while `*started` is null, lines are not added. A slice that
     /// does not start at the start of its spine item must begin its first
     /// page at the top of its first block, as the page of the whole spine
     /// item does. What the containers of that block put above it is not a
@@ -628,7 +628,7 @@ public:
     /// effective page-split stride: vertical override if set, else page_h
     int  getEffectivePageHeight() { return vert_split_page_h > 0 ? vert_split_page_h : page_h; }
 
-    /// FORK (per-page mixed writing mode): the layout sets the writing mode of
+    /// Blaze: the layout sets the writing mode of
     /// the content currently being added; AddLine() stamps it onto each line.
     /// Switching to a second distinct mode flags the document as mixed.
     void setCurrentWritingMode( int wm ) {
@@ -656,7 +656,7 @@ public:
         return &lines;
     };
     void Finalize();
-    /// koblaze: forget this context after a cancelled layout
+    /// Blaze: forget this context after a cancelled layout
     void Abandon();
 };
 

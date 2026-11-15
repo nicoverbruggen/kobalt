@@ -284,6 +284,7 @@ void TextLangMan::resetCounters() {
     }
 }
 
+// Blaze: Save and restore per-language quote depth when a parked layout yields to another document.
 int TextLangMan::koblazeQuoteLevels( int * levels, int size ) {
     for ( int i=0; i<_lang_cfg_list.length() && i<size; i++ ) {
         levels[i] = _lang_cfg_list[i]->_quote_nesting_level;

@@ -1708,7 +1708,7 @@ static void drawBackgroundImage(ldomNode *enode, LVDrawBuf &drawbuf, int x0, int
             img = enode->getParentNode()->getDocument()->getObjectImageSource(DecodeHTMLUrlString(filepath));
         }
         if (!img.isNull() && width > 0 && height > 0) {
-            // CSS percentage widths use the logical padding box. Image positions
+            // Blaze: CSS percentage widths use the logical padding box. Image positions
             // and repeats use the painted box, which is rotated on a vertical page.
             const int sizing_width = width;
             if (vertical) {

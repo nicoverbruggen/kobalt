@@ -66,6 +66,13 @@ WordCache::Lookup WordCache::findOrAdd(const lChar32 * text, int len, unsigned i
     // A new word.
     const unsigned int offset = (unsigned int)active.words.size();
     active.words.resize(offset + KW_TEXT + 4 * len, 0);
+    int * word = &active.words[offset];
+    word[KW_HASH] = (int)hash;
+    word[KW_LEN] = len;
+    word[KW_KERN_AFTER] = KW_UNKNOWN;
+    word[KW_KERN_BEFORE] = KW_UNKNOWN;
+    for ( int k = 0; k < len; k++ )
+        word[KW_TEXT + 4 * k] = (int)text[k];
     active.table[slot] = offset + 1;
     active.count++;
     if ( active.count * 2 > active.table.size() ) {
@@ -81,13 +88,6 @@ WordCache::Lookup WordCache::findOrAdd(const lChar32 * text, int len, unsigned i
         }
         active.table.swap(table);
     }
-    int * word = &active.words[offset];
-    word[KW_HASH] = (int)hash;
-    word[KW_LEN] = len;
-    word[KW_KERN_AFTER] = KW_UNKNOWN;
-    word[KW_KERN_BEFORE] = KW_UNKNOWN;
-    for ( int k = 0; k < len; k++ )
-        word[KW_TEXT + 4 * k] = (int)text[k];
     return { offset, true };
 }
 

@@ -29,6 +29,11 @@ void checkWordCache()
         const lChar32 letter = 0x3000 + i;
         cache.findOrAdd(&letter, 1, i);
     }
+    for (unsigned int i = 0; i < 2100; ++i) {
+        const lChar32 letter = 0x3000 + i;
+        require(!cache.findOrAdd(&letter, 1, i).inserted,
+                "Growing the table lost the word that triggered the rehash");
+    }
     cache.selectLanguage(turkish);
     const auto other = cache.findOrAdd(U"ink", 3, 42);
     require(other.inserted, "A new language must shape the word for itself");

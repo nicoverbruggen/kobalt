@@ -250,11 +250,17 @@ bool parseProgress(const QJsonObject &object, Progress *progress)
         return true;
     const auto position = object.value("progress"), percent = object.value("percentage");
     const auto timestamp = object.value("timestamp");
+    // Grimmory can have a book-progress row before it has any KOSync state.
+    // A percentage or timestamp means there is remote state we must not replace.
+    if (position.isNull() && percent.isNull() && timestamp.isNull()
+        && hexDigest(object.value("document").toString().toLatin1())
+        && object.value("device").isString() && object.value("device_id").isString())
+        return true;
     if (!position.isString() || position.toString().isEmpty() || position.toString().size() > 4096
         || !percent.isDouble() || !std::isfinite(percent.toDouble()) || percent.toDouble() < 0
         || percent.toDouble() > 1 || !object.value("device").isString()
         || (!object.value("device_id").isUndefined() && !object.value("device_id").isString())
-        || (!timestamp.isUndefined()
+        || (!timestamp.isUndefined() && !timestamp.isNull()
             && (!timestamp.isDouble() || !std::isfinite(timestamp.toDouble())
                 || timestamp.toDouble() < 0 || timestamp.toDouble() > 1e12)))
         return false;
@@ -805,8 +811,19 @@ void Client::sendRequest(const QByteArray &method, const QString &path, const QU
                     QJsonParseError error;
                     const auto document = QJsonDocument::fromJson(*bytes, &error);
                     const auto object = document.object();
+                    const bool missing =
+                            object.size() == 1 && object.value("status").toString() == "not found";
+                    // Grimmory distinguishes an existing book without progress
+                    // from a missing book or route. Only the former permits a PUT.
+                    const bool grimmoryMissing = object.size() == 3
+                            && object.value("status").isDouble()
+                            && object.value("status").toDouble() == 404
+                            && object.value("message").toString()
+                                    == "No progress found for user and book"
+                            && object.value("timestamp").isString()
+                            && !object.value("timestamp").toString().isEmpty();
                     if (error.error == QJsonParseError::NoError && document.isObject()
-                        && object.size() == 1 && object.value("status").toString() == "not found") {
+                        && (missing || grimmoryMissing)) {
                         done(status, {}, {});
                         return;
                     }
@@ -878,8 +895,12 @@ void Client::login(const QString &server, const QString &username, const QString
     const auto key = QCryptographicHash::hash(password.toUtf8(), QCryptographicHash::Md5).toHex();
     request("GET", "/users/auth", url, username, key, {},
             [this, url, username, key, done](int status, QJsonObject object, QString error) {
-                if (error.isEmpty()
-                    && (status != 200 || object.value("authorized").toString() != "OK"))
+                // KOReader accepts HTTP 200 here. Grimmory names the user
+                // instead of returning the reference server's authorized field.
+                const bool authorized = object.value("authorized").toString() == "OK"
+                        || (object.size() == 1 && object.value("username").isString()
+                            && object.value("username").toString() == username);
+                if (error.isEmpty() && (status != 200 || !authorized))
                     error = failure("kosync.invalid_response", "sign-in",
                                     qt::object({ { "stage", "authorization" },
                                                  { "http_status", status } }));
@@ -949,9 +970,13 @@ void Client::push(const QByteArray &document, const Progress &progress, const Me
     }
     request("PUT", "/syncs/progress", server_, username_, key_, object,
             [done, document](int status, QJsonObject response, QString error) {
-                if (error.isEmpty()
-                    && (status != 200
-                        || response.value("document").toString().toLatin1() != document))
+                // Grimmory confirms the write with a status message. If a
+                // document is present, it must still match the uploaded digest.
+                const bool acknowledged = response.contains("document")
+                        ? response.value("document").toString().toLatin1() == document
+                        : response.size() == 1
+                                && response.value("status").toString() == "progress updated";
+                if (error.isEmpty() && (status != 200 || !acknowledged))
                     error = failure("kosync.invalid_response", "upload-position",
                                     qt::object({ { "stage", "upload-acknowledgement" },
                                                  { "http_status", status } }));

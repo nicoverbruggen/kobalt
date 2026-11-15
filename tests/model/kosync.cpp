@@ -543,12 +543,63 @@ void failureChecks(const QString &path)
     setDiagnosticObserver({});
 }
 
+void grimmoryChecks(const QString &path)
+{
+    Network network;
+    kosync::Client client(path, nullptr, &network);
+    QString error;
+    auto done = [&](QString value) { error = value; };
+    network.response = R"({"username":"reader"})";
+    client.login("https://sync.example/api/koreader", "reader", "secret", done);
+    wait(client);
+    require(error.isEmpty() && client.signedIn(), "Grimmory authorizes the requested username");
+    kosync::Progress parsed;
+    auto progress =
+            QJsonDocument::fromJson(
+                    R"({"document":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","progress":null,"percentage":null,"timestamp":null,"device":"Grimmory","device_id":"Grimmory"})")
+                    .object();
+    require(kosync::parseProgress(progress, &parsed) && !parsed.found,
+            "a Grimmory row without KOSync state is absent progress");
+    progress["percentage"] = 0.5;
+    require(!kosync::parseProgress(progress, &parsed),
+            "percentage-only remote progress must not be silently overwritten");
+    progress["progress"] = "/body/DocFragment[1]/body/p[1].0";
+    require(kosync::parseProgress(progress, &parsed) && parsed.found && parsed.timestamp == 0,
+            "a null optional timestamp does not invalidate a usable position");
+    for (const auto &body : { QByteArray(R"({"username":"another"})"),
+                              QByteArray(R"({"username":"reader","authorized":"NO"})"),
+                              QByteArray(R"({"username":123})") }) {
+        network.response = body;
+        client.login("https://sync.example/api/koreader", "reader", "secret", done);
+        wait(client);
+        require(!error.isEmpty(), "incorrect or contradictory authorization is rejected");
+    }
+    const QByteArray digest(32, 'a');
+    const kosync::Progress local{ "/body/DocFragment[1]/body/p[1].0", {}, {}, 0.25 };
+    network.response = R"({"status":"progress updated"})";
+    client.push(digest, local, {}, done);
+    wait(client);
+    require(error.isEmpty(), "Grimmory acknowledges an upload without echoing its document");
+    for (const auto &body : { QByteArray(R"({"status":"progress updated","document":"wrong"})"),
+                              QByteArray(R"({"status":"not found"})"),
+                              QByteArray(R"({"status":"progress updated","error":"failed"})") }) {
+        network.response = body;
+        client.push(digest, local, {}, done);
+        wait(client);
+        require(!error.isEmpty(), "ambiguous upload acknowledgements are rejected");
+    }
+}
+
 // Checks progress reconciliation, document identity, matching modes, accounts, the schedule, responses, read retries and hostname lookups.
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     if (argc == 4 && QByteArray(argv[1]) == "--server")
         return liveServer(QString::fromLocal8Bit(argv[2]), QString::fromLocal8Bit(argv[3]));
+    {
+        QTemporaryDir directory;
+        grimmoryChecks(directory.path() + "/account.json");
+    }
     {
         using Action = kosync::Reconciler::Action;
         kosync::Reconciler sync;
@@ -907,7 +958,15 @@ int main(int argc, char **argv)
     for (const auto &response :
          { std::make_pair(200, QByteArray("{}")), std::make_pair(200, QByteArray("[]")),
            std::make_pair(200, QByteArray(" \n[ \n ]\t")),
-           std::make_pair(404, QByteArray(R"({"status":"not found"})")) }) {
+           std::make_pair(
+                   200,
+                   QByteArray(
+                           R"({"document":"900150983cd24fb0d6963f7d28e17f72","progress":null,"percentage":null,"timestamp":null,"device":"Grimmory","device_id":"Grimmory"})")),
+           std::make_pair(404, QByteArray(R"({"status":"not found"})")),
+           std::make_pair(
+                   404,
+                   QByteArray(
+                           R"({"status":404,"message":"No progress found for user and book","timestamp":"2026-11-15T12:00:00"})")) }) {
         network.status = response.first;
         network.response = response.second;
         network.failures = network.status == 404 ? 1 : 0;
@@ -968,6 +1027,14 @@ int main(int argc, char **argv)
            QByteArray("<html>Not Found</html>"), QByteArray(R"({"error":"not found"})"),
            QByteArray(R"({"status":"Not Found"})"),
            QByteArray(R"({"status":"not found","progress":"private"})"),
+           QByteArray(
+                   R"({"status":404,"message":"Book not found for hash aaaa","timestamp":"2026-11-15T12:00:00"})"),
+           QByteArray(
+                   R"({"status":404,"message":"Resource not found.","timestamp":"2026-11-15T12:00:00"})"),
+           QByteArray(
+                   R"({"status":401,"message":"No progress found for user and book","timestamp":"2026-11-15T12:00:00"})"),
+           QByteArray(
+                   R"({"status":404,"message":"No progress found for user and book","timestamp":"2026-11-15T12:00:00","progress":"private"})"),
            QByteArray(R"({"status":"not found"})") + QByteArray(17000, ' '),
            QByteArray(R"({"status":"not found"} trailing)") }) {
         network.response = body;

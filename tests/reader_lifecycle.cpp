@@ -204,6 +204,7 @@ struct KosyncHttpState
     int requests = 0, uploads = 0;
     int readStatus = 200, uploadStatus = 200;
     QByteArray readBody = "{}";
+    QByteArray uploadBody;
     QJsonObject lastUpload;
     bool hold = false;
     QList<QPointer<test::KosyncReply>> held;
@@ -228,6 +229,8 @@ protected:
             body = QJsonDocument(QJsonObject{ { "document", upload.value("document") },
                                               { "timestamp", 1 } })
                            .toJson(QJsonDocument::Compact);
+            if (!state->uploadBody.isEmpty())
+                body = state->uploadBody;
         }
         auto *reply = new test::KosyncReply(
                 request, body, operation == PutOperation ? state->uploadStatus : state->readStatus,
@@ -7348,7 +7351,22 @@ private slots:
         QTest::addColumn<bool>("missing");
         QTest::newRow("empty-object") << 200 << QByteArray("{}") << true;
         QTest::newRow("empty-array") << 200 << QByteArray("[]") << true;
+        QTest::newRow("grimmory-empty-progress")
+                << 200
+                << QByteArray(
+                           R"({"document":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","progress":null,"percentage":null,"timestamp":null,"device":"Grimmory","device_id":"Grimmory"})")
+                << true;
         QTest::newRow("missing-progress") << 404 << QByteArray(R"({"status":"not found"})") << true;
+        QTest::newRow("grimmory-missing-progress")
+                << 404
+                << QByteArray(
+                           R"({"status":404,"message":"No progress found for user and book","timestamp":"2026-11-15T12:00:00"})")
+                << true;
+        QTest::newRow("grimmory-missing-book")
+                << 404
+                << QByteArray(
+                           R"({"status":404,"message":"Book not found for hash aaaa","timestamp":"2026-11-15T12:00:00"})")
+                << false;
         QTest::newRow("missing-route") << 404 << QByteArray("<html>Not Found</html>") << false;
         QTest::newRow("ambiguous-404") << 404 << QByteArray("{}") << false;
         QTest::newRow("auth-failure") << 401 << QByteArray(R"({"status":"not found"})") << false;
@@ -7371,6 +7389,7 @@ private slots:
         auto http = std::make_shared<KosyncHttpState>();
         http->readStatus = statusCode;
         http->readBody = body;
+        http->uploadBody = R"({"status":"progress updated"})";
         ReaderFixture host(paths, testFonts, testPlaceholder);
         host.configureServices = [http](ReaderHostServices &services) {
             services.kosyncHttp = [http] { return std::make_unique<KosyncHttp>(http); };

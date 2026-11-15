@@ -691,7 +691,7 @@ if(BUILD_TESTING)
                 target_sources(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}/platforms/kobo/common/engine_positions.cpp")
                 target_compile_definitions(kobalt-${name}-tests PRIVATE KOBALT_TEST_FIXTURES="${KOBALT_ROOT}/tests/fixtures")
             endif()
-            if(check MATCHES "^(reader|document_cache)$")
+            if(check MATCHES "^(reader|document_cache|page_estimate)$")
                 target_compile_definitions(kobalt-${name}-tests PRIVATE
                     KOBALT_TEST_VARIABLE_FONT_DIRECTORY="${KOBALT_ROOT}/tests/fixtures")
             endif()

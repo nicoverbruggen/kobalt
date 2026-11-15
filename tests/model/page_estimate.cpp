@@ -2207,6 +2207,30 @@ void parkedPublisherFonts()
                        });
 }
 
+void parkedVariableFont()
+{
+    const auto book = pagesBook();
+    EngineDocument preview(test::readerFonts());
+    openResources(preview, book, { { "font_face", "Libron" }, { "font_pixels", 28 } });
+    const auto catalog = discoverReadingFonts(test::readerFonts().sources);
+    for (const auto &font : catalog) {
+        for (const auto &file : font.files) {
+            if (QFileInfo(file).fileName() != "AmstelvarAlpha-VF.ttf")
+                continue;
+            const QJsonObject settings{ { "font_face", font.family },
+                                        { "font_weight", font.weightAxis.maximum },
+                                        { "font_optical_size", font.opticalSizeAxis.maximum },
+                                        { "font_pixels", 28 },
+                                        { "line_spacing_version", 1 } };
+            parkedFullDocument([&](EngineDocument &model) { openResources(model, book, settings); },
+                               3, "variable font with a static preview", 13, {},
+                               [&] { preview.image(0); });
+            return;
+        }
+    }
+    require(false, "Missing variable font fixture");
+}
+
 // A book that is in the parsed-book cache gives the whole book without
 // parsing: the try right after a book opens takes it. A book that is not
 // there waits until the reader asks for the whole build.
@@ -2859,6 +2883,7 @@ int main(int argc, char **argv)
     fullDocument();
     fullDocumentKeepsPublisherFonts();
     parkedPublisherFonts();
+    parkedVariableFont();
     fullDocumentPixels();
     fullDocumentFromCache(bytes);
     abandonedOpenedDocument(bytes);

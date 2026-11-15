@@ -16,6 +16,7 @@
 #include "publication/publication.h"
 #include <atomic>
 #include <lvdocview.h>
+#include <lvrend.h>
 #include <QElapsedTimer>
 #include <QDir>
 #include <QWaitCondition>
@@ -1383,6 +1384,8 @@ struct EngineDocument::FullBuild
         // must not write to that cache.
         int levels[64];
         const int count = qMin(64, TextLangMan::koblazeQuoteLevels(levels, 64));
+        const int fontWeight = LVRendGetBaseFontWeight();
+        const float opticalSize = LVRendGetFontOpticalSize();
         const bool pairKerning = koblazePairKerning();
         const bool wordWidths = koblazeWordWidths();
         const bool wordPairs = koblazeWordPairs();
@@ -1410,6 +1413,8 @@ struct EngineDocument::FullBuild
         ldomDocCache::koblazeSuspend(false);
         koblazeSwapCancelScopes(&noCancel, &parserCanStop);
         TextLangMan::koblazeSetQuoteLevels(levels, count);
+        LVRendSetBaseFontWeight(fontWeight);
+        LVRendSetFontOpticalSize(opticalSize);
         koblazeSetPairKerning(pairKerning);
         koblazeSetWordWidths(wordWidths);
         koblazeSetWordPairs(wordPairs);

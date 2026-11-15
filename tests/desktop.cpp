@@ -8738,6 +8738,19 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.visible("rrNoteEditor") && editorText());
         const QString note = QStringLiteral("Named on a whim.\nCompare chapter 3.");
         editorText()->setPlainText(note);
+        const auto changeSql = [&](const QString &statement) {
+            return storage::profileTransaction(fixture.paths.directory, [&](QSqlDatabase &db) {
+                return QSqlQuery(db).exec(statement);
+            });
+        };
+        QVERIFY(changeSql("CREATE TRIGGER refuse_note BEFORE INSERT ON entries "
+                          "BEGIN SELECT RAISE(ABORT,'test'); END"));
+        QVERIFY(fixture.press("rrNoteSave"));
+        QTRY_VERIFY(fixture.visible("rrNoteError"));
+        QCOMPARE(editorText()->toPlainText(), note);
+        QVERIFY(!editorText()->isReadOnly());
+        QVERIFY(storedNote().isEmpty());
+        QVERIFY(changeSql("DROP TRIGGER refuse_note"));
         QVERIFY(fixture.press("rrNoteSave"));
         QTRY_VERIFY(!fixture.visible("rrNoteEditor"));
         QTRY_COMPARE(storedNote(), note);

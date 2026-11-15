@@ -1625,15 +1625,12 @@ void Reader::openNoteEditor(const QString &id)
             strings::get(detail.note.isEmpty() ? "annotations.add_note" : "annotations.edit_note"),
             passage, detail.note);
     noteEditor->saveRequested = [this, id](const QString &text) {
-        if (text.size() > HighlightStore::maxNoteUnits) {
+        if (text.size() > HighlightStore::maxNoteUnits)
             noteEditor->setError(strings::get("annotations.note_too_long"));
-            return false;
-        }
-        if (!highlights->setNote(id, text)) {
+        else if (!highlights->setNote(id, text, true))
             noteEditor->setError(strings::get("annotations.note_save_failed"));
-            return false;
-        }
-        return true;
+        else if (!highlights->saving())
+            noteEditor->saved();
     };
     noteEditor->closed = [this] {
         if (noteEditor)

@@ -36,8 +36,10 @@ public:
     // Shows a save error below the text box and keeps the text.
     void setError(const QString &message);
 
-    // Returns false to keep the editor open, for example after an error.
-    std::function<bool(const QString &)> saveRequested;
+    bool saving() const { return saving_; }
+
+    void saved();
+    std::function<void(const QString &)> saveRequested;
     // The owner destroys the editor, which may not happen inside this call.
     std::function<void()> closed;
 
@@ -45,6 +47,7 @@ protected:
     bool eventFilter(QObject *object, QEvent *event) override;
 
 private:
+    bool saving_ = false;
     void place();
     void close();
     QPointer<ui::ChoiceModal> dialog;

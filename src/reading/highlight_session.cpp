@@ -297,10 +297,14 @@ void HighlightSession::finishSave(quint64 id, bool ok, const QString &error, qui
         store_->dropDetails();
         retryPending_ = false;
         retryHighlights_.clear();
+        beforeEditorWrite_.clear();
+        if (saved)
+            saved();
         return;
     }
-    retryHighlights_ = highlights;
-    retryPending_ = true;
+    retryHighlights_ = id == editorWrite_ ? beforeEditorWrite_ : highlights;
+    retryPending_ = id != editorWrite_ || !beforeEditorWrite_.isEmpty();
+    beforeEditorWrite_.clear();
     error_ = error;
     ++errors_;
     known_.clear();
@@ -581,7 +585,7 @@ bool HighlightSession::updateAppearance(const QString &id, const QString &color,
     return false;
 }
 
-bool HighlightSession::setNote(const QString &id, const QString &note)
+bool HighlightSession::setNote(const QString &id, const QString &note, bool editorOwnsRetry)
 {
     const QString value = note.trimmed().isEmpty() ? QString() : note;
     if (value.size() > HighlightStore::maxNoteUnits) {
@@ -607,7 +611,16 @@ bool HighlightSession::setNote(const QString &id, const QString &note)
         h.chapter = full.chapter;
         h.note = value;
         h.detailsLoaded = true;
-        return persist(std::move(list));
+        QVector<Highlight> preceding;
+        if (editorOwnsRetry)
+            preceding = saving() ? highlights() : retryHighlights_;
+        if (!persist(std::move(list)))
+            return false;
+        if (editorOwnsRetry) {
+            editorWrite_ = posted_;
+            beforeEditorWrite_ = preceding;
+        }
+        return true;
     }
     return false;
 }

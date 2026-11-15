@@ -128,11 +128,15 @@ NoteEditor::NoteEditor(QWidget *parent, const KeyboardFactory &makeKeyboard, con
     card->rows()->insertWidget(2, textRow);
 
     connect(dialog->primaryButton(), &QPushButton::clicked, this, [this] {
-        if (!dialog || !dialog->isVisible())
+        if (!dialog || !dialog->isVisible() || saving_)
             return;
-        if (saveRequested && !saveRequested(text()))
-            return;
-        close();
+        if (saveRequested) {
+            saving_ = true;
+            editor->setReadOnly(true);
+            dialog->primaryButton()->setEnabled(false);
+            dialog->secondaryButton()->setEnabled(false);
+            saveRequested(text());
+        }
     });
     connect(dialog->secondaryButton(), &QPushButton::clicked, this, [this] { close(); });
     dialog->dismissed = [this] { close(); };
@@ -178,8 +182,18 @@ QString NoteEditor::text() const
     return editor ? editor->toPlainText() : QString();
 }
 
+void NoteEditor::saved()
+{
+    saving_ = false;
+    close();
+}
+
 void NoteEditor::setError(const QString &message)
 {
+    saving_ = false;
+    editor->setReadOnly(false);
+    dialog->primaryButton()->setEnabled(true);
+    dialog->secondaryButton()->setEnabled(true);
     if (!error)
         return;
     error->setText(message);
@@ -189,7 +203,7 @@ void NoteEditor::setError(const QString &message)
 
 void NoteEditor::close()
 {
-    if (!dialog || !dialog->isVisible())
+    if (saving_ || !dialog || !dialog->isVisible())
         return;
     if (keyboard)
         keyboard->hide();

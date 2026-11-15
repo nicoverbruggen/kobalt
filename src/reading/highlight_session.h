@@ -64,7 +64,7 @@ public:
     // Empty fields preserve saved values. Both changes persist together or roll back.
     bool updateAppearance(const QString &id, const QString &color, const QString &style);
     // Replaces the passage's note. A note of only whitespace removes it.
-    bool setNote(const QString &id, const QString &note);
+    bool setNote(const QString &id, const QString &note, bool editorOwnsRetry = false);
     bool remove(const QString &id);
 
     // True until the newest save has reported back.
@@ -78,7 +78,7 @@ public:
     bool retryFailedSave();
     // `failed` reports a refused edit or a failed save. `saveFailed` reports
     // only a failed save, after the list has returned to the saved one.
-    std::function<void()> changed, failed, saveFailed;
+    std::function<void()> changed, failed, saved, saveFailed;
 
 private:
     bool persist(QVector<Highlight> highlights);
@@ -105,6 +105,10 @@ private:
     QVector<Highlight> saved_;
     QVector<Highlight> retryHighlights_;
     bool retryPending_ = false;
+    // A failed editor write leaves its draft in the editor. Keep any earlier
+    // edits which shared the same writer snapshot available for retry.
+    quint64 editorWrite_ = 0;
+    QVector<Highlight> beforeEditorWrite_;
     quint64 posted_ = 0, reported_ = 0, adopted_ = 0;
     // Counts errors, so a save clears only errors set before it was posted.
     quint64 errors_ = 0;

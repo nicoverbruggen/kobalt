@@ -17,6 +17,7 @@
 #include <QThread>
 #include <QVariant>
 #include <QWidget>
+#include <utility>
 #include <QWindow>
 #include <QSettings>
 #include <algorithm>
@@ -40,9 +41,9 @@ constexpr quint64 bit(int attribute)
 }
 
 constexpr quint64 heuristic = bit(129), partialMode = bit(130), full = bit(131),
-                  automatic = bit(132), gc16 = bit(134), gl16 = bit(137), glr16 = bit(138),
-                  gck16 = bit(140), glkw16 = bit(141), darkFlag = bit(164), autoImage = bit(165),
-                  autoText = bit(166);
+                  automatic = bit(132), direct = bit(133), gc16 = bit(134), gl16 = bit(137),
+                  glr16 = bit(138), gck16 = bit(140), glkw16 = bit(141), darkFlag = bit(164),
+                  autoImage = bit(165), autoText = bit(166);
 QPointer<QWidget> readerWindow, pageWidget;
 
 struct ImxCapabilities
@@ -114,6 +115,8 @@ quint64 repairPolicy(bool dark, bool wide = true)
 
 quint64 pagePolicy = 0;
 bool previousDark = false;
+// The area that a selection drag drew with the direct waveform.
+QRegion dragArea;
 KeyboardRefreshCache keyboardPixels;
 
 bool readerOwnsScreen()
@@ -137,6 +140,7 @@ void setReaderRefreshWindow(QWidget *widget)
     pageWidget.clear();
     pagePolicy = 0;
     previousDark = false;
+    dragArea = QRegion();
 }
 
 template <class Submit>
@@ -235,6 +239,26 @@ static void flushReaderUsing(QBackingStore *store, const QRegion &region, QWindo
         return;
     }
     previousDark = dark;
+    // While a finger drags a selection or a handle, each step uses the direct
+    // waveform, which only drives pixels to black or white and is much faster
+    // than the text waveforms. Partial mode leaves unchanged pixels alone.
+    // A page turn during the drag keeps its own refresh.
+    if (readerWindow->property("reader_annotation_drag").toBool() && !pageTurn && !direction) {
+        keyboardPixels.clear();
+        dragArea += region;
+        deliver(region, { { region.boundingRect(), direct | partialMode } });
+        return;
+    }
+    if (!dragArea.isEmpty()) {
+        // The direct waveform leaves grey text edges black or white. Redraw
+        // what the drag touched once with the text waveform in full mode,
+        // which also refreshes pixels that did not change.
+        const QRegion area = std::exchange(dragArea, QRegion());
+        if (!pageTurn && !direction) {
+            const auto text = ordinaryPolicy(dark, false) & (automatic | glr16 | glkw16 | gl16);
+            submit(area, { { area.boundingRect(), (text == automatic ? gl16 : text) | full } });
+        }
+    }
     const QRegion annotationRepairs = annotationRepairRegions(readerWindow);
     if (pageAnimationPanel() == AnimationPanel::Color && !(region & annotationRepairs).isEmpty()) {
         keyboardPixels.clear();

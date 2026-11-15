@@ -15,6 +15,8 @@ namespace {
 using Update = std::array<uint32_t, 18>;
 std::vector<Update> updates;
 int flushes = 0;
+// Every policy the adapter sent, in order.
+std::vector<quint64> policies;
 int expectImmediate = -1;
 bool available = true;
 
@@ -32,6 +34,8 @@ template <class Flags>
 void flush(QBackingStore *, const QRegion &region, QWindow *, const QPoint &, const Flags &flags)
 {
     ++flushes;
+    for (const auto &entry : flags)
+        policies.push_back(quint64(entry.second));
     for (const auto &entry : flags) {
         if (expectImmediate >= 0)
             require(bool(entry.second & 1) == bool(expectImmediate),
@@ -73,7 +77,9 @@ void diagnostic(const char *, QJsonObject, bool) { }
 void diagnostic(const char *, QJsonObject, DiagnosticSeverity) { }
 
 DiagnosticOperation::DiagnosticOperation(const char *name, std::function<bool()> stopped)
-    : operation(name), interrupted(std::move(stopped)) { }
+    : operation(name), interrupted(std::move(stopped))
+{
+}
 
 DiagnosticOperation::~DiagnosticOperation() = default;
 } // namespace kobalt
@@ -285,5 +291,36 @@ int main(int argc, char **argv)
                         && updates[0][3] == uint32_t(bounds.height()) && updates[0][5] == 0,
                 "MTK's one update for a masked paint is not partial over its rows");
     }
-    std::puts("PASS: Qt5 flush ABIs preserve sweeps and keep MTK tab feedback partial");
+    // A selection drag uses the direct waveform in partial mode. The flush
+    // after it redraws the dragged area once with the text waveform.
+    reader.setProperty("reader_refresh_backend", "mxc_epdc_fb");
+    reader.setProperty("reader_dark", false);
+    for (bool legacy : { true, false }) {
+        setReaderRefreshWindow(&reader);
+        const QRect step(40, 60, 80, 40), next(50, 200, 40, 20);
+        const quint32 automaticPartial = (1U << 4) | (1U << 2);
+        auto submit = [&](const QRect &rect) {
+            if (legacy)
+                flushReader32(&store, rect, reader.windowHandle(), {},
+                              { { rect, automaticPartial } });
+            else
+                flushReader(&store, rect, reader.windowHandle(), {},
+                            { { rect, automaticPartial } });
+        };
+        reader.setProperty("reader_annotation_drag", true);
+        policies.clear();
+        submit(step);
+        require(policies.size() == 1 && policies[0] == ((1U << 5) | (1U << 2)),
+                "A drag step did not use the direct waveform in partial mode");
+        reader.setProperty("reader_annotation_drag", false);
+        policies.clear();
+        submit(next);
+        require(policies.size() == 2 && policies[0] == ((1U << 10) | (1U << 3)),
+                "The flush after a drag did not redraw it with REAGL in full mode");
+        policies.clear();
+        submit(next);
+        require(policies.size() == 1, "The drag cleanup repeated");
+    }
+    std::puts("PASS: Qt5 flush ABIs preserve sweeps, keep MTK tab feedback partial and use the "
+              "direct waveform while dragging");
 }

@@ -4,6 +4,7 @@
 # A misspelled property reads as empty, so a new name must be added here.
 # Each line is `name|meaning`. Remove a line when its last use goes.
 reader_animation_direction|Reader window: direction of the page-turn animation for the next flush, or 0 for none.
+reader_annotation_drag|Reader window: a finger is dragging a selection or a handle, so page updates use the fast direct waveform until it lifts.
 reader_annotation_regions|Reader window: annotation colour areas on the current page, for the colour refresh.
 reader_annotation_repairs|Reader window: areas where annotation colour appeared or went, repaired with a colour update. The adapter clears it.
 reader_arrow_only|Toolbar return action: show the arrow alone, centered in its cell, as in Zen mode.

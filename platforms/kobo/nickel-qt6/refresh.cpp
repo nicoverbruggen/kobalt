@@ -22,6 +22,7 @@
 #include <QWindow>
 #include <algorithm>
 #include <functional>
+#include <utility>
 
 namespace kobalt::platform {
 LookupRefreshFlags nativeRefreshFlags = nullptr;
@@ -30,6 +31,8 @@ Flush nativeFlush = nullptr;
 namespace {
 QPointer<QWidget> readerWindow, pageWidget;
 bool previousDark = false;
+// The area that a selection drag drew with the direct waveform.
+QRegion dragArea;
 KeyboardRefreshCache keyboardPixels;
 
 constexpr quint64 bit(Qt::WidgetAttribute attribute)
@@ -92,6 +95,7 @@ void setReaderRefreshWindow(QWidget *widget)
     readerWindow = widget;
     setDisplayFormatWindow(widget);
     previousDark = false;
+    dragArea = QRegion();
 }
 
 void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, const QPoint &offset,
@@ -183,6 +187,31 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
         return;
     }
     previousDark = dark;
+    // While a finger drags a selection or a handle, each step uses the direct
+    // waveform, which only drives pixels to black or white and is much faster
+    // than the text waveforms. Partial mode leaves unchanged pixels alone. It
+    // bypasses the batch, whose merge knows only the text and image waveforms.
+    // A page turn during the drag keeps its own refresh.
+    if (readerWindow->property("reader_annotation_drag").toBool() && !pageTurn && !direction) {
+        keyboardPixels.clear();
+        dragArea += region;
+        nativeFlush(store, region, target, offset,
+                    { { region.boundingRect(),
+                        bit(Qt::WA_KoboEpdWfModeDirect) | bit(Qt::WA_KoboEpdUpdateModePartial)
+                                | (dark ? bit(Qt::WA_KoboEpdFlagDarkMode) : 0) } });
+        return;
+    }
+    if (!dragArea.isEmpty()) {
+        // The direct waveform leaves grey text edges black or white. Redraw
+        // what the drag touched once with the text waveform in full mode,
+        // which also refreshes pixels that did not change.
+        const QRegion area = std::exchange(dragArea, QRegion());
+        if (!pageTurn && !direction)
+            submit(area,
+                   { { area.boundingRect(),
+                       bit(Qt::WA_KoboEpdWfModeAutoText) | bit(Qt::WA_KoboEpdUpdateModeFull)
+                               | (dark ? bit(Qt::WA_KoboEpdFlagDarkMode) : 0) } });
+    }
     const QRegion annotationRepairs = annotationRepairRegions(readerWindow);
     if (pageAnimationPanel() == AnimationPanel::Color && !(region & annotationRepairs).isEmpty()) {
         keyboardPixels.clear();

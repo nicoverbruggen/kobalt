@@ -20,6 +20,8 @@ The Hybrid checks also cover interrupted chapter-place reads, publisher-font reu
 
 The restored `reader`, `publisher-markup`, `local-reader` and `document-word-count` checks keep the original assertions. Their focused EPUBs are generated offline in C++ with the original text, span IDs, markup and resource paths. `engine.document-cache` is a separate check, so `engine.reader` stays within the child deadline under parallel execution. `engine.reader` also links the portable Kobo position codec, but it does not load Nickel or inspect firmware symbols. Its variable-font cases need the pinned Amstelvar fixture and fail rather than skip without it.
 
+`engine.spine-window` checks that a chapter window does not report its own pages as exact book progress, and that whole-book layout restores the exact page numbers.
+
 `engine.engine-contract` checks that callbacks stay with their view through chapter changes and detach when the view is destroyed. Nested layouts preserve their caller's cancellation and progress. A foreground layout with nested flows polls its own callback while a whole-book layout is parked.
 
 `engine.page-estimate` restores a bookmark outside the initial chapter window, parks whole-book pagination, jumps until the bookmarked chapter is evicted, then returns. The bookmark, adjacent pages and final handoff must match an independent whole-book rendering. Opening a second book on the same engine must use the new book's pages and count whether the first book's pagination was parked or complete.

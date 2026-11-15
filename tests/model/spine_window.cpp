@@ -54,12 +54,14 @@ Pages pages(const EngineDocument &model)
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
-#if __has_include(<koblaze.h>)
     EngineDocument model(test::readerFonts());
     open(model, test::engineBook(false, 8, 120));
     const auto whole = pages(model);
     const int wholePages = model.pages();
     require(whole.items.size() == 8, "The fixture needs eight spine items with pages");
+    const auto fullInfo = model.pageInfo();
+    require(fullInfo.bookPages.exact() && fullInfo.bookPages.value() == wholePages,
+            "A whole-book layout must report the exact book total");
     const auto chapter = whole.items[4];
     const auto position = whole.starts[chapter].value(2);
     require(!position.isEmpty() && model.goTo(position), "Cannot go into the fifth spine item");
@@ -75,6 +77,10 @@ int main(int argc, char **argv)
     require(model.position() == position || model.goTo(position),
             "A position in the window must resolve");
     require(model.pageStart(model.page()) == position, "The position must be on its own page");
+    const auto partialInfo = model.pageInfo();
+    require(!partialInfo.bookPages.exact() && !partialInfo.bookPage.exact()
+                    && !partialInfo.bookProgress.exact(),
+            "A chapter window must not report its local pages as exact book progress");
     // Positions outside the window have no page.
     require(model.pagesOf({ whole.starts[whole.items[0]].first() }).value(0, -1) <= 0,
             "A spine item outside the window must have no pages of its own");
@@ -93,6 +99,10 @@ int main(int argc, char **argv)
     require(model.pages() > 0 && model.fontSize() == 36, "The whole book must keep the settings");
     require(model.applyAppearance(appearance::Patch(QJsonObject{ { "font_pixels", 28 } })),
             "Cannot change the font back");
+    const auto restored = model.pageInfo();
+    require(restored.bookPages.exact() && restored.bookPages.value() == wholePages
+                    && restored.bookPage.exact() && restored.bookPage.value() == model.page(),
+            "Restoring whole-book layout must restore exact book pages");
     const auto again = pages(model);
     require(again.items == whole.items && again.starts == whole.starts,
             "The whole book must come back with the same pages");
@@ -123,8 +133,5 @@ int main(int argc, char **argv)
         backward.prepend(model.pageStart(model.page()));
     require(backward == all, "Reading backward through moving windows gave other pages");
     std::printf("PASS: a window of spine items has the pages of the whole book\n");
-#else
-    std::printf("SKIP: stock CREngine loads every spine item\n");
-#endif
     return 0;
 }

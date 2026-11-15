@@ -2004,8 +2004,15 @@ PageInfo EngineDocument::pageInfo() const
     const int total = pages();
     if (!engine_ || total <= 0)
         return info;
-    // CREngine lays out the whole book, so every value is exact.
     const LayoutGeneration generation{ 0, layoutSignature() };
+    if (windowFirst_ >= 0) {
+        // The window can start or end inside a contents entry. Its page
+        // indexes describe neither the entire chapter nor the entire book.
+        info.bookPage = info.bookPages = Query<int>::pending(generation);
+        info.chapterPage = info.chapterPages = Query<int>::pending(generation);
+        info.bookProgress = Query<double>::pending(generation);
+        return info;
+    }
     info.bookPage = Query<int>::exact(page(), generation);
     info.bookPages = Query<int>::exact(total, generation);
     info.bookProgress = Query<double>::exact(double(page()) / total, generation);

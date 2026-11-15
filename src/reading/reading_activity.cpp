@@ -29,10 +29,10 @@ void add(BookTotal &total, const ActivitySession &session)
 {
     if (!total.sessions) {
         total.book = session.book;
-        total.identity = session.identity;
         total.first = session.started;
     }
     // The newest snapshot names and finds the book, as it is shown now.
+    total.identity = session.identity;
     total.sourceKey = session.sourceKey;
     total.title = session.title;
     total.author = session.author;

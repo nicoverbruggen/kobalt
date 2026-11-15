@@ -85,7 +85,8 @@ void weekAndMonths()
                          session("a", QDate(2026, 11, 9), 21, 30, "November"),
                          session("b", QDate(2026, 11, 10), 21, 50),
                          session("a", today, 7, 20, "November") };
-    records.percent.insert("file:///books/a.epub", 22);
+    records.sessions.last().identity = "file:///books/a-renamed.epub";
+    records.percent.insert("file:///books/a-renamed.epub", 22);
     records.percent.insert("file:///books/b.epub", 100);
     records.finished.insert("file:///books/b.epub");
     const auto summary = activity::summarize(records, today);

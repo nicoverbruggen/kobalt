@@ -204,7 +204,7 @@ void addByDate(QMap<QString, qint64> &dates, qint64 started, qint64 observed, qi
 // totals existed has no total for the deleted session. The open opening's
 // total is never changed; a total that reaches zero is deleted.
 bool reduceDay(QSqlDatabase &db, const QString &date, qint64 removed, qint64 remaining,
-               const QString &keepOpening)
+               const QString &keepOpening, const QString &book, bool onlyBook)
 {
     const QString prefix = "reading-day:" + date + ':';
     QSqlQuery query(db);
@@ -223,6 +223,7 @@ bool reduceDay(QSqlDatabase &db, const QString &date, qint64 removed, qint64 rem
     };
 
     QVector<Total> totals;
+    QStringList owned;
     qint64 sum = 0;
     while (query.next()) {
         if (query.value(1).toInt() != 1)
@@ -231,12 +232,25 @@ bool reduceDay(QSqlDatabase &db, const QString &date, qint64 removed, qint64 rem
         const double value = payload.value("milliseconds").toDouble(-1);
         if (!std::isfinite(value) || value <= 0 || value > 9007199254740991.0)
             continue;
-        sum += qint64(value);
         const auto name = query.value(0).toString();
+        const auto owner = payload.value("book").toString();
+        if (!owner.isEmpty()) {
+            if (owner == book && name.mid(prefix.size()) != keepOpening)
+                owned.append(name);
+            continue;
+        }
+        sum += qint64(value);
         if (name.mid(prefix.size()) != keepOpening)
             totals.append({ name, payload, qint64(value) });
     }
-    qint64 take = sum - qMax(sum - removed, qMin(sum, remaining));
+    for (const auto &name : owned) {
+        QSqlQuery write(db);
+        write.prepare("DELETE FROM profile_state WHERE name=?");
+        write.addBindValue(name);
+        if (!write.exec())
+            return false;
+    }
+    qint64 take = onlyBook ? sum : sum - qMax(sum - removed, qMin(sum, remaining));
     for (auto &total : totals) {
         if (take <= 0)
             break;
@@ -303,23 +317,76 @@ bool ActivityRecordStore::remove(const QString &directory, const QString &book,
         // that each date keeps.
         QSqlQuery sessions(db);
         sessions.setForwardOnly(true);
-        if (!sessions.exec("SELECT CAST(book AS BLOB),started,observed,active_ms "
-                           "FROM reading_sessions"))
+        if (!sessions.exec(
+                    "SELECT CAST(s.book AS BLOB),s.started,s.observed,s.active_ms,h.name "
+                    "FROM reading_sessions s LEFT JOIN profile_state h ON "
+                    "h.name>=('reading-hours:'||s.id||':') AND h.name<('reading-hours:'||s.id||';')"))
             return false;
         QMap<QString, qint64> removed, remaining;
+        QSet<QString> recordedDates, overnightDates;
+        QStringList hourRecords;
         const auto key = book.toUtf8();
-        while (sessions.next())
-            addByDate(sessions.value(0).toByteArray() == key ? removed : remaining,
-                      sessions.value(1).toLongLong(), sessions.value(2).toLongLong(),
-                      clampedActive(sessions.value(3).toLongLong()));
+        while (sessions.next()) {
+            const bool deleting = sessions.value(0).toByteArray() == key;
+            if (sessions.value(4).isNull()) {
+                if (deleting) {
+                    const auto first =
+                            QDateTime::fromMSecsSinceEpoch(sessions.value(1).toLongLong()).date();
+                    const auto last =
+                            QDateTime::fromMSecsSinceEpoch(sessions.value(2).toLongLong()).date();
+                    if (first < last) {
+                        // Only visit dates with saved totals, even if a device clock jumped years.
+                        QSqlQuery days(db);
+                        days.prepare("SELECT name FROM profile_state WHERE name>=? AND name<?");
+                        days.addBindValue("reading-day:" + first.toString(Qt::ISODate) + ':');
+                        days.addBindValue("reading-day:" + last.toString(Qt::ISODate) + ';');
+                        if (!days.exec())
+                            return false;
+                        while (days.next())
+                            overnightDates.insert(days.value(0).toString().section(':', 1, 1));
+                    }
+                }
+                addByDate(deleting ? removed : remaining, sessions.value(1).toLongLong(),
+                          sessions.value(2).toLongLong(),
+                          clampedActive(sessions.value(3).toLongLong()));
+            } else if (deleting) {
+                const auto name = sessions.value(4).toString();
+                hourRecords.append(name);
+                recordedDates.insert(name.section(':', -1));
+            }
+        }
+        for (const auto &name : hourRecords) {
+            QSqlQuery erase(db);
+            erase.prepare("DELETE FROM profile_state WHERE name=?");
+            erase.addBindValue(name);
+            if (!erase.exec())
+                return false;
+        }
         QSqlQuery remove(db);
         remove.prepare("DELETE FROM reading_sessions WHERE book=CAST(? AS TEXT)");
         remove.addBindValue(key);
         if (!remove.exec())
             return false;
         for (auto it = removed.cbegin(); it != removed.cend(); ++it)
-            if (!reduceDay(db, it.key(), it.value(), remaining.value(it.key()), keepOpening))
+            recordedDates.insert(it.key());
+        recordedDates.unite(overnightDates);
+        for (const auto &date : recordedDates) {
+            bool onlyBook = false;
+            if (overnightDates.contains(date)) {
+                const auto day = QDate::fromString(date, Qt::ISODate);
+                QSqlQuery others(db);
+                others.prepare(
+                        "SELECT 1 FROM reading_sessions WHERE started<? AND observed>=? LIMIT 1");
+                others.addBindValue(QDateTime(day.addDays(1), QTime(0, 0)).toMSecsSinceEpoch());
+                others.addBindValue(QDateTime(day, QTime(0, 0)).toMSecsSinceEpoch());
+                if (!others.exec())
+                    return false;
+                onlyBook = !others.next();
+            }
+            if (!reduceDay(db, date, removed.value(date), remaining.value(date), keepOpening, book,
+                           onlyBook))
                 return false;
+        }
         QSet<QString> hidden;
         bool writable = false;
         if (!readHidden(db, &hidden, &writable))

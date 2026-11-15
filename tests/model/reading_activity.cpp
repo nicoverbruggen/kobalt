@@ -396,6 +396,7 @@ void deleteEdgeCases()
                     == 2,
             "The newer hidden list was replaced");
 }
+
 // A beta 8 session and a new opening share the upgrade date. The new
 // session sleeps over midnight, then resumes on the first of the month.
 void upgradeAndSleep()
@@ -435,6 +436,31 @@ void upgradeAndSleep()
             "Could not load the open book's history");
     require(activity::summarize(records, second, days).days == summary.days,
             "The open book's time was counted twice");
+    require(ActivityRecordStore::remove(directory, book, QString()),
+            "Could not delete the new book");
+    require(ActivityRecordStore::read(directory, {}, &records) && records.days.isEmpty()
+                    && records.sessions.size() == 1
+                    && activity::summarize(records, second).totalMilliseconds == 30 * minute,
+            "Deletion changed the other book or left part of the deleted book");
+}
+
+void deleteAnonymousOvernight()
+{
+    storage::closeProfile();
+    QTemporaryDir root;
+    const auto day = QDate(2026, 11, 1);
+    sql(root.path(),
+        "INSERT INTO reading_sessions VALUES('one','only','only','','','','',?,?,?,'','','completed')",
+        { at(day, 23, 40), at(day.addDays(1), 0, 10), 15 * minute });
+    for (int i : { 0, 1 })
+        sql(root.path(), "INSERT INTO profile_state VALUES(?,1,0,?)",
+            { "reading-day:" + day.addDays(i).toString(Qt::ISODate) + ":anonymous",
+              QString("{\"milliseconds\":%1}").arg((i ? 5 : 10) * minute) });
+    require(ActivityRecordStore::remove(root.path(), "only", QString()),
+            "Cannot remove overnight history");
+    ActivityRecords records;
+    require(ActivityRecordStore::read(root.path(), {}, &records) && records.days.isEmpty(),
+            "The only book left anonymous time on the first day");
 }
 } // namespace
 
@@ -451,6 +477,7 @@ int main(int argc, char **argv)
     hideAndRemove();
     deleteEdgeCases();
     upgradeAndSleep();
+    deleteAnonymousOvernight();
     storage::closeProfile();
     return 0;
 }

@@ -252,7 +252,24 @@ inline constexpr Px minimumBarHeight{ 20 }, minimumBarWidth{ 6 }, maximumBarWidt
         narrowBarWidth{ 16 };
 inline constexpr Px sparseGap{ 12 };
 inline constexpr Px outline{ 2 }, fillInset{ 4 }, narrowFillInset{ 2 };
+// The Activity row under the cells. The chart gives up the height.
+inline constexpr Px activityHeight{ 84 }, activityIconGap{ 18 }, activityColumnWidth{ 170 };
 } // namespace chapters
+
+namespace activity {
+// Activity: today and the streak, the week's bars, figure cells, a month
+// calendar, books, a book's progress, reading hours and milestones.
+inline constexpr Px figureText{ 80 };
+inline constexpr Px barGap{ 40 }, maximumBarWidth{ 96 }, valueGap{ 10 }, labelGap{ 14 };
+inline constexpr Px dayGap{ 6 }, dayPadding{ 10 }, todayOutline{ 5 }, legendSwatch{ 26 };
+inline constexpr Px yearSquare{ 16 }, yearGap{ 3 };
+inline constexpr Px rowHeight{ 156 }, progressWidth{ 250 }, progressHeight{ 16 };
+inline constexpr Px sessionHeight{ 85 }, chartInset{ 74 };
+inline constexpr Px badgeSize{ 100 }, badgeRule{ 3 };
+inline constexpr Px milestoneTop{ 20 }, milestoneGap{ 16 }, milestoneBottom{ 28 },
+        milestoneRow{ 150 }, milestoneRowGap{ 32 };
+inline constexpr Px lineWidth{ 5 }, dotRadius{ 8 };
+} // namespace activity
 
 namespace list {
 // Section strips keep the status strip's standard height.

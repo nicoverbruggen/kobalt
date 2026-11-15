@@ -7,7 +7,7 @@ This document describes what Kobalt does on a device today: which builds exist, 
 | [Installation and files](reader/installation.md) | Builds and firmware, installation, removal and recovery, files on user storage, hardware validation |
 | [macOS testing app](reader/desktop.md) | The desktop development app |
 | [Opening books](reader/opening.md) | Opening, authorization, layout checks, opening errors, closing and publication limits |
-| [Reading position, progress and history](reader/progress.md) | Saved positions, Nickel progress, finished books, Stats and reading history |
+| [Reading position, progress and history](reader/progress.md) | Saved positions, Nickel progress, finished books, Stats, reading history and Activity |
 | [Reading interface](reader/interface.md) | The reading menu, scrubber, status strip, form factors, header and footer, keyboard and shared dialogs |
 | [Page turns and navigation](reader/navigation.md) | Page turns, tap zones, swipes, chapters, links, footnotes and search |
 | [Text and typography](reader/typography.md) | Text style inheritance, fonts, columns, Styling and text rendering |

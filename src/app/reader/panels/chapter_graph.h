@@ -32,6 +32,11 @@ public:
 
     void setModeEnabled(bool enabled) { mode->setEnabled(enabled); }
 
+    // The row under the cells that opens Activity, with today's reading and
+    // the streak. Hidden without a handler.
+    void setActivity(const QString &summary);
+    std::function<void()> activityRequested;
+
     void open();
 
     void setTopPadding(int padding)
@@ -71,7 +76,14 @@ private:
     int wordsRowHeight() const;
     int wordsHeight() const;
     int pagerHeight() const;
+    int activityHeight() const;
+    bool activityRowShown() const;
+    // The cells' width: all of it, or what the Activity column leaves.
+    int cellsWidth() const;
     const bool phoneLayout;
+    bool activityAvailable = false;
+    class ActivityRow *activityRow = nullptr;
+    class ActivityCell *activityCell = nullptr;
     bool ready = false, dense = true, cellWords = false;
     qint64 words = -1, chapterTime = -1, bookTime = -1;
     int minutes = 0, pageTurns = 0, chapterNumber = 0;

@@ -31,6 +31,7 @@
 #include "app/reader/views/image_viewer.h"
 #include "app/reader/views/appearance_preview.h"
 #include "app/reader/panels/choice_screen.h"
+#include "app/reader/panels/activity_view.h"
 #include "app/reader/panels/chapter_graph.h"
 #include "app/reader/settings/acknowledgments.h"
 #include "app/reader/panels/light_panel.h"
@@ -46,6 +47,8 @@
 #include "support/save_wait.h"
 #include "app/reader/panels/word_list.h"
 #include "app/reader/panels/word_page.h"
+#include "library/cover_thumbnails.h"
+#include "storage/activity_records.h"
 #include "storage/saved_words.h"
 #include "appearance_edit_session.h"
 #include "app/reader/views/navigation.h"
@@ -674,6 +677,20 @@ private:
     void lookupSelection();
     // My Words. Null with the JSON diagnostic backend, which has no database.
     std::unique_ptr<kobalt::SavedWords> savedWords;
+    // Activity: the reading history behind Stats. The store reads on the
+    // profile writer thread; the view exists while it is open.
+    std::unique_ptr<kobalt::ActivityRecordStore> activityRecords;
+    std::unique_ptr<kobalt::library::CoverThumbnails> activityCovers;
+    QPointer<kobalt::ActivityView> activityView;
+    // Shown the first time Activity opens: the history covers this device only.
+    QPointer<ui::ModalOverlay> activityWelcome;
+    void showActivityWelcome();
+    QDate activityToday() const;
+    void openActivity();
+    void closeActivity();
+    void loadActivity();
+    void mapActivityBook(const QString &book);
+    void loadActivityCovers(const QVector<kobalt::activity::BookTotal> &books, QSize size);
     kobalt::WordList *wordList = nullptr, *allWords = nullptr;
     kobalt::WordPage *wordPage = nullptr;
     QString lookupContext, lookupPosition;

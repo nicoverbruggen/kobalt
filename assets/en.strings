@@ -1117,6 +1117,171 @@
 "stats.duration_hours" = "%1 h %2 min";
 /* Arguments: %1, %2 */
 "stats.duration_clock" = "%1:%2";
+/* Activity: the reading history behind Stats. */
+"activity.title" = "Activity";
+/* The page of one book in Activity. */
+"activity.book_title" = "Book Activity";
+"activity.close" = "Close Activity";
+/* The alert the first time Activity opens. */
+"activity.welcome_title" = "Welcome to Activity";
+"activity.welcome_description" = "Activity shows your reading time and reading stats on this device. It doesn't sync, so if you also read on another device, your streaks and totals here won't include that reading.";
+"activity.loading" = "Loading reading history…";
+"activity.unavailable" = "Reading history is unavailable right now.";
+"activity.empty" = "Your reading time appears here after your first reading session.";
+"activity.no_books" = "Books you read appear here.";
+"activity.tab_overview" = "OVERVIEW";
+"activity.tab_calendar" = "CALENDAR";
+"activity.tab_books" = "BOOKS";
+"activity.tab_records" = "RECORDS";
+/* The Activity row in Stats: today's reading. */
+"activity.row_started" = "Just started reading";
+/* Arguments: %1 */
+"activity.row_minutes" = "%1 min today";
+/* Hours and minutes read today. Arguments: %1, %2 */
+"activity.row_hours" = "%1h %2m today";
+/* Today's reading and the streak in days. Arguments: %1, %2 */
+"activity.row_streak" = "%1 · %2-day streak";
+/* Hours and minutes in a small place, such as "1 h 04". Arguments: %1, %2 */
+"activity.duration_short" = "%1 h %2";
+"activity.hours_unit" = "h";
+/* Minutes in a narrow calendar day. Arguments: %1 */
+"activity.duration_compact_minutes" = "%1m";
+/* Hours and minutes in a narrow calendar day, such as "1h04". Arguments: %1, %2 */
+"activity.duration_compact_hours" = "%1h%2";
+/* Whole hours on a chart scale, such as "2 h". Arguments: %1 */
+"activity.duration_hours" = "%1 h";
+/* The unit beside a number of hours when minutes follow, such as "h 10 min". Arguments: %1 */
+"activity.hours_minutes_unit" = "h %1 min";
+"activity.hours" = "hours";
+"activity.today" = "Today";
+"activity.streak" = "Streak";
+"activity.day" = "day";
+"activity.days" = "days";
+/* Arguments: %1 */
+"activity.best_streak" = "Best %1 days";
+/* Arguments: %1 */
+"activity.best_streak_one" = "Best %1 day";
+"activity.best_yet" = "Your best yet";
+"activity.no_reading_today" = "No reading yet today";
+/* Arguments: %1 */
+"activity.session_count" = "%1 session";
+/* Arguments: %1 */
+"activity.sessions_count" = "%1 sessions";
+/* Arguments: %1 */
+"activity.book_count" = "%1 book";
+/* Arguments: %1 */
+"activity.books_count" = "%1 books";
+"activity.this_week" = "This week";
+"activity.all_time" = "All time";
+/* Arguments: %1 */
+"activity.since" = "Since %1";
+"activity.reading" = "Reading";
+/* The average reading time per day. Arguments: %1 */
+"activity.per_day" = "≈ %1 a day";
+"activity.finished" = "Finished";
+"activity.book" = "book";
+"activity.books_unit" = "books";
+/* Arguments: %1 */
+"activity.in_progress" = "%1 in progress";
+"activity.sessions" = "Sessions";
+/* Arguments: %1 */
+"activity.average" = "%1 average";
+"activity.days_read" = "Days read";
+/* Arguments: %1 */
+"activity.of_days" = "of %1 days";
+/* Arguments: %1 */
+"activity.of_days_one" = "of %1 day";
+"activity.saved_words" = "Saved words";
+/* Arguments: %1 */
+"activity.this_week_count" = "%1 this week";
+"activity.books" = "Books";
+/* Arguments: %1 */
+"activity.this_month_count" = "%1 this month";
+"activity.longest" = "Longest";
+"activity.this_month" = "This month";
+/* Reading days of the days in the month so far. Arguments: %1, %2 */
+"activity.days_of" = "%1 of %2 days";
+/* Arguments: %1, %2 */
+"activity.days_of_one" = "%1 of %2 day";
+"activity.less" = "Less";
+"activity.more" = "More";
+/* Arguments: %1 */
+"activity.day_read" = "%1 day read";
+/* Arguments: %1 */
+"activity.days_read_count" = "%1 days read";
+"activity.finished_mark" = "Finished";
+"activity.time_read" = "Time read";
+"activity.to_finish" = "To finish";
+"activity.last_read" = "Last read";
+/* The date the book may be finished at the recent pace. Arguments: %1 */
+"activity.around" = "≈ by %1";
+"activity.estimate" = "≈ at your pace";
+"activity.progress" = "Progress";
+/* Arguments: %1 */
+"activity.started" = "Started %1";
+"activity.time_per_day" = "Time per day";
+"activity.at_recent_pace" = "at your recent pace";
+/* A session's progress, such as "21% → 22%". Arguments: %1, %2 */
+"activity.range" = "%1 → %2";
+/* Arguments: %1 */
+"activity.today_at" = "Today, %1";
+/* Arguments: %1 */
+"activity.yesterday_at" = "Yesterday, %1";
+"activity.when_you_read" = "When you read";
+/* The busiest two hours of the day. Arguments: %1, %2 */
+"activity.mostly" = "Mostly %1 – %2";
+"activity.records" = "Records";
+"activity.longest_session" = "Longest session";
+"activity.most_in_day" = "Most in one day";
+"activity.longest_streak" = "Longest streak";
+"activity.milestones" = "Milestones";
+/* Arguments: %1, %2 */
+"activity.progress_of" = "%1 / %2";
+"activity.milestone_first_book" = "First book";
+"activity.milestone_books" = "Books";
+"activity.milestone_hours" = "Hours";
+"activity.milestone_streak" = "Day streak";
+"activity.milestone_days_read" = "Days read";
+"activity.all_milestones" = "All milestones";
+/* The title of the screen with every milestone. */
+"activity.milestones_title" = "Milestones";
+/* Milestones reached of all. Arguments: %1, %2 */
+"activity.reached_of" = "%1 of %2";
+"activity.milestones_books" = "Books finished";
+"activity.milestones_hours" = "Hours read";
+"activity.milestones_streak" = "Streaks";
+"activity.milestones_days" = "Reading days";
+/* Under each kind on the Milestones screen: where the reader stands, then the next milestone. */
+"activity.phrase_books_none" = "You haven't finished a book here yet.";
+"activity.phrase_books_one" = "You've finished one book.";
+/* Arguments: %1 */
+"activity.phrase_books" = "You've finished %1 books.";
+"activity.phrase_hours_none" = "Your reading hours start here.";
+"activity.phrase_hours_one" = "You've read for one hour.";
+/* Arguments: %1 */
+"activity.phrase_hours" = "You've read for %1 hours.";
+"activity.phrase_streak_none" = "Read today to start a streak.";
+"activity.phrase_streak_one" = "Your longest streak is one day.";
+/* Arguments: %1 */
+"activity.phrase_streak" = "Your longest streak is %1 days.";
+/* The streak line while the longest streak is still going. Arguments: %1 */
+"activity.phrase_streak_ongoing" = "Your current ongoing streak is at %1 days.";
+"activity.phrase_streak_ongoing_one" = "Your current ongoing streak is at one day.";
+/* The longest streak's length and the day it ended. Arguments: %1, %2 */
+"activity.phrase_streak_ended" = "Your longest streak of %1 days ended on %2.";
+/* Arguments: %1 */
+"activity.phrase_streak_ended_one" = "Your longest streak of one day ended on %1.";
+"activity.phrase_current_none" = "You have no streak going now.";
+"activity.phrase_current_one" = "Your current streak is one day.";
+/* Arguments: %1 */
+"activity.phrase_current" = "Your current streak is %1 days.";
+"activity.phrase_days_none" = "Each day you read counts here.";
+"activity.phrase_days_one" = "You've read on one day.";
+/* Arguments: %1 */
+"activity.phrase_days" = "You've read on %1 days.";
+/* The distance to the next milestone and its target. Arguments: %1, %2 */
+"activity.phrase_next" = "%1 more to reach %2.";
+"activity.phrase_all" = "You've reached every milestone.";
 
 "opening.native" = "Letting Kobo handle this book";
 "opening.protected" = "This book is protected";

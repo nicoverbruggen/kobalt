@@ -26,6 +26,11 @@ list(FILTER kobo_shared_sources EXCLUDE REGEX "/src/engine/blaze/")
 file(GLOB_RECURSE engine_adapter ${kobo_glob_options} "${kobo_source}/engine/blaze/adapter/*.cpp" "${kobo_source}/engine/blaze/adapter/*.h")
 list(APPEND kobo_shared_sources ${engine_adapter})
 list(FILTER kobo_shared_sources EXCLUDE REGEX "/(library|app/library)/")
+# Activity's book covers use the Library's EPUB cover reader and its
+# thumbnail loader on every platform.
+list(APPEND kobo_shared_sources
+    "${kobo_source}/library/book_metadata.cpp" "${kobo_source}/library/book_metadata.h"
+    "${kobo_source}/library/cover_thumbnails.cpp" "${kobo_source}/library/cover_thumbnails.h")
 # The adapters of this SDK's firmware.
 file(GLOB kobo_adapter_sources ${kobo_glob_options}
     "${kobo_directory}/common/*.cpp" "${kobo_directory}/common/*.h"

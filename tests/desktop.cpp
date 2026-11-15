@@ -5,6 +5,8 @@
 #include "storage/record_writer.h"
 #include <QtGui/private/qeventpoint_p.h>
 #include "ui/controls/options.h"
+#include "ui/controls/rows.h"
+#include <future>
 #include "ui/controls/keyboard.h"
 #include "assets/assets.h"
 #include "assets/bundled_fonts.h"
@@ -457,6 +459,9 @@ private:
     std::shared_ptr<QByteArray> body;
 };
 
+// Activity's today in every fixture. Captures and checks use this date.
+const QDate activityToday(2026, 11, 14);
+
 struct Fixture
 {
     QTemporaryDir directory{ QDir::tempPath() + "/kobalt-profile-XXXXXX" };
@@ -492,6 +497,10 @@ struct Fixture
                       if (standaloneSettings)
                           services.devicePreview = [] { return false; };
                       services.inputMilliseconds = test::inputMilliseconds;
+                      // Activity's dates stay fixed, so its captures keep their pixels.
+                      services.activityMilliseconds = [] {
+                          return QDateTime(activityToday, QTime(9, 41)).toMSecsSinceEpoch();
+                      };
                       if (configure)
                           configure(services);
                   })
@@ -1242,6 +1251,26 @@ bool capture(Fixture &fixture, const QString &name, QWidget *nativeScreen = null
     if (!captureOnly.isEmpty() && !captureOnly.contains(parts.captured(3))
         && !captureOnly.contains("@" + test::screenshotIdentity(parts.captured(3)).first))
         return true;
+    // Activity's book lists load their covers in the background.
+    for (const char *list : { "rrActivityBooks", "rrActivityHidden" })
+        if (auto *books = fixture.widget(list); books && books->isVisible()) {
+            QElapsedTimer waited;
+            waited.start();
+            while (books->property("activity_covers_pending").toInt() > 0
+                   && waited.elapsed() < 10000)
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+            if (books->property("activity_covers_pending").toInt() > 0)
+                return false;
+        }
+    // Stats loads the Activity row's summary in the background.
+    if (auto *row = fixture.widget("rrGraphActivity"); row && row->isVisible()) {
+        QElapsedTimer waited;
+        waited.start();
+        while (row->accessibleDescription().isEmpty() && waited.elapsed() < 10000)
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        if (row->accessibleDescription().isEmpty())
+            return false;
+    }
     // Model state and visibility can settle before queued layouts and proxy
     // cache updates. Deliver those updates before rendering the visible frame.
     QCoreApplication::processEvents();
@@ -1513,6 +1542,291 @@ void fixBookmarkDates(Fixture &fixture)
     QTRY_COMPARE(reopened.count(), 1);
     QTRY_VERIFY(!fixture.state().value("busy").toBool());
     QTRY_VERIFY(fixture.state().value("bookmarked").toBool());
+}
+
+// Two and a half months of reading for Activity, up to activityToday: daily
+// totals, sessions in several books, their saved progress and saved words.
+// The open book has two sessions between real chapter positions, so its page
+// shows progress. The writes run off the main thread, as the reader's do.
+void seedActivity(Fixture &fixture, const QString &previous, const QString &position)
+{
+    const auto current = fixture.state();
+    const auto openKey = BookmarkStore::bookKey(current.value("book").toString(),
+                                                current.value("fingerprint").toString().toLatin1());
+
+    struct Book
+    {
+        const char *key, *title, *author;
+        int percent;
+        bool finished;
+    };
+
+    const Book books[] = {
+        { "activity-pride", "Pride and Prejudice", "Jane Austen", 100, true },
+        { "activity-moby", "Moby Dick; Or, The Whale", "Herman Melville", 41, false },
+        { "activity-war", "War and Peace", "Leo Tolstoy", 22, false },
+        { "activity-alice", "Alice's Adventures in Wonderland", "Lewis Carroll", 100, true },
+        { "activity-calculus", "Calculus Made Easy", "Silvanus P. Thompson", 18, false },
+        { "activity-rivers", "A Map of Quiet Rivers", "Elin Marsh", 38, false },
+    };
+    const auto identity = [](const char *key) {
+        return QStringLiteral("file:///activity/%1.epub").arg(QString::fromLatin1(key));
+    };
+    // Minutes per day from 3 September. The last twenty days end today.
+    const int recent[] = { 45, 30, 62, 18,  0,  88, 185, 0,  24, 51,
+                           33, 40, 96, 120, 38, 64, 22,  71, 55, 42 };
+    const int earlier[] = { 35, 48, 22, 61, 75, 90, 30, 18, 125, 52, 40, 66, 28 };
+    const QDate first(2026, 9, 3);
+    const int span = int(first.daysTo(activityToday)) + 1;
+
+    struct Session
+    {
+        QString book, identity, title, author, start, end;
+        qint64 started = 0, milliseconds = 0;
+    };
+
+    QMap<QDate, int> days;
+    QVector<Session> sessions;
+    for (int index = 0; index < span; ++index) {
+        const auto date = first.addDays(index);
+        const int fromEnd = span - 1 - index;
+        int minutes = fromEnd < 20 ? recent[19 - fromEnd] : earlier[index % 13];
+        // One gap ends the September streak; a few more break October.
+        if (date == QDate(2026, 10, 4) || date == QDate(2026, 10, 9) || date == QDate(2026, 10, 15)
+            || date == QDate(2026, 10, 21))
+            minutes = 0;
+        if (!minutes)
+            continue;
+        days.insert(date, minutes);
+        const auto evening = date < QDate(2026, 9, 29)                     ? 0
+                : date < QDate(2026, 10, 12)                               ? 1
+                : date >= QDate(2026, 11, 2) && date <= QDate(2026, 11, 7) ? 3
+                                                                           : 2;
+        const auto morning = date.day() % 2 ? 1 : 4;
+        const auto add = [&](int book, int hour, int minute, int length) {
+            Session session;
+            session.book = QString::fromLatin1(books[book].key);
+            session.identity = identity(books[book].key);
+            session.title = QString::fromUtf8(books[book].title);
+            session.author = QString::fromUtf8(books[book].author);
+            session.start = session.end = QStringLiteral("/body/p[1]");
+            session.started = QDateTime(date, QTime(hour, minute)).toMSecsSinceEpoch();
+            session.milliseconds = qint64(length) * 60000;
+            sessions.append(session);
+            return &sessions.last();
+        };
+        const bool openBookDay = date == QDate(2026, 11, 12) || date == activityToday;
+        if (minutes >= 60 || openBookDay) {
+            const int part = qMin(minutes - 5, qMax(5, minutes * 35 / 100));
+            if (openBookDay) {
+                auto *session = add(0, 7, 48, part);
+                session->book = openKey;
+                session->identity = current.value("book").toString();
+                session->title = QStringLiteral("Trevelyan's Type Tester");
+                session->author = QStringLiteral("Aven Teral");
+                session->start = previous;
+                session->end = date == activityToday ? position : previous;
+            } else {
+                add(date == QDate(2026, 11, 10)          ? 5
+                            : date < QDate(2026, 10, 12) ? evening
+                                                         : morning,
+                    7, 30, part);
+            }
+            add(evening, 21, 10, minutes - part);
+        } else {
+            add(evening, 21, 10, minutes);
+        }
+    }
+    auto write = std::async(std::launch::async, [&] {
+        return storage::profileTransaction(fixture.paths.directory, [&](QSqlDatabase &db) {
+            QSqlQuery query(db);
+            for (auto it = days.cbegin(); it != days.cend(); ++it) {
+                query.prepare("INSERT OR REPLACE INTO profile_state(name,format,revision,payload) "
+                              "VALUES(?,1,0,?)");
+                query.addBindValue("reading-day:" + it.key().toString(Qt::ISODate)
+                                   + ":activity-seed");
+                query.addBindValue(
+                        QString("{\"milliseconds\":%1}").arg(qint64(it.value()) * 60000));
+                if (!query.exec())
+                    return false;
+            }
+            int number = 0;
+            for (const auto &session : sessions) {
+                query.prepare(
+                        "INSERT OR REPLACE INTO reading_sessions(id,book,identity,fingerprint,source_key,"
+                        "title,author,started,observed,active_ms,start_position,end_position,status) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'completed')");
+                for (const QVariant &value :
+                     { QVariant(QString("activity-seed-%1").arg(++number)), QVariant(session.book),
+                       QVariant(session.identity), QVariant(QString(64, 'a')),
+                       QVariant(session.identity), QVariant(session.title),
+                       QVariant(session.author), QVariant(session.started),
+                       QVariant(session.started + session.milliseconds),
+                       QVariant(session.milliseconds), QVariant(session.start),
+                       QVariant(session.end) })
+                    query.addBindValue(value);
+                if (!query.exec())
+                    return false;
+            }
+            for (const auto &book : books) {
+                query.prepare("INSERT OR REPLACE INTO book_state(identity,format,revision,payload) "
+                              "VALUES(?,1,0,?)");
+                query.addBindValue(identity(book.key));
+                query.addBindValue(
+                        QString("{\"book\":\"%1\",\"percent\":%2,\"finished_position\":\"%3\"}")
+                                .arg(identity(book.key))
+                                .arg(book.percent)
+                                .arg(book.finished ? "/body/p[9]" : ""));
+                if (!query.exec())
+                    return false;
+            }
+            for (int word = 0; word < 30; ++word) {
+                query.prepare(
+                        "INSERT OR REPLACE INTO saved_words(book,word_key,word,identity,fingerprint,"
+                        "source_key,title,author,chapter,context,position,dictionary,definition,"
+                        "created,looked_up,lookups) VALUES(?,?,?,?,?,?,?,?,'','','','','',?,?,1)");
+                const auto name = QString("activity-word-%1").arg(word);
+                const qint64 created = QDateTime(activityToday.addDays(-word * 2), QTime(21, 30))
+                                               .toMSecsSinceEpoch();
+                for (const QVariant &value :
+                     { QVariant(QStringLiteral("activity-war")), QVariant(name), QVariant(name),
+                       QVariant(identity("activity-war")), QVariant(QString(64, 'a')),
+                       QVariant(identity("activity-war")),
+                       QVariant(QStringLiteral("War and Peace")),
+                       QVariant(QStringLiteral("Leo Tolstoy")), QVariant(created),
+                       QVariant(created) })
+                    query.addBindValue(value);
+                if (!query.exec())
+                    return false;
+            }
+            return true;
+        });
+    });
+    QTRY_VERIFY(write.wait_for(std::chrono::seconds(0)) == std::future_status::ready);
+    QVERIFY(write.get());
+}
+
+QString labelText(Fixture &fixture, const char *name)
+{
+    const auto *label = qobject_cast<QLabel *>(fixture.widget(name));
+    return label ? label->text() : QString();
+}
+
+// Stats, its Activity row and every Activity section, opened as a person would.
+// `pages` captures every page of a paged screen; a run without screenshots
+// passes one that does nothing.
+template <class Scene, class Pages>
+void activityTour(Fixture &fixture, const Scene &scene, const Pages &pages)
+{
+    // The open book's seeded sessions run from the previous page to this one.
+    if (fixture.visible("rrNavStats"))
+        QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(!fixture.visible("rrNavStats"));
+    const auto position = fixture.state().value("position").toString();
+    QVERIFY(fixture.turnPage(-1));
+    QTRY_VERIFY(fixture.state().value("position").toString() != position);
+    const auto earlier = fixture.state().value("position").toString();
+    QVERIFY(fixture.turnPage(1));
+    QTRY_COMPARE(fixture.state().value("position").toString(), position);
+    seedActivity(fixture, earlier, position);
+    if (QTest::currentTestFailed())
+        return;
+    QVERIFY(fixture.press("rrPage"));
+    QTRY_VERIFY(fixture.visible("rrNavStats"));
+    QVERIFY(fixture.press("rrNavStats"));
+    // Short screens open Activity from a fourth column instead of the row.
+    QTRY_VERIFY(fixture.visible("rrGraphActivity") || fixture.visible("rrGraphActivityCell"));
+    const char *entry =
+            fixture.visible("rrGraphActivity") ? "rrGraphActivity" : "rrGraphActivityCell";
+    QTRY_COMPARE(fixture.widget(entry)->accessibleDescription(),
+                 QString("42 min today · 12-day streak"));
+    QVERIFY(scene("stats-activity"));
+    QVERIFY(fixture.press(entry));
+    // The first opening explains that the history covers this device.
+    QTRY_VERIFY(fixture.visible("rrActivityWelcome"));
+    // The history loads after the open book's session is saved.
+    QTRY_VERIFY(fixture.visible("rrActivityOverview"));
+    QVERIFY(scene("stats-activity-welcome"));
+    QVERIFY(fixture.press("rrActivityWelcomeClose"));
+    QTRY_VERIFY(!fixture.visible("rrActivityWelcome"));
+    QTRY_VERIFY(fixture.visible("rrActivityOverview"));
+    QCOMPARE(labelText(fixture, "rrActivityTodayFigure"), QString("42"));
+    QCOMPARE(labelText(fixture, "rrActivityStreakFigure"), QString("12"));
+    QVERIFY(scene("stats-activity-overview"));
+    QVERIFY(fixture.press("rrActivityCalendarTab"));
+    QTRY_VERIFY(fixture.visible("rrActivityCalendar"));
+    QCOMPARE(labelText(fixture, "rrActivityLongestFigure"), QString("31"));
+    QVERIFY(scene("stats-activity-calendar"));
+    QVERIFY(fixture.press("rrActivityMonthsPrevious"));
+    QTRY_COMPARE(labelText(fixture, "rrActivityMonthTotalCaption"), QString("October"));
+    QVERIFY(fixture.press("rrActivityMonthsNext"));
+    QTRY_COMPARE(labelText(fixture, "rrActivityMonthTotalCaption"), QString("This month"));
+    QVERIFY(fixture.press("rrActivityRecordsTab"));
+    QTRY_VERIFY(fixture.visible("rrActivityRecords"));
+    QVERIFY(scene("stats-activity-records"));
+    QVERIFY(fixture.press("rrActivityAllMilestones"));
+    QTRY_VERIFY(fixture.visible("rrActivityMilestonesScreen"));
+    QVERIFY(fixture.visible("rrActivityBack"));
+    QVERIFY(!fixture.visible("rrActivityBooksTab"));
+    pages("stats-activity-milestones", "rrActivityMilestones");
+    if (QTest::currentTestFailed())
+        return;
+    QVERIFY(fixture.press("rrActivityBack"));
+    QTRY_VERIFY(fixture.visible("rrActivityRecords"));
+    QVERIFY(fixture.press("rrActivityBooksTab"));
+    QTRY_VERIFY(fixture.visible("rrActivityBooks"));
+    // Covers load for the shown page in the background.
+    QTRY_COMPARE(fixture.widget("rrActivityBooks")->property("activity_covers_pending").toInt(), 0);
+    pages("stats-activity-books", "rrActivityBooks");
+    if (QTest::currentTestFailed())
+        return;
+    if (fixture.widget("rrActivityBooksPrevious")->isVisible())
+        while (fixture.widget("rrActivityBooksPrevious")->isEnabled())
+            QVERIFY(fixture.press("rrActivityBooksPrevious"));
+    QCOMPARE(fixture.widget("rrActivityBook1")->accessibleName(), QString("War and Peace"));
+    QVERIFY(fixture.press("rrActivityBook1"));
+    QTRY_VERIFY(fixture.visible("rrActivityBookPage"));
+    QVERIFY(fixture.visible("rrActivityBack"));
+    QVERIFY(scene("stats-activity-book"));
+    QVERIFY(fixture.press("rrActivityBack"));
+    QTRY_VERIFY(fixture.visible("rrActivityBooks"));
+    // The open book's page maps its sessions into the current layout. Its row
+    // can be on a later page on smaller screens.
+    QByteArray open;
+    for (int page = 0; page < 6 && open.isEmpty(); ++page) {
+        for (int index = 1; index <= 12; ++index) {
+            const auto name = QString("rrActivityBook%1").arg(index).toLatin1();
+            const auto *book = fixture.widget(name.constData());
+            if (book && book->isVisible() && book->accessibleName() == "Trevelyan's Type Tester") {
+                open = name;
+                break;
+            }
+        }
+        if (open.isEmpty())
+            QVERIFY(fixture.press("rrActivityBooksNext"));
+    }
+    QVERIFY(!open.isEmpty());
+    QVERIFY(fixture.press(open.constData()));
+    QTRY_VERIFY(fixture.visible("rrActivityBookPage"));
+    QTRY_VERIFY(static_cast<ui::ListHeader *>(fixture.widget("rrActivityChartBand"))
+                        ->leftLabel()
+                        ->text()
+                        .startsWith("PROGRESS"));
+    QVERIFY(scene("stats-activity-open-book"));
+    QVERIFY(fixture.press("rrActivityClose"));
+    QTRY_VERIFY(!fixture.visible("rrActivity"));
+    QVERIFY(fixture.visible("rrChapterGraph"));
+    // The welcome shows once, and its choice is saved.
+    QTRY_VERIFY(storage::readPreferences(fixture.paths.preferences())
+                        .object.value("activity_welcome_seen")
+                        .toBool(false));
+    QVERIFY(fixture.press(entry));
+    QTRY_VERIFY(fixture.visible("rrActivityOverview"));
+    QVERIFY(!fixture.visible("rrActivityWelcome"));
+    QVERIFY(fixture.press("rrActivityClose"));
+    QTRY_VERIFY(!fixture.visible("rrActivity"));
+    QVERIFY(fixture.press("rrNavStats"));
+    QTRY_VERIFY(!fixture.visible("rrChapterGraph"));
 }
 
 void openPrologueBody(Fixture &fixture)
@@ -2532,6 +2846,16 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
     QVERIFY(scene("stats"));
     QVERIFY(fixture.press("rrNavStats"));
     QTRY_VERIFY(!fixture.visible("rrChapterGraph"));
+    if (screenshots) {
+        activityTour(fixture, scene, [&](const QString &suffix, const char *prefix) {
+            capturePages(fixture, name + '-' + suffix, prefix);
+        });
+        if (QTest::currentTestFailed())
+            return;
+        if (!fixture.visible("rrNavText"))
+            QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavText"));
+    }
     QVERIFY(fixture.press("rrNavText"));
     QTRY_VERIFY(fixture.visible("rrFont"));
     QVERIFY(scene("text"));
@@ -11400,6 +11724,22 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(light->savedBrightness, -1);
         QCOMPARE(light->savedWarmth, -1);
         QVERIFY(!fixture.visible("rrBrightnessNotice"));
+    }
+
+    // Activity opens from the Stats row with the history: its sections, an
+    // earlier month, another book's page and the open book's mapped sessions.
+    void activity()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        openPrologueBody(fixture);
+        activityTour(
+                fixture, [](const QString &) { return true; },
+                [](const QString &, const char *) {});
     }
 
     void graphMode_data() { screenshotVariants(); }

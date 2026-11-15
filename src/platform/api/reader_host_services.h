@@ -123,6 +123,9 @@ struct ReaderHostServices
     // Optional local time of day in milliseconds for the reader's minute tick;
     // tests replace it.
     std::function<int()> millisecondsOfDay;
+    // Optional UTC milliseconds that decide today's date in Activity; tests
+    // replace it so captures keep their dates.
+    std::function<qint64()> activityMilliseconds;
     std::function<BatteryStatus()> battery;
     // Optional native notifications. The subscription ends with context.
     std::function<void(QObject *context, std::function<void()> changed)> observeBattery;

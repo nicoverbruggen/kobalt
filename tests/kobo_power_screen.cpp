@@ -373,11 +373,11 @@ private slots:
         QSqlQuery query(database);
         QVERIFY(query.exec("CREATE TABLE content (ContentID TEXT, ContentType INTEGER, "
                            "DateLastRead TEXT, Title TEXT, Attribution TEXT, ImageId TEXT, "
-                           "___PercentRead INTEGER)"));
+                           "___PercentRead INTEGER, ReadStatus INTEGER)"));
         // Nickel's percentage wins over the one Kobalt saved.
         QVERIFY(query.exec(
                 "INSERT INTO content VALUES ('kobalt-book', 6, "
-                "'2026-11-14T08:00:00Z', 'Type Tester', 'N. Farbridge', 'no-image', 42)"));
+                "'2026-11-14T08:00:00Z', 'Type Tester', 'N. Farbridge', 'no-image', 42, 1)"));
         QJsonObject positions;
         positions[sleep::value(sleep::Design::Seal)] = sleep::value(sleep::Place::TopLeft);
         QVERIFY(storage::writeBookState(paths, "kobalt-book",

@@ -316,7 +316,14 @@ inline bool LVFreeTypeFace::koblazeBuildWord( const lChar32 * text, int len, int
         if ( koblazeWordChar(c) < 2 )
             return false;
         const int next_index = index, next_glyph = glyph, next_advance = advance;
-        index = c < 0x250 ? (int)c : (int)c - 0x2010 + 0x250;
+        if ( c < 0x250 )
+            index = (int)c;
+        else if ( c >= 0x1E00 && c <= 0x1EFF )
+            index = KW_EXTENDED + (int)c - 0x1E00;
+        else if ( c >= 0x2010 && c <= 0x203A )
+            index = KW_PUNCT + (int)c - 0x2010;
+        else
+            return false;
         if ( cached.char_glyph[index] == KW_UNKNOWN ) {
             koblazeShapeWord(&c, 1);
             unsigned int glyphs = 0;

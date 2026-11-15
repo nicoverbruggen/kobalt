@@ -1748,7 +1748,8 @@ protected:
     unsigned int _koblaze_kern_runs = 0;
     blaze::WordCache _word_cache;
     enum { KW_BIT_GLYPH = 1, KW_BIT_ADVANCE = 2 };
-    enum { KW_MAX_LEN = 48, KW_CHARS = 0x250 + 0x203B - 0x2010 };
+    enum { KW_MAX_LEN = 48, KW_EXTENDED = 0x250, KW_PUNCT = KW_EXTENDED + 0x100,
+           KW_CHARS = KW_PUNCT + 0x203B - 0x2010 };
     bool _koblaze_build_failed = false;
     unsigned int _koblaze_built_words = 0;
     std::vector<int> _koblaze_built_check;

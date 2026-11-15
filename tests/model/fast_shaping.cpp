@@ -49,16 +49,8 @@ void checkWordCache()
     }
 }
 
-void open(EngineDocument &model, int characters, const QString &face)
+void open(EngineDocument &model, const QByteArray &body, const QString &face)
 {
-    const QByteArray prose("The reader crossed the quiet room and opened the book. ");
-    QByteArray body;
-    int remaining = characters;
-    while (remaining > 0) {
-        const auto text = prose.left(qMin(remaining, prose.size()));
-        body += "<p>" + text + "</p>";
-        remaining -= text.size();
-    }
     auto files = kobalt::test::engineBook(false, 1, 1);
     files["OEBPS/c1.xhtml"] = kobalt::test::publisherHtml(body);
     QMap<QString, qint64> sizes;
@@ -74,6 +66,19 @@ void open(EngineDocument &model, int characters, const QString &face)
     QString error;
     require(model.openResources(resources, sizes, viewport, { { "font_face", face } }, &error),
             qPrintable(error));
+}
+
+void open(EngineDocument &model, int characters, const QString &face)
+{
+    const QByteArray prose("The reader crossed the quiet room and opened the book. ");
+    QByteArray body;
+    int remaining = characters;
+    while (remaining > 0) {
+        const auto text = prose.left(qMin(remaining, prose.size()));
+        body += "<p>" + text + "</p>";
+        remaining -= text.size();
+    }
+    open(model, body, face);
 }
 
 void checkChoice(EngineDocument &model, bool expected)
@@ -97,12 +102,37 @@ void compare(EngineDocument &automatic, EngineDocument &reference)
                 "Conditional shaping changed page pixels");
     }
 }
+
+void checkExtendedLatin()
+{
+    // Warm the word cache past its initial shaping checks before introducing ḷ.
+    // The old glyph index for ḷ was also the index for w.
+    QByteArray body("<p>w a ");
+    for (int word = 0; word < 853; ++word) {
+        int digits = word;
+        for (int i = 0; i < 5; ++i) {
+            body += "abcd"[digits % 4];
+            digits /= 4;
+        }
+        body += ' ';
+    }
+    body += "</p>";
+    body += ("<p>" + QByteArray(u8"ḷ ").repeated(71) + "</p>").repeated(95);
+    EngineDocument fast(kobalt::test::readerFonts()), normal(kobalt::test::readerFonts());
+    qputenv("KOBALT_FAST_SHAPING", "1");
+    open(fast, body, "Libron");
+    qputenv("KOBALT_FAST_SHAPING", "0");
+    open(normal, body, "Libron");
+    qunsetenv("KOBALT_FAST_SHAPING");
+    compare(fast, normal);
+}
 } // namespace
 
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
     checkWordCache();
+    checkExtendedLatin();
     for (const auto &face : { QStringLiteral("Libron"), kobalt::test::alternateReadingFace(),
                               kobalt::test::headingReadingFace() }) {
         for (int characters : { 8000, 249999, 250000 }) {

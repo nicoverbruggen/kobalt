@@ -52,6 +52,9 @@ public:
 
     qint64 dayMilliseconds(const QString &day) const { return days.value(day); }
 
+    // This opening's active milliseconds per ISO date, including unsaved time.
+    const QMap<QString, qint64> &dayTotals() const { return days; }
+
     // Other openings are read off the GUI thread. This opening is added from
     // memory, independently of its checkpoint's progress through the writer.
     static qint64 dayTotal(const QString &directory, const QString &day,

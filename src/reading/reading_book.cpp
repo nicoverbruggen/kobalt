@@ -662,6 +662,19 @@ qint64 ReadingBook::readingDayMilliseconds()
     return history->dayMilliseconds(readingDay());
 }
 
+QMap<QDate, qint64> ReadingBook::readingDays()
+{
+    QMap<QDate, qint64> result;
+    if (!history)
+        return result;
+    if (activeReading.isValid())
+        history->update(readingMilliseconds(), session_->state().value("position").toString());
+    const auto &days = history->dayTotals();
+    for (auto it = days.cbegin(); it != days.cend(); ++it)
+        result.insert(QDate::fromString(it.key(), Qt::ISODate), it.value());
+    return result;
+}
+
 qint64 ReadingBook::readingMilliseconds() const
 {
     return completedReadingMilliseconds + (activeReading.isValid() ? activeReading.elapsed() : 0);

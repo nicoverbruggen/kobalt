@@ -1,0 +1,231 @@
+#include "reading/reading_activity.h"
+#include "storage/activity_records.h"
+#include "storage/profile_database.h"
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QElapsedTimer>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QTemporaryDir>
+#include <QVariant>
+
+using namespace kobalt;
+
+namespace {
+void require(bool ok, const char *message)
+{
+    if (!ok)
+        qFatal("%s", message);
+}
+
+constexpr qint64 minute = 60 * 1000;
+
+// Local times, so the dates hold in every time zone.
+qint64 at(const QDate &date, int hour, int minuteOfHour = 0)
+{
+    return QDateTime(date, QTime(hour, minuteOfHour)).toMSecsSinceEpoch();
+}
+
+ActivitySession session(const QString &book, const QDate &date, int hour, qint64 minutes,
+                        const QString &title = {})
+{
+    ActivitySession value;
+    value.book = book;
+    value.identity = "file:///books/" + book + ".epub";
+    value.title = title.isEmpty() ? book : title;
+    value.author = "Author";
+    value.started = at(date, hour);
+    value.milliseconds = minutes * minute;
+    value.observed = value.started + value.milliseconds;
+    return value;
+}
+
+const QDate today(2026, 11, 14);
+
+// Daily totals win over sessions; dates without totals use their sessions.
+void daysAndFallback()
+{
+    ActivityRecords records;
+    records.sessions = { session("a", QDate(2026, 9, 3), 20, 30), session("a", today, 8, 10) };
+    records.days.insert(today, 25 * minute);
+    const auto summary = activity::summarize(records, today, { { today, 5 * minute } });
+    require(summary.days.value(QDate(2026, 9, 3)) == 30 * minute,
+            "A date before daily totals lost its sessions");
+    require(summary.todayMilliseconds == 30 * minute,
+            "Today did not add the open book's unsaved time to the saved totals");
+    require(summary.totalMilliseconds == 60 * minute, "The total did not follow the days");
+    require(summary.since == QDate(2026, 9, 3) && summary.daysSince == 73,
+            "The first reading day was wrong");
+    require(summary.todaySessions == 1 && summary.todayBooks == 1, "Today's sessions were wrong");
+}
+
+// A streak survives a day that has not had reading yet, and breaks after it.
+void streaks()
+{
+    ActivityRecords records;
+    for (int day = 1; day <= 5; ++day)
+        records.days.insert(QDate(2026, 10, day), 20 * minute);
+    for (int day = 10; day <= 13; ++day)
+        records.days.insert(QDate(2026, 11, day), 20 * minute);
+    records.days.insert(QDate(2026, 11, 9), 30 * 1000);
+    auto summary = activity::summarize(records, today);
+    require(summary.current.days == 4 && summary.current.first == QDate(2026, 11, 10),
+            "Yesterday's streak ended before today's reading");
+    require(summary.longest.days == 5 && summary.longest.first == QDate(2026, 10, 1),
+            "The longest streak was wrong");
+    require(summary.daysRead == 9, "Half a minute counted as a reading day");
+    summary = activity::summarize(records, today.addDays(1));
+    require(summary.current.days == 0, "A streak survived a whole day without reading");
+}
+
+void weekAndMonths()
+{
+    ActivityRecords records;
+    records.sessions = { session("a", QDate(2026, 10, 30), 21, 40, "October"),
+                         session("a", QDate(2026, 11, 9), 21, 30, "November"),
+                         session("b", QDate(2026, 11, 10), 21, 50),
+                         session("a", today, 7, 20, "November") };
+    records.percent.insert("file:///books/a.epub", 22);
+    records.percent.insert("file:///books/b.epub", 100);
+    records.finished.insert("file:///books/b.epub");
+    const auto summary = activity::summarize(records, today);
+    require(summary.week.size() == 7 && summary.week[0] == 30 * minute
+                    && summary.week[1] == 50 * minute && summary.week[5] == 20 * minute
+                    && summary.week[6] == -1,
+            "The week did not run from Monday with the future left empty");
+    require(summary.weekMilliseconds == 100 * minute, "The week total was wrong");
+    require(summary.months.size() == 2 && summary.months[0].month == QDate(2026, 11, 1),
+            "Months were not newest first");
+    const auto &november = summary.months[0];
+    require(november.books.size() == 2 && november.books[0].book == "a"
+                    && november.books[0].milliseconds == 50 * minute
+                    && november.books[0].sessions == 2 && november.books[0].percent == 22,
+            "November's books were wrong");
+    require(november.books[1].finished, "A finished book lost its mark");
+    require(summary.finished == 1 && summary.inProgress == 1 && summary.books == 2
+                    && summary.booksThisMonth == 2,
+            "Book counts were wrong");
+    require(summary.longestSession == 50 * minute && summary.longestSessionTitle == "b",
+            "The longest session was wrong");
+}
+
+// A session that crosses the hour fills both hours.
+void hours()
+{
+    ActivityRecords records;
+    auto value = session("a", today, 21, 0);
+    value.started = at(today, 21, 40);
+    value.milliseconds = 50 * minute;
+    records.sessions = { value };
+    const auto summary = activity::summarize(records, today);
+    require(summary.hours[21] == 20 * minute && summary.hours[22] == 30 * minute,
+            "A session did not spread over the hours it covered");
+}
+
+// A session under two minutes keeps its time on the day but is not counted.
+void shortSessions()
+{
+    ActivityRecords records;
+    records.sessions = { session("a", today, 8, 10), session("b", today, 9, 1) };
+    const auto summary = activity::summarize(records, today);
+    require(summary.todayMilliseconds == 11 * minute, "A short session lost its time");
+    require(summary.sessions == 1 && summary.todaySessions == 1 && summary.todayBooks == 1,
+            "A short session counted as a session");
+    require(activity::bookSessions(records, "b", today).isEmpty()
+                    && activity::bookTotal(records, "b", today).sessions == 0,
+            "A short session was listed for its book");
+}
+
+void milestones()
+{
+    ActivityRecords records;
+    for (int day = 0; day < 8; ++day)
+        records.days.insert(today.addDays(-day), 2 * 3600 * 1000);
+    records.finished.insert("x");
+    const auto summary = activity::summarize(records, today);
+    int reached = 0;
+    for (const auto &milestone : summary.milestones)
+        reached += milestone.reached();
+    // One book, 10 hours and a 7-day streak.
+    require(reached == 3, "Milestones were not reached as expected");
+}
+
+QVariant sql(const QString &directory, const QString &statement, const QVariantList &values = {})
+{
+    QVariant value;
+    require(storage::profileTransaction(directory,
+                                        [&](QSqlDatabase &db) {
+                                            QSqlQuery query(db);
+                                            query.prepare(statement);
+                                            for (const auto &item : values)
+                                                query.addBindValue(item);
+                                            if (!query.exec())
+                                                return false;
+                                            if (query.next())
+                                                value = query.value(0);
+                                            return true;
+                                        }),
+            "Activity SQL fixture");
+    return value;
+}
+
+// The store reads the profile on the writer thread and leaves out the
+// excluded opening's daily totals.
+void storeReadsProfile()
+{
+    QTemporaryDir root;
+    const auto directory = root.path();
+    const auto started = at(QDate(2026, 11, 13), 21);
+    sql(directory,
+        "INSERT INTO reading_sessions(id,book,identity,fingerprint,source_key,title,author,started,"
+        "observed,active_ms,start_position,end_position,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        { "s1", "book-a", "file:///a.epub", QString(64, 'a'), "/a.epub", "War and Peace",
+          "Leo Tolstoy", started, started + 48 * minute, 48 * minute, "/body/p[1]", "/body/p[9]",
+          "completed" });
+    for (const auto &name : { QStringLiteral("reading-day:2026-11-13:open-1"),
+                              QStringLiteral("reading-day:2026-11-13:open-2"),
+                              QStringLiteral("reading-day:2026-11-14:open-2") })
+        sql(directory, "INSERT INTO profile_state(name,format,revision,payload) VALUES(?,1,0,?)",
+            { name, QStringLiteral("{\"milliseconds\":600000}") });
+    sql(directory, "INSERT INTO book_state(identity,format,revision,payload) VALUES(?,1,0,?)",
+        { "file:///a.epub", QStringLiteral("{\"percent\":22,\"finished_position\":\"\"}") });
+    sql(directory, "INSERT INTO book_state(identity,format,revision,payload) VALUES(?,1,0,?)",
+        { "file:///b.epub", QStringLiteral("{\"percent\":100,\"finished_position\":\"/end\"}") });
+
+    ActivityRecordStore store(directory);
+    bool done = false, ok = false;
+    ActivityRecords records;
+    store.load("open-2", [&](bool success, ActivityRecords result) {
+        ok = success;
+        records = std::move(result);
+        done = true;
+    });
+    QElapsedTimer timer;
+    timer.start();
+    while (!done && timer.elapsed() < 10000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    require(done && ok, "Activity records did not load");
+    require(records.sessions.size() == 1 && records.sessions[0].title == "War and Peace"
+                    && records.sessions[0].milliseconds == 48 * minute,
+            "The session did not load");
+    require(records.days.size() == 1 && records.days.value(QDate(2026, 11, 13)) == 10 * minute,
+            "The excluded opening's daily totals were counted");
+    require(records.percent.value("file:///a.epub") == 22 && records.finished.size() == 1
+                    && records.finished.contains("file:///b.epub"),
+            "Book progress or the finished mark did not load");
+}
+} // namespace
+
+int main(int argc, char **argv)
+{
+    QCoreApplication app(argc, argv);
+    daysAndFallback();
+    streaks();
+    weekAndMonths();
+    hours();
+    shortSessions();
+    milestones();
+    storeReadsProfile();
+    storage::closeProfile();
+    return 0;
+}

@@ -1,4 +1,6 @@
 #pragma once
+#include <QDate>
+#include <QMap>
 #include "reading_pace.h"
 #include "reading_speed.h"
 #include "reading_progress.h"
@@ -102,6 +104,8 @@ public:
     QString readingDay() const;
     QString readingOpeningId() const;
     qint64 readingDayMilliseconds();
+    // This opening's reading per local date, including time not saved yet.
+    QMap<QDate, qint64> readingDays();
 
     qint64 sessionReadingMilliseconds() const { return readingMilliseconds() - sessionBaseline; }
 

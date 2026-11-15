@@ -424,6 +424,11 @@ void upgradeAndSleep()
     const auto summary = activity::summarize(records, second);
     require(summary.hours[23] == 10 * minute && summary.hours[0] == 5 * minute,
             "Sleep moved reading into the wrong hour");
+    const auto book = records.sessions.last().book;
+    const auto days = activity::bookDays(records, book, second);
+    require(days.value(first) == 10 * minute && days.value(second) == 5 * minute
+                    && summary.months.first().milliseconds == 5 * minute,
+            "The book's time went to the wrong date or month");
 }
 } // namespace
 

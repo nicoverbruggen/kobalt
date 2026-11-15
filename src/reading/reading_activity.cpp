@@ -25,7 +25,7 @@ QDate monthOf(const QDate &date)
     return QDate(date.year(), date.month(), 1);
 }
 
-void add(BookTotal &total, const ActivitySession &session)
+void add(BookTotal &total, const ActivitySession &session, qint64 milliseconds)
 {
     if (!total.sessions) {
         total.book = session.book;
@@ -36,7 +36,7 @@ void add(BookTotal &total, const ActivitySession &session)
     total.sourceKey = session.sourceKey;
     total.title = session.title;
     total.author = session.author;
-    total.milliseconds += session.milliseconds;
+    total.milliseconds += milliseconds;
     ++total.sessions;
     total.first = qMin(total.first, session.started);
     total.last = qMax(total.last, session.observed);
@@ -154,14 +154,24 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
             continue;
         ++summary.sessions;
         allBooks.insert(session.book);
-        if (monthOf(date) == monthOf(today))
-            monthBooks.insert(session.book);
-        if (date == today) {
+        QMap<QDate, qint64> monthTime;
+        bool readToday = false;
+        visitHours(session, [&](const QDate &day, int hour, qint64 milliseconds) {
+            if (day > today)
+                return;
+            monthTime[monthOf(day)] += milliseconds;
+            summary.hours[hour] += milliseconds;
+            if (day == today) {
+                readToday = true;
+                todayBooks.insert(session.book);
+            }
+            if (monthOf(day) == monthOf(today))
+                monthBooks.insert(session.book);
+            if (day == summary.bestDayDate)
+                bestDayBooks.insert(session.book);
+        });
+        if (readToday)
             ++summary.todaySessions;
-            todayBooks.insert(session.book);
-        }
-        if (date == summary.bestDayDate)
-            bestDayBooks.insert(session.book);
         const bool hidden = records.hidden.contains(session.book);
         if (session.milliseconds > summary.longestSession) {
             summary.longestSession = session.milliseconds;
@@ -169,10 +179,10 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
             summary.longestSessionTitle = hidden ? QString() : session.title;
         }
         if (hidden)
-            add(hiddenBooks[session.book], session);
+            add(hiddenBooks[session.book], session, session.milliseconds);
         else
-            add(months[monthOf(date)][session.book], session);
-        visitHours(session, [&](const QDate &, int hour, qint64 ms) { summary.hours[hour] += ms; });
+            for (auto month = monthTime.cbegin(); month != monthTime.cend(); ++month)
+                add(months[month.key()][session.book], session, month.value());
     }
     summary.todayBooks = todayBooks.size();
     summary.books = allBooks.size();
@@ -268,7 +278,10 @@ QMap<QDate, qint64> bookDays(const ActivityRecords &records, const QString &book
     QMap<QDate, qint64> days;
     for (const auto &session : records.sessions)
         if (session.book == book && countsAsSession(session) && localDate(session.started) <= today)
-            days[localDate(session.started)] += session.milliseconds;
+            visitHours(session, [&](const QDate &day, int, qint64 milliseconds) {
+                if (day <= today)
+                    days[day] += milliseconds;
+            });
     return days;
 }
 
@@ -277,7 +290,7 @@ BookTotal bookTotal(const ActivityRecords &records, const QString &book, const Q
     BookTotal total;
     for (const auto &session : records.sessions)
         if (session.book == book && countsAsSession(session) && localDate(session.started) <= today)
-            add(total, session);
+            add(total, session, session.milliseconds);
     describe(total, records);
     return total;
 }

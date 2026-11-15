@@ -11989,42 +11989,44 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 dynamic_cast<reader::DictionariesPage *>(fixture.widget("rrDictionaries"));
         QVERIFY(dictionaries);
         dictionaries->setStorage({}, 32000000000LL);
-        QCoreApplication::processEvents();
-        auto *row = fixture.widget("rrDictionaryRow0");
-        QVERIFY(row);
-        bool found = false;
-        for (auto *label : row->findChildren<QLabel *>()) {
-            if (!label->text().contains("English"))
-                continue;
-            found = true;
-            QCOMPARE(label->palette().color(QPalette::WindowText),
-                     dark ? QColor(Qt::white) : QColor(Qt::black));
-            auto *canvas = fixture.window.findChild<QGraphicsView *>();
-            auto *stage = fixture.window.centralWidget();
-            const auto at = [&](QPoint point) {
-                return canvas->viewport()->mapTo(
-                        stage,
-                        canvas->mapFromScene(label->mapTo(fixture.window.readerWindow(), point)));
-            };
-            const QImage frame(fixture.window.saveScreenshot(fixture.directory.path()));
-            QVERIFY(!frame.isNull());
-            const qreal scale = frame.devicePixelRatio();
-            const QRect bounds(at(label->rect().topLeft()) * scale,
-                               at(label->rect().bottomRight()) * scale);
-            QVERIFY(frame.rect().contains(bounds));
-            int ink = 0;
-            const auto pixels = frame.convertToFormat(QImage::Format_ARGB32);
-            for (int y = bounds.top() + 2; y < bounds.bottom() - 2; ++y)
-                for (int x = bounds.left() + 2; x < bounds.right() - 2; ++x) {
-                    const auto pixel = pixels.pixel(x, y);
-                    const int gray = qGray(pixel);
-                    ink += qAlpha(pixel) > 200 && (dark ? gray > 200 : gray < 80);
-                }
-            QVERIFY2(
-                    ink > 10,
-                    "Dictionary title disappeared from the actual canvas capture after rebuilding the list");
-        }
-        QVERIFY(found);
+        // Resizing the page queues the list layout and then a canvas repaint.
+        // Sample the visible title after those updates reach the preview.
+        const auto titleHasInk = [&] {
+            auto *row = fixture.widget("rrDictionaryRow0");
+            if (!row)
+                return false;
+            auto *reader = fixture.window.readerWindow();
+            auto *canvas = reader->graphicsProxyWidget()->scene()->views().first();
+            for (auto *label : row->findChildren<QLabel *>()) {
+                if (!label->isVisible() || !label->text().contains("English"))
+                    continue;
+                if (label->palette().color(QPalette::WindowText)
+                    != (dark ? QColor(Qt::white) : QColor(Qt::black)))
+                    return false;
+                const auto at = [&](QPoint point) {
+                    return canvas->viewport()->mapTo(
+                            fixture.window.centralWidget(),
+                            canvas->mapFromScene(label->mapTo(reader, point)));
+                };
+                const QImage frame(fixture.window.saveScreenshot(fixture.directory.path()));
+                const auto scale = frame.devicePixelRatio();
+                const QRect bounds(at(label->rect().topLeft()) * scale,
+                                   at(label->rect().bottomRight()) * scale);
+                if (!frame.rect().contains(bounds))
+                    return false;
+                int ink = 0;
+                const auto pixels = frame.convertToFormat(QImage::Format_ARGB32);
+                for (int y = bounds.top() + 2; y < bounds.bottom() - 2; ++y)
+                    for (int x = bounds.left() + 2; x < bounds.right() - 2; ++x) {
+                        const auto pixel = pixels.pixel(x, y);
+                        const int gray = qGray(pixel);
+                        ink += qAlpha(pixel) > 200 && (dark ? gray > 200 : gray < 80);
+                    }
+                return ink > 10;
+            }
+            return false;
+        };
+        QTRY_VERIFY2(titleHasInk(), "The visible dictionary title never reached the canvas");
     }
 
     // Checks brightness and warmth gestures with each feedback choice: queued commands, deferred notices and cancellation.

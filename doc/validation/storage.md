@@ -19,6 +19,8 @@ These checks cover the profile database, record writers, saves at close and slee
 
 `lifecycle.activityBatchesAndLowBattery` waits for standby to request the activity save after the page turn's queued refresh. It checks standby both before and after a failed background save completes. Standby may resume during retry cooldown only after pending writes end. The check retains the unsaved position until an explicit successful checkpoint.
 
+`session.reading-book` holds the profile writer while an enlarged image returns to Fit. It reads the stored book record after the writer drains. It also delays acknowledgements across repeated choices, forces the newest write to fail, and checks that an unchanged retry reaches storage. A close that is still saving accepts a newer explicit choice. A synchronous checkpoint waits for the close write, preserves its callback and confirms the newer state.
+
 `platform.native-lifecycle` checks native scan dispatch, rejection of a second pending request and one-shot completion through Nickel’s `doneProcessing` signal.
 
 `model.preview-store` belongs to the `settings` label. Run it separately with `ctest --preset mac -R '^model.preview-store$'`.

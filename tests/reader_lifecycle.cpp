@@ -9150,7 +9150,8 @@ private slots:
             return storage::readBookState(paths, identity).object.value("position").toString();
         };
         QTRY_COMPARE_WITH_TIMEOUT(stored(), anchor, 5000);
-        QVERIFY(host.window()->flushBeforeStandby());
+        // The row can be visible before the reader receives the save acknowledgement.
+        QTRY_VERIFY(host.window()->flushBeforeStandby());
         QCOMPARE(host.progress->writes, writes);
         QString error;
         const auto expected = host.session()->savedNativePosition(&error);

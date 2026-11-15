@@ -4,6 +4,7 @@
 #include "reading/reading_book.h"
 #include "reading/appearance_settings.h"
 #include "reading/session_timeout.h"
+#include "reading/text_presets.h"
 #include "app/messages/opening_message.h"
 #include "reading/reader_session.h"
 #include "storage/reader_storage.h"
@@ -25,6 +26,7 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QJsonDocument>
+#include <QSemaphore>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QThread>
@@ -350,6 +352,93 @@ int main(int argc, char **argv)
                             && !storage::readBookState(finishPaths, identity)
                                         .object.contains("image_views"),
                     "Fit restored stale views from the opening record");
+            // Deliver the first A completion only after a second A has been queued.
+            // B reaches storage in between. Fail the second A and retry it unchanged.
+            const auto queuePreset = [&](const QString &name) {
+                reopened.setTextPreset(name);
+                require(reopened.checkpoint(&snapshot, true), "Could not queue preset");
+                storage::drainWriterThread();
+            };
+            const auto presetSql = [&](const QString &statement) {
+                return storage::profileTransaction(finishPaths.directory, [&](QSqlDatabase &db) {
+                    return QSqlQuery(db).exec(statement);
+                });
+            };
+            queuePreset("A");
+            queuePreset("B");
+            require(presetSql("CREATE TRIGGER refuse_preset BEFORE UPDATE ON book_state "
+                              "BEGIN SELECT RAISE(ABORT,'test'); END"),
+                    "Could not obstruct the second preset save");
+            int presetFailures = 0;
+            reopened.onCheckpointFailed([&] { ++presetFailures; });
+            queuePreset("A");
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+            require(presetSql("DROP TRIGGER refuse_preset"), "Could not release preset save");
+            queuePreset("A");
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+            require(presetFailures == 1
+                            && storage::readBookState(finishPaths, identity)
+                                            .object.value(textpresets::bookKey)
+                                    == "A",
+                    "An earlier A completion acknowledged a later failed A save");
+            reopened.onCheckpointFailed({});
+            // The timed-out close still owns its snapshot while the reader accepts input.
+            int closes = 0;
+            reopened.checkpointForClose([&](bool ok) {
+                require(ok, "Held close checkpoint failed");
+                ++closes;
+            });
+            reopened.setHideBookOnSleepScreen(true);
+            require(reopened.checkpoint(&snapshot, true), "Lost explicit choice during close save");
+            waitUntil([&] { return closes == 1 && !reopened.savesPending(); });
+            require(storage::readBookState(finishPaths, identity)
+                            .object.value("hide_book_on_sleep_screen")
+                            .toBool(),
+                    "Close completion lost the newer sleep-screen choice");
+            // Sleep can also require a durable checkpoint before the close replies.
+            QVector<quint64> savedEpochs;
+            reopened.onPositionSaved(
+                    [&](const QString &, quint64 epoch) { savedEpochs.append(epoch); });
+            reopened.checkpointForClose([&](bool ok) {
+                require(ok, "A forced save dropped a pending close");
+                ++closes;
+            });
+            const auto currentEpoch = reopened.advancePositionSaveEpoch();
+            reopened.setHideBookOnSleepScreen(false);
+            require(reopened.checkpoint(&snapshot), "A pending close prevented the durable save");
+            waitUntil([&] { return closes == 2 && !reopened.savesPending(); });
+            require(savedEpochs == QVector<quint64>{ currentEpoch }
+                            && !storage::readBookState(finishPaths, identity)
+                                        .object.value("hide_book_on_sleep_screen")
+                                        .toBool()
+                            && !storage::profileHasUnsyncedWrites(),
+                    "An obsolete close acknowledged or replaced the forced save");
+            reopened.onPositionSaved({});
+
+            // Fit is on disk. Hold the writer while the reader zooms in and
+            // returns to Fit, then check the record before a close can save it again.
+            QSemaphore entered, release;
+            storage::RecordWriter blocker;
+            blocker.post(
+                    [&] {
+                        entered.release();
+                        release.acquire();
+                        return true;
+                    },
+                    {});
+            entered.acquire();
+            require(reopened.rememberImageView(a, { { "zoom", 2 }, { "x", .5 }, { "y", .5 } })
+                            && reopened.checkpoint(&snapshot, true),
+                    "Queue zoom while the profile writer is busy");
+            require(reopened.rememberImageView(a, { { "zoom", 1 }, { "x", .5 }, { "y", .5 } })
+                            && reopened.checkpoint(&snapshot, true),
+                    "Queue Fit while the zoom checkpoint is pending");
+            release.release();
+            waitUntil([&] { return !reopened.savesPending(); });
+            const auto fitted = storage::readBookState(finishPaths, identity);
+            require(fitted.status == storage::ReadStatus::Ok
+                            && !fitted.object.contains("image_views"),
+                    "The pending zoom overwrote the reader's final Fit choice");
             for (int i = 0; i < 70; ++i)
                 require(reopened.rememberImageView(QString::number(i, 16).rightJustified(64, '0'),
                                                    { { "zoom", 2 }, { "x", .25 }, { "y", .75 } }),

@@ -164,6 +164,14 @@ public:
     QJsonObject checkpointState() const;
     bool savesPending() const;
 
+    // A reply belongs to the wake cycle in which its save was requested.
+    quint64 advancePositionSaveEpoch() { return ++positionSaveEpoch; }
+
+    void onPositionSaved(std::function<void(const QString &, quint64)> saved)
+    {
+        positionSaved = std::move(saved);
+    }
+
     // Called after a failed background checkpoint, which is already logged.
     // The reader does not notify the user; tests observe failures here.
     void onCheckpointFailed(std::function<void()> failed) { checkpointFailed = std::move(failed); }
@@ -189,10 +197,13 @@ private:
     bool hideBookOnSleepScreen_ = false;
     struct ActivitySave;
     void writeActivity(std::shared_ptr<ActivitySave>, int attempt);
-    void resumeActivityCheckpoints();
+    void resumeDeferredCheckpoints();
+    bool checkpoint(QJsonObject *snapshot, bool background, quint64 epoch);
+    void checkpointForClose(std::function<void(bool)> done, quint64 epoch);
     QElapsedTimer activitySaved, activityFailed;
-    bool activityPending = false, checkpointAfterActivity = false;
-    QVector<std::function<void(bool)>> closesAfterActivity;
+    bool activityPending = false;
+    quint64 deferredCheckpointEpoch = 0, positionSaveEpoch = 1;
+    QVector<std::function<void(bool)>> deferredCloses;
     quint64 activityGeneration = 0;
     std::unique_ptr<storage::RecordWriter> activityWriter, appearanceWriter;
     QJsonObject rememberedAppearance;
@@ -205,7 +216,8 @@ private:
     quint64 nativeFinishGeneration = 0;
     QVector<std::function<void(NativeActivityResult)>> nativeFinishCallbacks;
     QJsonObject persistedCheckpoint(const QJsonObject &state) const;
-    void finishCloseCheckpoint(const QJsonObject &checkpoint, bool saved,
+    struct CloseCheckpoint;
+    void finishCloseCheckpoint(const CloseCheckpoint &save, bool saved,
                                std::function<void(bool)> done);
     bool closeCheckpointPending = false;
     ReadingActivity readingActivity() const;
@@ -244,8 +256,12 @@ private:
     QJsonArray imageViews;
     // The background checkpoint that has not reported back yet.
     QJsonObject pendingCheckpoint;
+    quint64 checkpointRequest = 0;
+    quint64 beginCheckpoint();
+    void recordSavedCheckpoint(const QJsonObject &checkpoint, quint64 epoch);
+    std::function<void(const QString &, quint64)> positionSaved;
     std::function<void()> checkpointFailed;
-    void finishBackgroundCheckpoint(const QJsonObject &checkpoint, bool saved);
+    void finishBackgroundCheckpoint(quint64 request, quint64 epoch, bool saved);
     // A writer holds one waiting write, so each record has its own: a speed
     // record must not replace a waiting position. The destructor resets both
     // after their last writes have finished.

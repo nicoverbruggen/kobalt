@@ -39,6 +39,17 @@ endforeach()
 
 include("${KOBALT_ROOT}/dependencies/cache.cmake")
 kobalt_dependencies()
+if(BUILD_TESTING)
+    # Generated dependency inputs exist on the builder, not in the runtime
+    # archive sent to CI test shards. Check them before producing that archive.
+    get_filename_component(dependency_entry "${KOBALT_TEST_DEPENDENCIES}" DIRECTORY)
+    foreach(library libunibreak/src fribidi/lib)
+        file(STRINGS "${dependency_entry}/${library}/Makefile" flags REGEX "^CFLAGS = ")
+        if(NOT flags MATCHES "(^| )-O[123sgz]( |$)")
+            message(FATAL_ERROR "Autotools dependency has no optimization flag: ${library}: ${flags}")
+        endif()
+    endforeach()
+endif()
 include("${KOBALT_ROOT}/dependencies/local-engine.cmake")
 kobalt_local_engine()
 add_subdirectory("${KOBALT_ROOT}/assets" "${CMAKE_CURRENT_BINARY_DIR}/assets")
@@ -224,7 +235,6 @@ if(BUILD_TESTING)
     set_tests_properties(build.cachePolicy PROPERTIES LABELS "fast;build" TIMEOUT 30)
     add_test(NAME build.dependencyCache COMMAND "${CMAKE_COMMAND}"
         "-DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/dependency-cache-test"
-        "-DDEPENDENCY_PREFIX=${KOBALT_TEST_DEPENDENCIES}"
         "-DCACHE_SCRIPT=${KOBALT_ROOT}/dependencies/cache.cmake" "-DMAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/test-dependency-cache.cmake")
     set_tests_properties(build.dependencyCache PROPERTIES LABELS "fast;build" TIMEOUT 60)

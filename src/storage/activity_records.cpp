@@ -33,12 +33,13 @@ QString text(const QVariant &value)
 
 bool readSessions(QSqlDatabase &db, ActivityRecords *records)
 {
+    QHash<QString, int> indices;
     QSqlQuery query(db);
     query.setForwardOnly(true);
     if (!query.exec("SELECT CAST(book AS BLOB),CAST(identity AS BLOB),CAST(source_key AS BLOB),"
                     "CAST(title AS BLOB),"
                     "CAST(author AS BLOB),CAST(start_position AS BLOB),CAST(end_position AS BLOB),"
-                    "started,observed,active_ms FROM reading_sessions ORDER BY started,id"))
+                    "started,observed,active_ms,id FROM reading_sessions ORDER BY started,id"))
         return false;
     while (query.next()) {
         ActivitySession session;
@@ -52,7 +53,28 @@ bool readSessions(QSqlDatabase &db, ActivityRecords *records)
         session.started = query.value(7).toLongLong();
         session.observed = query.value(8).toLongLong();
         session.milliseconds = clampedActive(query.value(9).toLongLong());
+        indices.insert(query.value(10).toString(), records->sessions.size());
         records->sessions.append(session);
+    }
+    if (!query.exec(
+                "SELECT name,CASE WHEN length(CAST(payload AS BLOB))<=2048 THEN payload END "
+                "FROM profile_state WHERE name>='reading-hours:' AND name<'reading-hours;' AND format=1"))
+        return false;
+    while (query.next()) {
+        const auto parts = query.value(0).toString().split(':');
+        if (parts.size() != 3 || !indices.contains(parts[1]))
+            continue;
+        const auto date = QDate::fromString(parts[2], Qt::ISODate);
+        if (!date.isValid())
+            continue;
+        const auto hours = QJsonDocument::fromJson(query.value(1).toByteArray()).object();
+        for (auto it = hours.begin(); it != hours.end(); ++it) {
+            bool ok = false;
+            const int hour = it.key().toInt(&ok);
+            const double ms = it.value().toDouble(-1);
+            if (ok && hour >= 0 && hour < 24 && ms > 0 && ms <= 31.0 * 86400000)
+                records->sessions[indices.value(parts[1])].hours[date][hour] = qint64(ms);
+        }
     }
     return true;
 }

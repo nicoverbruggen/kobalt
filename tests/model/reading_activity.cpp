@@ -1,5 +1,6 @@
 #include "reading/reading_activity.h"
 #include "storage/activity_records.h"
+#include "storage/reading_history.h"
 #include "storage/profile_database.h"
 #include <QCoreApplication>
 #include <QDateTime>
@@ -395,6 +396,35 @@ void deleteEdgeCases()
                     == 2,
             "The newer hidden list was replaced");
 }
+// A beta 8 session and a new opening share the upgrade date. The new
+// session sleeps over midnight, then resumes on the first of the month.
+void upgradeAndSleep()
+{
+    storage::closeProfile();
+    QTemporaryDir root;
+    const QDate first(2026, 10, 31), second = first.addDays(1);
+    const auto directory = root.path();
+    const auto morning = at(first, 10);
+    sql(directory,
+        "INSERT INTO reading_sessions VALUES('old','older','older','','','','',?,?,?,'','','completed')",
+        { morning, morning + 30 * minute, 30 * minute });
+    qint64 now = at(first, 23, 40);
+    ReadingHistory history(directory, "current", {}, {}, "New book", {}, [&] { return now; });
+    history.start(0, "before");
+    now += 10 * minute;
+    history.pause(10 * minute, "middle");
+    require(history.save(), "Could not save reading before midnight");
+    now = at(second, 0, 5);
+    history.start(10 * minute, "middle");
+    now += 5 * minute;
+    history.stop(15 * minute, "after");
+    require(history.save(), "Could not save reading after midnight");
+    ActivityRecords records;
+    require(ActivityRecordStore::read(directory, {}, &records), "Cannot load both openings");
+    const auto summary = activity::summarize(records, second);
+    require(summary.hours[23] == 10 * minute && summary.hours[0] == 5 * minute,
+            "Sleep moved reading into the wrong hour");
+}
 } // namespace
 
 int main(int argc, char **argv)
@@ -409,6 +439,7 @@ int main(int argc, char **argv)
     storeReadsProfile();
     hideAndRemove();
     deleteEdgeCases();
+    upgradeAndSleep();
     storage::closeProfile();
     return 0;
 }

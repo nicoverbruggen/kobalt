@@ -65,11 +65,17 @@ QVector<Streak> streaks(const QMap<QDate, qint64> &days)
     return runs;
 }
 
-// Active time starts at the session's start and fills local hours from there.
-// The session's wall time can be longer than its active time; the reading
-// itself took place at the start of the span.
-void spread(QVector<qint64> &hours, const ActivitySession &session)
+// Older sessions only recorded their total duration. Use their starting
+// time to estimate the local hours when actual observations are unavailable.
+template <typename Visit>
+void visitHours(const ActivitySession &session, Visit visit)
 {
+    if (!session.hours.isEmpty()) {
+        for (auto day = session.hours.cbegin(); day != session.hours.cend(); ++day)
+            for (auto hour = day.value().cbegin(); hour != day.value().cend(); ++hour)
+                visit(day.key(), hour.key(), hour.value());
+        return;
+    }
     qint64 left = session.milliseconds;
     auto cursor = QDateTime::fromMSecsSinceEpoch(session.started);
     while (left > 0) {
@@ -77,7 +83,7 @@ void spread(QVector<qint64> &hours, const ActivitySession &session)
         const qint64 hourLeft =
                 qint64(60 - time.minute()) * 60000 - time.second() * 1000 - time.msec();
         const qint64 used = qMax<qint64>(1, qMin(left, hourLeft));
-        hours[time.hour()] += used;
+        visit(cursor.date(), time.hour(), used);
         left -= used;
         cursor = cursor.addMSecs(used);
     }
@@ -166,7 +172,7 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
             add(hiddenBooks[session.book], session);
         else
             add(months[monthOf(date)][session.book], session);
-        spread(summary.hours, session);
+        visitHours(session, [&](const QDate &, int hour, qint64 ms) { summary.hours[hour] += ms; });
     }
     summary.todayBooks = todayBooks.size();
     summary.books = allBooks.size();

@@ -79,8 +79,14 @@ void ReadingHistory::start(qint64 activeMilliseconds, const QString &position)
     dayBaseline = activeMilliseconds;
     baseline = activeMilliseconds;
     const auto now = qMax<qint64>(0, utc());
-    pending.append({ QUuid::createUuid().toString(), bounded(position), bounded(position), "active",
-                     now, now, 0 });
+    pending.append({ QUuid::createUuid().toString(),
+                     bounded(position),
+                     bounded(position),
+                     "active",
+                     now,
+                     now,
+                     0,
+                     {} });
     dirty = true;
     ++generation;
 }
@@ -133,12 +139,13 @@ void ReadingHistory::countDays(qint64 activeMilliseconds)
     // distributes reading time across a sleep.
     qint64 cursor = end - elapsed;
     while (cursor < end) {
-        const auto date = QDateTime::fromMSecsSinceEpoch(cursor).date();
-        const auto midnight = QDateTime(date.addDays(1), QTime(0, 0));
-        const qint64 next = midnight.toMSecsSinceEpoch();
-        // Calendar boundaries, rather than 24-hour steps, retain DST days.
-        const qint64 stop = next > cursor ? qMin(end, next) : end;
-        days[date.toString(Qt::ISODate)] += stop - cursor;
+        const auto local = QDateTime::fromMSecsSinceEpoch(cursor);
+        const auto date = local.date().toString(Qt::ISODate);
+        const auto time = local.time();
+        const qint64 untilHour = (60 - time.minute()) * 60000 - time.second() * 1000 - time.msec();
+        const qint64 stop = cursor + qMin(end - cursor, untilHour);
+        days[date] += stop - cursor;
+        pending.last().hours[date][time.hour()] += stop - cursor;
         cursor = stop;
     }
 }
@@ -253,6 +260,24 @@ ReadingHistory::Snapshot ReadingHistory::snapshot()
                 update.addBindValue(utf8(interval.status));
                 if (!update.exec() || update.numRowsAffected() != 1)
                     return false;
+                for (auto day = interval.hours.cbegin(); day != interval.hours.cend(); ++day) {
+                    QJsonObject hours;
+                    for (auto hour = day.value().cbegin(); hour != day.value().cend(); ++hour)
+                        hours.insert(QString::number(hour.key()), double(hour.value()));
+                    const QString name = "reading-hours:" + interval.id + ':' + day.key();
+                    const auto bytes = QJsonDocument(hours).toJson(QJsonDocument::Compact);
+                    QSqlQuery write(db);
+                    write.prepare(
+                            "INSERT OR REPLACE INTO profile_state(name,format,revision,payload) "
+                            "SELECT ?,1,0,CAST(? AS TEXT) WHERE NOT EXISTS "
+                            "(SELECT 1 FROM profile_state WHERE name=? AND payload=CAST(? AS TEXT))");
+                    write.addBindValue(name);
+                    write.addBindValue(bytes);
+                    write.addBindValue(name);
+                    write.addBindValue(bytes);
+                    if (!write.exec())
+                        return false;
+                }
             }
             for (auto day = days.cbegin(); day != days.cend(); ++day) {
                 const QString name = "reading-day:" + day.key() + ':' + opening;
@@ -271,6 +296,7 @@ ReadingHistory::Snapshot ReadingHistory::snapshot()
                     if (payload.value("milliseconds").toDouble(-1) == day.value())
                         continue;
                 }
+                payload["book"] = book;
                 payload["milliseconds"] = double(day.value());
                 const auto bytes = QJsonDocument(payload).toJson(QJsonDocument::Compact);
                 if (bytes.size() > 16384)

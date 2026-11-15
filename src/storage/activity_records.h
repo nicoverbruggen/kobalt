@@ -16,6 +16,7 @@ struct ActivitySession
     QString book, identity, sourceKey, title, author, startPosition, endPosition;
     // UTC milliseconds; `milliseconds` is active reading time.
     qint64 started = 0, observed = 0, milliseconds = 0;
+    QMap<QDate, QMap<int, qint64>> hours;
 };
 
 // What Activity reads from the profile. Nothing here is written for it: the

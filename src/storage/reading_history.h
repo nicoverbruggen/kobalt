@@ -68,6 +68,7 @@ private:
     {
         QString id, startPosition, endPosition, status;
         qint64 started = 0, observed = 0, milliseconds = 0;
+        QMap<QString, QMap<int, qint64>> hours;
     };
 
     QString directory, identity, book, sourceKey, title, author;

@@ -3,6 +3,10 @@
 #include <QIODevice>
 #include <QString>
 
+namespace kobalt {
+class Publication;
+}
+
 namespace kobalt::library {
 // What the library shows before a book is opened. Reading the package
 // document and one cover image is far cheaper than opening the book in the
@@ -27,4 +31,5 @@ inline constexpr QSize coverSize{ 240, 360 };
 // older version are read again by the next scan.
 inline constexpr int metadataVersion = 1;
 BookMetadata readBookMetadata(QIODevice &source);
+BookMetadata readBookMetadata(QIODevice &source, const Publication &publication);
 } // namespace kobalt::library

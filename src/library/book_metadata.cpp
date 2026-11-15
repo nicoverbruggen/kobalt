@@ -178,6 +178,12 @@ BookMetadata readBookMetadata(QIODevice &source)
             metadata.result = BookMetadata::Result::Protected;
         return metadata;
     }
+    return readBookMetadata(source, publication);
+}
+
+BookMetadata readBookMetadata(QIODevice &source, const Publication &publication)
+{
+    BookMetadata metadata;
     const auto package =
             packagePath(member(source, publication, "META-INF/container.xml", xmlLimit));
     if (package.isEmpty())

@@ -1,4 +1,5 @@
 #include "app/reader/settings/sleep_editor.h"
+#include "library/cover_thumbnails.h"
 #include "app/reader/views/annotation_exporter.h"
 #include "app/reader/panels/search_panel.h"
 #include <QVariant>
@@ -5981,6 +5982,38 @@ private slots:
         QVERIFY(clickAt(canvas, help->mapTo(canvas.surface(), QPoint(help->width() / 2, 4))));
         QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSleepOverlayHelpPopup"));
         QVERIFY(gallery->isVisible());
+    }
+
+    // Activity must recheck the book before returning a cached cover.
+    void activityCoverReplacement()
+    {
+        QTemporaryDir root;
+        const auto path = root.filePath("book.epub");
+        QVERIFY(QFile::copy(coverBook, path));
+        library::CoverThumbnails thumbnails(root.filePath("cache"));
+        QImage image;
+        bool done = false, missing = false;
+        const auto request = [&] {
+            done = false;
+            thumbnails.request({ { "fixture", path } }, QSize(32, 32),
+                               [&](const QString &, const QImage &result, bool gone) {
+                                   image = result;
+                                   missing = gone;
+                                   done = true;
+                               });
+        };
+        request();
+        QTRY_VERIFY(done);
+        QVERIFY(!image.isNull() && !missing);
+        QVERIFY(QFile::remove(path));
+        QVERIFY(QFile::copy(textBook, path));
+        request();
+        QTRY_VERIFY(done);
+        QVERIFY(image.isNull() && !missing);
+        QVERIFY(QFile::remove(path));
+        request();
+        QTRY_VERIFY(done);
+        QVERIFY(image.isNull() && missing);
     }
 
     // The Custom editor shows the cover even when the chosen design does not

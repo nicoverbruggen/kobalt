@@ -1109,6 +1109,9 @@ public:
     // hidden books' own list.
     void setGroups(const QVector<activity::MonthBooks> &groups, int hidden)
     {
+        known.clear();
+        missingBooks.clear();
+        covers.clear();
         months = groups;
         hiddenCount = hidden;
         // A reload, such as after hiding a book, keeps the page in view.

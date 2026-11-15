@@ -1,5 +1,4 @@
 #pragma once
-#include "storage/preview_store.h"
 #include <QImage>
 #include <QObject>
 #include <QPair>
@@ -28,15 +27,11 @@ public:
     // read finishes on the worker, and its cover is dropped.
     ~CoverThumbnails() override;
     // Replaces earlier requests. `books` pairs each key with its file.
-    // `ready` runs on this object's thread once for each key, at once for a
-    // cover held in memory and later for the others.
+    // `ready` runs on this object's thread once for each key after checking the current file.
     void request(const QVector<QPair<QString, QString>> &books, QSize size, Ready ready);
 
-    // The cache key: the file and the thumbnail's size.
-    static QByteArray cacheKey(const QString &file, QSize size);
-
 private:
-    storage::PreviewStore store;
+    QString directory;
     std::shared_ptr<std::atomic<quint64>> generation;
 };
 } // namespace kobalt::library

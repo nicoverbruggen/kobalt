@@ -195,7 +195,7 @@ void storeReadsProfile()
     ActivityRecordStore store(directory);
     bool done = false, ok = false;
     ActivityRecords records;
-    store.load("open-2", [&](bool success, ActivityRecords result) {
+    store.load("open-2", {}, [&](bool success, ActivityRecords result) {
         ok = success;
         records = std::move(result);
         done = true;

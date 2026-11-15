@@ -133,21 +133,27 @@ bool ActivityRecordStore::read(const QString &directory, const QString &excludeO
     return true;
 }
 
-void ActivityRecordStore::load(const QString &excludeOpening, Loaded loaded)
+void ActivityRecordStore::load(const QString &excludeOpening, Prepare prepare, Loaded loaded)
 {
     const auto ticket = ++generation;
     auto result = std::make_shared<ActivityRecords>();
     QPointer<ActivityRecordStore> guard(this);
-    writer.post([directory = directory, excludeOpening,
-                 result] { return read(directory, excludeOpening, result.get()); },
-                [guard, ticket, result, loaded](bool ok) {
-                    qt::invoke(
-                            guard.data(),
-                            [guard, ticket, result, loaded, ok] {
-                                if (guard && guard->generation == ticket)
-                                    loaded(ok, ok ? std::move(*result) : ActivityRecords{});
-                            },
-                            Qt::QueuedConnection);
-                });
+    writer.post(
+            [directory = directory, excludeOpening, result, prepare] {
+                if (!read(directory, excludeOpening, result.get()))
+                    return false;
+                if (prepare)
+                    prepare(*result);
+                return true;
+            },
+            [guard, ticket, result, loaded](bool ok) {
+                qt::invoke(
+                        guard.data(),
+                        [guard, ticket, result, loaded, ok] {
+                            if (guard && guard->generation == ticket)
+                                loaded(ok, ok ? std::move(*result) : ActivityRecords{});
+                        },
+                        Qt::QueuedConnection);
+            });
 }
 } // namespace kobalt

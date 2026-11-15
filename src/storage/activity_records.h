@@ -42,12 +42,16 @@ class ActivityRecordStore final : public QObject
 {
 public:
     using Loaded = std::function<void(bool ok, ActivityRecords records)>;
+    // Work on the loaded records that belongs on the store's thread too, such
+    // as a summary the interface would otherwise compute.
+    using Prepare = std::function<void(const ActivityRecords &)>;
     explicit ActivityRecordStore(QString directory, QObject *parent = nullptr);
     ~ActivityRecordStore() override;
     // `excludeOpening` leaves out that opening's daily totals, so the reader
     // can add its own unsaved time without counting the saved part twice. A
     // newer load replaces one that has not started; only its result arrives.
-    void load(const QString &excludeOpening, Loaded loaded);
+    // `prepare` runs after a successful read.
+    void load(const QString &excludeOpening, Prepare prepare, Loaded loaded);
 
     // The same read, for callers already on a thread that may wait.
     static bool read(const QString &directory, const QString &excludeOpening,

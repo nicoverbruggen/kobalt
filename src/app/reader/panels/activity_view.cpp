@@ -2582,11 +2582,10 @@ void ActivityView::setUnavailable()
     arrange();
 }
 
-void ActivityView::setRecords(ActivityRecords value, const QDate &today,
-                              const QMap<QDate, qint64> &unsaved)
+void ActivityView::setRecords(ActivityRecords value, activity::Summary computed)
 {
     records = std::move(value);
-    summary = activity::summarize(records, today, unsaved);
+    summary = std::move(computed);
     loading = unavailable = false;
     message->setText(summary.days.isEmpty() && records.sessions.isEmpty()
                              ? strings::get("activity.empty")

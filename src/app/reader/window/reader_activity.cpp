@@ -45,28 +45,36 @@ void Reader::loadActivity()
         return;
     if (!activityRecords)
         activityRecords = std::make_unique<ActivityRecordStore>(book->paths().directory);
+    // The summary is computed with the read, off the interface thread: years
+    // of sessions take a while on a Kobo.
+    const auto today = activityToday();
+    const auto unsaved = book->readingDays();
+    auto summary = std::make_shared<activity::Summary>();
     QPointer<Reader> guard(this);
-    activityRecords->load(book->readingOpeningId(), [guard](bool ok, ActivityRecords records) {
-        if (!guard || !guard->book)
-            return;
-        if (!ok) {
-            if (guard->activityView)
-                guard->activityView->setUnavailable();
-            return;
-        }
-        const auto today = guard->activityToday();
-        const auto unsaved = guard->book->readingDays();
-        const auto summary = activity::summarize(records, today, unsaved);
-        const auto time = todayCaption(summary.todayMilliseconds);
-        guard->chapterGraph->setActivity(
-                summary.current.days >= 2
-                        ? strings::get("activity.row_streak").arg(time).arg(summary.current.days)
-                        : time);
-        if (!guard->activityView)
-            return;
-        guard->activityView->setRecords(std::move(records), today, unsaved);
-        prepareRefresh(guard->activityView);
-    });
+    activityRecords->load(
+            book->readingOpeningId(),
+            [summary, today, unsaved](const ActivityRecords &records) {
+                *summary = activity::summarize(records, today, unsaved);
+            },
+            [guard, summary](bool ok, ActivityRecords records) {
+                if (!guard || !guard->book)
+                    return;
+                if (!ok) {
+                    if (guard->activityView)
+                        guard->activityView->setUnavailable();
+                    return;
+                }
+                const auto time = todayCaption(summary->todayMilliseconds);
+                guard->chapterGraph->setActivity(summary->current.days >= 2
+                                                         ? strings::get("activity.row_streak")
+                                                                   .arg(time)
+                                                                   .arg(summary->current.days)
+                                                         : time);
+                if (!guard->activityView)
+                    return;
+                guard->activityView->setRecords(std::move(records), std::move(*summary));
+                prepareRefresh(guard->activityView);
+            });
 }
 
 void Reader::openActivity()

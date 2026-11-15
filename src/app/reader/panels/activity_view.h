@@ -41,9 +41,9 @@ public:
     // Until the records arrive.
     void setLoading();
     void setUnavailable();
-    // `unsaved` is the open book's reading that the records do not hold yet.
-    void setRecords(ActivityRecords records, const QDate &today,
-                    const QMap<QDate, qint64> &unsaved);
+    // The records and their summary, which the caller computes off the
+    // interface thread.
+    void setRecords(ActivityRecords records, activity::Summary summary);
     void setOpenBook(const ActivityOpenBook &book);
     void showSection(Section section);
     void openBook(const QString &book);

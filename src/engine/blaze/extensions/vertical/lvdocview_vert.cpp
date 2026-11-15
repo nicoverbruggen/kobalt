@@ -10,8 +10,8 @@
 // with these methods since they live in a separate fork-only file.
 // =============================================================================
 
-#include "../include/lvdocview.h"
-#include "../include/fb2def.h"
+#include "lvdocview.h"
+#include "fb2def.h"
 
 /// Returns the screen-X anchor for the right edge of a vertical-rl page.
 /// In vertical-rl mode, columns are anchored at page_right: the first column

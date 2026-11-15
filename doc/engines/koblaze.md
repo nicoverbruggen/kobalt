@@ -18,7 +18,7 @@ Blaze keeps its cancellation and pause callbacks and its chapter-window selectio
 
 Each font face owns a word cache. The [cache](../../src/engine/blaze/extensions/word_cache.cpp) stores shaped words and kerning by language. The font face in `lvfntman.cpp` still chooses the shaping path, checks it against HarfBuzz and clears the cache when font settings change. Shaping overrides live in `extensions/shaping_options.cpp`.
 
-For a change to text layout, check both `lvtextfm.cpp` and `lvtextfm_vert.cpp`. The first includes the second in the same translation unit. In `lvfntman.cpp`, check the Blaze word-shaping paths as well as the original HarfBuzz path. Changes to block layout or the DOM also need testing with a chapter window and a complete document. Use the [layout regressions](../validation/layout.md) to compare them.
+For a change to text layout, check both the inherited `lvtextfm.cpp` and [Blaze’s vertical formatter](../../src/engine/blaze/extensions/vertical/lvtextfm_vert.cpp). They still compile together because the vertical formatter uses the private formatter class. Vertical-only font, page and drawing helpers live beside it. The Bold Reading word-prefix helper lives in `extensions/lvbionic.h`. Changes to block layout or the DOM also need testing with a chapter window and a complete document. Use the [layout regressions](../validation/layout.md) to compare them.
 
 ## Cache compatibility
 

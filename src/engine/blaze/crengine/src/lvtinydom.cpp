@@ -268,7 +268,7 @@ enum CacheFileBlockType {
 #include "../include/fb2def.h"
 #if BUILD_LITE!=1
 #include "../include/lvrend.h"
-#include "../include/lvlogical.h"
+#include "../../extensions/vertical/lvlogical.h"
 #include "../include/chmfmt.h"
 #endif
 #include "../include/crtest.h"

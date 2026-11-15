@@ -19,9 +19,9 @@
 #include <stdio.h>
 
 #include "../include/lvfntman.h"
-#include "../include/lvfntman_vert.h"  // fork-only: TTB glyph metrics cache
-#include "../include/lvfntman_vert_buffer.h"
-#include "../include/lvtextfm_vert_diag.h"
+#include "../../extensions/vertical/lvfntman_vert.h"  // fork-only: TTB glyph metrics cache
+#include "../../extensions/vertical/lvfntman_vert_buffer.h"
+#include "../../extensions/vertical/lvtextfm_vert_diag.h"
 #include "../include/lvstream.h"
 #include "../include/lvdrawbuf.h"
 #include "../include/lvstyles.h"

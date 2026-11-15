@@ -4,7 +4,7 @@
 #include <QGuiApplication>
 #include <QColor>
 #include <cstdio>
-#include <lvfntman_vert_buffer.h>
+#include "engine/blaze/extensions/vertical/lvfntman_vert_buffer.h"
 
 using namespace kobalt;
 

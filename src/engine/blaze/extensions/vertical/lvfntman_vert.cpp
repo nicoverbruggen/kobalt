@@ -18,10 +18,10 @@
 //   per glyph index per face), so the FT_Load_Glyph cost is paid once.
 // =============================================================================
 
-#include "../include/lvtextfm_vert_diag.h"
-#include "../include/lvfntman_vert.h"
-#include "../include/lvfntman.h"
-#include "../include/lvdrawbuf.h"
+#include "lvtextfm_vert_diag.h"
+#include "lvfntman_vert.h"
+#include "lvfntman.h"
+#include "lvdrawbuf.h"
 
 #include <ft2build.h>
 #include FT_FREETYPE_H

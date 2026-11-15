@@ -19,9 +19,9 @@
 #include "../include/cssdef.h"
 #include "../include/lvfnt.h"
 #include "../include/lvtextfm.h"
-#include "../include/lvlogical.h"
-#include "../include/lvfntman_vert.h"   // fork-only: JFM class + glue/kern helpers
-#include "../include/lvtextfm_vert_diag.h"
+#include "../../extensions/vertical/lvlogical.h"
+#include "../../extensions/vertical/lvfntman_vert.h"   // fork-only: JFM class + glue/kern helpers
+#include "../../extensions/vertical/lvtextfm_vert_diag.h"
 #include "../include/lvdrawbuf.h"
 #include "../include/fb2def.h"
 #include "../include/koblaze.h"
@@ -32,7 +32,7 @@
 #include "../include/lvrend.h"
 #include "../include/textlang.h"
 #include "../include/renderutil.h"
-#include "../include/lvtextfm_fork.h"
+#include "../../extensions/vertical/lvtextfm_fork.h"
 #endif
 
 #if USE_HARFBUZZ==1
@@ -3108,7 +3108,7 @@ bool LVFormatter::m_libunibreak_init_done = false;
 
 // Vertical-mode diagnostic globals were moved to lvtextfm_vert.cpp during
 // Phase C Step 2a; this file's increment sites see them via the extern
-// declarations in include/lvtextfm_fork.h.
+// declarations in lvtextfm_fork.h.
 
 // -----------------------------------------------------------------------------
 // alignLineHorizontal
@@ -6662,7 +6662,7 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
             bool restore_orig_clip = false;
             lvRect origClip;
             // Fork: reset per-column vertical state.  See VerticalDrawState
-            // in include/lvtextfm_fork.h for member documentation.
+            // in lvtextfm_fork.h for member documentation.
             vstate.resetForNewFrmline();
             bool vertical_line_has_image = false;
             if ( is_vertical ) {
@@ -7739,6 +7739,6 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
 
 
 
-#include "lvtextfm_vert.cpp"
+#include "../../extensions/vertical/lvtextfm_vert.cpp"
 
 #endif

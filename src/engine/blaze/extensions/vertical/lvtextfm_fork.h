@@ -7,8 +7,6 @@
 // ruby-detection helpers in one place so lvtextfm.cpp stays closer
 // to upstream.  It must be included after lvtinydom.h / fb2def.h /
 // cssdef.h are visible (i.e. include it from lvtextfm.cpp only).
-//
-// Created during Phase C Step 1 (soft-fork hygiene) — see CLAUDE.md.
 // =============================================================================
 
 #ifndef LVTEXTFM_FORK_H_INCLUDED

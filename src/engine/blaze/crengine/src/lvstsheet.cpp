@@ -20,7 +20,7 @@
 #include "../include/fb2def.h"
 #include "../include/lvstream.h"
 #include "../include/lvrend.h"   // for -cr-only-if:
-#include "../include/lvlogical.h"
+#include "../../extensions/vertical/lvlogical.h"
 
 // define to dump all tokens
 //#define DUMP_CSS_PARSING

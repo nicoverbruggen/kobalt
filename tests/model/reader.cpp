@@ -20,7 +20,7 @@
 #include <lvimg.h>
 #include <lvdrawbuf.h>
 #include <lvfntman.h>
-#include <lvbionic.h>
+#include "engine/blaze/extensions/lvbionic.h"
 #include <QCryptographicHash>
 #include <QColor>
 #include <QBuffer>

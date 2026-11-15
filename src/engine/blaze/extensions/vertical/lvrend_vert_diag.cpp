@@ -15,7 +15,7 @@
 // through lvrend_reset_ruby_diag() / lvrend_get_ruby_diag().
 // =============================================================================
 
-#include "../include/lvrend_vert_diag.h"
+#include "lvrend_vert_diag.h"
 
 static int ruby_vert_ok   = 0;
 static int ruby_vert_miss = 0;

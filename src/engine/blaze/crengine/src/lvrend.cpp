@@ -16,12 +16,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../include/lvtextfm.h"
-#include "../include/lvbionic.h"
+#include "../../extensions/lvbionic.h"
 #include "../include/lvtinydom.h"
 #include "../include/fb2def.h"
 #include "../include/lvrend.h"
-#include "../include/lvrend_vert_diag.h"
-#include "../include/lvlogical.h"
+#include "../../extensions/vertical/lvrend_vert_diag.h"
+#include "../../extensions/vertical/lvlogical.h"
 #include "../include/renderutil.h"
 #include "../include/drawutil.h"
 

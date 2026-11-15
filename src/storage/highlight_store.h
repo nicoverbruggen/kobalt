@@ -20,16 +20,20 @@ struct Highlight
     QString note = {};
     // Compact database records omit text, chapter and note until requested.
     bool detailsLoaded = true;
+    // Whether the omitted note is empty. Full records use `note` instead.
+    bool compactNote = false;
     // Bookmark-only metadata carried by the shared annotation transaction.
     QString bookmarkName = {}, bookmarkIcon = {};
 };
 
 struct HighlightExcerpt
 {
-    QString id, text, chapter;
+    QString id, text, chapter, note;
 };
 
 QJsonObject highlightJson(const Highlight &highlight);
+// Whether a full or compact record carries a note.
+bool hasHighlightNote(const Highlight &highlight);
 bool validHighlight(const Highlight &highlight);
 bool validHighlightMetadata(const Highlight &highlight);
 // Unknown future stored keys display gray without losing their original value.

@@ -63,6 +63,8 @@ public:
     bool restyle(const QString &id, const QString &style);
     // Empty fields preserve saved values. Both changes persist together or roll back.
     bool updateAppearance(const QString &id, const QString &color, const QString &style);
+    // Replaces the passage's note. A note of only whitespace removes it.
+    bool setNote(const QString &id, const QString &note);
     bool remove(const QString &id);
 
     // True until the newest save has reported back.

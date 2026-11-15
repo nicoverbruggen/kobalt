@@ -266,6 +266,7 @@ Highlight readHighlight(const QSqlQuery &q, bool compact = false)
     check((startPolicy || h.chosenStart.isEmpty()) && (endPolicy || h.chosenEnd.isEmpty()),
           "invalid-database");
     h.detailsLoaded = !compact;
+    h.compactNote = compact && q.value(16).toInt() != 0;
     return h;
 }
 
@@ -353,11 +354,11 @@ QVector<Highlight> readRows(Connection &c, const QString &key, int kind,
             ? QStringLiteral(
                       "CAST(id AS BLOB),CAST(start AS BLOB),CAST(end AS BLOB),X'',X'',CAST(created AS BLOB),"
                       "CAST(color AS BLOB),CAST(style AS BLOB),X'',CAST(chosen_start AS BLOB),CAST(chosen_end AS BLOB),"
-                      "start_policy,end_policy,bytes,ordinal,typeof(ordinal)")
+                      "start_policy,end_policy,bytes,ordinal,typeof(ordinal),note<>''")
             : QStringLiteral(
                       "CAST(id AS BLOB),CAST(start AS BLOB),CAST(end AS BLOB),CAST(text AS BLOB),CAST(chapter AS BLOB),"
                       "CAST(created AS BLOB),CAST(color AS BLOB),CAST(style AS BLOB),CAST(note AS BLOB),"
-                      "CAST(chosen_start AS BLOB),CAST(chosen_end AS BLOB),start_policy,end_policy,bytes,ordinal,typeof(ordinal)");
+                      "CAST(chosen_start AS BLOB),CAST(chosen_end AS BLOB),start_policy,end_policy,bytes,ordinal,typeof(ordinal),note<>''");
     check(q.prepare("SELECT " + projection
                     + " FROM entries WHERE book=? AND kind=? ORDER BY ordinal"),
           "invalid-database");
@@ -898,14 +899,16 @@ bool AnnotationDatabase::excerpts(const AnnotationBook &book, const QStringList 
             query.setForwardOnly(true);
             check(query.prepare(
                           "SELECT CAST(id AS BLOB),CAST(text AS BLOB),CAST(chapter AS BLOB),bytes,"
-                          "length(CAST(text AS BLOB))+length(CAST(chapter AS BLOB)) "
+                          "length(CAST(text AS BLOB))+length(CAST(chapter AS BLOB))+length(CAST(note AS BLOB)),"
+                          "CAST(note AS BLOB) "
                           "FROM entries WHERE book=? AND kind=1 AND id IN ("
                           + placeholders.join(',')
                           + ") AND "
                             "typeof(id)='text' AND length(CAST(id AS BLOB))<=512 AND "
-                            "typeof(text)='text' AND typeof(chapter)='text' AND "
+                            "typeof(text)='text' AND typeof(chapter)='text' AND typeof(note)='text' AND "
                             "length(CAST(text AS BLOB)) BETWEEN 1 AND 1048576 AND length(CAST(chapter AS BLOB))<=2048 AND "
-                            "length(CAST(text AS BLOB))+length(CAST(chapter AS BLOB))<=bytes"),
+                            "length(CAST(note AS BLOB))<=262144 AND "
+                            "length(CAST(text AS BLOB))+length(CAST(chapter AS BLOB))+length(CAST(note AS BLOB))<=bytes"),
                   "invalid-database");
             query.addBindValue(book.key);
             for (int i = 0; i < count; ++i)
@@ -919,9 +922,11 @@ bool AnnotationDatabase::excerpts(const AnnotationBook &book, const QStringList 
                               && query.value(3).toLongLong() == size
                               && query.value(4).toLongLong() <= size,
                       "invalid-highlight");
-                HighlightExcerpt row{ id, utf8Text(query.value(1)), utf8Text(query.value(2)) };
+                HighlightExcerpt row{ id, utf8Text(query.value(1)), utf8Text(query.value(2)),
+                                      utf8Text(query.value(5)) };
                 check(!row.text.isEmpty() && row.text.size() <= HighlightStore::maxTextUnits
-                              && row.chapter.size() <= 512,
+                              && row.chapter.size() <= 512
+                              && row.note.size() <= HighlightStore::maxNoteUnits,
                       "invalid-highlight");
                 fetched.insert(id, row);
                 ++received;

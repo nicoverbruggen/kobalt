@@ -71,6 +71,11 @@ bool validHighlightMetadata(const Highlight &h)
     return validMetadata(h);
 }
 
+bool hasHighlightNote(const Highlight &h)
+{
+    return h.detailsLoaded ? !h.note.isEmpty() : h.compactNote;
+}
+
 QJsonObject highlightJson(const Highlight &h)
 {
     QJsonObject item = qt::object({ { "id", h.id },
@@ -301,7 +306,7 @@ bool HighlightStore::excerpts(const QStringList &ids, QVector<HighlightExcerpt> 
         return false;
     QVector<HighlightExcerpt> result;
     for (const auto &h : full)
-        result.append({ h.id, h.text, h.chapter });
+        result.append({ h.id, h.text, h.chapter, h.note });
     *rows = std::move(result);
     return true;
 }
@@ -311,6 +316,7 @@ void HighlightStore::dropDetails()
     if (!compact_)
         return;
     for (auto &h : highlights_) {
+        h.compactNote = hasHighlightNote(h);
         h.text.clear();
         h.chapter.clear();
         h.note.clear();

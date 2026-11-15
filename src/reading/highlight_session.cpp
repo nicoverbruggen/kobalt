@@ -337,7 +337,7 @@ void HighlightSession::remember(const QVector<Highlight> &highlights)
     QHash<QString, HighlightExcerpt> kept;
     for (const auto &h : highlights) {
         if (h.detailsLoaded)
-            kept.insert(h.id, { h.id, h.text, h.chapter });
+            kept.insert(h.id, { h.id, h.text, h.chapter, h.note });
         else if (known_.contains(h.id))
             kept.insert(h.id, known_.value(h.id));
     }
@@ -576,6 +576,37 @@ bool HighlightSession::updateAppearance(const QString &id, const QString &color,
         }
         h.color = chosenColor;
         h.style = chosenStyle;
+        return persist(std::move(list));
+    }
+    return false;
+}
+
+bool HighlightSession::setNote(const QString &id, const QString &note)
+{
+    const QString value = note.trimmed().isEmpty() ? QString() : note;
+    if (value.size() > HighlightStore::maxNoteUnits) {
+        error_ = QStringLiteral("note-too-long");
+        ++errors_;
+        if (failed)
+            failed();
+        return false;
+    }
+    Highlight full;
+    if (!detail(id, &full))
+        return false;
+    auto list = highlights();
+    for (auto &h : list) {
+        if (h.id != id)
+            continue;
+        if (full.note == value && writable()) {
+            error_.clear();
+            return true;
+        }
+        // A compact row needs its text and chapter to save a changed note.
+        h.text = full.text;
+        h.chapter = full.chapter;
+        h.note = value;
+        h.detailsLoaded = true;
         return persist(std::move(list));
     }
     return false;

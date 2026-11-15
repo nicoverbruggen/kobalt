@@ -26,6 +26,7 @@
 #include "reading/highlight_session.h"
 #include "reading/annotation_draft.h"
 #include "storage/annotation_export.h"
+#include "storage/record_writer.h"
 #include "app/reader/views/reading_page.h"
 #include "app/reader/views/image_viewer.h"
 #include "app/reader/views/appearance_preview.h"
@@ -851,7 +852,7 @@ private:
     // Counts preferences writes. An asynchronous save that fails undoes its
     // change only when no later write started: a later write already carries
     // the change, and its own result decides.
-    quint64 preferencesWrites = 0;
+    quint64 zenStatsWrite = 0;
 
     void showSettingsWriteError();
     void selectPanel(int index);
@@ -1026,7 +1027,8 @@ private:
     quint64 closeRequest = 0;
     QElapsedTimer closeStage;
     QPointer<kobalt::ui::ChoiceModal> closeSaveError;
-    std::unique_ptr<storage::RecordWriter> reportWriter, preferencesWriter;
+    std::unique_ptr<storage::RecordWriter> reportWriter;
+    storage::RecordWriter preferencesWriter{ storage::RecordWriter::Delivery::All };
     void saveSoon();
     void save(bool snapshot = false, bool background = false, bool persist = true);
     // True while a tap can turn the page. The main thread then must not write

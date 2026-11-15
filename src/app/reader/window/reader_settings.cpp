@@ -713,37 +713,34 @@ void Reader::saveButtonControls(const QJsonObject &actions)
 {
     if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph)
         return;
-    auto next = appearance::globalPreferences(preferences);
-    appearance::rememberTextLayout(next, session->state());
-    appearance::rememberPageMargins(next, session->state());
-    next[pageButtons::preferenceKey] = actions;
+    const auto before = qt::object(
+            { { pageButtons::preferenceKey, preferences.value(pageButtons::preferenceKey) } });
+    const auto next = qt::object({ { pageButtons::preferenceKey, actions } });
     logSettingChanges(qt::object({ { pageButtons::preferenceKey,
                                      preferences.value(pageButtons::preferenceKey).toObject() } }),
                       qt::object({ { pageButtons::preferenceKey, actions } }));
     savingButtonControls = true;
     static_cast<SettingsPanel *>(general)->buttonControlsButton->setEnabled(false);
-    if (!preferencesWriter)
-        preferencesWriter = std::make_unique<storage::RecordWriter>();
     QPointer<Reader> guard(this);
-    preferencesWriter->post([path = book->paths().preferences(),
-                             next] { return storage::writePreferences(path, next); },
-                            [guard, actions](bool saved) {
-                                qt::invoke(
-                                        QCoreApplication::instance(),
-                                        [guard, actions, saved] {
-                                            if (!guard)
-                                                return;
-                                            guard->savingButtonControls = false;
-                                            saves::settled();
-                                            if (saved)
-                                                guard->preferences[pageButtons::preferenceKey] =
-                                                        actions;
-                                            else
-                                                guard->showSettingsWriteError();
-                                            guard->refresh();
-                                        },
-                                        Qt::QueuedConnection);
-                            });
+    preferencesWriter.post([path = book->paths().preferences(), before,
+                            next] { return storage::updatePreferences(path, before, next); },
+                           [guard, actions](bool saved) {
+                               qt::invoke(
+                                       QCoreApplication::instance(),
+                                       [guard, actions, saved] {
+                                           if (!guard)
+                                               return;
+                                           guard->savingButtonControls = false;
+                                           saves::settled();
+                                           if (saved)
+                                               guard->preferences[pageButtons::preferenceKey] =
+                                                       actions;
+                                           else
+                                               guard->showSettingsWriteError();
+                                           guard->refresh();
+                                       },
+                                       Qt::QueuedConnection);
+                           });
 }
 
 bool Reader::writePreferences(const QJsonObject &next)
@@ -754,16 +751,16 @@ bool Reader::writePreferences(const QJsonObject &next)
     // Known exception: a settings change waits for its write, so each caller
     // can undo the change when the write fails.
     mainthread::AllowBlocking allow("settings write");
+    const auto before = appearance::globalPreferences(preferences);
     auto global = appearance::globalPreferences(next);
     appearance::rememberTextLayout(global, session->state());
     appearance::rememberPageMargins(global, session->state());
     // On the writer thread, after any queued layout memory, so neither write
     // loses the other's change.
-    if (!preferencesWriter)
-        preferencesWriter = std::make_unique<storage::RecordWriter>();
-    ++preferencesWrites;
-    if (!preferencesWriter->writeNow([path = book->paths().preferences(), global] {
-            return kobalt::storage::writePreferences(path, global);
+    if (next.value("zen_stats") != preferences.value("zen_stats"))
+        ++zenStatsWrite;
+    if (!preferencesWriter.writeNow([path = book->paths().preferences(), before, global] {
+            return kobalt::storage::updatePreferences(path, before, global);
         })) {
         showSettingsWriteError();
         return false;
@@ -963,42 +960,37 @@ void Reader::setDenseGraph(bool dense)
         refresh();
         return;
     }
-    auto next = appearance::globalPreferences(preferences);
-    appearance::rememberTextLayout(next, session->state());
-    appearance::rememberPageMargins(next, session->state());
-    next["dense_stats_chart"] = dense;
+    const auto before =
+            qt::object({ { "dense_stats_chart", preferences.value("dense_stats_chart") } });
+    const auto next = qt::object({ { "dense_stats_chart", dense } });
     logSettingChanges(qt::object({ { "dense_stats_chart",
                                      preferences.value("dense_stats_chart").toBool(false) } }),
                       qt::object({ { "dense_stats_chart", dense } }));
     savingDenseGraph = true;
-    if (!preferencesWriter)
-        preferencesWriter = std::make_unique<storage::RecordWriter>();
     QPointer<Reader> guard(this);
-    preferencesWriter->post(
-            [path = book->paths().preferences(), next] {
-                return storage::writePreferences(path, next);
-            },
-            [guard, dense](bool saved) {
-                qt::invoke(
-                        QCoreApplication::instance(),
-                        [guard, dense, saved] {
-                            if (!guard)
-                                return;
-                            guard->savingDenseGraph = false;
-                            saves::settled();
-                            if (saved) {
-                                guard->preferences["dense_stats_chart"] = dense;
-                                guard->denseGraphOption->setChecked(dense);
-                            } else {
-                                guard->chapterGraph->setDense(
-                                        guard->preferences.value("dense_stats_chart")
-                                                .toBool(false));
-                                guard->showSettingsWriteError();
-                            }
-                            guard->refresh();
-                        },
-                        Qt::QueuedConnection);
-            });
+    preferencesWriter.post([path = book->paths().preferences(), before,
+                            next] { return storage::updatePreferences(path, before, next); },
+                           [guard, dense](bool saved) {
+                               qt::invoke(
+                                       QCoreApplication::instance(),
+                                       [guard, dense, saved] {
+                                           if (!guard)
+                                               return;
+                                           guard->savingDenseGraph = false;
+                                           saves::settled();
+                                           if (saved) {
+                                               guard->preferences["dense_stats_chart"] = dense;
+                                               guard->denseGraphOption->setChecked(dense);
+                                           } else {
+                                               guard->chapterGraph->setDense(
+                                                       guard->preferences.value("dense_stats_chart")
+                                                               .toBool(false));
+                                               guard->showSettingsWriteError();
+                                           }
+                                           guard->refresh();
+                                       },
+                                       Qt::QueuedConnection);
+                           });
     refresh();
 }
 
@@ -1015,32 +1007,31 @@ void Reader::toggleZenStats()
     const bool shown = !preferences.value("zen_stats").toBool(false);
     logSettingChanges(qt::object({ { "zen_stats", !shown } }),
                       qt::object({ { "zen_stats", shown } }));
+    const auto before = qt::object({ { "zen_stats", !shown } });
+    const auto next = qt::object({ { "zen_stats", shown } });
     preferences["zen_stats"] = shown;
-    const auto write = ++preferencesWrites;
-    auto next = appearance::globalPreferences(preferences);
-    appearance::rememberTextLayout(next, session->state());
-    appearance::rememberPageMargins(next, session->state());
-    if (!preferencesWriter)
-        preferencesWriter = std::make_unique<storage::RecordWriter>();
+    const auto write = ++zenStatsWrite;
     QPointer<Reader> guard(this);
-    preferencesWriter->post([path = book->paths().preferences(),
-                             next] { return kobalt::storage::writePreferences(path, next); },
-                            [guard, shown, write](bool saved) {
-                                if (saved)
-                                    return;
-                                qt::invoke(
-                                        QCoreApplication::instance(),
-                                        [guard, shown, write] {
-                                            if (!guard || guard->preferencesWrites != write)
-                                                return;
-                                            // A failed save undoes the toggle, as the
-                                            // other settings do.
-                                            guard->preferences["zen_stats"] = !shown;
-                                            guard->showSettingsWriteError();
-                                            guard->syncNavigation();
-                                        },
-                                        Qt::QueuedConnection);
-                            });
+    preferencesWriter.post(
+            [path = book->paths().preferences(), before, next] {
+                return kobalt::storage::updatePreferences(path, before, next);
+            },
+            [guard, shown, write](bool saved) {
+                if (saved)
+                    return;
+                qt::invoke(
+                        QCoreApplication::instance(),
+                        [guard, shown, write] {
+                            if (!guard || guard->zenStatsWrite != write)
+                                return;
+                            // A failed save undoes the toggle, as the
+                            // other settings do.
+                            guard->preferences["zen_stats"] = !shown;
+                            guard->showSettingsWriteError();
+                            guard->syncNavigation();
+                        },
+                        Qt::QueuedConnection);
+            });
     syncNavigation();
 }
 
@@ -1051,43 +1042,40 @@ void Reader::applyDarkMode(bool enabled)
         refresh();
         return;
     }
-    auto next = appearance::globalPreferences(preferences);
-    appearance::rememberTextLayout(next, session->state());
-    appearance::rememberPageMargins(next, session->state());
-    next["dark_mode"] = enabled;
+    const auto before = qt::object({ { "dark_mode", preferences.value("dark_mode") } });
+    const auto next = qt::object({ { "dark_mode", enabled } });
     logSettingChanges(qt::object({ { "dark_mode", preferences.value("dark_mode").toBool(false) } }),
                       qt::object({ { "dark_mode", enabled } }));
     savingDarkMode = enabled;
-    if (!preferencesWriter)
-        preferencesWriter = std::make_unique<storage::RecordWriter>();
     QPointer<Reader> guard(this);
-    preferencesWriter->post([path = book->paths().preferences(),
-                             next] { return kobalt::storage::writePreferences(path, next); },
-                            [guard, enabled](bool saved) {
-                                qt::invoke(
-                                        QCoreApplication::instance(),
-                                        [guard, enabled, saved] {
-                                            if (!guard)
-                                                return;
-                                            auto *reader = guard.data();
-                                            reader->savingDarkMode = -1;
-                                            if (!saved) {
-                                                reader->showSettingsWriteError();
-                                                reader->refresh();
-                                                return;
-                                            }
-                                            reader->preferences["dark_mode"] = enabled;
-                                            reader->settingsError->clear();
-                                            reader->settingsError->hide();
-                                            reader->pendingDarkMode = enabled;
-                                            reader->session->setDarkMode(enabled);
-                                            if (reader->appearanceEdit.preview())
-                                                reader->appearanceEdit.preview()->setDarkMode(
-                                                        enabled);
-                                            reader->refresh();
-                                        },
-                                        Qt::QueuedConnection);
-                            });
+    preferencesWriter.post(
+            [path = book->paths().preferences(), before, next] {
+                return kobalt::storage::updatePreferences(path, before, next);
+            },
+            [guard, enabled](bool saved) {
+                qt::invoke(
+                        QCoreApplication::instance(),
+                        [guard, enabled, saved] {
+                            if (!guard)
+                                return;
+                            auto *reader = guard.data();
+                            reader->savingDarkMode = -1;
+                            if (!saved) {
+                                reader->showSettingsWriteError();
+                                reader->refresh();
+                                return;
+                            }
+                            reader->preferences["dark_mode"] = enabled;
+                            reader->settingsError->clear();
+                            reader->settingsError->hide();
+                            reader->pendingDarkMode = enabled;
+                            reader->session->setDarkMode(enabled);
+                            if (reader->appearanceEdit.preview())
+                                reader->appearanceEdit.preview()->setDarkMode(enabled);
+                            reader->refresh();
+                        },
+                        Qt::QueuedConnection);
+            });
     refresh();
 }
 

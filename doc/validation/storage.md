@@ -8,7 +8,8 @@ These checks cover the profile database, record writers, saves at close and slee
 | --- | --- |
 | `model.preview-store` | Private preview filenames, exact PNG pixels, invalidation, memory and storage limits, one-time old-cache cleanup, interrupted migration and pending scan recovery, completion persistence, failed and special marker reads, hidden PNGs, preservation of unrelated files and symlinks, and ancestor replacement at the deletion boundary |
 | `model.profile-storage` | The SQLite profile: import, schema checks, single ownership, recovery, backups, synced commits and preservation of beta 8 caches during profile preparation and Blaze cache clearing |
-| `model.record-writer` | Queue order, cancellation and limits of the record writers |
+| `model.record-writer` | Queue order, replacement of pending snapshots, delivery of each independent preference edit and its result, cancellation and wait limits |
+| `desktop.settingsKeepPendingLibrarySort` | Select Author in the Library, delay its save until the Reader opens, switch on dark mode and verify both settings on disk |
 | `model.save-wait` | Save waits: a report runs the waiting check from the event loop, also from a worker thread; the writer thread reports each write; the fallback timer covers a save that does not report |
 | `model.reading-history` | Reading history, its migration and its recovery |
 | `session.reading-book` | Saved book state, background saves and retries, reading time and history in the session |

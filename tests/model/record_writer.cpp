@@ -123,6 +123,26 @@ int main()
                 "The newest write did not report its own result");
     }
     {
+        // An ordered writer keeps independent edits and their outcomes.
+        Log log;
+        Gate gate;
+        RecordWriter blocker, edits(RecordWriter::Delivery::All);
+        blocker.post(
+                [&] {
+                    gate.wait();
+                    return true;
+                },
+                {});
+        gate.awaitEntered();
+        edits.post(record(log, "zen", false),
+                   [&](bool ok) { log.add(ok ? "unexpected" : "failed"); });
+        edits.post(record(log, "dark"), [&](bool ok) { log.add(ok ? "saved" : "unexpected"); });
+        gate.release();
+        require(edits.writeNow(record(log, "apply")), "Cannot apply settings");
+        require(log.text() == "zen failed dark saved apply ",
+                "Applying settings lost a queued edit or its completion");
+    }
+    {
         // writeNow replaces a waiting write, runs on the writer thread and
         // returns that write's result.
         Log log;

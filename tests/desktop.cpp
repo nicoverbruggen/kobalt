@@ -5784,6 +5784,52 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!sheet->isVisible());
     }
 
+    void settingsKeepPendingLibrarySort()
+    {
+        Fixture fixture(false, false, true);
+        QVERIFY(fixture.prepared);
+        auto *start = fixture.window.findChild<standalone::StartScreen *>();
+        QVERIFY(start);
+        start->showLibrary();
+        auto *view = start->library();
+        auto submit = view->settingsChanged;
+        library::Settings pending;
+        bool chosen = false;
+        // Let the Reader load the old settings before the Library saves its choice.
+        view->settingsChanged = [&](const library::Settings &settings) {
+            pending = settings;
+            chosen = true;
+        };
+        auto *sort = view->findChild<QPushButton *>("librarySort");
+        QVERIFY(sort && sort->isVisible());
+        sort->click();
+        auto *author = view->findChild<QAbstractButton *>("librarySortAuthor");
+        QVERIFY(author && author->isVisible());
+        author->click();
+        QVERIFY(chosen && pending.sort == library::Sort::Author);
+        view->settingsChanged = submit;
+
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        submit(pending);
+        const auto savedSort = [&] {
+            return storage::readJson(fixture.paths.preferences())
+                    .value("library")
+                    .toObject()
+                    .value("sort")
+                    .toString();
+        };
+        QTRY_COMPARE(savedSort(), QString("author"));
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(revealSettingsOption(fixture, "rrDarkMode"));
+        QVERIFY(fixture.press("rrDarkMode"));
+        QTRY_VERIFY(storage::readJson(fixture.paths.preferences()).value("dark_mode").toBool());
+        QCOMPARE(savedSort(), QString("author"));
+    }
+
     void libraryAtStart()
     {
         // Once there is a library, a fresh start opens on it.

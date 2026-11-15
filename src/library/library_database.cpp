@@ -155,9 +155,10 @@ bool Index::loadDatabase(const QString &directory)
             if (source.status == storage::ReadStatus::Ok && !loaded.restore(source.object))
                 return false;
             if (!preferences.object.contains("library")) {
+                const auto before = preferences.object;
                 preferences.object["library"] = options(loaded.settings);
-                if (!storage::writePreferences(directory + "/reader-settings.json",
-                                               preferences.object))
+                if (!storage::updatePreferences(directory + "/reader-settings.json", before,
+                                                preferences.object))
                     return false;
             }
             if (!saveRows(db, loaded)
@@ -231,12 +232,15 @@ bool Index::saveDatabase(const QString &directory) const
     if (preferences.status != storage::ReadStatus::Ok
         && preferences.status != storage::ReadStatus::Missing)
         return false;
-    const auto next = options(this->settings);
-    if (preferences.object.value("library").toObject() != next) {
-        preferences.object["library"] = next;
-        if (!storage::writePreferences(directory + "/reader-settings.json", preferences.object))
-            return false;
-    }
+    const auto known = preferences.object.value("library").toObject();
+    const auto next = options(settings);
+    auto updated = known;
+    for (auto it = next.begin(); it != next.end(); ++it)
+        updated[it.key()] = it.value();
+    if (updated != known
+        && !storage::updatePreferences(directory + "/reader-settings.json",
+                                       { { "library", known } }, { { "library", updated } }))
+        return false;
     return storage::profileTransaction(directory, [&](QSqlDatabase &db) {
         QSqlQuery query(db);
         return query.exec("SELECT format FROM profile_state WHERE name='library'") && query.next()

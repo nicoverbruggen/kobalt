@@ -1,4 +1,5 @@
 #include "reader_storage.h"
+#include "record_writer.h"
 #include "support/main_thread.h"
 #include "annotation_database.h"
 #include "profile_database.h"
@@ -415,11 +416,9 @@ bool writeReadingActivity(const Paths &paths, const QString &identity, const QJs
 
 namespace {
 constexpr auto sleepDefaultsMigrated = "sleep_defaults_migrated";
-}
 
-JsonRead readPreferences(const QString &path)
+JsonRead normalizePreferences(const JsonRead &read)
 {
-    auto read = readJsonFile(path);
     if (read.status != ReadStatus::Ok)
         return read;
     if (read.object.contains("schema") && read.object.value("schema").toDouble(-1) != 1)
@@ -431,23 +430,83 @@ JsonRead readPreferences(const QString &path)
         clean[sleepDefaultsMigrated] = true;
     }
     clean["schema"] = 1;
-    if (clean != read.object && !writeJson(path, clean))
-        diagnostic("settings-cleanup-unsaved", {}, DiagnosticSeverity::Error);
     return { clean, ReadStatus::Ok };
 }
 
-bool writePreferences(const QString &path, const QJsonObject &object)
+bool savePreferences(const QString &path, const QJsonObject &object)
 {
-    const auto old = readJsonFile(path);
-    if (old.status != ReadStatus::Ok && old.status != ReadStatus::Missing)
-        return false;
-    if ((old.object.contains("schema") && old.object.value("schema").toDouble(-1) != 1)
-        || (object.contains("schema") && object.value("schema").toDouble(-1) != 1))
+    if (object.contains("schema") && object.value("schema").toDouble(-1) != 1)
         return false;
     auto clean = appearance::cleanPreferences(object);
     clean[sleepDefaultsMigrated] = true;
     clean["schema"] = 1;
     return writeJson(path, clean);
+}
+} // namespace
+
+JsonRead readPreferences(const QString &path)
+{
+    const auto raw = readJsonFile(path);
+    auto clean = normalizePreferences(raw);
+    if (clean.status == ReadStatus::Ok && clean.object != raw.object) {
+        // A different preference may have changed since this thread read the
+        // old format. Migrate the file the profile worker actually finds.
+        if (!onWriterThread()) {
+            runOnWriterThread([&] { clean = readPreferences(path); });
+            return clean;
+        }
+        if (!writeJson(path, clean.object))
+            diagnostic("settings-cleanup-unsaved", {}, DiagnosticSeverity::Error);
+    }
+    return clean;
+}
+
+bool writePreferences(const QString &path, const QJsonObject &object)
+{
+    bool saved = false;
+    runOnWriterThread([&] {
+        const auto old = normalizePreferences(readJsonFile(path));
+        if (old.status == ReadStatus::Ok || old.status == ReadStatus::Missing)
+            saved = savePreferences(path, object);
+    });
+    return saved;
+}
+
+namespace {
+void applyChanges(QJsonObject &current, const QJsonObject &before, const QJsonObject &after)
+{
+    for (auto it = before.begin(); it != before.end(); ++it)
+        if (!after.contains(it.key()))
+            current.remove(it.key());
+    for (auto it = after.begin(); it != after.end(); ++it) {
+        const auto old = before.value(it.key());
+        if (old == it.value())
+            continue;
+        if (it.value().isObject() && (old.isUndefined() || old.isObject())) {
+            auto nested = current.value(it.key()).toObject();
+            applyChanges(nested, old.toObject(), it.value().toObject());
+            current[it.key()] = nested;
+        } else {
+            current[it.key()] = it.value();
+        }
+    }
+}
+} // namespace
+
+bool updatePreferences(const QString &path, const QJsonObject &before, const QJsonObject &after)
+{
+    bool saved = false;
+    runOnWriterThread([&] {
+        const auto raw = readJsonFile(path);
+        const auto read = normalizePreferences(raw);
+        if (read.status != ReadStatus::Ok && read.status != ReadStatus::Missing)
+            return;
+        auto next = read.object;
+        applyChanges(next, before, after);
+        saved = (read.status == ReadStatus::Ok && next == raw.object)
+                || savePreferences(path, next);
+    });
+    return saved;
 }
 
 namespace {

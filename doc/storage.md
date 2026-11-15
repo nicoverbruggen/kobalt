@@ -6,6 +6,8 @@
 
 Kobalt separates saved reading data from disposable rendering caches. Storage formats are versioned independently of application releases. Hosts choose the storage directory; `storage::Paths` owns the shared filenames. JSON uses UTF-8. Writes use `QSaveFile` to replace a complete file atomically.
 
+The Reader and the standalone Library share `reader-settings.json`. Each applies its changed fields to the current file on the profile writer. Removing a setting removes that field. Independent settings and unknown fields survive, including fields inside the Library options.
+
 ## Saved reading data
 
 `page_animations` retains the user’s configured preference in both themes. On the older i.MX display backend, dark mode suppresses the animation at runtime without saving a different value. Returning to light mode restores the preference. Settings schema 1 and reading-data and cache formats stay unchanged.

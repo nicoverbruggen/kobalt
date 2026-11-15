@@ -113,21 +113,22 @@ public:
         std::unique_lock<std::mutex> lock(mutex);
         assertNotRunner();
         finished.wait(lock, [writer] { return !writer->running && !writer->pending; });
-        // A cancelled writer can still be queued without a write.
-        if (writer->queued)
-            queue.erase(std::find(queue.begin(), queue.end(), writer));
     }
 
     void post(RecordWriter *writer, RecordWriter::Write write, RecordWriter::Done done)
     {
         {
             std::lock_guard<std::mutex> lock(mutex);
-            writer->pending = std::move(write);
-            writer->pendingDone = std::move(done);
-            if (!writer->queued) {
-                writer->queued = true;
-                writer->queuedAt = std::chrono::steady_clock::now();
-                queue.push_back(writer);
+            if (writer->pending && writer->delivery == RecordWriter::Delivery::Latest) {
+                auto pending = std::find_if(queue.begin(), queue.end(), [writer](const Job &job) {
+                    return job.owner == writer;
+                });
+                pending->write = std::move(write);
+                pending->done = std::move(done);
+            } else {
+                queue.push_back({ writer, std::move(write), std::move(done),
+                                  std::chrono::steady_clock::now() });
+                ++writer->pending;
             }
             start();
         }
@@ -138,8 +139,11 @@ public:
     {
         std::unique_lock<std::mutex> lock(mutex);
         assertNotRunner();
-        writer->pending = {};
-        writer->pendingDone = {};
+        queue.erase(std::remove_if(queue.begin(), queue.end(),
+                                   [writer](const Job &job) { return job.owner == writer; }),
+                    queue.end());
+        writer->pending = 0;
+        finished.notifyAll();
         finished.wait(lock, [writer] { return !writer->running; });
     }
 
@@ -162,6 +166,14 @@ public:
     }
 
 private:
+    struct Job
+    {
+        RecordWriter *owner;
+        RecordWriter::Write write;
+        RecordWriter::Done done;
+        std::chrono::steady_clock::time_point queuedAt;
+    };
+
     struct Call
     {
         const std::function<void()> &operation;
@@ -188,7 +200,7 @@ private:
         if (queue.empty())
             return false;
         return calls.empty()
-                || std::chrono::steady_clock::now() - queue.front()->queuedAt >= backgroundLimit;
+                || std::chrono::steady_clock::now() - queue.front().queuedAt >= backgroundLimit;
     }
 
     void run()
@@ -212,18 +224,10 @@ private:
                 finished.notifyAll();
                 continue;
             }
-            auto *writer = queue.front();
+            auto job = std::move(queue.front());
             queue.pop_front();
-            writer->queued = false;
-            // A cancelled writer stays queued without a write.
-            if (!writer->pending) {
-                finished.notifyAll();
-                continue;
-            }
-            auto write = std::move(writer->pending);
-            auto done = std::move(writer->pendingDone);
-            writer->pending = {};
-            writer->pendingDone = {};
+            auto *writer = job.owner;
+            --writer->pending;
             writer->running = busy = true;
             lock.unlock();
             // The writer cannot be destroyed while `running` is set. A write
@@ -232,13 +236,13 @@ private:
             {
                 DiagnosticOperation operation("background-profile-write");
                 try {
-                    saved = write();
+                    saved = job.write();
                 } catch (...) {
                 }
             }
             try {
-                if (done)
-                    done(saved);
+                if (job.done)
+                    job.done(saved);
             } catch (...) {
             }
             lock.lock();
@@ -251,13 +255,13 @@ private:
 
     std::mutex mutex;
     Condition wake, finished;
-    std::deque<RecordWriter *> queue;
+    std::deque<Job> queue;
     std::deque<Call *> calls;
     bool started = false, busy = false;
     std::thread::id runner;
 };
 
-RecordWriter::RecordWriter() = default;
+RecordWriter::RecordWriter(Delivery delivery) : delivery(delivery) { }
 
 RecordWriter::~RecordWriter()
 {

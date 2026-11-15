@@ -273,7 +273,8 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
             // The shared settings must be on disk before the reader uses them.
             // The window is still being built, so no input can arrive.
             mainthread::AllowBlocking allow("remembered layout before reader input");
-            if (!kobalt::storage::writePreferences(book->paths().preferences(), global))
+            if (!kobalt::storage::updatePreferences(book->paths().preferences(),
+                                                    savedSettings.object, global))
                 kobalt::diagnostic("last-appearance-unsaved", {},
                                    kobalt::DiagnosticSeverity::Error);
         }

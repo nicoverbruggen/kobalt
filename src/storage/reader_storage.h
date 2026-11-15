@@ -64,6 +64,9 @@ bool writeReadingActivity(const Paths &, const QString &identity, const QJsonObj
                           const QString &legacy = {});
 JsonRead readPreferences(const QString &path);
 bool writePreferences(const QString &path, const QJsonObject &);
+// Apply only the fields changed between these two snapshots, including removals.
+// The profile writer reads the latest file and commits the edit as one operation.
+bool updatePreferences(const QString &path, const QJsonObject &before, const QJsonObject &after);
 
 // What profile preparation did with saved data it could not use.
 struct ProfileRecovery

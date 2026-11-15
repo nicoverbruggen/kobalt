@@ -3712,7 +3712,16 @@ private slots:
             // A new visible range asks for details while rendering rejects the request.
             panel->resize(panel->width(), panel->height() - 240);
             QVERIFY(!first->isEnabled());
-            interrupted = true;
+            // The old layout still says "Search complete" until the restarted
+            // search delivers its first batch. Observe it during delivery so
+            // even a scan that finishes between two test polls is counted.
+            application->afterEvent = [&](QObject *object, QEvent *event) {
+                if (object == qApp && event->type() == QEvent::MetaCall
+                    && status->text() == strings::get("search_panel.searching")) {
+                    application->afterEvent = {};
+                    interrupted = true;
+                }
+            };
         }
         if (interruption == "replaced-query") {
             query->setText("zqxjv");

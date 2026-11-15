@@ -575,6 +575,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
         auto *reader = controller.window();
         canvas->setContent(reader, renderingDpi != 0, renderingDpi ? renderingDpi / 300.0 : 1.0);
         stack->setCurrentWidget(canvas);
+        start->releaseOpening();
         sizeCanvas();
         reader->show();
         setUpdatesEnabled(true);

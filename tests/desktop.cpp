@@ -11588,15 +11588,22 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         for (int pass = 0; pass < 3; ++pass) {
             const bool showCover = pass == 1 ? !initialCover : initialCover;
             fixture.window.openBook(book);
-            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), pass + 1, 30000);
-            QTRY_VERIFY(!fixture.state().value("busy").toBool());
             auto *start = fixture.window.findChild<standalone::StartScreen *>();
-            auto *opening = start->openingCanvas()->content->findChild<QDialog *>("rrOpening");
+            QPointer<QWidget> surface(start->openingCanvas());
+            QVERIFY(surface);
+            QPointer<QDialog> opening =
+                    start->openingCanvas()->content->findChild<QDialog *>("rrOpening");
             QVERIFY(opening);
             auto *brand = opening->findChild<QLabel *>("rrOpeningBrand");
             auto *cover = opening->findChild<QWidget *>("rrOpeningCover");
+            QImage sample(32, 32, QImage::Format_RGB32);
+            sample.fill(Qt::black);
+            start->setCover(sample);
             QCOMPARE(brand->isHidden(), showCover);
             QCOMPARE(cover->isHidden(), !showCover);
+            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), pass + 1, 30000);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QVERIFY(!start->openingCanvas() && !surface && !opening);
             QVERIFY(fixture.press("rrPage"));
             QVERIFY(fixture.press("rrSettings"));
             QVERIFY(fixture.press("rrSettingsSystem"));
@@ -17318,12 +17325,13 @@ private slots:
         fixture.window.openBook(book);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         auto *reader = fixture.window.readerWindow();
-        auto *start = fixture.window.findChild<standalone::StartScreen *>();
-        auto *view = start->openingCanvas()->content->findChild<QDialog *>("rrOpening");
-        QVERIFY(view);
-        // Keep the production opening, including the cover delivered by its worker.
-        // Reparent it onto the visible reader so the gallery can capture it.
-        view->setParent(reader, Qt::Widget);
+        QFile source(book);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        const auto metadata = library::readBookMetadata(source);
+        QVERIFY(!metadata.cover.isNull());
+        auto opening = createEmbeddedOpening(reader, desktop::readerHostServices().presentation);
+        opening->setCover(metadata.cover);
+        auto *view = opening->window();
         view->setGeometry(reader->rect());
         view->show();
         view->raise();
@@ -17338,7 +17346,7 @@ private slots:
         QVERIFY(capture(fixture, name + "-loading-cover", view));
         auto *coverSurface = view->findChild<QWidget *>("rrOpeningCover");
         auto *hint = view->findChild<QLabel *>("rrOpeningHint");
-        start->setReopening();
+        opening->setReopening();
         QCOMPARE(hint->text(), QLocale().toUpper(strings::get("opening.reopening")));
         QVERIFY(capture(fixture, name + "-loading-cover-reopening", view));
         QTRY_COMPARE_WITH_TIMEOUT(
@@ -17354,10 +17362,6 @@ private slots:
             QCOMPARE(slow, first);
         }
         view->hide();
-        QFile source(book);
-        QVERIFY(source.open(QIODevice::ReadOnly));
-        const auto metadata = library::readBookMetadata(source);
-        QVERIFY(!metadata.cover.isNull());
         auto handoff = createEmbeddedOpening(reader, desktop::readerHostServices().presentation);
         handoff->window()->setGeometry(reader->rect());
         handoff->setCover(metadata.cover);

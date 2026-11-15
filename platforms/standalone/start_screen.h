@@ -24,6 +24,7 @@ public:
                 std::function<qreal()> textScale = {}, QWidget *parent = nullptr);
     ~StartScreen() override;
     void showOpening(const QString &bookKey = {}, bool showCover = true);
+    void releaseOpening();
     void setProgress(int percent);
     void setReopening();
     void setCover(QImage cover);

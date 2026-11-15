@@ -176,6 +176,7 @@ public:
             layout->setCurrentWidget(canvas);
             layout->setStackingMode(QStackedLayout::StackOne);
             canvas->viewport()->repaint();
+            start->releaseOpening();
             openingHandoff.stop();
             syncPageButtons();
             reader->checkpoint();

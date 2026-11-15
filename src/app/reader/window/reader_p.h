@@ -1095,7 +1095,7 @@ private:
     std::unique_ptr<storage::RecordWriter> reportWriter;
     storage::RecordWriter preferencesWriter{ storage::RecordWriter::Delivery::All };
     void saveSoon();
-    void save(bool snapshot = false, bool background = false, bool persist = true);
+    bool save(bool snapshot = false, bool background = false, bool persist = true);
     // True while a tap can turn the page. The main thread then must not write
     // storage or wait for another thread; see support/main_thread.h.
     bool takesInput() const;

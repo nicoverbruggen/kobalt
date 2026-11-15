@@ -132,15 +132,12 @@ void Reader::checkpoint()
     // clock before any save can block, so background I/O is not reading time.
     if (services.suspended())
         book->sleepReading(preferences);
-    save(true);
-    if (services.deferKosync && services.suspended()) {
-        QJsonObject snapshot = book->checkpointState();
-        // Only hand off a position that reached local storage. A repeated
-        // unchanged checkpoint does not write its row.
-        if (book->checkpoint(&snapshot) && !book->usesNativeCloudSync() && kosyncAutomatic()
-            && kosyncClient->signedIn() && !book->pendingProgress() && !book->deviceTransition()
-            && !session->busy() && !session->temporaryTypography()
-            && !syncCoordinator->pendingProgress() && session->pages() > 0) {
+    const bool saved = save(true);
+    if (saved && services.deferKosync && services.suspended()) {
+        if (!book->usesNativeCloudSync() && kosyncAutomatic() && kosyncClient->signedIn()
+            && !book->pendingProgress() && !book->deviceTransition() && !session->busy()
+            && !session->temporaryTypography() && !syncCoordinator->pendingProgress()
+            && session->pages() > 0) {
             cancelKosync();
             auto job = kosyncClient->deferredAccount();
             job["document"] = QString::fromLatin1(kosyncDocument());
@@ -3454,21 +3451,22 @@ bool Reader::flushBeforeStandby()
 
 // `snapshot` marks a close, sleep or shutdown. `background` queues the
 // checkpoint on the book's writer thread; a failure is only logged.
-void Reader::save(bool snapshot, bool background, bool persist)
+bool Reader::save(bool snapshot, bool background, bool persist)
 {
     localSaveDue = false;
     QJsonObject state = book->checkpointState();
     // Only a save that waits for storage, such as sleep, reports a failure.
     // Background saves are transient and only log theirs.
-    if (persist && !book->checkpoint(&state, background) && !background) {
+    const bool saved = !persist || book->checkpoint(&state, background);
+    if (!saved && !background) {
         page->notice = strings::get("reader.could_not_save_reading_position");
         page->refreshContent();
     }
     // Routine reports are opt-in; snapshots remain available at lifecycle boundaries.
     if (!snapshot && !liveState && !services.development.continuousStateReports)
-        return;
+        return saved;
     if (book->paths().stateReport.isEmpty())
-        return;
+        return saved;
     state["page"] = session->page();
     state["pages"] = session->pages();
     state["cached_pages"] = session->cachedPages();
@@ -3576,6 +3574,7 @@ void Reader::save(bool snapshot, bool background, bool persist)
         reportWriter = std::make_unique<storage::RecordWriter>();
     reportWriter->post([path = book->paths().stateReport, state] { return writeJson(path, state); },
                        {});
+    return saved;
 }
 
 } // namespace kobalt::reader

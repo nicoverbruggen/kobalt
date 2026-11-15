@@ -25,6 +25,9 @@ struct BookmarkRow
     int sourceOrder = -1;
     QString pinName = {}, pinIcon = {};
     bool pagePending = false;
+    // Annotation rows: whether the highlight has a note, and the note once read.
+    bool hasNote = false;
+    QString note = {};
 };
 
 // The Bookmarks list covers the header's action row with its own bar, like
@@ -51,6 +54,8 @@ public:
 
     std::function<void(const QString &)> sortRequested;
     void setExcerptFont(const QString &family);
+    // The reading font that excerpts use, at the excerpt size.
+    QFont excerptFont() const;
 
     bool annotationsShown() const { return annotations; }
 
@@ -112,7 +117,7 @@ private:
     QPointer<ui::ModalOverlay> sortPopup;
     void openSort();
     void closeSort();
-    QVector<int> pageStarts, itemHeights, excerptLines;
+    QVector<int> pageStarts, itemHeights, excerptLines, noteLines;
     QHash<QString, int> excerptLineCache;
     QFont excerptCacheFont;
     int excerptCacheWidth = -1, excerptCacheLineHeight = -1;
@@ -124,7 +129,11 @@ private:
     QString customPinDirectory = QStringLiteral("custom-pins/");
     int listTop() const;
     int rowHeight() const;
-    QFont excerptFont() const;
+    int excerptLineHeight() const;
+    int rowLineHeight() const;
+    int rowTextWidth() const;
+    // A row's height for these numbers of excerpt and note lines.
+    int itemHeight(int excerptLineCount, int noteLineCount) const;
     QLabel *empty, *emptyHint;
     ui::CellButton *close;
     ui::PagerBar *pager;

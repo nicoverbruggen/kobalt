@@ -89,6 +89,13 @@ public:
     void setDetail(const QString &text);
     void setDetailLines(int lines);
     void setDetailHighlight(const QString &style, QColor color, int lineSpacing);
+    // A note of up to `lines` lines below the detail, after a note icon.
+    // Zero lines leaves no room for it.
+    void setNote(const QString &text, int lines);
+    // The height that `lines` note lines add to a row, with the gap below them.
+    static int noteHeight(int lines);
+    static int noteGap();
+    static int noteLead();
     void setCaption(const QString &text);
     void setLeading(const QString &text, int indent = 0);
     void setLeadingIcon(ControlIcon icon);
@@ -132,15 +139,16 @@ private:
     void setLabelFont(PrivateTextLabel *label, int index, const QFont &font);
     void observeParent();
     PrivateTextLabel *title = nullptr, *detail = nullptr, *caption = nullptr, *leading = nullptr,
-                     *trailing = nullptr;
+                     *trailing = nullptr, *note = nullptr;
     QPushButton *action = nullptr;
-    QString titleText, detailText, captionText, leadingText;
-    QString labelStyles[5];
+    QString titleText, detailText, captionText, leadingText, noteText;
+    QString labelStyles[6];
     Accessory accessory = None{};
     ControlIcon leadingIcon{};
     bool hasLeadingIcon = false, topDivider = false;
     QPointer<QWidget> observedParent;
     int detailLines = 1;
+    int noteLines = 0;
     int titleGap = 0;
     int indentation = 0;
     bool arranging = false, synchronizing = false;

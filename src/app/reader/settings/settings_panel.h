@@ -192,7 +192,7 @@ public:
     ui::CaptionButton *buttonControlsButton = nullptr;
     ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr,
                       *navigationBarButton = nullptr, *tappableLinksButton = nullptr,
-                      *chapterGroupsButton = nullptr;
+                      *annotationInteractionButton = nullptr, *chapterGroupsButton = nullptr;
     ui::DescribedOption *bionicOption = nullptr;
     ui::CaptionButton *refreshButton = nullptr, *resetDefaults = nullptr, *resetPresets = nullptr;
     QPushButton *keepDefaults = nullptr, *confirmDefaults = nullptr;

@@ -127,6 +127,8 @@ public:
     void setAnnotationHandles(const AnnotationGeometry &geometry);
     QRect annotationHandleRect(bool start) const;
     QRegion annotationHandleHitRegion() const;
+    // Only the drawn handle dots. A popover over a handle passes these on.
+    QRegion annotationHandleDotRegion() const;
     // Boundary -1 starts a new drag; 0 and 1 move the source start and end.
     std::function<bool(QPoint, int)> annotationDragStarted;
     std::function<void(QPoint)> annotationDragMoved;
@@ -234,6 +236,10 @@ private:
     };
 
     std::array<AnnotationHandle, 2> annotationHandles;
+    QRegion annotationHandleRegion(int radius) const;
+    // The handle under the finger, drawn larger until the press ends; -1 for none.
+    int pressedHandle = -1;
+    void setPressedHandle(int handle);
     bool annotationInputEnabled = false, annotationDragging = false;
     QPoint annotationDragOffset;
     int annotationPointerBoundary = -1;

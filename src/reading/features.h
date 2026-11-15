@@ -29,8 +29,10 @@ inline void normalize(QJsonObject &preferences)
         preferences.remove("navigation_bar_buttons");
     if (!enabled(preferences, Stats))
         preferences.remove("dense_stats_chart");
-    if (!enabled(preferences, Annotations))
+    if (!enabled(preferences, Annotations)) {
         preferences.remove("minimal_annotation_mode");
+        preferences.remove("annotation_interaction");
+    }
     if (!enabled(preferences, Annotations) && !enabled(preferences, Bookmarks)
         && !enabled(preferences, Words))
         preferences.remove("marks_sort");

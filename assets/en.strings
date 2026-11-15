@@ -711,7 +711,6 @@
 "reader.restore_defaults" = "Restore defaults";
 "reader.return_to_passage" = "Return to passage";
 "reader.follow_link" = "Follow link";
-"reader.link_dictionary" = "Dictionary";
 "reader.dismiss_link" = "Dismiss";
 "reader.stay_here" = "Stay here and forget return position";
 /* Arguments: %1 */
@@ -823,6 +822,7 @@
 "settings.section_screen" = "Screen refresh";
 "settings.section_navigation" = "Navigation";
 "settings.section_links" = "Links";
+"settings.section_annotations" = "Annotations";
 "settings.section_chapter_list" = "Chapter List";
 "settings.chapter_groups" = "Collapsible chapters";
 "settings.chapter_groups_hint" = "Choose whether chapter groups can collapse and how they open.";
@@ -1388,8 +1388,7 @@
 "settings.minimal_annotation_mode_description" = "Hide the annotation bar. Tap text or blank space, then choose Stop highlighting to exit.";
 
 /* annotations */
-"annotations.style_section" = "Style";
-"annotations.actions_section" = "Actions";
+"annotations.style" = "Style";
 "annotations.title" = "Annotate";
 "annotations.tab" = "Annotations";
 "annotations.close" = "Close annotations";
@@ -1445,13 +1444,21 @@
 "annotations.next_matches" = "Next highlights";
 "annotations.save_then_edit" = "Save selection and edit highlight";
 "annotations.discard_then_edit" = "Discard selection and edit highlight";
+"annotations.add_note" = "Add note";
+"annotations.look_up" = "Look up";
+"annotations.edit_note" = "Edit note";
+"annotations.discard" = "Discard";
+"annotations.note_placeholder" = "Write a note";
+"annotations.note_save_failed" = "Could not save the note. Your text is kept.";
+"annotations.note_too_long" = "This note is too long to save.";
+"annotations.note" = "Note";
 
 "annotations.color_yellow" = "Yellow";
 "annotations.color_green" = "Green";
 "annotations.color_blue" = "Blue";
 "annotations.color_pink" = "Pink";
 "annotations.color_gray" = "Gray";
-"annotations.color_section" = "Color";
+"annotations.color" = "Color";
 
 "annotations.color_failed" = "Could not save color. Try again.";
 
@@ -1577,6 +1584,12 @@
 "settings.tappable_links_off_description" = "Long press and choose Follow link to avoid accidental opening.";
 "settings.tappable_links_footnotes_description" = "Tap footnotes to open them. Long press other links, then choose Follow link.";
 "settings.tappable_links_all_description" = "Tap footnotes and links to open them.";
+"settings.annotation_interaction" = "Highlighting";
+"settings.annotation_interaction_description" = "Choose how to start a highlight.";
+"settings.annotation_interaction_toggle" = "Toggleable annotation mode";
+"settings.annotation_interaction_toggle_description" = "Turn on Annotate in the reading menu, then hold text to highlight it. Outside the mode, holding text looks it up in a dictionary of your choice.";
+"settings.annotation_interaction_quick" = "Quick annotation mode";
+"settings.annotation_interaction_quick_description" = "Hold text to highlight it, add a note or look it up. The Annotate button is hidden.";
 "settings.vertical_spacing" = "Vertical page spacing";
 "settings.vertical_spacing_mode" = "Page spacing";
 "settings.vertical_spacing_description" = "Adjust blank space on nearly full pages.";

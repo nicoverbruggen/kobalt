@@ -737,6 +737,12 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     tappableLinksButton = ui::makeCaptionButton(controlsPage, nullptr, "rrTappableLinks",
                                                 strings::get("settings.tappable_links"), [] { });
     controlsRows->addWidget(tappableLinksButton);
+    section(controlsPage, controlsRows, "rrControlsAnnotationsSection",
+            strings::get("settings.section_annotations"));
+    annotationInteractionButton =
+            ui::makeCaptionButton(controlsPage, nullptr, "rrAnnotationInteraction",
+                                  strings::get("settings.annotation_interaction"), [] { });
+    controlsRows->addWidget(annotationInteractionButton);
     section(controlsPage, controlsRows, "rrControlsMenuSection",
             strings::get("settings.section_reading_menu"));
     menuViewButton = ui::makeCaptionButton(controlsPage, nullptr, "rrDefaultMenuView",
@@ -1208,6 +1214,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                           tapZonesButton,
                           chapterGroupsButton,
                           tappableLinksButton,
+                          annotationInteractionButton,
                           navigationBarButton,
                           menuViewButton,
                           disabledFeaturesButton,
@@ -2567,6 +2574,9 @@ void SettingsPanel::updateFeatureOptions()
     const bool navigate = features::enabled(featurePreferences, features::Navigate);
     const bool stats = features::enabled(featurePreferences, features::Stats);
     navigationBarButton->setVisible(navigate);
+    const bool annotations = features::enabled(featurePreferences, features::Annotations);
+    annotationInteractionButton->setVisible(annotations);
+    findChild<QWidget *>("rrControlsAnnotationsSection")->setVisible(annotations);
     menuViewButton->setVisible(navigate || stats);
     denseGraphOption->setVisible(stats);
     saveWordsOption->setVisible(features::enabled(featurePreferences, features::Words));

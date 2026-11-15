@@ -34,7 +34,8 @@ inline QString screenshotGroup(const QString &scene)
     if (scene.startsWith("page-turn-") || scene.startsWith("settings") || scene == "about"
         || scene == "acknowledgments" || scene.startsWith("license"))
         return "Settings and About";
-    if (scene.startsWith("annotation") || scene == "annotating" || scene.startsWith("bookmark")
+    if (scene.startsWith("annotation") || scene.startsWith("quick-annotation")
+        || scene == "annotating" || scene.startsWith("bookmark")
         || scene.startsWith("pinned-bookmark"))
         return "Bookmarks and annotations";
     if (scene.startsWith("vertical-") || scene == "layout" || scene.startsWith("margin-preview")
@@ -109,15 +110,21 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "alice-reading", "Alice in Wonderland" },
         { "annotating", "Annotation mode" },
         { "annotation-actions", "Selection actions" },
+        { "annotation-adjust", "Adjust a highlight" },
         { "annotation-edit", "Edit a highlight" },
         { "annotation-export-confirmation", "Confirm annotation export" },
         { "annotation-export-list", "Annotations ready to export" },
         { "annotation-export-menu", "Export annotations" },
         { "annotation-export-pressed", "Export action pressed" },
         { "annotation-export-saved", "Export complete" },
+        { "annotation-interaction-choices", "Highlighting choices" },
+        { "annotation-note", "Highlight with a note" },
+        { "annotation-note-color", "Color of a noted highlight" },
+        { "annotation-note-editor", "Write a note" },
         { "annotation-saved", "Saved highlight" },
         { "annotation-start", "Start a selection" },
         { "annotations", "Empty annotation list" },
+        { "quick-annotation-actions", "Quick annotation selection" },
         { "bionic-reading", "Bold reading" },
         { "bionic-setting", "Bold reading setting" },
         { "bookmark-remove", "Remove a bookmark" },

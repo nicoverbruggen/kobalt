@@ -61,7 +61,8 @@ ListRow::ListRow(QWidget *parent) : Button(parent)
     caption = new PrivateTextLabel(this);
     leading = new PrivateTextLabel(this);
     trailing = new PrivateTextLabel(this);
-    for (auto *label : { title, detail, caption, leading, trailing }) {
+    note = new PrivateTextLabel(this);
+    for (auto *label : { title, detail, caption, leading, trailing, note }) {
         label->setTextFormat(Qt::PlainText);
         label->setAttribute(Qt::WA_TransparentForMouseEvents);
         label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -75,8 +76,14 @@ ListRow::ListRow(QWidget *parent) : Button(parent)
     ui::captionLabel(caption);
     ui::captionLabel(leading);
     ui::captionLabel(trailing);
+    readerStyle(note,
+                styles::font(metrics::chrome::descriptionText)
+                        + "background:transparent;border:none;");
+    note->setWordWrap(true);
+    note->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    note->hide();
     int index = 0;
-    for (auto *label : { title, detail, caption, leading, trailing }) {
+    for (auto *label : { title, detail, caption, leading, trailing, note }) {
         labelStyles[index++] = label->property("reader_style").toString();
         label->installEventFilter(this);
     }
@@ -140,6 +147,37 @@ void ListRow::setDetailHighlight(const QString &style, QColor color, int lineSpa
     detail->setHighlight(style, color, lineSpacing);
     detail->setMaximumLines(detailLines);
     detail->setWordWrap(detailLines > 1 || !style.isEmpty() || lineSpacing > 0);
+}
+
+int ListRow::noteGap()
+{
+    return px(12);
+}
+
+int ListRow::noteLead()
+{
+    // With the excerpt's line spacing, this matches the gap below the title.
+    return px(8);
+}
+
+int ListRow::noteHeight(int lines)
+{
+    if (lines <= 0)
+        return 0;
+    return noteLead() + lines * interfaceLineHeight(interfaceFont(metrics::chrome::descriptionText))
+            + noteGap();
+}
+
+void ListRow::setNote(const QString &text, int lines)
+{
+    lines = qBound(0, lines, 3);
+    if (noteText == text && noteLines == lines)
+        return;
+    noteText = text;
+    noteLines = lines;
+    note->setMaximumLines(lines);
+    arrange();
+    update();
 }
 
 void ListRow::setCaption(const QString &text)
@@ -254,7 +292,8 @@ void ListRow::setActionIcon(ControlIcon icon)
 
 QSize ListRow::sizeHint() const
 {
-    const int lines = 1 + (detailText.isEmpty() ? 0 : detailLines) + !captionText.isEmpty();
+    const int lines =
+            1 + (detailText.isEmpty() ? 0 : detailLines) + noteLines + !captionText.isEmpty();
     if (lines > 3)
         return { 0,
                  int(metrics::list::threeLines) + (lines - 3) * detail->fontMetrics().height()
@@ -341,7 +380,7 @@ bool ListRow::eventFilter(QObject *object, QEvent *event)
         syncLabelStyles();
     if (!synchronizing
         && (object == title || object == detail || object == caption || object == leading
-            || object == trailing)) {
+            || object == trailing || object == note)) {
         if (event->type() == QEvent::PaletteChange)
             syncLabelStyles();
         else if (event->type() == QEvent::FontChange || event->type() == QEvent::StyleChange)
@@ -352,7 +391,8 @@ bool ListRow::eventFilter(QObject *object, QEvent *event)
 
 void ListRow::syncLabelStyles()
 {
-    if (!title || synchronizing)
+    // The note label is created last; child events can arrive before it.
+    if (!note || synchronizing)
         return;
     synchronizing = true;
     const auto colors = parentWidget() ? parentWidget()->palette() : palette();
@@ -360,7 +400,7 @@ void ListRow::syncLabelStyles()
     const QColor ink = colors.color(current ? QPalette::Window : QPalette::WindowText);
     int index = 0;
     bool changed = false;
-    for (auto *label : { title, detail, caption, leading, trailing }) {
+    for (auto *label : { title, detail, caption, leading, trailing, note }) {
         const QColor color = !isEnabled()   ? themeColors(this).disabledInk
                 : current || label == title ? ink
                                             : noteColor(this);
@@ -386,7 +426,7 @@ void ListRow::syncLabelStyles()
 
 void ListRow::arrange()
 {
-    if (!title || arranging || synchronizing)
+    if (!note || arranging || synchronizing)
         return;
     arranging = true;
     const int end = width() - contentsMargins().right()
@@ -402,23 +442,39 @@ void ListRow::arrange()
     const int start = contentsMargins().left() + metrics::list::inset + lead + indentation;
     const int textWidth =
             qMax(0, end - start - trail - (trail ? int(metrics::contents::pageGap) : 0));
+    // Note lines use the note's own line height, so a note does not open
+    // gaps as tall as the excerpt's lines.
+    const int noteBlock = ListRow::noteHeight(noteLines);
     const int lines = 1 + (detailText.isEmpty() ? 0 : detailLines) + !captionText.isEmpty();
-    const int top = lines == 1 ? 0 : int(metrics::list::lineInset);
+    const int top = lines + noteLines == 1 ? 0 : int(metrics::list::lineInset);
     const int lineHeight =
-            qMax(1, (height() - 2 * top - titleGap - metrics::control::border) / lines);
+            qMax(1, (height() - 2 * top - titleGap - noteBlock - metrics::control::border) / lines);
     const int titleInset = static_cast<RowTitle *>(title)->iconInset();
     title->setGeometry(start, top, textWidth, lineHeight);
     title->setText(title->elidedText(titleText, qMax(0, textWidth - titleInset)));
-    int line = 1;
+    int y = top + titleGap + lineHeight;
     detail->setVisible(!detailText.isEmpty());
     caption->setVisible(!captionText.isEmpty());
-    for (const auto &item : { qMakePair(detail, detailText), qMakePair(caption, captionText) }) {
+    note->setVisible(noteLines > 0 && !noteText.isEmpty());
+    for (const auto &item : { qMakePair(detail, detailText), qMakePair(note, noteText),
+                              qMakePair(caption, captionText) }) {
+        if (item.first == note) {
+            // The reserved note lines stay empty until the note text arrives.
+            if (noteLines > 0) {
+                const int indent =
+                        int(metrics::control::iconSize) / 2 + int(metrics::chrome::selectorGap);
+                note->setGeometry(start + indent, y + noteLead(), qMax(0, end - start - indent),
+                                  noteBlock - noteLead() - noteGap());
+                note->setText(noteText.simplified());
+            }
+            y += noteBlock;
+            continue;
+        }
         if (item.second.isEmpty())
             continue;
         const int count = item.first == detail ? detailLines : 1;
-        item.first->setGeometry(start, top + titleGap + line * lineHeight, qMax(0, end - start),
-                                count * lineHeight);
-        line += count;
+        item.first->setGeometry(start, y, qMax(0, end - start), count * lineHeight);
+        y += count * lineHeight;
         item.first->setText(count > 1 ? item.second
                                       : item.first->elidedText(item.second, item.first->width()));
     }
@@ -478,6 +534,16 @@ void ListRow::paintEvent(QPaintEvent *)
                   << area.topLeft() + QPointF(side * .82, side * .22);
             painter.drawPolyline(check);
         }
+    }
+    if (note && note->isVisible()) {
+        const int side = int(metrics::control::iconSize) / 2;
+        const QColor noteInk =
+                isEnabled() ? (current ? ink : noteColor(this)) : themeColors(this).disabledInk;
+        const auto lineHeight = QFontMetrics(note->font()).height();
+        controlIcon(ControlIcon::Note, noteInk)
+                .paint(&painter,
+                       QRect(note->x() - side - int(metrics::chrome::selectorGap),
+                             note->y() + qMax(0, (lineHeight - side) / 2), side, side));
     }
     if (topDivider)
         painter.fillRect(0, 0, width(), metrics::control::border, dividerColor(this));

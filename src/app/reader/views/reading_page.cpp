@@ -300,6 +300,7 @@ void ReadingPage::cancelHold()
     animationDirection = 0;
     holdTimer.stop();
     tracking = false;
+    setPressedHandle(-1);
     if (std::exchange(annotationDragging, false) && annotationDragFinished)
         annotationDragFinished(true);
     const bool active = brightnessGesture.active();
@@ -467,18 +468,20 @@ void ReadingPage::setAnnotationInputEnabled(bool enabled)
 
 QRect ReadingPage::annotationHandleRect(bool start) const
 {
-    const auto &handle = annotationHandles[start ? 0 : 1];
+    const int index = start ? 0 : 1;
+    const auto &handle = annotationHandles[index];
     if (!handle.visible)
         return {};
-    const int radius = metrics::selection::handleRadius;
+    // A held handle is drawn larger, so its repaint covers that size.
+    const int radius = index == pressedHandle ? int(metrics::selection::handlePressedRadius)
+                                              : int(metrics::selection::handleRadius);
     return QRect(handle.center - QPoint(radius, radius) + QPoint(0, topHeight()),
                  QSize(2 * radius + 1, 2 * radius + 1));
 }
 
-QRegion ReadingPage::annotationHandleHitRegion() const
+QRegion ReadingPage::annotationHandleRegion(int radius) const
 {
     QRegion region;
-    const int radius = metrics::selection::handleHitRadius;
     for (const auto &handle : annotationHandles) {
         if (handle.visible) {
             const QPoint center = handle.center + QPoint(0, topHeight());
@@ -488,6 +491,29 @@ QRegion ReadingPage::annotationHandleHitRegion() const
         }
     }
     return region;
+}
+
+void ReadingPage::setPressedHandle(int handle)
+{
+    if (pressedHandle == handle)
+        return;
+    const int radius = metrics::selection::handlePressedRadius + metrics::selection::outline;
+    for (int i : { pressedHandle, handle })
+        if (i >= 0 && annotationHandles[i].visible)
+            update(QRect(annotationHandles[i].center - QPoint(radius, radius)
+                                 + QPoint(0, topHeight()),
+                         QSize(2 * radius + 1, 2 * radius + 1)));
+    pressedHandle = handle;
+}
+
+QRegion ReadingPage::annotationHandleDotRegion() const
+{
+    return annotationHandleRegion(metrics::selection::handleRadius);
+}
+
+QRegion ReadingPage::annotationHandleHitRegion() const
+{
+    return annotationHandleRegion(metrics::selection::handleHitRadius);
 }
 
 void ReadingPage::setAnnotationHandles(const AnnotationGeometry &geometry)
@@ -1022,10 +1048,13 @@ void ReadingPage::paintBody(QPainter &painter) const
     painter.drawPath(candidateOutline);
     painter.setPen(Qt::NoPen);
     painter.setBrush(palette().color(QPalette::WindowText));
-    for (const auto &handle : annotationHandles)
+    for (int i = 0; i < 2; ++i) {
+        const auto &handle = annotationHandles[i];
+        const int radius = i == pressedHandle ? int(metrics::selection::handlePressedRadius)
+                                              : int(metrics::selection::handleRadius);
         if (handle.visible)
-            painter.drawEllipse(handle.center, int(metrics::selection::handleRadius),
-                                int(metrics::selection::handleRadius));
+            painter.drawEllipse(handle.center, radius, radius);
+    }
     painter.restore();
     if (!revealedCircles.isEmpty()) {
         painter.save();
@@ -1292,6 +1321,7 @@ void ReadingPage::beginPointer(QPointF point, const QInputEvent *event)
             // Resolve a press as a drag only after movement. The larger hit
             // area overlaps nearby words, which must still accept taps.
             annotationPointerBoundary = nearest;
+            setPressedHandle(nearest);
             return;
         }
     }
@@ -1512,6 +1542,7 @@ void ReadingPage::finishGesture()
     if (!tracking)
         return;
     tracking = false;
+    setPressedHandle(-1);
 
     // A navigation callback can destroy the reader.
     struct SourceTime

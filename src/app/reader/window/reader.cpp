@@ -974,6 +974,7 @@ QVector<QWidget *> Reader::popups() const
              chapterGroupsPopup.data(),
              menuViewPopup.data(),
              tappableLinksPopup.data(),
+             annotationInteractionPopup.data(),
              marksActions.data(),
              removeDialog.data(),
              annotationExporter ? annotationExporter->dialog() : nullptr,
@@ -2164,6 +2165,9 @@ void Reader::activateNavigation(kobalt::NavigationDestination destination)
         return;
     }
     if (destination == Nav::Annotate) {
+        // Quick annotation mode has no mode to toggle.
+        if (quickAnnotations())
+            return;
         bookmarkList->hide();
         toolbarComposition.annotate->click();
         syncNavigation();
@@ -2895,9 +2899,8 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, ui::Inp
     // A turn buffered behind a running one keeps the time of the first tap.
     if (!turnStarted.isValid())
         turnStarted.start();
-    if (!annotationMode && !session->busy() && direction > 0
-        && !session->continuesAfter() && session->nextPage() == session->page()
-        && book->offerFinish()) {
+    if (!annotationMode && !session->busy() && direction > 0 && !session->continuesAfter()
+        && session->nextPage() == session->page() && book->offerFinish()) {
         turnStarted.invalidate();
         showFinishChoice();
         return;

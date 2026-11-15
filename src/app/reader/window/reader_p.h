@@ -36,6 +36,7 @@
 #include "app/reader/settings/acknowledgments.h"
 #include "app/reader/panels/light_panel.h"
 #include "app/reader/panels/bookmark_list.h"
+#include "app/reader/panels/note_editor.h"
 #include "app/reader/panels/dictionary_panel.h"
 #include "app/reader/panels/link_panel.h"
 #include "app/reader/panels/search_panel.h"
@@ -181,8 +182,9 @@ private:
     ImageViewer *imageViewer = nullptr;
     quint64 imageRequest = 0;
     void buildAnnotations();
-    void enterAnnotations();
-    void leaveAnnotations();
+    // `notice` shows the On or Off indicator. Quick annotation mode passes false.
+    void enterAnnotations(bool notice = true);
+    void leaveAnnotations(bool notice = true);
     void showAnnotationModeNotice();
     void annotationTap(QPoint point);
     void loadAnnotationDragEdges();
@@ -209,6 +211,16 @@ private:
     void finishAnnotationPresentation();
     void editAnnotation(const QString &id, bool navigate = true);
     void showSavedAnnotationAt(const QString &id, QRect anchor, bool navigate);
+    // The color and style choices of a saved highlight. `colorStep` comes
+    // from a noted highlight's Color action and offers Discard instead of the
+    // highlight's other actions.
+    void showSavedAppearance(const QString &id, QRect anchor, bool navigate, bool colorStep);
+    void openNoteEditor(const QString &id);
+    // Tells the Kobo refresh that a finger drags a selection or a handle.
+    void setAnnotationDragRefresh(bool dragging);
+    // Which presses the open selection menu passes on to the handles.
+    void syncPopoverExclusions();
+    QPointer<kobalt::NoteEditor> noteEditor;
     void showSavedAnnotation(const QString &id, QRect anchor, bool navigate = false);
     void showAnnotationMatches(QVector<QString> ids, QRect anchor, int page = 0);
     void removeAnnotation(const QString &id);
@@ -226,7 +238,8 @@ private:
                               bool compactActions = true, const QString &paletteColor = {},
                               std::function<void(QString)> colorChanged = {},
                               const QString &selectedStyle = {},
-                              std::function<void(QString)> styleChanged = {});
+                              std::function<void(QString)> styleChanged = {},
+                              const QString &note = {});
 
     bool colorAnnotations() const { return services.colorDisplay && services.colorDisplay(); }
 
@@ -512,6 +525,9 @@ private:
     kobalt::ui::LightSwipeNotice *brightnessNotice = nullptr;
     kobalt::ui::AnnotationModeNotice *annotationModeNotice = nullptr;
     QTimer annotationModeHide;
+    // Reopens the selection menu after a handle adjustment; see reopenAnnotationActions.
+    QTimer annotationReopen;
+    void reopenAnnotationActions();
     kobalt::ui::ButtonFeedback *wordNotice = nullptr;
     void showWordNotice(const QString &text);
     void placeWordNotice();
@@ -877,6 +893,12 @@ private:
     void openPageNavigation();
     void showTappableLinks();
     void openTappableLinks();
+    void showAnnotationInteraction();
+    void openAnnotationInteraction();
+    // Quick annotation mode enters annotation mode for each held selection
+    // and leaves it when that selection ends.
+    bool quickAnnotations() const;
+    void settleQuickAnnotations();
     void showMenuView();
     void openMenuView();
     void showChapterGroups();
@@ -957,8 +979,9 @@ private:
     kobalt::ui::CaptionButton *pageNavigationButton = nullptr, *tapZonesButton = nullptr,
                               *navigationBarButton = nullptr, *chapterGroupsButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> pageNavigationPopup, tapZonesPopup, navigationBarPopup,
-            menuViewPopup, tappableLinksPopup, chapterGroupsPopup;
-    kobalt::ui::CaptionButton *menuViewButton = nullptr, *tappableLinksButton = nullptr;
+            menuViewPopup, tappableLinksPopup, chapterGroupsPopup, annotationInteractionPopup;
+    kobalt::ui::CaptionButton *menuViewButton = nullptr, *tappableLinksButton = nullptr,
+                              *annotationInteractionButton = nullptr;
     int settingsColumnSpacing = defaultColumnSpacingPercent;
     int settingsWordSpacing = 100;
     int settingsParagraphSpacing = -1;

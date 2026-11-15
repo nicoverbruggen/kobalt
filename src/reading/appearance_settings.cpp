@@ -170,6 +170,7 @@ QJsonObject cleanPreferences(QJsonObject preferences)
             preferences.remove(key);
     };
     choice("tappable_links", { "off", "footnotes", "all" });
+    choice("annotation_interaction", { "toggle", "quick" });
     choice("bold_reading", { "off", "bold" });
     choice("widows_orphans", { "publisher", "avoid", "allow" });
     if (preferences.contains("vertical_justification"))

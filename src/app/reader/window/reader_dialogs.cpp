@@ -1881,6 +1881,48 @@ void Reader::openTappableLinks()
                     });
 }
 
+namespace {
+QString annotationInteractionLabel(const QString &mode)
+{
+    return strings::get(mode == "quick" ? "settings.annotation_interaction_quick"
+                                        : "settings.annotation_interaction_toggle");
+}
+} // namespace
+
+void Reader::showAnnotationInteraction()
+{
+    const auto mode = preferences.value("annotation_interaction").toString("toggle");
+    annotationInteractionButton->setCaption(annotationInteractionLabel(mode).toUpper());
+}
+
+void Reader::openAnnotationInteraction()
+{
+    const QStringList modes{ "toggle", "quick" };
+    QVector<ChoiceOption> options;
+    for (const auto &mode : modes)
+        options.append(
+                { "rrAnnotationInteraction_" + mode, annotationInteractionLabel(mode),
+                  strings::get(mode == "quick"
+                                       ? "settings.annotation_interaction_quick_description"
+                                       : "settings.annotation_interaction_toggle_description") });
+    openChoicePopup(annotationInteractionPopup, "rrAnnotationInteraction",
+                    strings::get("settings.annotation_interaction"),
+                    strings::get("settings.annotation_interaction_description"), options,
+                    modes.indexOf(preferences.value("annotation_interaction").toString("toggle")),
+                    [this, modes](int index) {
+                        auto next = preferences;
+                        next["annotation_interaction"] = modes[index];
+                        if (savePreferences(next)) {
+                            showAnnotationInteraction();
+                            // A mode that the toggle opened ends with the toggle.
+                            if (quickAnnotations() && annotationMode)
+                                leaveAnnotations(false);
+                            syncReadingControls();
+                        }
+                        closePopup(annotationInteractionPopup);
+                    });
+}
+
 void Reader::showMenuView()
 {
     const auto mode = pageNavigation::menuView(preferences);

@@ -232,7 +232,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     setAttribute(Qt::WA_DeleteOnClose);
     // Member timers belong to the window, so a check of its children finds them.
     for (auto *timer : { &kosyncOpeningGrace, &renderNoticeTimer, &resizeTimer, &annotationModeHide,
-                         &brightnessHide, &lightFeedback })
+                         &annotationReopen, &brightnessHide, &lightFeedback })
         timer->setParent(this);
     presentation = services.presentation(this);
     Q_ASSERT(presentation);
@@ -1081,6 +1081,7 @@ void Reader::buildOverlays()
                 }
             }
             rows->append({ excerpt.id, chapter, excerpt.text, {}, -1, false });
+            rows->last().note = excerpt.note;
         }
         return true;
     };
@@ -1535,6 +1536,7 @@ void Reader::buildSettings()
     pageNavigationButton = settings->pageNavigationButton;
     tapZonesButton = settings->tapZonesButton;
     tappableLinksButton = settings->tappableLinksButton;
+    annotationInteractionButton = settings->annotationInteractionButton;
     navigationBarButton = settings->navigationBarButton;
     chapterGroupsButton = settings->chapterGroupsButton;
     menuViewButton = settings->menuViewButton;
@@ -1693,6 +1695,8 @@ void Reader::buildSettings()
     connect(sleepScreenButton, &QPushButton::clicked, this, [this] { openSleepScreen(); });
     connect(sessionTimeoutButton, &QPushButton::clicked, this, [this] { openSessionTimeout(); });
     connect(tappableLinksButton, &QPushButton::clicked, this, [this] { openTappableLinks(); });
+    connect(annotationInteractionButton, &QPushButton::clicked, this,
+            [this] { openAnnotationInteraction(); });
     connect(tapZonesButton, &QPushButton::clicked, this, [this] { openTapZones(); });
     connect(chapterGroupsButton, &QPushButton::clicked, this, [this] { openChapterGroups(); });
     connect(navigationBarButton, &QPushButton::clicked, this,
@@ -1818,6 +1822,9 @@ void Reader::buildNotices()
     annotationModeNotice = new ui::AnnotationModeNotice(this);
     annotationModeNotice->setObjectName("rrAnnotationModeNotice");
     annotationModeNotice->hide();
+    annotationReopen.setSingleShot(true);
+    annotationReopen.setInterval(metrics::selection::reopenMilliseconds);
+    connect(&annotationReopen, &QTimer::timeout, this, [this] { reopenAnnotationActions(); });
     annotationModeHide.setSingleShot(true);
     annotationModeHide.setInterval(metrics::lightSwipe::hideMilliseconds);
     connect(&annotationModeHide, &QTimer::timeout, annotationModeNotice, &QWidget::hide);
@@ -1957,14 +1964,15 @@ void Reader::connectPageInput()
     page->annotationDragMoved = [this](QPoint point) { moveAnnotationDrag(point); };
     page->annotationDragFinished = [this](bool cancelled) { finishAnnotationDrag(cancelled); };
     page->annotationRequested = [this] {
-        if (!features::enabled(preferences, features::Annotations) || annotationMode || !isEnabled()
-            || !isVisible() || lifecycleHidden || closing || exitPending || exportRunning
-            || services.suspended() || book->deviceTransition() || session->busy()
-            || appearanceEdit.panelOpen() || appearanceEdit.applying() || general->isVisible()
-            || choices->isVisible() || topControls->isVisible() || revealingLinks
-            || dictionaryPanel->isVisible() || searchPanel->isVisible() || linksActive()
-            || lookupPending || acknowledgments->isVisible() || bookmarkList->isVisible()
-            || lightPopup->isVisible() || chapterGraph->isVisible() || !highlights->writable()) {
+        if (!features::enabled(preferences, features::Annotations) || annotationMode
+            || quickAnnotations() || !isEnabled() || !isVisible() || lifecycleHidden || closing
+            || exitPending || exportRunning || services.suspended() || book->deviceTransition()
+            || session->busy() || appearanceEdit.panelOpen() || appearanceEdit.applying()
+            || general->isVisible() || choices->isVisible() || topControls->isVisible()
+            || revealingLinks || dictionaryPanel->isVisible() || searchPanel->isVisible()
+            || linksActive() || lookupPending || acknowledgments->isVisible()
+            || bookmarkList->isVisible() || lightPopup->isVisible() || chapterGraph->isVisible()
+            || !highlights->writable()) {
             return;
         }
         const auto *modal = QApplication::activeModalWidget();

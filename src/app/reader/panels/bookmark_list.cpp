@@ -766,6 +766,7 @@ void BookmarkList::hideEvent(QHideEvent *event)
             auto *row = static_cast<ui::ListRow *>(buttons[i]);
             row->setTitle({});
             row->setDetail({});
+            row->setNote({}, 0);
             row->setAccessibleName({});
             row->setEnabled(false);
             removes[i]->setEnabled(false);
@@ -799,18 +800,41 @@ void BookmarkList::paintEvent(QPaintEvent *event)
                      ui::metrics::control::border, ui::dividerColor(this));
 }
 
+int BookmarkList::excerptLineHeight() const
+{
+    const auto font = excerptFont();
+    return ui::needsPrivateText(QStringLiteral("Mg"), font)
+            ? ui::measurePrivateTextLayout(QStringLiteral("Mg"), font).lineHeight
+            : QFontMetrics(font).lineSpacing();
+}
+
+int BookmarkList::rowLineHeight() const
+{
+    return qMax(ui::px(44),
+                qMax(excerptLineHeight(),
+                     ui::interfaceLineHeight(ui::interfaceFont(chrome::captionText))));
+}
+
+int BookmarkList::rowTextWidth() const
+{
+    return qMax(1, width() - chrome::cellWidth - 2 * ui::metrics::list::inset);
+}
+
+int BookmarkList::itemHeight(int excerptLineCount, int noteLineCount) const
+{
+    return qMax(int(ui::metrics::list::threeLines),
+                2 * int(ui::metrics::list::lineInset) + (excerptLineCount + 2) * rowLineHeight()
+                        + ui::ListRow::noteHeight(noteLineCount) + int(ui::px(annotations ? 6 : 4))
+                        + int(ui::metrics::control::border));
+}
+
 void BookmarkList::arrange()
 {
     const int first = pageStarts.value(page, 0), top = listTop(),
               available = qMax(1, height() - top);
     const auto font = excerptFont();
-    const int textLineHeight = ui::needsPrivateText(QStringLiteral("Mg"), font)
-            ? ui::measurePrivateTextLayout(QStringLiteral("Mg"), font).lineHeight
-            : QFontMetrics(font).lineSpacing();
-    const int lineHeight = qMax(
-            ui::px(44),
-            qMax(textLineHeight, ui::interfaceLineHeight(ui::interfaceFont(chrome::captionText))));
-    const int textWidth = qMax(1, width() - chrome::cellWidth - 2 * ui::metrics::list::inset);
+    const int textLineHeight = excerptLineHeight();
+    const int textWidth = rowTextWidth();
     if (excerptCacheFont != font || excerptCacheWidth != textWidth
         || excerptCacheLineHeight != textLineHeight) {
         excerptLineCache.clear();
@@ -824,6 +848,7 @@ void BookmarkList::arrange()
     nextLineCache.reserve(items.size());
     itemHeights.clear();
     excerptLines.clear();
+    noteLines.clear();
     int total = 0;
     for (const auto &item : items) {
         const bool lazy = annotations && bool(annotationDetails);
@@ -837,11 +862,12 @@ void BookmarkList::arrange()
                            2);
         if (!lazy)
             nextLineCache.insert(item.excerpt, count);
-        const int itemHeight = qMax(int(ui::metrics::list::threeLines),
-                                    2 * int(ui::metrics::list::lineInset) + (count + 2) * lineHeight
-                                            + int(ui::px(annotations ? 12 : 4))
-                                            + int(ui::metrics::control::border));
+        // A note keeps two lines, like the excerpt of a lazy row, because
+        // its text is read only for the visible page.
+        const int notes = annotations && (item.hasNote || !item.note.isEmpty()) ? 2 : 0;
+        const int itemHeight = this->itemHeight(count, notes);
         excerptLines.append(count);
+        noteLines.append(notes);
         itemHeights.append(itemHeight);
         total += itemHeight;
     }
@@ -926,6 +952,7 @@ void BookmarkList::redraw()
             auto *row = static_cast<ui::ListRow *>(button);
             row->setTitle({});
             row->setDetail({});
+            row->setNote({}, 0);
             row->setAccessibleName({});
         }
         if (isVisible() && !loading && rows > 0) {
@@ -1044,7 +1071,31 @@ void BookmarkList::redraw()
         const QString excerpt = lazy
                 ? (detailsReady ? details[row].excerpt : strings::get("annotations.load_failed"))
                 : item.excerpt;
-        const int itemHeight = itemHeights[index];
+        // Rows that read their text lazily reserve two excerpt lines and two
+        // note lines for pagination. Once the text is known, the row takes
+        // only the lines it needs; the page keeps any space left at the end.
+        int excerptLineCount = excerptLines[index], noteLineCount = noteLines.value(index);
+        if (lazy && detailsReady) {
+            const auto lines = [](const QString &text, const QFont &font, int width,
+                                  int lineHeight) {
+                return (ui::wrappedInterfaceTextHeight(text, font, width) + lineHeight - 1)
+                        / qMax(1, lineHeight);
+            };
+            excerptLineCount = qBound(
+                    1, lines(excerpt, excerptFont(), rowTextWidth(), excerptLineHeight()), 2);
+            const auto noteFont = ui::interfaceFont(chrome::descriptionText);
+            const int noteWidth = rowTextWidth() - int(ui::metrics::control::iconSize) / 2
+                    - int(ui::metrics::chrome::selectorGap);
+            noteLineCount = details[row].note.isEmpty()
+                    ? 0
+                    : qBound(1,
+                             lines(details[row].note.simplified(), noteFont, noteWidth,
+                                   ui::interfaceLineHeight(noteFont)),
+                             2);
+        }
+        const int itemHeight = lazy && detailsReady
+                ? this->itemHeight(excerptLineCount, noteLineCount)
+                : itemHeights[index];
         auto *button = buttons[row];
         button->setObjectName(QString(annotations ? "rrAnnotation%1" : "rrBookmark%1").arg(index));
         removes[row]->setObjectName(
@@ -1064,11 +1115,13 @@ void BookmarkList::redraw()
         itemRow->setTitlePixels(ui::px(24));
         itemRow->setTitleIcon(ui::ControlIcon::Pin, !annotations && !item.pinIcon.isEmpty(),
                               !annotations);
-        itemRow->setTitleGap(ui::px(annotations ? 12 : 4));
+        itemRow->setTitleGap(ui::px(annotations ? 6 : 4));
         itemRow->titleLabel()->setAlignment(Qt::AlignLeft
                                             | (annotations ? Qt::AlignVCenter : Qt::AlignBottom));
-        itemRow->setDetailLines(excerptLines[index]);
+        itemRow->setDetailLines(excerptLineCount);
         itemRow->setDetail(excerpt);
+        itemRow->setNote(lazy ? (detailsReady ? details[row].note : QString()) : item.note,
+                         noteLineCount);
         itemRow->setDetailHighlight(
                 annotations && detailsReady
                         ? (item.style.isEmpty() ? QStringLiteral("shaded") : item.style)

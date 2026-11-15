@@ -16,6 +16,8 @@
 #include <functional>
 
 namespace kobalt::ui {
+// The swatch's name is its accessible name. The circles carry no labels, so
+// that the popover stays small.
 class HighlightSwatch : public QAbstractButton
 {
 public:
@@ -26,10 +28,9 @@ public:
         setText(label);
         setAccessibleName(label);
         setCheckable(true);
-        setFixedHeight(px(88));
+        setFixedHeight(px(76));
         setMinimumWidth(0);
         setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-        setFont(interfaceFont(px(23)));
     }
 
 protected:
@@ -43,16 +44,8 @@ protected:
         const auto ink = palette().color(QPalette::WindowText);
         const int pen = px(2), ring = px(5);
         const int inset = ring + (pen + 1) / 2 + px(2);
-        const int diameter = qMax(px(24), qMin(px(48), width() - 2 * inset));
-        auto labelFont = font();
-        labelFont.setPixelSize(qMin(px(23), qMax(px(16), width() / 3)));
-        const auto labelLine = interfaceInkBounds(QStringLiteral("Ag"), labelFont);
-        const int ringExtent = ring + (pen + 1) / 2;
-        const int gap = px(5);
-        // Center the visible circle, selection ring and label as one group.
-        const int contentHeight = 2 * ringExtent + diameter + gap + labelLine.height();
-        const int top = (height() - contentHeight) / 2;
-        const QRect chip((width() - diameter) / 2, top + ringExtent, diameter, diameter);
+        const int diameter = qMax(px(24), qMin(px(48), qMin(width(), height()) - 2 * inset));
+        const QRect chip((width() - diameter) / 2, (height() - diameter) / 2, diameter, diameter);
         p.setPen(QPen(ink, pen));
         p.setBrush(render::highlightTint(key));
         p.drawEllipse(chip);
@@ -64,16 +57,6 @@ protected:
             p.drawLine(chip.center() + QPoint(-px(3), px(10)),
                        chip.center() + QPoint(px(14), -px(13)));
         }
-        p.setPen(ink);
-        p.setFont(labelFont);
-        // The layout above reserves the ink of "Ag" below the chip. The text is
-        // drawn from its line box, which starts above the ink, so raise the
-        // box by that distance. Otherwise the descenders of "Yellow" and
-        // "Gray" fall below the swatch and are cut off.
-        const int inkTop = chip.y() + diameter + ringExtent + gap;
-        const int lineTop = inkTop - (interfaceLineAscent(labelFont) + labelLine.top());
-        drawInterfaceText(p, QRect(0, lineTop, width(), interfaceLineHeight(labelFont)), text(),
-                          Qt::AlignHCenter | Qt::AlignTop);
     }
 
 private:
@@ -91,7 +74,7 @@ public:
         parent->installEventFilter(this);
         setFixedHeight(compactHeight());
         auto *layout = new QVBoxLayout(this);
-        layout->setContentsMargins(px(28), px(12), px(28), px(12));
+        layout->setContentsMargins(px(28), px(4), px(28), px(4));
         layout->setSpacing(px(4));
         auto *row = new QHBoxLayout;
         row->setSpacing(px(12));
@@ -123,7 +106,7 @@ public:
         error->hide();
     }
 
-    static int compactHeight() { return px(112); }
+    static int compactHeight() { return px(84); }
 
     void setError(const QString &message)
     {
@@ -224,18 +207,20 @@ class HighlightStyleSample : public Button
 {
 public:
     HighlightStyleSample(const QString &style, const QString &label, bool last, QWidget *parent)
-        : Button(parent), style(style), label(label), last(last)
+        : Button(parent), style(style), last(last)
     {
         setObjectName("rrAnnotationStyle_" + style);
         setAccessibleName(label);
         setCheckable(true);
         setPaintMode(ButtonPaintMode::ToolbarCell);
-        setFixedHeight(px(104));
+        setFixedHeight(height());
         setMinimumWidth(0);
         setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-        setFont(interfaceFont(px(23)));
-        readerStyle(this, styles::font(px(23)));
+        setFont(interfaceFont(px(21)));
+        readerStyle(this, styles::font(px(21)));
     }
+
+    static int height() { return px(80); }
 
     void setColor(const QString &key)
     {
@@ -249,16 +234,17 @@ protected:
         QPainter p(this);
         p.fillRect(rect(), isDown() ? sectionColor(this) : palette().color(QPalette::Window));
         const auto ink = palette().color(QPalette::WindowText);
-        const QRect sample((width() - px(90)) / 2, px(8), px(90), px(44));
-        p.setFont(interfaceFont(px(32)));
+        // The sample is its own label; its name is the accessible name. The
+        // check sits beside the sample, centered on it.
+        const int sampleWidth = px(76), gap = px(10), side = px(20);
+        const QRect sample((width() - sampleWidth) / 2, (QWidget::height() - px(44)) / 2,
+                           sampleWidth, px(44));
+        p.setFont(interfaceFont(px(30)));
         p.setPen(ink);
         drawInterfaceText(p, sample, QStringLiteral("Abc"), Qt::AlignCenter);
         render::paintHighlightMark(p, { sample }, QRegion(sample), color, style, darkTheme(this));
-        p.setFont(font());
-        drawInterfaceText(p, QRect(px(6), px(62), width() - px(12), px(30)), label,
-                          Qt::AlignCenter);
         if (isChecked()) {
-            const QRect check(width() - px(40), px(10), px(24), px(24));
+            const QRect check(sample.right() + 1 + gap, sample.center().y() - side / 2, side, side);
             p.setRenderHint(QPainter::Antialiasing);
             p.setPen(QPen(ink, px(3), Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin));
             QPolygonF mark;
@@ -271,7 +257,7 @@ protected:
     }
 
 private:
-    QString style, label;
+    QString style;
     QColor color = render::highlightTint("gray");
     bool last;
 };
@@ -310,7 +296,7 @@ public:
         error->setContentsMargins(px(20), px(4), px(20), px(12));
         layout->addWidget(error);
         error->hide();
-        setFixedHeight(px(104));
+        setFixedHeight(HighlightStyleSample::height());
     }
 
     void setSelectedStyle(const QString &selected)
@@ -331,7 +317,7 @@ public:
         setSelectedStyle(selected);
         error->setText(message);
         error->show();
-        setFixedHeight(px(104)
+        setFixedHeight(HighlightStyleSample::height()
                        + qMax(error->sizeHint().height(), error->heightForWidth(qMax(1, width()))));
     }
 

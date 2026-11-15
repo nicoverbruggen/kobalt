@@ -397,8 +397,15 @@ inline constexpr TextPx noticeText{ 24 };
 } // namespace acknowledgments
 
 namespace selection {
-inline constexpr Px outline{ 2 }, handleRadius{ 14 }, handleHitRadius{ 32 };
-}
+// A handle drag starts within handleHitRadius of the drawn dot, about 8 mm
+// across. Over the selection menu card only the dot itself starts a drag.
+// A held handle grows, so the finger sees what it moves.
+inline constexpr Px outline{ 2 }, handleRadius{ 18 }, handlePressedRadius{ 24 },
+        handleHitRadius{ 48 };
+// The selection menu reopens this long after a handle is released, unless a
+// handle is pressed again first.
+inline constexpr int reopenMilliseconds = 1500;
+} // namespace selection
 
 namespace input {
 // A long press on controls, lists and the library. Word lookup in the reader

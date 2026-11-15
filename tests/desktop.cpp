@@ -102,6 +102,7 @@
 #include <QLabel>
 #include "app/reader/views/sleep_screen.h"
 #include <QLineEdit>
+#include <QTextEdit>
 #include <QIntValidator>
 #include <QImage>
 #include <QJsonArray>
@@ -908,16 +909,10 @@ struct Fixture
         if (!press("rrPage") || !QTest::qWaitFor([this] { return visible("rrAnnotate"); }, 2000)
             || !press("rrAnnotate") || !selectWord(target, position))
             return false;
-        auto *paper = static_cast<ReadingPage *>(target);
+        // A new selection in highlight mode opens its menu when the finger lifts.
         return QTest::qWaitFor(
-                       [&] {
-                           return visible("rrAnnotationEdit")
-                                   || (!state().value("annotation_dragging").toBool()
-                                       && paper->annotationContains(
-                                               position - QPoint(0, paper->topHeight())));
-                       },
-                       2000)
-                && (visible("rrAnnotationEdit") || click(target, position));
+                [this] { return visible("rrAnnotationEdit") || visible("rrAnnotationSave"); },
+                2000);
     }
 
     bool hold(QWidget *target, QPoint position)
@@ -3220,6 +3215,11 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
         QVERIFY(word.x() >= 0);
         QVERIFY(fixture.selectWord(page, word));
         QTRY_VERIFY(!page->annotationHandleRect(true).isEmpty());
+        // The menu opens on release. A tap outside it keeps the outlined draft,
+        // and a tap on the draft opens the menu again.
+        QTRY_VERIFY(fixture.visible("rrAnnotationStyle_shaded"));
+        QVERIFY(fixture.click(page, QPoint(10, page->height() / 2)));
+        QTRY_VERIFY(!fixture.visible("rrAnnotationPopover"));
         QVERIFY(scene("annotation-start"));
         QVERIFY(fixture.click(page, word));
         QTRY_VERIFY(fixture.visible("rrAnnotationStyle_shaded"));
@@ -3247,6 +3247,41 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
         QVERIFY(fixture.selectWord(page, word));
         QTRY_VERIFY(fixture.visible("rrAnnotationEdit"));
         QVERIFY(scene("annotation-edit"));
+        QVERIFY(fixture.press("rrAnnotationAddNote"));
+        QTRY_VERIFY(fixture.visible("rrNoteText"));
+        auto *noteText = qobject_cast<QTextEdit *>(fixture.widget("rrNoteText"));
+        QVERIFY(noteText);
+        noteText->setPlainText(QStringLiteral(
+                "Named on a whim, and yet the machines grew into their names. Compare the "
+                "proof presses in chapter 3."));
+        noteText->moveCursor(QTextCursor::End);
+        QVERIFY(scene("annotation-note-editor"));
+        QVERIFY(fixture.press("rrNoteSave"));
+        QTRY_VERIFY(!fixture.visible("rrNoteEditor"));
+        QTRY_VERIFY(!fixture.stored("highlights.json", "highlights")
+                             .first()
+                             .toObject()
+                             .value("note")
+                             .toString()
+                             .isEmpty());
+        QVERIFY(fixture.selectWord(page, word));
+        QTRY_VERIFY(fixture.visible("rrAnnotationEditNote"));
+        QVERIFY(scene("annotation-note"));
+        QVERIFY(fixture.press("rrAnnotationAppearance"));
+        QTRY_VERIFY(fixture.visible("rrAnnotationDiscard"));
+        QVERIFY(scene("annotation-note-color"));
+        QVERIFY(fixture.press("rrAnnotationDiscard"));
+        QTRY_VERIFY(fixture.visible("rrAnnotationEditNote"));
+        // Adjusting the range: Apply changes, Edit note and Discard.
+        QVERIFY(fixture.press("rrAnnotationEdit"));
+        QTRY_VERIFY(!page->annotationHandleRect(true).isEmpty());
+        QVERIFY(fixture.click(page, word));
+        QTRY_VERIFY(fixture.visible("rrAnnotationEditNote") && fixture.visible("rrAnnotationSave"));
+        QVERIFY(scene("annotation-adjust"));
+        QVERIFY(fixture.press("rrAnnotationCancel"));
+        QTRY_VERIFY(page->annotationHandleRect(true).isEmpty());
+        QVERIFY(fixture.selectWord(page, word));
+        QTRY_VERIFY(fixture.visible("rrAnnotationEditNote"));
         QVERIFY(fixture.click(page, QPoint(10, page->height() / 2)));
         QTRY_VERIFY(!fixture.visible("rrAnnotationPopover"));
     }
@@ -6504,7 +6539,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(word.x() >= 0);
         QVERIFY(fixture.selectWord(page, word));
         QTRY_VERIFY(!page->annotationHandleRect(true).isEmpty());
-        QVERIFY(fixture.click(page, word));
+        // The menu opens when the finger lifts.
         QTRY_VERIFY(fixture.visible("rrAnnotationSave"));
         QVERIFY(fixture.press("rrAnnotationSave"));
         QTRY_COMPARE(fixture.stored("highlights.json", "highlights").size(), 1);
@@ -6695,10 +6730,17 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         send("render-queued", 1000, { { "render_id", 1 } });
         send("render-start", 1005, { { "render_id", 1 }, { "page_turn", true } });
         send("render-end", 1047, { { "render_id", 1 }, { "elapsed_ms", 42 } });
-        send("engine-work-start", 1050, { { "work_id", 2 }, { "work", "Neighbour pages and chapters" } });
-        send("engine-work-end", 1080, { { "work_id", 2 }, { "work", "Neighbour pages and chapters" },
-                { "elapsed_ms", 30 }, { "completed", false }, { "cached_pages", 3 }, { "book_fraction", .4 } });
-        send("page-turn-painted", 1085, { { "render_id", 1 }, { "elapsed_ms", 85 }, { "paint_ms", 4 } });
+        send("engine-work-start", 1050,
+             { { "work_id", 2 }, { "work", "Neighbour pages and chapters" } });
+        send("engine-work-end", 1080,
+             { { "work_id", 2 },
+               { "work", "Neighbour pages and chapters" },
+               { "elapsed_ms", 30 },
+               { "completed", false },
+               { "cached_pages", 3 },
+               { "book_fraction", .4 } });
+        send("page-turn-painted", 1085,
+             { { "render_id", 1 }, { "elapsed_ms", 85 }, { "paint_ms", 4 } });
         send("monitor-memory", 1085, { { "rss_kib", 65536 }, { "peak_rss_kib", 70000 } });
         monitor.refresh();
         auto *table = monitor.findChild<QTableWidget *>("engineMonitorEvents");
@@ -6712,10 +6754,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(summary->text().contains("Input to paint 85 ms"));
         QVERIFY(resources->text().contains("64.0 MiB"));
         QVERIFY(resources->text().contains("40.0%"));
-        send("operation-end", 1086, { { "operation_id", 3 }, { "operation", "chapter-load" },
-                { "elapsed_ms", 10 }, { "interrupted", true } });
-        send("operation-end", 1087, { { "operation_id", 4 }, { "operation", "engine-open" },
-                { "elapsed_ms", 10 } });
+        send("operation-end", 1086,
+             { { "operation_id", 3 },
+               { "operation", "chapter-load" },
+               { "elapsed_ms", 10 },
+               { "interrupted", true } });
+        send("operation-end", 1087,
+             { { "operation_id", 4 }, { "operation", "engine-open" }, { "elapsed_ms", 10 } });
         monitor.refresh();
         QCOMPARE(table->item(0, 4)->text(), QStringLiteral("Ended"));
         QCOMPARE(table->item(1, 4)->text(), QStringLiteral("Interrupted"));
@@ -6729,7 +6774,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             send("image-load-end", 1100 + i, { { "elapsed_ms", 2 } });
         monitor.refresh();
         QCOMPARE(table->rowCount(), 150);
-        QVERIFY(monitor.findChild<QLabel *>("engineMonitorStatus")->text().contains("76 events dropped"));
+        QVERIFY(monitor.findChild<QLabel *>("engineMonitorStatus")
+                        ->text()
+                        .contains("76 events dropped"));
         monitor.findChild<QPushButton *>("engineMonitorClear")->click();
         QCOMPARE(table->rowCount(), 0);
         monitor.hide();
@@ -6737,7 +6784,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         monitor.refresh();
         QCOMPARE(table->rowCount(), 0);
         std::function<void(const QJsonObject &)> detached;
-        { desktop::EngineMonitor other; other.show(); detached = other.observer(); }
+        {
+            desktop::EngineMonitor other;
+            other.show();
+            detached = other.observer();
+        }
         detached({ { "event", "render-start" }, { "render_id", 99 } });
     }
 
@@ -6755,25 +6806,34 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(range->currentData().toInt(), 5);
         monitor.findChild<QPushButton *>("engineMonitorZoomOut")->click();
         QCOMPARE(range->currentData().toInt(), 10);
-        struct Result { std::atomic_bool done{ false }; qint64 elapsed = 0, work = 0; };
+
+        struct Result
+        {
+            std::atomic_bool done{ false };
+            qint64 elapsed = 0, work = 0;
+        };
+
         const auto run = [&](bool scoped, bool cancel) {
             auto result = std::make_shared<Result>();
-            kobalt::qt::invoke(engineWorker(), [result, scoped, cancel] {
-                QElapsedTimer timer;
-                timer.start();
-                {
-                    EngineSlowdownScope scope(scoped, [cancel, &timer, result] {
-                        return cancel && timer.nsecsElapsed() > result->work * 3;
-                    });
-                    // A small fixed CPU workload makes the added delay observable.
-                    // A nested chapter scope must not multiply it a second time.
-                    EngineSlowdownScope nested(scoped);
-                    while (timer.nsecsElapsed() < 2000000) {}
-                    result->work = timer.nsecsElapsed();
-                }
-                result->elapsed = timer.nsecsElapsed();
-                result->done = true;
-            }, Qt::QueuedConnection);
+            kobalt::qt::invoke(
+                    engineWorker(),
+                    [result, scoped, cancel] {
+                        QElapsedTimer timer;
+                        timer.start();
+                        {
+                            EngineSlowdownScope scope(scoped, [cancel, &timer, result] {
+                                return cancel && timer.nsecsElapsed() > result->work * 3;
+                            });
+                            // A small fixed CPU workload makes the added delay observable.
+                            // A nested chapter scope must not multiply it a second time.
+                            EngineSlowdownScope nested(scoped);
+                            while (timer.nsecsElapsed() < 2000000) { }
+                            result->work = timer.nsecsElapsed();
+                        }
+                        result->elapsed = timer.nsecsElapsed();
+                        result->done = true;
+                    },
+                    Qt::QueuedConnection);
             return result;
         };
         const auto scaled = run(true, false);
@@ -6796,7 +6856,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     void engineMonitorReading()
     {
         renderingMode::setOverride(1);
-        const auto restore = qScopeGuard([] { setDiagnosticObserver({}); pauseDiagnostics(true); renderingMode::setOverride(-1); });
+        const auto restore = qScopeGuard([] {
+            setDiagnosticObserver({});
+            pauseDiagnostics(true);
+            renderingMode::setOverride(-1);
+        });
         QTemporaryDir logs;
         QVERIFY(logs.isValid());
         initializeDiagnostics(logs.path());
@@ -6821,14 +6885,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         const auto has = [&](const QString &text) {
             monitor.refresh();
             for (int row = 0; row < table->rowCount(); ++row)
-                if (table->item(row, 2)->text() == text) return true;
+                if (table->item(row, 2)->text() == text)
+                    return true;
             return false;
         };
         QTRY_VERIFY_WITH_TIMEOUT(has("Page turn"), 10000);
         QTRY_VERIFY_WITH_TIMEOUT(has("Neighbour pages and chapters"), 10000);
         QTRY_VERIFY_WITH_TIMEOUT(has("Page estimates"), 10000);
         QTRY_VERIFY_WITH_TIMEOUT(has("engine-open"), 10000);
-        QTRY_VERIFY_WITH_TIMEOUT(!monitor.findChild<QLabel *>("engineMonitorResources")->text().contains("Process RSS Unavailable"), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(!monitor.findChild<QLabel *>("engineMonitorResources")
+                                          ->text()
+                                          .contains("Process RSS Unavailable"),
+                                 10000);
         auto injectedDelay = std::make_shared<std::atomic<double>>(0);
         const auto monitorSink = monitor.observer();
         setDiagnosticObserver([monitorSink, injectedDelay](const QJsonObject &event) {
@@ -6915,10 +6983,14 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         initializeDiagnostics(logs.path());
         pauseDiagnostics(false);
         const auto restore = qScopeGuard([] {
-            setDiagnosticObserver({}); pauseDiagnostics(true);
-            setEngineSlowdownEnabled(false); renderingMode::setOverride(-1);
+            setDiagnosticObserver({});
+            pauseDiagnostics(true);
+            setEngineSlowdownEnabled(false);
+            renderingMode::setOverride(-1);
         });
-        struct Trace {
+
+        struct Trace
+        {
             std::atomic_bool preview{ false }, boundary{ false };
             std::atomic<double> queued{ -1 }, waited{ -1 };
         };
@@ -6928,12 +7000,15 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             const auto name = event.value("event").toString();
             if (event.value("work") == "Adjacent page preview") {
                 trace->preview = name == "engine-work-start";
-                if (name == "engine-work-end") trace->boundary = false;
+                if (name == "engine-work-end")
+                    trace->boundary = false;
             }
-            if (trace->preview && name == "operation-start" && event.value("operation") == "chapter-turn")
+            if (trace->preview && name == "operation-start"
+                && event.value("operation") == "chapter-turn")
                 trace->boundary = true;
             if (name == "render-queued") {
-                trace->queued = event.value("monotonic_ms").toDouble(); trace->waited = -1;
+                trace->queued = event.value("monotonic_ms").toDouble();
+                trace->waited = -1;
             }
             if (name == "render-start" && trace->queued >= 0)
                 trace->waited = event.value("monotonic_ms").toDouble() - trace->queued.load();
@@ -6962,7 +7037,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             trace->waited = -1;
             QVERIFY(fixture.press("rrNavigationNext"));
             QTRY_VERIFY_WITH_TIMEOUT(trace->waited.load() >= 0, 10000);
-            QVERIFY2(trace->waited.load() < 100, "A cancelled adjacent preview delayed the next chapter jump");
+            QVERIFY2(trace->waited.load() < 100,
+                     "A cancelled adjacent preview delayed the next chapter jump");
             QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("position") != position, 30000);
             QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
             QVERIFY(navigator->isVisible());
@@ -8497,6 +8573,252 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!toggle->isChecked());
     }
 
+    void annotationNotes()
+    {
+        Fixture fixture(false);
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        const auto word = fixture.wordPoint(3);
+        QVERIFY(word.x() >= 0);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrAnnotate"));
+        QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+        const auto storedNote = [&] {
+            const auto rows = fixture.stored("highlights.json", "highlights");
+            return rows.size() == 1 ? rows.first().toObject().value("note").toString() : QString();
+        };
+        const auto editorText = [&] {
+            return qobject_cast<QTextEdit *>(fixture.widget("rrNoteText"));
+        };
+        // Other panels own hidden keyboards with the same name.
+        const auto keyboardShown = [&] {
+            for (auto *panel :
+                 fixture.window.readerWindow()->findChildren<QWidget *>("widgetKeyboard"))
+                if (panel->isVisible())
+                    return true;
+            return false;
+        };
+
+        // With the menu open, a press near a handle, outside its dot and the
+        // card, still drags it. A handle adjustment leaves the menu closed.
+        QVERIFY(fixture.selectWord(page, word));
+        QTRY_VERIFY(fixture.visible("rrAnnotationAddNote"));
+        const QRect endBefore = page->annotationHandleRect(false);
+        QVERIFY(!endBefore.isEmpty());
+        const QPoint nearEnd = endBefore.center() - QPoint(0, int(ui::px(32)));
+        const QPoint farther = fixture.wordPoint(6);
+        QVERIFY(farther.x() >= 0);
+        QVERIFY(fixture.drag(page, nearEnd, farther));
+        QTRY_VERIFY(page->annotationHandleRect(false).center().x() != endBefore.center().x()
+                    || page->annotationHandleRect(false).center().y() != endBefore.center().y());
+        QVERIFY(!fixture.visible("rrAnnotationPopover"));
+        // After a pause the menu reopens, with one full cleanup refresh.
+        auto *reader = fixture.window.readerWindow();
+        reader->setProperty("reader_full_flash", false);
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrAnnotationCancel"), 5000);
+        QVERIFY(reader->property("reader_full_flash").toBool());
+        QVERIFY(fixture.press("rrAnnotationCancel"));
+        QTRY_VERIFY(page->annotationHandleRect(true).isEmpty());
+
+        // Add note on a new selection saves the highlight, then opens the editor.
+        QVERIFY(fixture.selectWord(page, word));
+        QTRY_VERIFY(!page->annotationHandleRect(true).isEmpty());
+        // The menu opens when the finger lifts.
+        QTRY_VERIFY(fixture.visible("rrAnnotationAddNote"));
+        QVERIFY(fixture.press("rrAnnotationAddNote"));
+        QTRY_VERIFY(fixture.visible("rrNoteEditor") && editorText());
+        QCOMPARE(fixture.stored("highlights.json", "highlights").size(), 1);
+        QVERIFY(keyboardShown());
+        QVERIFY(editorText()->toPlainText().isEmpty());
+        QVERIFY(!qobject_cast<QLabel *>(fixture.widget("rrNoteQuote"))->text().isEmpty());
+
+        // Cancel leaves the highlight without a note.
+        QVERIFY(fixture.press("rrNoteCancel"));
+        QTRY_VERIFY(!fixture.visible("rrNoteEditor"));
+        QVERIFY(!keyboardShown());
+        QVERIFY(storedNote().isEmpty());
+
+        // A highlight without a note keeps its choices and offers Add note.
+        QVERIFY(fixture.selectWord(page, word));
+        QTRY_VERIFY(fixture.visible("rrAnnotationAddNote"));
+        QVERIFY(fixture.visible("rrAnnotationApply") && fixture.visible("rrAnnotationEdit")
+                && fixture.visible("rrAnnotationRemove"));
+        QVERIFY(!fixture.visible("rrAnnotationEditNote"));
+        QVERIFY(fixture.press("rrAnnotationAddNote"));
+        QTRY_VERIFY(fixture.visible("rrNoteEditor") && editorText());
+        const QString note = QStringLiteral("Named on a whim.\nCompare chapter 3.");
+        editorText()->setPlainText(note);
+        QVERIFY(fixture.press("rrNoteSave"));
+        QTRY_VERIFY(!fixture.visible("rrNoteEditor"));
+        QTRY_COMPARE(storedNote(), note);
+
+        // A noted highlight shows its note and one row of actions.
+        QVERIFY(fixture.selectWord(page, word));
+        QTRY_VERIFY(fixture.visible("rrAnnotationEditNote"));
+        QVERIFY(fixture.visible("rrAnnotationAppearance") && fixture.visible("rrAnnotationEdit")
+                && fixture.visible("rrAnnotationRemove"));
+        QVERIFY(!fixture.visible("rrAnnotationPalette") && !fixture.visible("rrAnnotationStyles"));
+        QCOMPARE(qobject_cast<QLabel *>(fixture.widget("rrAnnotationNoteText"))->text(), note);
+        const auto top = [&](const char *name) {
+            return fixture.widget(name)->mapTo(&fixture.window, QPoint()).y();
+        };
+        for (const auto *name :
+             { "rrAnnotationAppearance", "rrAnnotationEdit", "rrAnnotationRemove" })
+            QCOMPARE(top(name), top("rrAnnotationEditNote"));
+
+        // Color opens the choices. Discard drops them and returns to the note.
+        QVERIFY(fixture.press("rrAnnotationAppearance"));
+        QTRY_VERIFY(fixture.visible("rrAnnotationDiscard"));
+        QVERIFY(fixture.visible("rrAnnotationStyles") && fixture.visible("rrAnnotationApply"));
+        QVERIFY(!fixture.visible("rrAnnotationEditNote"));
+        QVERIFY(fixture.press("rrAnnotationStyle_dotted"));
+        QVERIFY(fixture.press("rrAnnotationDiscard"));
+        QTRY_VERIFY(fixture.visible("rrAnnotationEditNote"));
+        QCOMPARE(fixture.stored("highlights.json", "highlights")
+                         .first()
+                         .toObject()
+                         .value("style")
+                         .toString(),
+                 QStringLiteral("shaded"));
+        QVERIFY(fixture.press("rrAnnotationAppearance"));
+        QTRY_VERIFY(fixture.visible("rrAnnotationApply"));
+        QVERIFY(fixture.press("rrAnnotationStyle_dotted"));
+        QVERIFY(fixture.press("rrAnnotationApply"));
+        QTRY_COMPARE(fixture.stored("highlights.json", "highlights")
+                             .first()
+                             .toObject()
+                             .value("style")
+                             .toString(),
+                     QStringLiteral("dotted"));
+        QCOMPARE(storedNote(), note);
+
+        // Adjusting the range offers the note after Apply changes, and Discard
+        // in place of Clear selection.
+        QVERIFY(fixture.selectWord(page, word));
+        QTRY_VERIFY(fixture.visible("rrAnnotationEdit"));
+        QVERIFY(fixture.press("rrAnnotationEdit"));
+        QTRY_VERIFY(!page->annotationHandleRect(true).isEmpty());
+        QVERIFY(fixture.click(page, word));
+        QTRY_VERIFY(fixture.visible("rrAnnotationEditNote"));
+        const auto left = [&](const char *name) {
+            return fixture.widget(name)->mapTo(&fixture.window, QPoint()).x();
+        };
+        QVERIFY(left("rrAnnotationSave") < left("rrAnnotationEditNote"));
+        QVERIFY(left("rrAnnotationEditNote") < left("rrAnnotationCancel"));
+        QCOMPARE(qobject_cast<QAbstractButton *>(fixture.widget("rrAnnotationCancel"))->text(),
+                 QStringLiteral("Discard"));
+        QVERIFY(fixture.press("rrAnnotationEditNote"));
+        QTRY_VERIFY(fixture.visible("rrNoteEditor") && editorText());
+        QCOMPARE(editorText()->toPlainText(), note);
+        QVERIFY(fixture.press("rrNoteCancel"));
+        QTRY_VERIFY(!fixture.visible("rrNoteEditor"));
+        QCOMPARE(storedNote(), note);
+
+        // Edit note opens the saved text. Saving an empty note removes it.
+        QVERIFY(fixture.selectWord(page, word));
+        QTRY_VERIFY(fixture.visible("rrAnnotationEditNote"));
+        QVERIFY(fixture.press("rrAnnotationEditNote"));
+        QTRY_VERIFY(fixture.visible("rrNoteEditor") && editorText());
+        QCOMPARE(editorText()->toPlainText(), note);
+        editorText()->clear();
+        QVERIFY(fixture.press("rrNoteSave"));
+        QTRY_VERIFY(!fixture.visible("rrNoteEditor"));
+        QTRY_VERIFY(storedNote().isEmpty());
+        QCOMPARE(fixture.stored("highlights.json", "highlights").size(), 1);
+        QVERIFY(fixture.selectWord(page, word));
+        QTRY_VERIFY(fixture.visible("rrAnnotationAddNote"));
+        QVERIFY(!fixture.visible("rrAnnotationEditNote"));
+    }
+
+    void quickAnnotations()
+    {
+        Fixture fixture(false);
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        auto *annotate = qobject_cast<QAbstractButton *>(fixture.widget("rrAnnotate"));
+        QVERIFY(annotate);
+
+        // Toggleable annotation mode is the default.
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrSettings"));
+        QVERIFY(fixture.visible("rrAnnotate"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsControls"));
+        QTRY_VERIFY(fixture.visible("rrAnnotationInteraction"));
+        QVERIFY(fixture.press("rrAnnotationInteraction"));
+        QTRY_VERIFY(fixture.visible("rrAnnotationInteraction_quick"));
+        QVERIFY(qobject_cast<QAbstractButton *>(fixture.widget("rrAnnotationInteraction_toggle"))
+                        ->isChecked());
+        QVERIFY(fixture.press("rrAnnotationInteraction_quick"));
+        QTRY_VERIFY(!fixture.visible("rrAnnotationInteractionPopup"));
+        QCOMPARE(storage::readJson(fixture.paths.preferences()).value("annotation_interaction"),
+                 QJsonValue("quick"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        if (!fixture.visible("rrSettings"))
+            QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrSettings"));
+        QVERIFY(!fixture.visible("rrAnnotate"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+
+        // Hold and drag selects several words, and release opens the menu.
+        const QPoint first = fixture.wordPoint(0), fourth = fixture.wordPoint(3);
+        QVERIFY(first.x() >= 0 && fourth.x() >= 0);
+        QVERIFY(fixture.drag(page, first, fourth, true));
+        QTRY_VERIFY(fixture.visible("rrAnnotationSave"));
+        for (const auto *name :
+             { "rrAnnotationAddNote", "rrSelectionLookup", "rrAnnotationCancel" })
+            QVERIFY(fixture.visible(name));
+        QVERIFY(!fixture.visible("rrAnnotationModeNotice"));
+        QVERIFY(!fixture.visible("rrDictionary"));
+        QVERIFY(fixture.press("rrAnnotationSave"));
+        QTRY_COMPARE(fixture.stored("highlights.json", "highlights").size(), 1);
+        QVERIFY(fixture.stored("highlights.json", "highlights")
+                        .first()
+                        .toObject()
+                        .value("text")
+                        .toString()
+                        .contains(' '));
+        // Saving ends the selection and leaves annotation mode.
+        QTRY_VERIFY(!annotate->isChecked() && !fixture.visible("rrAnnotationPopover"));
+
+        // Clear selection also leaves the mode.
+        const QPoint later = fixture.wordPoint(7);
+        QVERIFY(later.x() >= 0);
+        QVERIFY(fixture.selectWord(page, later));
+        QTRY_VERIFY(fixture.visible("rrAnnotationCancel"));
+        QVERIFY(annotate->isChecked());
+        QVERIFY(fixture.press("rrAnnotationCancel"));
+        QTRY_VERIFY(!annotate->isChecked());
+
+        // Look up opens the dictionary for the selection, outside annotation mode.
+        QVERIFY(fixture.selectWord(page, later));
+        QTRY_VERIFY(fixture.visible("rrSelectionLookup"));
+        QVERIFY(fixture.press("rrSelectionLookup"));
+        QTRY_VERIFY(fixture.visible("rrDictionary"));
+        QVERIFY(!annotate->isChecked());
+        QVERIFY(fixture.press("rrDictionaryClose"));
+        QTRY_VERIFY(!fixture.visible("rrDictionary"));
+        QCOMPARE(fixture.stored("highlights.json", "highlights").size(), 1);
+
+        // Holding the saved highlight opens its actions.
+        QVERIFY(fixture.selectWord(page, first));
+        QTRY_VERIFY(fixture.visible("rrAnnotationApply"));
+        QVERIFY(fixture.click(page, QPoint(10, page->height() / 2)));
+        QTRY_VERIFY(!fixture.visible("rrAnnotationPopover") && !annotate->isChecked());
+    }
+
     void annotationSelection_data()
     {
         QTest::addColumn<bool>("dark");
@@ -8606,17 +8928,17 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         };
         QCOMPARE(frame(shaded).right() + 1, frame(underline).left());
         QCOMPARE(frame(underline).right() + 1, frame(dotted).left());
-        QCOMPARE(frame(save).right() + 1, frame(cancel).left());
-        auto *styleSection = fixture.widget("rrAnnotationStyleSection");
-        auto *actionsSection = fixture.widget("rrAnnotationActionsSection");
-        QVERIFY(styleSection && actionsSection);
-        QVERIFY(styleSection->isVisible() && actionsSection->isVisible());
-        QVERIFY(frame(styleSection).bottom() < frame(shaded).top());
+        // A new selection offers Add note between Mark text and Clear selection.
+        auto *addNote = fixture.widget("rrAnnotationAddNote");
+        QVERIFY(addNote && addNote->isVisible());
+        QCOMPARE(frame(save).right() + 1, frame(addNote).left());
+        QCOMPARE(frame(addNote).right() + 1, frame(cancel).left());
+        // The choices have no section captions.
+        for (const auto *name : { "rrAnnotationColorSection", "rrAnnotationStyleSection",
+                                  "rrAnnotationActionsSection" })
+            QVERIFY(!fixture.widget(name));
         if (auto *palette = fixture.widget("rrAnnotationPalette")) {
-            auto *colorSection = fixture.widget("rrAnnotationColorSection");
-            QVERIFY(colorSection && colorSection->isVisible());
-            QCOMPARE(frame(colorSection).bottom() + 1, frame(palette).top());
-            QCOMPARE(frame(palette).bottom() + 1, frame(styleSection).top());
+            QCOMPARE(frame(palette).bottom() + 1, frame(shaded).top());
             const auto swatches = palette->findChildren<QAbstractButton *>();
             QCOMPARE(swatches.size(), 5);
             int circleTop = -1;
@@ -8645,11 +8967,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 }
             }
         }
-        QCOMPARE(frame(shaded).bottom() + 1, frame(actionsSection).top());
-        QCOMPARE(frame(actionsSection).bottom() + 1, frame(cancel).top());
+        QCOMPARE(frame(shaded).bottom() + 1, frame(cancel).top());
         QCOMPARE(frame(shaded).left(), frame(fixture.widget("rrAnnotationSave")).left());
         QCOMPARE(frame(dotted).right(), frame(cancel).right());
-        for (const auto *name : { "rrAnnotationSave", "rrAnnotationCancel" }) {
+        for (const auto *name :
+             { "rrAnnotationSave", "rrAnnotationAddNote", "rrAnnotationCancel" }) {
             auto *button = dynamic_cast<ui::CaptionButton *>(fixture.widget(name));
             QVERIFY(button && button->isIconAboveLabel());
             QCOMPARE(ui::elideInterfaceText(button->text(), button->font(),
@@ -8658,13 +8980,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(ui::metrics::chrome::cellIcon + ui::px(8)
                             + QFontMetrics(button->font()).height() + 2 * ui::px(8)
                     <= button->height());
-        }
-        for (auto *header : { styleSection, actionsSection }) {
-            const auto image = header->grab().toImage();
-            QCOMPARE(image.pixelColor(image.width() - 10, image.height() / 2),
-                     header->palette().color(QPalette::Window));
-            QCOMPARE(image.pixelColor(image.width() - 10, image.height() - 1),
-                     ui::dividerColor(header));
         }
         const auto paper = shaded->palette().color(QPalette::Window);
         const auto selectedSample = shaded->grab().toImage();
@@ -8687,7 +9002,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(cardBounds.bottom() <= selection.top() || cardBounds.top() >= selection.bottom());
         QVERIFY(fixture.stored("highlights.json", "highlights").isEmpty());
         QVERIFY(fixture.press("rrAnnotationStyle_underline"));
-        const QRect check(shaded->width() - ui::px(40), ui::px(10), ui::px(24), ui::px(24));
+        // The check sits right of the centered sample, centered on it.
+        const QRect check(shaded->width() / 2 + ui::px(38) + ui::px(10),
+                          shaded->height() / 2 - ui::px(10), ui::px(20), ui::px(20));
         QVERIFY(selectedSample.copy(check) != shaded->grab().toImage().copy(check));
         const auto selectedUnderline = underline->grab().toImage();
         QCOMPARE(selectedUnderline.pixelColor(selectedUnderline.width() / 2,
@@ -9056,7 +9373,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         const auto marked = word.rectangles.first().center() + QPoint(0, page->topHeight());
         QVERIFY(fixture.selectWord(page, marked));
         QTRY_VERIFY(!page->annotationHandleRect(true).isEmpty());
-        QVERIFY(fixture.click(page, marked));
         QTRY_VERIFY(fixture.visible("rrAnnotationSave"));
         QVERIFY(fixture.press("rrAnnotationSave"));
         QTRY_COMPARE(fixture.stored("highlights.json", "highlights").size(), 1);
@@ -9753,6 +10069,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!page->annotationHandleRect(false).isEmpty());
         const QRect draftStart = page->annotationHandleRect(true),
                     draftEnd = page->annotationHandleRect(false);
+        // The menu opens on release; a tap outside it closes it and keeps the draft.
+        QTRY_VERIFY(fixture.visible("rrAnnotationPopover"));
+        QVERIFY(fixture.click(page, QPoint(10, page->height() / 2)));
+        QTRY_VERIFY(!fixture.visible("rrAnnotationPopover"));
         QVERIFY(fixture.click(page, QPoint(page->width() / 2, page->height() / 2)));
         QTRY_VERIFY(fixture.visible("rrControlsTop"));
         QVERIFY(fixture.press("rrPage"));
@@ -14723,7 +15043,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(!fixture.visible("rrChapterGraph"));
             QVERIFY(!fixture.visible("rrChoices"));
             QVERIFY(!fixture.visible("rrDictionary"));
-            QVERIFY(fixture.click(page, currentWord));
             QTRY_VERIFY(fixture.visible("rrAnnotationCancel"));
             QVERIFY(fixture.press("rrAnnotationCancel"));
             QTRY_VERIFY(page->annotationHandleRect(true).isEmpty());
@@ -15865,7 +16184,6 @@ private slots:
         QVERIFY(word.x() >= 0);
         QVERIFY(fixture.selectWord(page, word));
         QTRY_VERIFY(!page->annotationHandleRect(true).isEmpty());
-        QVERIFY(fixture.click(page, word));
         QTRY_VERIFY(fixture.visible("rrAnnotationColor_yellow"));
         states("rrAnnotationColor_yellow", "annotation-color-feedback");
         // The Library owns a separate native canvas and the same checkbox control.
@@ -16525,7 +16843,7 @@ private slots:
         QVERIFY(word.x() >= 0);
         QVERIFY(fixture.selectWord(page, word));
         QTRY_VERIFY(!page->annotationHandleRect(true).isEmpty());
-        QVERIFY(fixture.click(page, word));
+        // The menu opens when the finger lifts.
         QTRY_VERIFY(fixture.visible("rrAnnotationSave"));
         QVERIFY(capture(fixture, name + "-annotation-actions"));
         QVERIFY(fixture.press("rrAnnotationStyle_shaded"));
@@ -17983,6 +18301,44 @@ private slots:
                                         + "-footnotes-prose-french-following"));
             }
         }
+    }
+
+    void quickAnnotation_data() { screenshotVariants(); }
+
+    void quickAnnotation()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        const auto name = screenshotDevice(preset) + ('-' + screenshotTheme(dark));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrSettings"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsControls"));
+        QVERIFY(revealSettingsOption(fixture, "rrAnnotationInteraction"));
+        QVERIFY(fixture.press("rrAnnotationInteraction"));
+        QTRY_VERIFY(fixture.visible("rrAnnotationInteraction_quick"));
+        QVERIFY(capture(fixture, name + "-annotation-interaction-choices"));
+        QVERIFY(fixture.press("rrAnnotationInteraction_quick"));
+        QTRY_VERIFY(!fixture.visible("rrAnnotationInteractionPopup"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        if (fixture.visible("rrControlsTop"))
+            QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(!fixture.visible("rrControlsTop"));
+        auto *page = fixture.widget("rrPage");
+        const QPoint first = fixture.wordPoint(0), fourth = fixture.wordPoint(3);
+        QVERIFY(first.x() >= 0 && fourth.x() >= 0);
+        QVERIFY(fixture.drag(page, first, fourth, true));
+        QTRY_VERIFY(fixture.visible("rrSelectionLookup"));
+        QVERIFY(capture(fixture, name + "-quick-annotation-actions"));
     }
 
     void directLinks_data() { screenshotVariants(); }

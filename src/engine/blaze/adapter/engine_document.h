@@ -222,8 +222,6 @@ public:
     bool fullDocumentReady() const override;
     int preparedSpreadTurn(int direction) const override;
     bool fullDocumentStarted() const override;
-    void setBackgroundCount(bool enabled) override;
-    bool backgroundCount() const override;
 
     bool continuesAfter() const override
     {

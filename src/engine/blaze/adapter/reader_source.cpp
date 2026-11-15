@@ -1612,17 +1612,6 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
 #endif
 }
 
-void EngineDocument::setBackgroundCount(bool enabled)
-{
-    if (source_)
-        source_->pageEstimate.count.store(enabled);
-}
-
-bool EngineDocument::backgroundCount() const
-{
-    return source_ && source_->pageEstimate.count.load();
-}
-
 void EngineDocument::keepUnit(std::unique_ptr<EngineDocument> document, const QJsonObject &settings,
                               QSize size)
 {

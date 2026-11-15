@@ -493,7 +493,8 @@ private:
     static void refinePageEstimate(std::shared_ptr<Engine> engine,
                                    const std::function<bool()> &current,
                                    QPointer<ReaderSession> guard, quint64 job,
-                                   const std::shared_ptr<SourceLease> &lease, quint64 requests);
+                                   const std::shared_ptr<SourceLease> &lease, quint64 requests,
+                                   const std::shared_ptr<std::atomic_bool> &count);
     storage::CustomPins customPins_;
     ReaderSession(std::shared_ptr<Engine> retainedEngine, QString placeholderFamily);
     EngineFontInputs fonts_;
@@ -529,6 +530,9 @@ private:
     // Page turns since the book opened or the appearance changed. Hybrid
     // rendering counts the pages of the book after a few of them.
     int quietTurns_ = 0;
+    // The UI sets this while the engine worker can be replacing its document.
+    const std::shared_ptr<std::atomic_bool> backgroundCount_ =
+            std::make_shared<std::atomic_bool>(false);
     // The entry of chapters() that `destination` is, or -1.
     int chapterTarget = -1;
     int pageDelta = 0;

@@ -288,12 +288,6 @@ public:
     // True once the build of that document has started.
     virtual bool fullDocumentStarted() const { return false; }
 
-    // The reader turns the count on when the user reads, and off while the
-    // user changes settings. The engine worker reads it.
-    virtual void setBackgroundCount(bool enabled) { Q_UNUSED(enabled); }
-
-    virtual bool backgroundCount() const { return false; }
-
     // Turns `delta` pages. Past the first or the last page that the engine
     // has, it loads the spine item there and continues. False at an end of
     // the book.

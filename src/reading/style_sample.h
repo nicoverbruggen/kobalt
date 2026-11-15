@@ -81,9 +81,11 @@ struct StyleSample
 };
 
 // Lays out the sample on the shared engine worker and calls `finished` on
-// the GUI thread, unless `context` was destroyed first.
+// the GUI thread, unless `context` was destroyed first. With `yielded`, a
+// background sample calls that instead if reader work overtook its queued job.
 void renderStyleSample(EngineFontInputs fonts, StyleSampleRequest request, QObject *context,
-                       std::function<void(StyleSample)> finished);
+                       std::function<void(StyleSample)> finished,
+                       std::function<void()> yielded = {});
 // Reading settings without the book-specific keys a sample cannot use.
 QJsonObject styleSampleSettings(QJsonObject state);
 // Page-break previews use one fixed page, font and size, so the sample shows

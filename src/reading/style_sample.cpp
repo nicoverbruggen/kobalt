@@ -516,24 +516,33 @@ QJsonObject styleSamplePageSettings(const QJsonObject &reading)
 }
 
 void renderStyleSample(EngineFontInputs fonts, StyleSampleRequest request, QObject *context,
-                       std::function<void(StyleSample)> finished)
+                       std::function<void(StyleSample)> finished, std::function<void()> yielded)
 {
     QPointer<QObject> guard(context);
+    const auto queued = engineWorkRequests();
+    auto *worker = yielded ? engineWorkerForIdle() : engineWorker();
     // The sample document shares CREngine's global fonts and caches, so it is
     // created, used and destroyed on the reader's engine worker.
     kobalt::qt::invoke(
-            engineWorker(),
-            [guard, fonts = std::move(fonts), request = std::move(request),
-             finished = std::move(finished)] {
+            worker,
+            [guard, yielded = std::move(yielded), queued, fonts = std::move(fonts),
+             request = std::move(request), finished = std::move(finished)] {
+                bool deferred = false;
                 StyleSample result;
                 {
                     EngineJob activity;
-                    result = render(fonts, request);
+                    deferred = yielded && engineWorkRequests() != queued;
+                    if (!deferred)
+                        result = render(fonts, request);
                 }
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, finished, result = std::move(result)]() mutable {
-                            if (guard)
+                        [guard, finished, yielded, deferred, result = std::move(result)]() mutable {
+                            if (!guard)
+                                return;
+                            if (deferred)
+                                yielded();
+                            else
                                 finished(std::move(result));
                         },
                         Qt::QueuedConnection);

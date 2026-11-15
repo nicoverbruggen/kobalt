@@ -781,7 +781,8 @@ private:
     // `finished` with it, or with a null image when it failed or was cancelled.
     void renderTextPresetTile(TextPresetPreview preview, QSize size,
                               std::shared_ptr<std::atomic_bool> cancelled,
-                              std::function<void(const QImage &)> finished);
+                              std::function<void(const QImage &)> finished,
+                              std::function<void()> yielded = {});
     kobalt::storage::PreviewStore &textPresetTiles();
     std::unique_ptr<kobalt::storage::PreviewStore> textPresetTileStore;
     // The presets, the one in force and whether the text differs from it.

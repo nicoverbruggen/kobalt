@@ -19,6 +19,7 @@
 #include "platforms/desktop/window.h"
 #include "platforms/desktop/engine_monitor.h"
 #include "engine/engine_worker.h"
+#include "reading/style_sample.h"
 #include <QTableWidget>
 #include "platforms/desktop/services.h"
 #include "app/reader/views/opening.h"
@@ -125,6 +126,7 @@
 #include "storage/saved_words.h"
 #include "engine/engine_activity.h"
 #include "engine/engine_worker.h"
+#include "reading/style_sample.h"
 #include "support/qt_compat.h"
 #include <QScopeGuard>
 #include <QSemaphore>
@@ -6478,6 +6480,55 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             view->hide();
         }
         monitor.findChild<QPushButton *>("engineMonitorSlowdown")->click();
+    }
+
+    // A preset tile queued during reader work must not delay a newer turn.
+    void backgroundStyleSamplesYieldToReader()
+    {
+        QObject context;
+        const auto release = std::make_shared<QSemaphore>();
+        const auto parked = std::make_shared<std::atomic_bool>(false);
+        qt::invoke(
+                engineWorker(),
+                [release, parked] {
+                    parked->store(true);
+                    release->acquire();
+                },
+                Qt::QueuedConnection);
+        auto unblock = qScopeGuard([release] { release->release(); });
+        QTRY_VERIFY(parked->load());
+        StyleSampleRequest request;
+        request.settings = styleSamplePageSettings({});
+        request.key = "font_pixels";
+        request.values = { request.settings.value("font_pixels") };
+        request.page = styleSamplePageSize();
+        request.thumbnail = { 120, 160 };
+        request.crop = { 200, 200 };
+        request.firstPageOnly = true;
+        bool completed = false, yielded = false, readerRan = false;
+        renderStyleSample(
+                fixtureFonts(), request, &context, [&](StyleSample) { completed = true; },
+                [&] { yielded = true; });
+        qt::invoke(
+                engineWorker(),
+                [&] { qt::invoke(&context, [&] { readerRan = true; }, Qt::QueuedConnection); },
+                Qt::QueuedConnection);
+        release->release();
+        unblock.dismiss();
+        QTRY_VERIFY(readerRan);
+        QTRY_VERIFY(yielded);
+        QVERIFY(!completed);
+        // Once the reader is idle the same request must still produce its tile.
+        StyleSample result;
+        renderStyleSample(
+                fixtureFonts(), request, &context,
+                [&](StyleSample sample) {
+                    result = std::move(sample);
+                    completed = true;
+                },
+                [&] { QFAIL("An idle sample yielded without newer reader work"); });
+        QTRY_VERIFY(completed);
+        QVERIFY(result.valid());
     }
 
     // New chapter jumps cancel adjacent previews, including the simulated Kobo delay.

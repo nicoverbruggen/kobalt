@@ -43,3 +43,5 @@ Dismissal checks verify that appearance and Styling previews release their sourc
 Reader teardown checks observe child-panel callbacks through window destruction, with Text and Layout previews ready or still rendering and with Settings open. They reject callbacks after reader teardown starts without relying on an allocator to detect a destroyed member. These checks cover the observed panel subscriptions, not every possible widget callback lifetime.
 
 `component.ui` checks the shared button feedback: its triangle overlaps the target button, it can appear beside a button or below one at the top of the screen, a side offset moves the card without moving the arrow tip, it lets input pass through, and it dismisses automatically.
+
+Background preset samples yield to reader requests queued after them and retry after the reader becomes idle. `desktop.backgroundStyleSamplesYieldToReader` checks that a queued tile yields, the reader runs first, and the tile can render afterward. `desktop.fastConsecutiveChapterJumps` retains its 100 ms queue-delay limit with simulated slow rendering.

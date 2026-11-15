@@ -631,20 +631,23 @@ QVector<Reader::TextPresetPreview> Reader::textPresetPreviews(const QVector<Pres
 
 void Reader::renderTextPresetTile(TextPresetPreview preview, QSize size,
                                   std::shared_ptr<std::atomic_bool> cancelled,
-                                  std::function<void(const QImage &)> finished)
+                                  std::function<void(const QImage &)> finished,
+                                  std::function<void()> yielded)
 {
     registerPickerFonts(preview.face);
     preview.request.cancelled = cancelled;
     const bool dark = darkTheme;
-    renderStyleSample(session->fontInputs(), preview.request, this,
-                      [this, cancelled, size, dark, key = preview.tile,
-                       finished = std::move(finished)](StyleSample sample) {
-                          const auto image = presetPreviewImage(sample, size, dark);
-                          // Keep a finished tile even when its page was
-                          // replaced: turning back shows it at once.
-                          textPresetTiles().insert(key, image);
-                          finished(cancelled->load() ? QImage() : image);
-                      });
+    renderStyleSample(
+            session->fontInputs(), preview.request, this,
+            [this, cancelled, size, dark, key = preview.tile,
+             finished = std::move(finished)](StyleSample sample) {
+                const auto image = presetPreviewImage(sample, size, dark);
+                // Keep a finished tile even when its page was
+                // replaced: turning back shows it at once.
+                textPresetTiles().insert(key, image);
+                finished(cancelled->load() ? QImage() : image);
+            },
+            std::move(yielded));
 }
 
 void Reader::renderTextPresetGallery()
@@ -845,13 +848,24 @@ void Reader::prerenderNextTextPreset()
         return;
     }
     const auto preview = textPresetPrerenderQueue.takeFirst();
-    renderTextPresetTile(preview, textPresetPrerenderSize, textPresetPrerenderCancel,
-                         [this](const QImage &image) {
-                             if (!image.isNull())
-                                 setProperty("text_preset_prerender_renders",
-                                             property("text_preset_prerender_renders").toInt() + 1);
-                             prerenderNextTextPreset();
-                         });
+    renderTextPresetTile(
+            preview, textPresetPrerenderSize, textPresetPrerenderCancel,
+            [this](const QImage &image) {
+                if (!image.isNull())
+                    setProperty("text_preset_prerender_renders",
+                                property("text_preset_prerender_renders").toInt() + 1);
+                prerenderNextTextPreset();
+            },
+            [this, preview, cancelled = textPresetPrerenderCancel] {
+                if (cancelled != textPresetPrerenderCancel || cancelled->load())
+                    return;
+                // Reader work overtook this queued tile. Retry it
+                // after that work, without delaying the next turn.
+                textPresetPrerenderQueue.prepend(preview);
+                textPresetPrerenderWaiting = true;
+                if (!session->busy() && !session->preparingNeighbours())
+                    qt::later(0, this, [this] { resumeTextPresetPrerender(); });
+            });
 }
 
 void Reader::closeTextPresetGallery()

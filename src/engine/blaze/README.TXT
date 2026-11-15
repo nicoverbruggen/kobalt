@@ -17,6 +17,8 @@ Folders
 crengine   The library: the CREngine sources and headers, with the Blaze
            changes. crengine/include/koblaze.h declares the hooks for
            chapter layout, shaping and cancellation.
+extensions Blaze library code shared by the parser and renderer, including
+           layout cancellation, pause callbacks and chapter-window selection.
 adapter    The Kobalt side: the code that drives the library for the
            reader (opening a book, pages, links, search, positions).
 data       The default style sheets of the engine, and the list of names

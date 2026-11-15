@@ -1,6 +1,8 @@
 # Third-party code keeps its upstream format.
 dependencies/**
 src/engine/blaze/crengine/**
+# Code extracted from the rendering library keeps the same style.
+src/engine/blaze/extensions/**
 src/engine/blaze/utils/**
 src/engine/blaze/tests/**
 platforms/kobo/toolchains/**

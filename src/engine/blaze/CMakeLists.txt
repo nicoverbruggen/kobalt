@@ -22,6 +22,8 @@ set(CRE_SRCS
     crengine/src/docxfmt.cpp
     crengine/src/drawutil.cpp
     crengine/src/epubfmt.cpp
+    extensions/layout_control.cpp
+    extensions/spine_window.cpp
     crengine/src/fb3fmt.cpp
     crengine/src/hist.cpp
     crengine/src/hyphman.cpp

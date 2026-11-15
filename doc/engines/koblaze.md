@@ -14,6 +14,8 @@ Preserve the GPLv2 notice in `src/engine/blaze/README.TXT`, the license text in 
 
 Compare the upstream change with the recorded KOReader base. In `crengine/`, keep upstream file names, indentation and declaration style. Kobalt’s [.clang-format-ignore](../../.clang-format-ignore) excludes these files. Format the adapter under `adapter/` with Kobalt’s Qt style.
 
+Blaze keeps its cancellation and pause callbacks and its chapter-window selection in `src/engine/blaze/extensions/`. They compile into the engine library and use the declarations in `crengine/include/koblaze.h`. The EPUB import loop still decides when parsing can stop and inserts an empty fragment for each skipped spine item so saved positions keep their fragment indices.
+
 For a change to text layout, check both `lvtextfm.cpp` and `lvtextfm_vert.cpp`. The first includes the second in the same translation unit. In `lvfntman.cpp`, check the Blaze word-shaping paths as well as the original HarfBuzz path. Changes to block layout or the DOM also need testing with a chapter window and a complete document. Use the [layout regressions](../validation/layout.md) to compare them.
 
 ## Cache compatibility

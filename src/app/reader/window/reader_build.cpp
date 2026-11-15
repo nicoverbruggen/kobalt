@@ -1739,6 +1739,15 @@ void Reader::buildSettings()
     connect(refreshButton, &QPushButton::clicked, this, [this] { openScreenRefresh(); });
     connect(settings->openAcknowledgments, &QPushButton::clicked, this, [this] {
         kobalt::ui::PanelTiming timing("acknowledgments");
+        if (!acknowledgments) {
+            acknowledgments = new kobalt::Acknowledgments(this);
+            acknowledgments->finished = [this] {
+                acknowledgments->hide();
+                general->raise();
+                syncNavigation();
+            };
+        }
+        acknowledgments->setGeometry(searchPanel->geometry());
         acknowledgments->open();
         timing.finish(acknowledgments);
         for (auto *widget : acknowledgments->findChildren<QWidget *>())
@@ -1796,14 +1805,6 @@ void Reader::buildSettings()
 
 void Reader::buildNotices()
 {
-    acknowledgments = new kobalt::Acknowledgments(this);
-    // The navigation hides its panel edges while Acknowledgments covers the reader.
-    acknowledgments->finished = [this] {
-        acknowledgments->hide();
-        general->raise();
-        syncNavigation();
-    };
-    acknowledgments->hide();
     busyNotice = new kobalt::ui::ModalOverlay(this);
     busyNotice->setDimmed(true);
     busyNotice->card()->message(strings::get("reader.applying_appearance_changes"),
@@ -1981,7 +1982,7 @@ void Reader::connectPageInput()
             || session->busy() || appearanceEdit.panelOpen() || appearanceEdit.applying()
             || general->isVisible() || choices->isVisible() || topControls->isVisible()
             || revealingLinks || dictionaryPanel->isVisible() || searchPanel->isVisible()
-            || linksActive() || lookupPending || acknowledgments->isVisible()
+            || linksActive() || lookupPending || acknowledgmentsVisible()
             || bookmarkList->isVisible() || lightPopup->isVisible() || chapterGraph->isVisible()
             || !highlights->writable()) {
             return;

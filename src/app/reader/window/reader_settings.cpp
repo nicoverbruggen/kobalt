@@ -355,7 +355,8 @@ void Reader::openSettings()
     lightPopup->hide();
     chapterGraph->hide();
     bookmarkList->hide();
-    acknowledgments->hide();
+    if (acknowledgments)
+        acknowledgments->hide();
     appearanceEdit.clearContinuation();
     restoringDefaults = false;
     restoringPresets = false;

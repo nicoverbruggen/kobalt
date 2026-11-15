@@ -47,6 +47,7 @@ protected:
 
 private:
     ui::PagerBar *pages, *choicesPaging;
+    KeyboardFactory keyboardFactory;
     std::unique_ptr<KeyboardController> keyboard;
     // On a narrow sheet, `actions` opens a menu with edit, search and save.
     ui::CellButton *dictionary, *close, *edit, *submit, *search, *actions;

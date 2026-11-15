@@ -1054,7 +1054,7 @@ bool Reader::event(QEvent *event)
                     !appearanceEdit.panelOpen() && !general->isVisible() && !choices->isVisible()
                             && !chapterGraph->isVisible() && !linkReturn->isVisible()
                             && !dictionaryPanel->isVisible() && !searchPanel->isVisible()
-                            && !linksActive() && !lookupPending && !acknowledgments->isVisible()
+                            && !linksActive() && !lookupPending && !acknowledgmentsVisible()
                             && !bookmarkList->isVisible() && !lightPopup->isVisible()
                             && !busyNotice->isVisible() && !syncDialog && !kosyncDialog
                             && !finishDialog && !annotationErrorDialog && !formattingWarningDialog
@@ -1589,7 +1589,8 @@ void Reader::resizeEvent(QResizeEvent *)
     fitSettings();
     // Full-screen views start below the camera band, as the menu does.
     const auto safeRect = rect().adjusted(0, safe.top, 0, -safe.bottom);
-    acknowledgments->setGeometry(safeRect);
+    if (acknowledgments)
+        acknowledgments->setGeometry(safeRect);
     searchPanel->setGeometry(safeRect);
     // Activity covers the same area as the All presets screen.
     if (activityView)
@@ -1839,7 +1840,7 @@ bool Reader::positionPromptOpen() const
 bool Reader::readingToolOpen() const
 {
     return chapterGraph->isVisible() || lightPopup->isVisible() || dictionaryPanel->isVisible()
-            || searchPanel->isVisible() || acknowledgments->isVisible() || linksActive()
+            || searchPanel->isVisible() || acknowledgmentsVisible() || linksActive()
             || lookupPending;
 }
 
@@ -1874,8 +1875,8 @@ void Reader::updateLinkReturn()
     syncLinkDiscovery();
     const bool available = !linkHistory.isEmpty() && !session->busy() && !lifecycleHidden
             && !closing && !linksActive() && !lookupPending && !general->isVisible()
-            && !acknowledgments->isVisible() && !bookmarkList->isVisible()
-            && !lightPopup->isVisible() && !syncDialog && !kosyncDialog && !finishDialog
+            && !acknowledgmentsVisible() && !bookmarkList->isVisible() && !lightPopup->isVisible()
+            && !syncDialog && !kosyncDialog && !finishDialog
             && (bottomControls->isVisible()
                 || (topControls->isVisible() && !menu->isVisible() && !chapterGraph->isVisible()))
             && !choices->isVisible() && !searchPanel->isVisible() && !dictionaryPanel->isVisible();
@@ -2455,7 +2456,7 @@ void Reader::syncNavigation()
                                                       : static_cast<QWidget *>(choices),
                   cover || chapters || bookmarkList->isVisible(),
                   topControls->isVisible() && !searchPanel->isVisible()
-                          && !acknowledgments->isVisible(),
+                          && !acknowledgmentsVisible(),
                   !session->busy() && !appearanceEdit.applying(),
                   services.lightAvailable(),
                   active,

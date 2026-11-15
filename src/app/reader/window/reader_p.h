@@ -550,7 +550,9 @@ private:
     bool navigateAvailable() const { return features::enabled(preferences, features::Navigate); }
 
     void openSeek();
-    kobalt::Acknowledgments *acknowledgments;
+    kobalt::Acknowledgments *acknowledgments = nullptr;
+
+    bool acknowledgmentsVisible() const { return acknowledgments && acknowledgments->isVisible(); }
     QStackedWidget *panels;
     QLabel *previewLabel;
     kobalt::reader::AppearancePreview *appearancePreview = nullptr;

@@ -37,6 +37,7 @@ protected:
     void resizeEvent(QResizeEvent *) override;
 
 private:
+    KeyboardFactory keyboardFactory;
     std::unique_ptr<KeyboardController> keyboard;
     ui::CellButton *back, *submit, *scopeButton;
     QPushButton *pageJump;

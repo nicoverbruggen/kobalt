@@ -7868,11 +7868,17 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             search->append(batch, 100);
             counterName = "rrSearchPage";
         } else {
+            QVERIFY(!reader->findChild<QWidget *>("rrAcknowledgments"));
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrSettings"));
+            QVERIFY(fixture.press("rrSettingsAbout"));
+            QVERIFY(fixture.press("rrOpenAcknowledgments"));
+            QVERIFY(fixture.press("rrAcknowledgmentsBack"));
+            QVERIFY(fixture.press("rrOpenAcknowledgments"));
             auto *acknowledgments =
                     dynamic_cast<Acknowledgments *>(fixture.widget("rrAcknowledgments"));
             QVERIFY(acknowledgments);
-            acknowledgments->setGeometry(reader->rect());
-            acknowledgments->open();
+            QVERIFY(acknowledgments->isVisible());
             if (view == "license") {
                 QVERIFY(fixture.press("rrAcknowledgment0"));
                 for (auto *child : acknowledgments->findChildren<QWidget *>())

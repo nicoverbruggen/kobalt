@@ -769,10 +769,10 @@ void Reader::syncPinnedBookmarks()
             && topControls->isVisible() && !session->busy() && !lifecycleHidden && !closing
             && !services.suspended() && !annotationMode && !seekOpen && !appearanceEdit.panelOpen()
             && !general->isVisible() && !menu->isVisible() && !choices->isVisible()
-            && !lightPopup->isVisible() && !bookmarkList->isVisible()
-            && !acknowledgments->isVisible() && !searchPanel->isVisible()
-            && !dictionaryPanel->isVisible() && !linksActive() && !lookupPending && !syncDialog
-            && !kosyncDialog && !finishDialog && !(fieldChooser && fieldChooser->isVisible())
+            && !lightPopup->isVisible() && !bookmarkList->isVisible() && !acknowledgmentsVisible()
+            && !searchPanel->isVisible() && !dictionaryPanel->isVisible() && !linksActive()
+            && !lookupPending && !syncDialog && !kosyncDialog && !finishDialog
+            && !(fieldChooser && fieldChooser->isVisible())
             && !(headerFooterView && headerFooterView->isVisible());
     pinnedBookmarks->setVisible(visible);
     if (!visible)

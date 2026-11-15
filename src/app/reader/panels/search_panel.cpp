@@ -57,7 +57,8 @@ private:
 };
 } // namespace
 
-SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard) : ui::Panel(parent)
+SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard)
+    : ui::Panel(parent), keyboardFactory(std::move(makeKeyboard))
 {
     setObjectName("rrSearch");
     back = new ui::CellButton(ui::ControlIcon::Back, this, chrome::backIcon);
@@ -90,10 +91,6 @@ SearchPanel::SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard) : ui::Pa
             [this](const QString &text) { clear->setVisible(!text.isEmpty()); });
     query->setAccessibleName(strings::get("reader.search_book"));
     query->setInputMethodHints(Qt::ImhNoPredictiveText | Qt::ImhNoAutoUppercase);
-    keyboard = makeKeyboard(this, query);
-    Q_ASSERT(keyboard);
-    keyboard->setSubmitText(strings::get("search_panel.search"));
-    keyboard->submitted = [this] { run(); };
     submit = new ui::CellButton(ui::ControlIcon::Search, this, chrome::backIcon);
     submit->setObjectName("rrSearchSubmit");
     submit->setRule(Qt::LeftEdge);
@@ -390,6 +387,12 @@ void SearchPanel::choosePage()
 
 void SearchPanel::open(bool returnAvailable, int originalPage, const QString &initialQuery)
 {
+    if (!keyboard) {
+        keyboard = keyboardFactory(this, query);
+        Q_ASSERT(keyboard);
+        keyboard->setSubmitText(strings::get("search_panel.search"));
+        keyboard->submitted = [this] { run(); };
+    }
     if (!initialQuery.isEmpty()) {
         query->setText(initialQuery);
         // The dictionary action explicitly asks to search the book.
@@ -551,7 +554,8 @@ void SearchPanel::stop()
     closePopup();
     updates.stop();
     ui::clearQueryFocus(query);
-    keyboard->hide();
+    if (keyboard)
+        keyboard->hide();
     QGuiApplication::inputMethod()->hide();
     restartOnOpen = restartOnOpen || scanning;
     if (scanning)
@@ -563,7 +567,8 @@ void SearchPanel::resizeEvent(QResizeEvent *)
 {
     closePopup();
     redraw();
-    keyboard->place();
+    if (keyboard)
+        keyboard->place();
 }
 
 void SearchPanel::paintEvent(QPaintEvent *event)

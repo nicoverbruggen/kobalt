@@ -51,7 +51,7 @@ private:
 } // namespace
 
 DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
-    : ui::Panel(parent, Qt::TopEdge)
+    : ui::Panel(parent, Qt::TopEdge), keyboardFactory(std::move(makeKeyboard))
 {
     setEdgeWidth(chrome::heavyRule);
     setObjectName("rrDictionary");
@@ -67,7 +67,7 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
     edit->setObjectName("rrDictionaryEdit");
     edit->setRule(Qt::LeftEdge);
     edit->setAccessibleName(strings::get("dictionary_panel.edit_lookup"));
-    edit->setEnabled(bool(makeKeyboard));
+    edit->setEnabled(bool(keyboardFactory));
     connect(edit, &QPushButton::clicked, this, [this] { editQuery(); });
     query = new ui::QueryEdit(this);
     query->setObjectName("rrDictionaryQuery");
@@ -95,14 +95,6 @@ DictionaryPanel::DictionaryPanel(QWidget *parent, KeyboardFactory makeKeyboard)
     connect(query, &QLineEdit::returnPressed, this, [this] { submitQuery(); });
     connect(query, &QLineEdit::textChanged, this,
             [this](const QString &value) { submit->setEnabled(!value.simplified().isEmpty()); });
-    if (makeKeyboard) {
-        // The keyboard stays at the bottom of the reader while the dictionary
-        // remains a compact sheet above it. Separate parents also keep key and
-        // dictionary damage in separate refresh rectangles.
-        keyboard = makeKeyboard(parent, query);
-        keyboard->setSubmitText(QString::fromUtf8("✓"));
-        keyboard->submitted = [this] { submitQuery(); };
-    }
     connect(dictionary, &QPushButton::clicked, this, [this] {
         if (dropdown->isVisible()) {
             dropdown->hide();
@@ -374,7 +366,7 @@ void DictionaryPanel::openActions()
     if (actionMenu)
         return;
     QVector<ui::ActionMenuItem> items;
-    if (keyboard)
+    if (keyboardFactory)
         items.append(ui::actionItem(strings::get("dictionary_panel.edit_lookup"),
                                     "rrDictionaryMenuEdit", ui::ControlIcon::EditHighlight,
                                     [this] { editQuery(); }));
@@ -462,8 +454,16 @@ void DictionaryPanel::keyPressEvent(QKeyEvent *event)
 
 void DictionaryPanel::editQuery()
 {
-    if (!keyboard || editing)
+    if (!keyboardFactory || editing)
         return;
+    if (!keyboard) {
+        // The keyboard stays at the bottom of the reader while the dictionary
+        // remains a compact sheet above it. Separate parents also keep key and
+        // dictionary damage in separate refresh rectangles.
+        keyboard = keyboardFactory(parentWidget(), query);
+        keyboard->setSubmitText(QString::fromUtf8("✓"));
+        keyboard->submitted = [this] { submitQuery(); };
+    }
     dropdown->hide();
     editing = true;
     if (prepareEditorFont)

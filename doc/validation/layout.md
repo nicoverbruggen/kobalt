@@ -61,7 +61,7 @@ The terminal lists each file, its result and the reason for any failure, then pr
 
 Intentional cache-policy and stylesheet mismatches in the negative tests can print CREngine cache warnings. The normal-book diagnostic check still rejects unexpected warnings.
 
-The CREngine upgrade to `4ce1aed1` keeps the Kobalt patch stack and the manual optical-size override. Both normal text and Bold Reading prefixes use the upstream 12-point optical-size fallback when CSS sizing is enabled and render DPI is below 100. `engine.reader` checks manual optical sizes with CSS sizing disabled, including Bold Reading prefixes and authored font widths. `engine.vertical-writing` retains the vertical-layout checks. HarfBuzz 15.1.0 and FriBidi 1.0.18 also affect text shaping and bidirectional layout; use the font, layout and multilingual corpus checks when changing these pins.
+The CREngine upgrade to `4ce1aed1` keeps the Kobalt patch stack and the manual optical-size override. Both normal text and Bold Reading prefixes use the upstream 12-point optical-size fallback when CSS sizing is enabled and render DPI is below 100. `engine.reader` checks manual optical sizes with CSS sizing disabled, including Bold Reading prefixes and authored font widths. `engine.vertical-writing` also checks a paragraph that inherits vertical writing. Its border encloses the background fill, and a centered background image falls inside the filled column in both vertical directions. A percentage-sized tile also repeats down the column. HarfBuzz 15.1.0 and FriBidi 1.0.18 also affect text shaping and bidirectional layout; use the font, layout and multilingual corpus checks when changing these pins.
 
 ## Figure pagination
 

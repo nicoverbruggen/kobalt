@@ -53,12 +53,18 @@ set(CRE_SRCS
     crengine/src/textlang.cpp
     crengine/src/txtselector.cpp
     crengine/src/wordfmt.cpp
+    extensions/chapter_layout.cpp
+    extensions/css_ancestors.cpp
+    extensions/document_fonts.cpp
+    extensions/font_selection.cpp
     extensions/layout_control.cpp
+    extensions/page_spacing.cpp
     extensions/shaping_options.cpp
     extensions/spine_window.cpp
     extensions/word_cache.cpp
     extensions/vertical/lvdocview_vert.cpp
     extensions/vertical/lvfntman_vert.cpp
+    extensions/vertical/vertical_boxes.cpp
     extensions/vertical/lvrend_vert_diag.cpp
 )
 

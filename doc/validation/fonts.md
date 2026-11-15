@@ -2,7 +2,7 @@
 
 Label `fonts`. Build `mac-tests`, then run `ctest --preset mac -L fonts` from `platforms/desktop/`. `ctest --preset mac -N -L fonts` lists its tests.
 
-These checks cover font sources, system and embedded fonts, the font pickers, Publisher Fonts as the default, optical size, KF variants and the font memory limits. `resource.resource-provider` and `engine.reader` check embedded publisher fonts. `component.ui`, in [Settings and controls](settings.md), checks font previews, their cache and fallback faces.
+These checks cover font sources, system and embedded fonts, the font pickers, Publisher Fonts as the default, optical size, KF variants and the font memory limits. `resource.resource-provider` and `engine.reader` check embedded publisher fonts. The reader opens two books with different fonts at the same path and byte length, then reopens the first book and compares the rendered pages. `component.ui`, in [Settings and controls](settings.md), checks font previews, their cache and fallback faces.
 
 `platform.font-sources` uses the pinned Amstelvar font for source precedence, because its family is absent from the bundled reader catalogue. Bundled Bitter would test duplicate-family precedence instead. `platform.system-fonts` uses synthetic plain, compressed and encrypted wrappers in temporary directories.
 

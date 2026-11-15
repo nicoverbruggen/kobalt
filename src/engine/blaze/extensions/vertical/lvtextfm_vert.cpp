@@ -26,6 +26,69 @@
 // mode-gated call sites in the shared formatter.
 // =============================================================================
 
+struct VertDecorationTraceEvent {
+    int kind, owner, character, x0, y0, x1, y1;
+};
+static VertDecorationTraceEvent vert_decoration_trace[128];
+static int vert_decoration_trace_count = 0;
+static int vert_decoration_trace_overflow = 0;
+static bool vert_decoration_trace_enabled = false;
+static int vert_decoration_trace_owner = 0;
+static int vert_decoration_trace_character = 0;
+
+void ltext_reset_vert_decoration_trace() {
+    vert_decoration_trace_count = 0;
+    vert_decoration_trace_overflow = 0;
+    vert_decoration_trace_owner = 0;
+    vert_decoration_trace_character = 0;
+    vert_decoration_trace_enabled = true;
+}
+void ltext_stop_vert_decoration_trace() {
+    vert_decoration_trace_enabled = false;
+    vert_decoration_trace_owner = 0;
+    vert_decoration_trace_character = 0;
+}
+void ltext_get_vert_decoration_trace_stats(int *count_out, int *overflow_out) {
+    *count_out = vert_decoration_trace_count;
+    *overflow_out = vert_decoration_trace_overflow;
+}
+bool ltext_get_vert_decoration_trace_event(int index, int *kind_out,
+        int *owner_out, int *char_out, int *x0_out, int *y0_out,
+        int *x1_out, int *y1_out) {
+    if ( index < 0 || index >= vert_decoration_trace_count )
+        return false;
+    const VertDecorationTraceEvent &event = vert_decoration_trace[index];
+    *kind_out = event.kind; *owner_out = event.owner;
+    *char_out = event.character; *x0_out = event.x0; *y0_out = event.y0;
+    *x1_out = event.x1; *y1_out = event.y1;
+    return true;
+}
+void ltext_set_vert_decoration_trace_context(int owner_id, int first_codepoint) {
+    if ( !vert_decoration_trace_enabled )
+        return;
+    vert_decoration_trace_owner = owner_id;
+    vert_decoration_trace_character = first_codepoint;
+}
+static void recordVertDecorationTrace(int kind, int owner, int character,
+        int x0, int y0, int x1, int y1) {
+    if ( !vert_decoration_trace_enabled )
+        return;
+    if ( vert_decoration_trace_count >= 128 ) {
+        vert_decoration_trace_overflow++;
+        return;
+    }
+    VertDecorationTraceEvent &event = vert_decoration_trace[vert_decoration_trace_count++];
+    event.kind = kind; event.owner = owner; event.character = character;
+    event.x0 = x0; event.y0 = y0; event.x1 = x1; event.y1 = y1;
+}
+void ltext_record_vert_decoration_trace(int kind, int x0, int y0, int x1, int y1) {
+    recordVertDecorationTrace(kind, vert_decoration_trace_owner,
+            vert_decoration_trace_character, x0, y0, x1, y1);
+}
+void ltext_record_vert_border_trace(int owner_id, int x0, int y0, int x1, int y1) {
+    recordVertDecorationTrace(3, owner_id, 0, x0, y0, x1, y1);
+}
+
 bool verticalTextDebugEnabled()
 {
     return getenv("KO_DEBUG_VERT_BG") != NULL;

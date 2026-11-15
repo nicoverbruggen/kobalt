@@ -17,10 +17,13 @@
 #include <string.h>
 #include "../include/lvtextfm.h"
 #include "../../extensions/lvbionic.h"
+#include "../../extensions/font_selection.h"
+#include "../../extensions/page_spacing.h"
 #include "../include/lvtinydom.h"
 #include "../include/fb2def.h"
 #include "../include/lvrend.h"
 #include "../../extensions/vertical/lvrend_vert_diag.h"
+#include "../../extensions/vertical/vertical_boxes.h"
 #include "../../extensions/vertical/lvlogical.h"
 #include "../include/renderutil.h"
 #include "../include/drawutil.h"
@@ -60,116 +63,12 @@
 int gRenderDPI = DEF_RENDER_DPI; // if 0: old crengine behaviour: 1px/pt=1px, 1in/cm/pc...=0px
 bool gRenderScaleFontWithDPI = DEF_RENDER_SCALE_FONT_WITH_DPI;
 
-static int resolveEffectiveWritingMode(ldomNode *enode)
-{
-    int writing_mode = enode->getStyle()->writing_mode;
-    if ( writing_mode == css_wm_inherit ) {
-        for (ldomNode * p = enode->getParentNode(); p && p->isElement(); p = p->getParentNode()) {
-            css_style_ref_t ps = p->getStyle();
-            if ( !ps.isNull() && ps->writing_mode != css_wm_inherit ) {
-                writing_mode = ps->writing_mode;
-                break;
-            }
-        }
-    }
-    return writing_mode;
-}
-
-// A document-wide vertical flow can be selected from another spine item's
-// writing-mode declaration. In that case a later XHTML body may legitimately
-// keep `writing-mode: inherit` on every DOM node, even though the current page
-// is laid out and painted vertically. DrawDocument receives that resolved page
-// mode through draw_extra_info; use it only when the DOM has no local answer.
-static int resolveEffectiveDrawWritingMode(ldomNode *enode, LVDrawBuf &drawbuf)
-{
-    int writing_mode = resolveEffectiveWritingMode(enode);
-    if (writing_mode != css_wm_inherit)
-        return writing_mode;
-    draw_extra_info_t *extra = (draw_extra_info_t *)drawbuf.GetDrawExtraInfo();
-    if (extra && extra->writing_mode != css_wm_inherit)
-        return extra->writing_mode;
-    return writing_mode;
-}
-
-// FORK (vertical-rl): vertical box sizing diagnostics and image page-split
-// helpers. Keep these helpers local and fork-prefixed so upstream merges see
-// small call-site changes instead of scattered condition details.
-static bool forkVerticalBoxDebugEnabled()
-{
-    return getenv("KO_DEBUG_VERT_BG") != NULL;
-}
-
-static bool isForkVerticalBoxDebugClass(ldomNode *enode)
-{
-    if ( !enode || !enode->isElement() )
-        return false;
-    lString32 cls = enode->getAttributeValue(attr_class);
-    return cls == "sec1" || cls == "figure1" || cls == "column" || cls == "column1"
-        || cls == "figure2" || cls == "figure3" || cls == "figure4"
-        || cls == "figure5" || cls == "jitsuki" || cls == "jitsuki1"
-        || cls == "jitsuki2" || cls == "formula" || cls == "calibre13"
-        || cls == "margin1" || cls == "columntitle" || cls == "calibre20"
-        || cls == "line";
-}
-
-static bool shouldDebugForkVerticalBoxNode(ldomNode *enode)
-{
-    return forkVerticalBoxDebugEnabled() && isForkVerticalBoxDebugClass(enode);
-}
-
-static bool forkNodeContainsEffectiveImage(ldomNode *node)
-{
-    if ( !node )
-        return false;
-    if ( node->isEffectiveImage() )
-        return true;
-    for ( int i=0; i<node->getChildCount(); i++ ) {
-        if ( forkNodeContainsEffectiveImage(node->getChildNode(i)) )
-            return true;
-    }
-    return false;
-}
-
-static bool forkFormattedWordContainsImage(LFormattedTextRef txform, const formatted_word_t *word)
-{
-    if ( !word )
-        return false;
-    if ( word->flags & LTEXT_WORD_IS_IMAGE )
-        return true;
-    if ( !(word->flags & LTEXT_WORD_IS_INLINE_BOX) )
-        return false;
-    const src_text_fragment_t * src = txform->GetSrcInfo(word->src_text_index);
-    return src && forkNodeContainsEffectiveImage((ldomNode*)src->object);
-}
-
-static bool shouldStartForkVerticalImageLineOnFreshPage(bool is_vertical, LFormattedTextRef txform,
-                                                        const formatted_line_t *line)
-{
-    return is_vertical
-        && line
-        && line->word_count == 1
-        && line->x > 0
-        && forkFormattedWordContainsImage(txform, &line->words[0]);
-}
-
-static bool isForkVerticalSingleImageLine(bool is_vertical, LFormattedTextRef txform,
-                                          const formatted_line_t *line)
-{
-    return is_vertical
-        && line
-        && line->word_count == 1
-        && forkFormattedWordContainsImage(txform, &line->words[0]);
-}
-
 static int setSplitBeforeAlways(int flags)
 {
     flags &= ~(0x7 << RN_SPLIT_BEFORE);
     flags |= RN_SPLIT_BEFORE_ALWAYS;
     return flags;
 }
-
-// opsz when gRenderDPI isn't a usable screen DPI: typical body text size
-#define OPSZ_FALLBACK_PT 12.0f
 
 int scaleForRenderDPI( int value ) {
     // if gRenderDPI == 0 or 96, use value as is (1px = 1px)
@@ -1730,7 +1629,7 @@ public:
             fmt.setWidth( w ); // fmt.width must be set before 'caption->renderFinalBlock'
                                // to have text-indent in % not mess up at render time
             css_style_ref_t caption_style = caption->getStyle();
-            CSSLogical caption_axes((css_writing_mode_t)resolveEffectiveWritingMode(caption));
+            CSSLogical caption_axes((css_writing_mode_t)blaze::resolveEffectiveWritingMode(caption));
             int padding_left = lengthToPx( caption, caption_style->padding[caption_axes.padIS()], w ) + measureBorder(caption, caption_axes.brdIS());
             int padding_right = lengthToPx( caption, caption_style->padding[caption_axes.padIE()], w ) + measureBorder(caption, caption_axes.brdIE());
             int padding_top = lengthToPx( caption, caption_style->padding[caption_axes.padBS()], w ) + measureBorder(caption, caption_axes.brdBS());
@@ -1877,7 +1776,7 @@ public:
                     if ( cell->elem->getRendMethod() == erm_final ) {
                         LFormattedTextRef txform;
                         css_style_ref_t elem_style = cell->elem->getStyle();
-                        CSSLogical cell_axes((css_writing_mode_t)resolveEffectiveWritingMode(cell->elem));
+                        CSSLogical cell_axes((css_writing_mode_t)blaze::resolveEffectiveWritingMode(cell->elem));
                         int border_left = measureBorder(cell->elem, cell_axes.brdIS());
                         int border_right = measureBorder(cell->elem, cell_axes.brdIE());
                         int padding_left = lengthToPx( cell->elem, elem_style->padding[cell_axes.padIS()], cell->width ) + border_left;
@@ -2043,7 +1942,7 @@ public:
                             // We just need to remove this cell bottom padding (we should
                             // not remove the inner content bottom margins or paddings).
                             css_style_ref_t elem_style = cell->elem->getStyle();
-                            CSSLogical cell_axes((css_writing_mode_t)resolveEffectiveWritingMode(cell->elem));
+                            CSSLogical cell_axes((css_writing_mode_t)blaze::resolveEffectiveWritingMode(cell->elem));
                             int padding_bottom = lengthToPx( cell->elem, elem_style->padding[cell_axes.padBE()], cell->width )
                                 + measureBorder(cell->elem, cell_axes.brdBE());
                             // We'll position that bottom content edge
@@ -2477,7 +2376,7 @@ public:
                                 copystyle(style, newstyle);
                                 // If padding-top is a percentage, it is relative to
                                 // the *width* of the containing block
-                                CSSLogical cell_axes((css_writing_mode_t)resolveEffectiveWritingMode(cell->elem));
+                                CSSLogical cell_axes((css_writing_mode_t)blaze::resolveEffectiveWritingMode(cell->elem));
                                 int orig_padding_top = lengthToPx( cell->elem, style->padding[cell_axes.padBS()], cell->width );
                                 newstyle->padding[cell_axes.padBS()].type = css_val_screen_px;
                                 newstyle->padding[cell_axes.padBS()].value = orig_padding_top + pad;
@@ -2570,7 +2469,7 @@ public:
         caption_direction = REND_DIRECTION_UNSET;
         caption_at_bottom = false;
         elem = tbl_elem;
-        writing_mode = (css_writing_mode_t)resolveEffectiveWritingMode(tbl_elem);
+        writing_mode = (css_writing_mode_t)blaze::resolveEffectiveWritingMode(tbl_elem);
         table_width = tbl_width;
         shrink_to_fit = tbl_shrink_to_fit;
         table_min_width = tbl_min_width;
@@ -2690,17 +2589,6 @@ int LVRendGetBaseFontWeight()
     return rend_font_base_weight;
 }
 
-static float rend_font_optical_size = 0;
-void LVRendSetFontOpticalSize(float points)
-{
-    rend_font_optical_size = points > 0 ? points : 0;
-}
-float LVRendGetFontOpticalSize()
-{
-    return rend_font_optical_size;
-}
-
-
 /// docFragmentIdx: pass the node's DocFragment sibling index if the caller already
 /// knows it (eg. from a traversal that tracks it), or leave at the default to
 /// have it looked up by walking up from node (see ldomNode::getDocFragmentIdx()).
@@ -2744,18 +2632,7 @@ LVFontRef getFont(ldomNode * node, css_style_rec_t * style, int documentId, int 
     // wght/ital are passed via the weight/italic params below, not here:
     // GetFont's computeVariations() derives those from weight/italic and
     // ignores requested.wght/requested.ital.
-    LVFontVariations variations;
-    // opsz in points. A user-set gRenderDPI approximates the screen DPI;
-    // the default (96) or "off" (0) doesn't, so use a fixed fallback.
-    if (rend_font_optical_size > 0)
-        variations.set(LVFONT_TAG_OPSZ, rend_font_optical_size);
-    else if (style->font_optical_sizing != css_fos_none) {
-        float opsz = gRenderDPI >= 100 ? sz * 72.0f / (float)gRenderDPI : OPSZ_FALLBACK_PT;
-        variations.set(LVFONT_TAG_OPSZ, opsz);
-    }
-    // font-width: selects among static width faces, and sets the wdth axis of variable ones.
-    if (style->font_width != css_fwd_normal)
-        variations.set(LVFONT_TAG_WDTH, style->font_width / 10.0f);
+    LVFontVariations variations = blaze::fontVariations(style, sz);
     if (docFragmentIdx == DOC_FRAGMENT_IDX_UNKNOWN)
         docFragmentIdx = (documentId != -1) ? node->getDocFragmentIdx() : -1;
     // koblaze: a font of the book that was not read is read now.
@@ -3725,7 +3602,7 @@ bool renderAsListStylePositionInside( const css_style_ref_t style, bool is_rtl=f
 static inline bool shouldApplyVerticalRlDefaultInterline( ldomNode *enode,
                                                            css_style_ref_t style )
 {
-    return resolveEffectiveWritingMode(enode) == css_wm_vertical_rl
+    return blaze::resolveEffectiveWritingMode(enode) == css_wm_vertical_rl
         && style->line_height.type == css_val_unspecified
         && style->line_height.value == css_generic_normal;
 }
@@ -3748,53 +3625,6 @@ static inline bool shouldApplyVerticalRlDefaultInterline( ldomNode *enode,
 // as is to the inline children elements: it is used to get the container width
 // for text-indent:NN%, paragraph direction (LTR/RTL/UNSET), and the height:NN%
 // base to keep in the formatter for measuring inline images.
-// Rendering and intrinsic box sizing must use the same prefix fonts and runs.
-static LVFontRef bionicFont(ldomNode *node, LVFontRef font, int length, int offset, bool legacy) {
-    if (!node->isEffectiveText()) return LVFontRef();
-    int mode = node->getDocument()->getProps()->getIntDef("kobalt.bionic.mode", 0);
-    auto *parent = node->getParentNode();
-    auto style = parent->getStyle();
-    if (!mode || legacy || offset || length >= 65536 || font->getWeight() >= 700
-        || style->font_family == css_ff_monospace || style->white_space >= css_ws_pre)
-        return LVFontRef();
-    for (auto *ancestor = parent; ancestor; ancestor = ancestor->getParentNode()) {
-        auto ancestorStyle = ancestor->getStyle();
-        int writing = ancestorStyle.isNull() ? css_wm_horizontal_tb : ancestorStyle->writing_mode;
-        if (ancestor->getNodeId() == el_math || ancestor->getNodeId() == el_ruby || ancestor->getNodeId() == el_code
-            || writing == css_wm_vertical_rl || writing == css_wm_vertical_lr)
-            return LVFontRef();
-    }
-    LVFontVariations variations;
-    if (rend_font_optical_size > 0)
-        variations.set(LVFONT_TAG_OPSZ, rend_font_optical_size);
-    else if (style->font_optical_sizing != css_fos_none) {
-        float opsz = gRenderDPI >= 100 ? font->getSize() * 72.0f / (float)gRenderDPI : OPSZ_FALLBACK_PT;
-        variations.set(LVFONT_TAG_OPSZ, opsz);
-    }
-    if (style->font_width != css_fwd_normal)
-        variations.set(LVFONT_TAG_WDTH, style->font_width / 10.0f);
-    return fontMan->GetFont(font->getSize(), 700,
-        style->font_style >= css_fs_italic, font->getFontFamily(), font->getTypeFace(), font->getFeatures(),
-        node->getDocument()->getFontContextDocIndex(), false,
-        variations.empty() ? NULL : &variations, node->getDocFragmentIdx());
-}
-static bool bionicContinuation(ldomNode *node) {
-    for (auto *before = node; before && before->getParentNode(); before = before->getParentNode()) {
-        auto *container = before->getParentNode();
-        if (before->getNodeIndex() > 0) {
-            auto *previous = container->getChildNode(before->getNodeIndex() - 1);
-            while (previous && previous->hasChildren()) previous = previous->getLastChild();
-            if (previous && previous->isEffectiveText()) {
-                auto text = previous->getEffectiveText();
-                return !text.empty() && lvBionicWord(text[text.length() - 1]);
-            }
-            return false;
-        }
-        if (container->getRendMethod() != erm_inline) break;
-    }
-    return false;
-}
-
 void renderFinalBlock( ldomNode * enode, LFormattedText * txform, RenderRectAccessor * fmt, lUInt32 & baseflags,
                        int indent, int line_h, TextLangCfg * lang_cfg, lUInt32 bgcolor, int valign_dy,
                        bool * is_link_start, lString32 running_bidi_ctrlchars )
@@ -4523,8 +4353,8 @@ void renderFinalBlock( ldomNode * enode, LFormattedText * txform, RenderRectAcce
                 && enode->getChildCount() == 0
                 && style->width.type != css_val_unspecified
                 && parent && parent->isElement() ) {
-            orthogonal_own_wm = resolveEffectiveWritingMode(enode);
-            orthogonal_parent_wm = resolveEffectiveWritingMode(parent);
+            orthogonal_own_wm = blaze::resolveEffectiveWritingMode(enode);
+            orthogonal_parent_wm = blaze::resolveEffectiveWritingMode(parent);
             is_orthogonal_spacer = css_wm_is_vertical(orthogonal_own_wm) != css_wm_is_vertical(orthogonal_parent_wm);
         }
         if ( is_orthogonal_spacer ) {
@@ -4554,7 +4384,7 @@ void renderFinalBlock( ldomNode * enode, LFormattedText * txform, RenderRectAcce
             // Even if an inset is present on a single side, emit both pads so
             // BiDi treats them as balanced parentheses and cannot separate
             // either one from its inline content.
-            CSSLogical L((css_writing_mode_t)resolveEffectiveWritingMode(enode));
+            CSSLogical L((css_writing_mode_t)blaze::resolveEffectiveWritingMode(enode));
             int margin_start = lengthToPx( enode, style->margin[L.marIS()], width );
             int border_start = measureBorder(enode, L.brdIS());
             int padding_start = lengthToPx( enode, style->padding[L.padIS()], width );
@@ -5198,9 +5028,9 @@ void renderFinalBlock( ldomNode * enode, LFormattedText * txform, RenderRectAcce
             // ignoring this single letter.
 
             if ( txt.length() > 0 ) {
-                LVFontRef emphasis = bionicFont(enode, font, txt.length(), textOffset, legacy_rendering);
+                LVFontRef emphasis = blaze::bionicFont(enode, font, txt.length(), textOffset, legacy_rendering);
                 if (!emphasis.isNull()) {
-                    auto runs = lvBionicRuns(txt.c_str(), txt.length(), bionicContinuation(enode));
+                    auto runs = lvBionicRuns(txt.c_str(), txt.length(), blaze::bionicContinuation(enode));
                     const lChar32 *retained = txform->RetainReadingText(txt);
                     for (auto run : runs) {
                         auto chosen = run.emphasized ? emphasis : font;
@@ -8520,7 +8350,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
     // Most EPUB child blocks inherit writing-mode from <body>.  Use the
     // cascaded mode so their physical box properties are mapped to the same
     // logical axes as their text and decorations.
-    CSSLogical L((css_writing_mode_t)resolveEffectiveWritingMode(enode));
+    CSSLogical L((css_writing_mode_t)blaze::resolveEffectiveWritingMode(enode));
     int border_left = measureBorder(enode, L.brdIS());
     int border_right = measureBorder(enode, L.brdIE());
     int padding_left   = lengthToPx( enode, style->padding[L.padIS()], container_width ) + border_left + DEBUG_TREE_DRAW;
@@ -8840,7 +8670,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
         }
         // (We could do the same fot height if in %, but it looks like Firefox
         // just ignore floats height in %, so let's ignore them too.)
-        CSSLogical child_axes((css_writing_mode_t)resolveEffectiveWritingMode(child));
+        CSSLogical child_axes((css_writing_mode_t)blaze::resolveEffectiveWritingMode(child));
         if ( ! BLOCK_RENDERING(flags, ALLOW_HORIZONTAL_BLOCK_OVERFLOW) ) {
             // Simplest way to avoid a float overflowing its floatBox is to
             // ensure no negative margins
@@ -10087,7 +9917,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                 if ( flow->isVertical() && auto_width ) {
                     int used_end = 0;
                     int text_line_count = 0;
-                    bool debug_vert_bg = shouldDebugForkVerticalBoxNode(enode);
+                    bool debug_vert_bg = blaze::shouldDebugForkVerticalBoxNode(enode);
                     int line_count = txform->GetLineCount();
                     for (int li = 0; li < line_count; li++) {
                         const formatted_line_t * line = txform->GetLineInfo(li);
@@ -10214,7 +10044,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                 if ( vert_eph_cap > 0 && txform->GetLineCount() == 1 ) {
                     const formatted_line_t * only_line = txform->GetLineInfo(0);
                     cap_vertical_single_image_block =
-                            isForkVerticalSingleImageLine(flow->isVertical(), txform, only_line)
+                            blaze::isForkVerticalSingleImageLine(flow->isVertical(), txform, only_line)
                             && final_h > vert_eph_cap;
                     if ( cap_vertical_single_image_block ) {
                         final_h = vert_eph_cap;
@@ -10285,92 +10115,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                 // We have lines of text in 'txform', that we should register
                 // into flow/context for later page splitting.
                 int count = txform->GetLineCount();
-                // Page-spacing eligibility is independent of horizontal alignment.
-                // Known decorations and captions may move as rigid groups. A
-                // floated initial anchors the whole opening prefix instead.
-                bool spacing_heading = false, spacing_figure = false, spacing_decoration = false;
-                ldomNode *opening = NULL, *spacing_group = NULL;
-                for (ldomNode *ancestor = enode; ancestor; ancestor = ancestor->getParentNode()) {
-                    if (!ancestor->isElement()) continue;
-                    // Element and attribute ids, not names: this runs for
-                    // every ancestor of every block of text.
-                    lUInt16 ancestor_id = ancestor->getNodeId();
-                    spacing_heading |= (ancestor_id >= el_h1 && ancestor_id <= el_h6) ||
-                        ancestor->getAttributeValue(attr_role) == U"heading";
-                    if (ancestor_id == el_figure) {
-                        spacing_figure = true;
-                        spacing_group = ancestor;
-                    }
-                    spacing_decoration |= ancestor->getAttributeValue(attr_aria_hidden) == U"true" &&
-                        ancestor->getText().trim().empty();
-                    if (ancestor_id == el_p && ancestor->hasAttribute(attr_HasFirstLetter)) {
-                        // Color, font and other inline first-letter styles need
-                        // no anchored prefix. Only an actual initial exclusion does.
-                        LVArray<ldomNode *> initials;
-                        initials.add(ancestor);
-                        for (int n=0; n<initials.length() && !opening; ++n) {
-                            ldomNode *node = initials[n];
-                            if (node->getEffectiveNodeId() == el_pseudoElem && node->hasEffectiveAttribute(attr_FirstLetter)) {
-                                css_style_ref_t initial = node->getStyle();
-                                if (!initial.isNull() && initial->display != css_d_none &&
-                                    (initial->float_ != css_f_none || hasAppliedInitialLetter(initial.get()))) opening = ancestor;
-                            }
-                            for (int c=0; c<node->getChildCount(); ++c) initials.add(node->getChildNode(c));
-                        }
-                    }
-                }
-                bool justify_prose = enode->getAttributeValue("data-kobalt-prose") == U"1";
-                bool justify_fixed = spacing_heading || spacing_figure || spacing_decoration || opening;
-                bool spacing_safe = !flow->isVertical() && (justify_prose || justify_fixed);
-                for (ldomNode *ancestor = enode; spacing_safe && ancestor; ancestor = ancestor->getParentNode()) {
-                    if (!ancestor->isElement()) continue;
-                    css_style_ref_t a = ancestor->getStyle();
-                    if (a.isNull()) continue;
-                    lUInt16 ancestor_id = ancestor->getNodeId();
-                    bool initial_float = opening && ancestor->getText().trim().length() <= 3 &&
-                        (ancestor_id == el_floatBox || ancestor_id == el_pseudoElem || ancestor_id == el_span);
-                    if (ancestor_id == el_table || ancestor_id == el_pre ||
-                        ancestor_id == el_li || ancestor_id == el_blockquote ||
-                        (a->white_space != css_ws_normal && a->white_space != css_ws_inherit && a->white_space != css_ws_nowrap) ||
-                        (a->float_ != css_f_none && !initial_float) || !a->background_image.empty() ||
-                        (a->background_color.type == css_val_color && !IS_COLOR_FULLY_TRANSPARENT(a->background_color.value)) ||
-                        (a->border_style_top != css_border_none && a->border_width[0].value > 0) ||
-                        (a->border_style_right != css_border_none && a->border_width[1].value > 0) ||
-                        (a->border_style_bottom != css_border_none && a->border_width[2].value > 0) ||
-                        (a->border_style_left != css_border_none && a->border_width[3].value > 0)) spacing_safe = false;
-                }
-                LVArray<ldomNode *> spacing_nodes;
-                if (spacing_safe) spacing_nodes.add(enode);
-                for (int n=0; spacing_safe && n<spacing_nodes.length(); ++n) {
-                    ldomNode *node=spacing_nodes[n];
-                    lUInt16 node_id = node->getNodeId(); // 0 for text
-                    if (node_id == el_br || node_id == el_code || node_id == el_math || node_id == el_ruby) {
-                        spacing_safe = false;
-                        break;
-                    }
-                    for (int c=0; c<node->getChildCount(); ++c) spacing_nodes.add(node->getChildNode(c));
-                }
-                // Record the whole figure's boundaries before page splitting.
-                // A figure split across columns must retain its authored layout.
-                ldomNode *group_first = NULL, *group_last = NULL;
-                if (spacing_group) {
-                    std::vector<ldomNode *> pending{spacing_group};
-                    while (!pending.empty()) {
-                        ldomNode *node = pending.back();
-                        pending.pop_back();
-                        if (node->getRendMethod() == erm_invisible) continue;
-                        if (node->getRendMethod() == erm_final) {
-                            if (!group_first) group_first = node;
-                            group_last = node;
-                        } else {
-                            for (int c=node->getChildCount()-1; c>=0; --c) {
-                                ldomNode *child = node->getChildNode(c);
-                                if (child->isElement()) pending.push_back(child);
-                            }
-                        }
-                    }
-                }
-                if (justify_fixed) justify_prose = false;
+                const blaze::BlockSpacing spacing(enode, flow->isVertical());
                 int orphans = (int)(style->orphans) - (int)(css_orphans_widows_1) + 1;
                 int widows = (int)(style->widows) - (int)(css_orphans_widows_1) + 1;
                 for (int i=0; i<count; i++) {
@@ -10419,10 +10164,10 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                     // don't inject another zero-height split carrier: that can
                     // become a real blank page before image-only fragments.
                     bool force_vertical_image_page =
-                            shouldStartForkVerticalImageLineOnFreshPage(flow->isVertical(), txform, line)
+                            blaze::shouldStartForkVerticalImageLineOnFreshPage(flow->isVertical(), txform, line)
                             && flow->hasSeenContentSincePageSplit()
                             && !flow->hasPendingForcedPageSplit();
-                    if ( force_vertical_image_page && shouldDebugForkVerticalBoxNode(enode) ) {
+                    if ( force_vertical_image_page && blaze::shouldDebugForkVerticalBoxNode(enode) ) {
                         fprintf(stderr,
                             "KO_DEBUG_VERT_BG page_line path=%s class=%s line_x=%d "
                             "line_y=%d line_width=%d line_height=%d word_flags=%u force_page=%d flags_before=%d\n",
@@ -10442,22 +10187,9 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
 
                     int lh = (vert_eph_cap > 0 && line->height > vert_eph_cap)
                         ? vert_eph_cap : line->height;
-                    bool spacing_line = spacing_safe && line->word_count > 0;
-                    if (!opening && (flow->hasFloatRunningAtY(flow->flowPos(), lh) ||
-                                     flow->hasCarriedInitialLetterAtY(flow->flowPos()))) spacing_line = false;
-                    for (int w=0; spacing_line && w<line->word_count; ++w) {
-                        if ((line->words[w].flags & LTEXT_WORD_IS_IMAGE) && !spacing_decoration && !spacing_figure)
-                            spacing_line = false;
-                        if ((line->words[w].flags & LTEXT_WORD_IS_INLINE_BOX) && !opening)
-                            spacing_line = false;
-                    }
-                    if (spacing_line) {
-                        if (justify_prose) line_flags |= RN_LINE_JUSTIFIABLE_TEXT;
-                        else line_flags |= RN_LINE_FIXED_SPACING;
-                        if (opening) line_flags |= RN_LINE_ANCHORED_SPACING;
-                    }
-                    if (enode == group_first && i == 0) line_flags |= RN_LINE_SPACING_GROUP_START;
-                    if (enode == group_last && i == count-1) line_flags |= RN_LINE_SPACING_GROUP_END;
+                    const bool beside_float = spacing.avoidsFloats() &&
+                        (flow->hasFloatRunningAtY(flow->flowPos(), lh) || flow->hasCarriedInitialLetterAtY(flow->flowPos()));
+                    line_flags |= spacing.lineFlags(*line, i, count, beside_float);
                     flow->addContentLine(lh, line_flags, line->baseline);
 
                     // See if there are links to footnotes in that line, and add
@@ -10685,426 +10417,6 @@ int renderBlockElement( LVRendPageContext & context, ldomNode * enode, int x, in
                                         direction, baseline, enode->getDocument()->getRenderBlockRenderingFlags() );
 }
 
-// === FORK (vertical-rl) =====================================================
-static int getVerticalInlineEndPadding(ldomNode *enode, RenderRectAccessor fmt)
-{
-    int padding_end = 0;
-    if ( RENDER_RECT_HAS_FLAG(fmt, INNER_FIELDS_SET) ) {
-        padding_end = fmt.getWidth() - fmt.getInnerX() - fmt.getInnerWidth();
-    }
-    else {
-        css_style_ref_t style = enode->getStyle();
-        CSSLogical DL((css_writing_mode_t)resolveEffectiveWritingMode(enode));
-        padding_end = lengthToPx( enode, style->padding[DL.padIE()], fmt.getWidth() )
-                + DEBUG_TREE_DRAW + measureBorder(enode, DL.brdIE());
-    }
-    return padding_end > 0 ? padding_end : 0;
-}
-
-// In vertical layout, RenderRectAccessor::width is the block-flow allocation
-// (screen width), while the inline extent is the page height used by the text
-// formatter.  For an auto-height block, CSS therefore makes its background
-// and borders span that inline extent.  Using fmt.width here made a centered
-// heading use the page height while its enclosing rectangle stopped at the
-// page width.
-static int getVerticalPaintedInlineSize(ldomNode *enode, RenderRectAccessor fmt,
-                                        int doc_x)
-{
-    if ( RENDER_RECT_HAS_FLAG(fmt, VERTICAL_USED_INLINE_SIZE_SET) ) {
-        int used_inline_size = fmt.getVerticalUsedInlineSize();
-        if ( used_inline_size > 0 )
-            return used_inline_size;
-    }
-    css_style_ref_t style = enode->getStyle();
-    if ( style->height.type == css_val_unspecified
-            && style->height.value == css_generic_auto ) {
-        int page_height = enode->getDocument()->getPageHeight();
-        int remaining_inline_size = page_height - doc_x;
-        if ( remaining_inline_size > 0 )
-            return remaining_inline_size;
-    }
-    return fmt.getWidth();
-}
-
-// DrawBorderVertical: draw a block's CSS borders in vertical-rl/lr writing mode.
-//
-// Upstream DrawBorder() draws straight to the buffer from the doc-space
-// (Y=X swapped) rect (x0+doc_x, y0+doc_y, fmt.getWidth/Height) without the
-// swap+mirror that LFormattedText::Draw applies to text.  In vertical mode that
-// misplaces block borders: e.g. a "border-top" comes out as a full-width
-// horizontal line near the page top instead of a short cap at the box's screen
-// top edge.  We map the doc-space border box to screen coordinates exactly as
-// initVerticalDrawSetup() maps text:
-//     screen_y = x0 + doc_x              (block's doc-X axis -> screen Y)
-//     screen_x = anchor - (y0 + doc_y)   (block's doc-Y axis -> screen X, mirrored)
-// with anchor = draw_extra_info->vert_column_clip_right (fallback clip.right).
-// So getHeight() (doc-Y extent) is the box's screen WIDTH and getWidth() its
-// screen HEIGHT.  CSS physical borders stay physical on screen (as browsers do).
-// Only solid borders are drawn precisely (FillRect per edge); other styles are
-// approximated as solid and border-radius corners are squared - acceptable for
-// vertical heading decorations in EPUBs. The caller dispatches vertical boxes here;
-// DrawBorder handles horizontal boxes.
-static void DrawBorderVertical(ldomNode *enode, LVDrawBuf & drawbuf,
-                               int x0, int y0, int doc_x, int doc_y, RenderRectAccessor fmt)
-{
-    css_style_ref_t style = enode->getStyle();
-    bool hasTop    = (style->border_style_top    >= css_border_solid);
-    bool hasRight  = (style->border_style_right  >= css_border_solid);
-    bool hasBottom = (style->border_style_bottom >= css_border_solid);
-    bool hasLeft   = (style->border_style_left   >= css_border_solid);
-
-    css_length_t bw;
-    bw = style->border_width[0]; hasTop    = hasTop    & !(bw.value==0 && bw.type>css_val_unspecified);
-    bw = style->border_width[1]; hasRight  = hasRight  & !(bw.value==0 && bw.type>css_val_unspecified);
-    bw = style->border_width[2]; hasBottom = hasBottom & !(bw.value==0 && bw.type>css_val_unspecified);
-    bw = style->border_width[3]; hasLeft   = hasLeft   & !(bw.value==0 && bw.type>css_val_unspecified);
-
-    lUInt32 colTop    = style->border_color[0].type != css_val_unspecified ? style->border_color[0].value : style->color.value;
-    lUInt32 colRight  = style->border_color[1].type != css_val_unspecified ? style->border_color[1].value : style->color.value;
-    lUInt32 colBottom = style->border_color[2].type != css_val_unspecified ? style->border_color[2].value : style->color.value;
-    lUInt32 colLeft   = style->border_color[3].type != css_val_unspecified ? style->border_color[3].value : style->color.value;
-    hasTop    = hasTop    & !IS_COLOR_FULLY_TRANSPARENT(colTop);
-    hasRight  = hasRight  & !IS_COLOR_FULLY_TRANSPARENT(colRight);
-    hasBottom = hasBottom & !IS_COLOR_FULLY_TRANSPARENT(colBottom);
-    hasLeft   = hasLeft   & !IS_COLOR_FULLY_TRANSPARENT(colLeft);
-
-    if ( !(hasTop || hasRight || hasBottom || hasLeft) )
-        return;
-
-    int wpct = 0; // % border widths are invalid, so this is unused
-    int twidth = lengthToPx(enode, style->border_width[0], wpct); if (twidth==0) twidth = DEFAULT_BORDER_WIDTH;
-    int rwidth = lengthToPx(enode, style->border_width[1], wpct); if (rwidth==0) rwidth = DEFAULT_BORDER_WIDTH;
-    int bwidth = lengthToPx(enode, style->border_width[2], wpct); if (bwidth==0) bwidth = DEFAULT_BORDER_WIDTH;
-    int lwidth = lengthToPx(enode, style->border_width[3], wpct); if (lwidth==0) lwidth = DEFAULT_BORDER_WIDTH;
-
-    lvRect clip;
-    drawbuf.GetClipRect(&clip);
-    draw_extra_info_t * dei = (draw_extra_info_t*)drawbuf.GetDrawExtraInfo();
-    int anchor = (dei && dei->vert_column_clip_right) ? dei->vert_column_clip_right : clip.right;
-
-    // The layout box supplies the block-direction extent.  Its separately
-    // tracked used inline extent supplies the screen height, so the border
-    // encloses the same rectangle as the background.
-    int screen_height = getVerticalPaintedInlineSize(enode, fmt, doc_x); // doc-X extent -> screen height
-    int screen_width = fmt.getHeight();  // doc-Y extent -> screen width
-    int screen_top    = x0 + doc_x;
-    int screen_bottom = screen_top + screen_height;
-    int screen_right  = anchor - (y0 + doc_y);
-    int screen_left   = screen_right - screen_width;
-
-    if ( shouldDebugForkVerticalBoxNode(enode) ) {
-        fprintf(stderr,
-            "KO_DEBUG_VERT_BG border path=%s class=%s fmt_width=%d fmt_height=%d "
-            "draw_width=%d doc=(%d,%d) screen=(%d,%d,%d,%d) borders=(%d,%d,%d,%d)\n",
-            LCSTR(ldomXPointer(enode, 0).toString()),
-            LCSTR(enode->getAttributeValue(attr_class)),
-            fmt.getWidth(), fmt.getHeight(), screen_height, doc_x, doc_y,
-            screen_left, screen_top, screen_right, screen_bottom,
-            twidth, rwidth, bwidth, lwidth);
-    }
-
-    if (hasTop)    drawbuf.FillRect(screen_left,          screen_top,            screen_right,         screen_top + twidth, colTop);
-    if (hasBottom) drawbuf.FillRect(screen_left,          screen_bottom - bwidth, screen_right,        screen_bottom,       colBottom);
-    if (hasRight)  drawbuf.FillRect(screen_right - rwidth, screen_top,           screen_right,         screen_bottom,       colRight);
-    if (hasLeft)   drawbuf.FillRect(screen_left,          screen_top,            screen_left + lwidth, screen_bottom,       colLeft);
-}
-
-static void DrawBackgroundColorVertical(LVDrawBuf & drawbuf, ldomNode *enode,
-                               int x0, int y0, int doc_x, int doc_y, RenderRectAccessor fmt, lUInt32 bg_color)
-{
-    lvRect clip;
-    drawbuf.GetClipRect(&clip);
-    draw_extra_info_t * dei = (draw_extra_info_t*)drawbuf.GetDrawExtraInfo();
-    int anchor = (dei && dei->vert_column_clip_right) ? dei->vert_column_clip_right : clip.right;
-
-    int screen_height = getVerticalPaintedInlineSize(enode, fmt, doc_x); // doc-X extent -> screen height
-    if ( shouldDebugForkVerticalBoxNode(enode) ) {
-        fprintf(stderr,
-            "KO_DEBUG_VERT_BG draw path=%s class=%s fmt_width=%d draw_width=%d fmt_height=%d "
-            "doc=(%d,%d) screen_top=%d screen_bottom=%d "
-            "padding_inline_end=%d\n",
-            LCSTR(ldomXPointer(enode, 0).toString()),
-            LCSTR(enode->getAttributeValue(attr_class)),
-            fmt.getWidth(), screen_height, fmt.getHeight(), doc_x, doc_y,
-            x0 + doc_x, x0 + doc_x + screen_height,
-            getVerticalInlineEndPadding(enode, fmt));
-    }
-    int screen_width = fmt.getHeight();  // doc-Y extent -> screen width
-    int screen_top    = x0 + doc_x;
-    int screen_bottom = screen_top + screen_height;
-    int screen_right  = anchor - (y0 + doc_y);
-    int screen_left   = screen_right - screen_width;
-
-    drawbuf.FillRect(screen_left, screen_top, screen_right, screen_bottom, bg_color);
-}
-// === END FORK ===============================================================
-
-static void DrawBackgroundImageVertical(ldomNode *enode, LVDrawBuf & drawbuf, int x0, int y0,
-                                       int doc_x, int doc_y, int width, int height,
-                                       bool clip_to_target)
-{
-    // The caller passes us the node's border box (fmt.getWidth()/getHeight()), for
-    // background-color's default background-clip: border-box. But background-position/-size
-    // resolve against the padding box (the default background-origin), so inset by the
-    // border width below -- see https://www.w3.org/TR/css-backgrounds-3/#the-background-origin
-    css_style_ref_t style=enode->getStyle();
-    if (!style->background_image.empty()) {
-        int leftBorderwidth = measureBorder(enode, 3);
-        int topBorderwidth = measureBorder(enode, 0);
-        int rightBorderwidth = measureBorder(enode, 1);
-        int bottomBorderwidth = measureBorder(enode, 2);
-        if (leftBorderwidth || topBorderwidth || rightBorderwidth || bottomBorderwidth) {
-            x0 += leftBorderwidth;
-            y0 += topBorderwidth;
-            width -= leftBorderwidth + rightBorderwidth;
-            height -= topBorderwidth + bottomBorderwidth;
-        }
-        // FORK (vertical-rl): regular element background images need the same
-        // doc-X/doc-Y to screen-Y/screen-X mapping as borders and background
-        // colors. Keep body/canvas background drawing on the legacy path.
-        // As with borders, background images on descendants must use their
-        // inherited writing mode, not just an explicitly declared value.
-        bool draw_vertical = clip_to_target
-            && css_wm_is_vertical(resolveEffectiveDrawWritingMode(enode, drawbuf));
-        int target_width = draw_vertical ? height : width;
-        int target_height = draw_vertical ? width : height;
-        if ( draw_vertical ) {
-            RenderRectAccessor fmt(enode);
-            target_height = getVerticalPaintedInlineSize(enode, fmt, doc_x);
-        }
-        lString32 filepath = lString32(style->background_image.c_str());
-        LVImageSourceRef img = enode->getParentNode()->getDocument()->getObjectImageSource(filepath);
-        if (img.isNull()) { // filepath may be url-encoded
-            img = enode->getParentNode()->getDocument()->getObjectImageSource(DecodeHTMLUrlString(filepath));
-        }
-        if (!img.isNull() && width > 0 && height > 0) {
-            // Raw, undecoded-transform pixel size of the image file
-            int native_img_w = img->GetWidth();
-            int native_img_h = img->GetHeight();
-            // Native image size, scaled according to gRenderDPI like getStyledImageSize()
-            // does for <img> elements.
-            int img_w = scaleForRenderDPI(native_img_w);
-            int img_h = scaleForRenderDPI(native_img_h);
-
-            // See if background-size specified and we need to adjust image native size
-            // (if both auto, use image native size)
-            css_length_t bg_w = style->background_size[0];
-            css_length_t bg_h = style->background_size[1];
-            if ( bg_w.type != css_val_unspecified || bg_w.value != css_generic_auto ||
-                 bg_h.type != css_val_unspecified || bg_h.value != css_generic_auto ) {
-                int new_w = 0;
-                int new_h = 0;
-                // Use the (already border-inset) padding box as the basis for percentage
-                // sizes and for cover/contain scaling.
-                int container_w = width;
-                int container_h = draw_vertical ? target_height : height;
-                bool check_lengths = true;
-                if ( bg_w.type == css_val_unspecified && bg_h.type == css_val_unspecified ) {
-                    if ( bg_w.value == css_generic_contain && bg_h.value == css_generic_contain ) {
-                        // Image should be fully contained in container (no crop)
-                        int scale_w = 1024 * container_w / img_w;
-                        int scale_h = 1024 * container_h / img_h;
-                        if ( scale_w < scale_h ) {
-                            new_w = container_w;
-                            new_h = img_h * scale_w / 1024;
-                        }
-                        else {
-                            new_h = container_h;
-                            new_w = img_w * scale_h / 1024;
-                        }
-                        check_lengths = false;
-                    }
-                    else if ( bg_w.value == css_generic_cover && bg_h.value == css_generic_cover ) {
-                        // Image should fully cover container (crop allowed)
-                        int scale_w = 1024 * container_w / img_w;
-                        int scale_h = 1024 * container_h / img_h;
-                        if ( scale_w > scale_h ) {
-                            new_w = container_w;
-                            new_h = img_h * scale_w / 1024;
-                        }
-                        else {
-                            new_h = container_h;
-                            new_w = img_w * scale_h / 1024;
-                        }
-                        check_lengths = false;
-                    }
-                }
-                if ( check_lengths ) {
-                    // These will compute to 0 if (css_val_unspecified, css_generic_auto) when really not specified
-                    new_w = lengthToPx(enode, style->background_size[0], container_w);
-                    new_h = lengthToPx(enode, style->background_size[1], container_h);
-                    if ( new_w == 0 ) {
-                        if ( new_h == 0 ) { // keep image native size
-                            new_h = img_h;
-                            new_w = img_w;
-                        }
-                        else { // use style height, keep aspect ratio
-                            new_w = img_w * new_h / img_h;
-                        }
-                    }
-                    else if ( new_h == 0 ) { // use style width, keep aspect ratio
-                        new_h = new_w * img_h / img_w;
-                    }
-                }
-                if ( new_w == 0 || new_h == 0 ) {
-                    // width or height computed to 0: nothing to draw
-                    return;
-                }
-                img_w = new_w;
-                img_h = new_h;
-            }
-            // Resize the decoded image to img_w x img_h if that doesn't match its
-            // native pixel size, whether because of background-size, of gRenderDPI
-            // scaling, or both (img_w/img_h above already account for either).
-            // Honor the same "Image Scaling" (smooth vs nearest-neighbor) setting
-            // used for normal <img> elements, so background-image scaling looks
-            // consistent with the rest of the page.
-            if ( img_w != native_img_w || img_h != native_img_h ) {
-                img = LVCreateStretchFilledTransform(img, img_w, img_h, IMG_TRANSFORM_STRETCH, IMG_TRANSFORM_STRETCH, 0, 0,
-                                                      drawbuf.getSmoothScalingImages());
-            }
-
-            // We can use some crengine facilities for background repetition and position,
-            // which has the advantage that img will be decoded once even if tiling it many
-            // times and if the target is many screen-heights long (like <BODY> could be).
-            // Unfortunaly, it does not everything well when not using IMG_TRANSFORM_TILE,
-            // as it would fill the not-drawn part of the target buffer with garbage,
-            // instead of letting it as is.
-            ImageTransform hori_transform = IMG_TRANSFORM_NONE;
-            ImageTransform vert_transform = IMG_TRANSFORM_NONE;
-            int transform_w = img_w;
-            int transform_h = img_h;
-            switch (style->background_repeat) {
-                case css_background_no_repeat:
-                case css_background_repeat_y:
-                    break;
-                case css_background_repeat_x:
-                case css_background_repeat:
-                default:
-                    // No need to tile if image is larger than target
-                    if ( target_width > img_w ) {
-                        hori_transform = IMG_TRANSFORM_TILE;
-                        transform_w = target_width;
-                    }
-                    break;
-            }
-            switch (style->background_repeat) {
-                case css_background_no_repeat:
-                case css_background_repeat_x:
-                    break;
-                case css_background_repeat_y:
-                case css_background_repeat:
-                default:
-                    // No need to tile if image is larger than target
-                    if ( target_height > img_h ) {
-                        vert_transform = IMG_TRANSFORM_TILE;
-                        transform_h = target_height;
-                    }
-                    break;
-            }
-            // Compute the position where to draw top left of image, as if
-            // it was a single image when no-repeat.
-            // Per spec, a <percentage> position is relative to the difference
-            // between the container and (possibly background-size resized)
-            // image sizes, while a <length> is a plain absolute offset.
-            css_length_t bg_pos_x = style->background_position[0];
-            css_length_t bg_pos_y = style->background_position[1];
-            int draw_x;
-            if ( bg_pos_x.type == css_val_percent )
-                draw_x = (target_width - img_w) * bg_pos_x.value / (100 * 256);
-            else
-                draw_x = lengthToPx(enode, bg_pos_x, target_width);
-            int draw_y;
-            if ( bg_pos_y.type == css_val_percent )
-                draw_y = (target_height - img_h) * bg_pos_y.value / (100 * 256);
-            else
-                draw_y = lengthToPx(enode, bg_pos_y, target_height);
-            // If tiling, we need to adjust the transform x/y (the offset
-            // in img, so, a value between 0 and img_w/h) to the point
-            // inside image that should be at top left of target area
-            int transform_x = 0;
-            int transform_y = 0;
-            if ( hori_transform == IMG_TRANSFORM_TILE && draw_x ) {
-                transform_x = (draw_x % img_w);
-                draw_x = 0;
-            }
-            if ( vert_transform == IMG_TRANSFORM_TILE && draw_y ) {
-                // Strangely, using the following instead of what we did for x/w
-                // gives the expected result (not investigated, might be
-                // a bug in LVStretchImgSource::OnLineDecoded() )
-                transform_y = img_h - (draw_y % img_h);
-                draw_y = 0;
-            }
-            // Ready to have crengine do all the work.
-            /* Looks like we don't need that:
-
-                // (Inspired from LVDocView::drawPageBackground(),
-                // we have to do it the complex way to avoid memory leaks
-                LVRef<LVColorDrawBuf> buf = LVRef<LVColorDrawBuf>( new LVColorDrawBuf(img_w, img_h, 32) );
-                buf->Draw(img, 0, 0, img_w, img_h, false); // (dither=false doesn't matter with a color buffer)
-                LVImageSourceRef src = LVCreateDrawBufImageSource(buf.get(), false);
-                LVImageSourceRef transformed = LVCreateStretchFilledTransform(src, transform_w, transform_h,
-
-              We can just transform the original image, which will work in its original
-              colorspace/depth, ensure alpha/transparency, and will be converted only
-              at the end to the final drawbuf bit depth.
-            */
-            LVImageSourceRef transformed = LVCreateStretchFilledTransform(img, transform_w, transform_h,
-                                               hori_transform, vert_transform, transform_x, transform_y);
-            int vertical_screen_left = 0;
-            int vertical_screen_top = 0;
-            int vertical_screen_right = 0;
-            int vertical_screen_bottom = 0;
-            if (draw_vertical) {
-                lvRect clip;
-                drawbuf.GetClipRect(&clip);
-                draw_extra_info_t * dei = (draw_extra_info_t*)drawbuf.GetDrawExtraInfo();
-                int anchor = (dei && dei->vert_column_clip_right) ? dei->vert_column_clip_right : clip.right;
-                vertical_screen_top = x0 + doc_x;
-                vertical_screen_bottom = vertical_screen_top + target_height;
-                vertical_screen_right = anchor - (y0 + doc_y);
-                vertical_screen_left = vertical_screen_right - height;
-            }
-            // We use the DrawBuf clip facility to ensure we don't draw outside this node fmt
-            lvRect orig_clip;
-            if (clip_to_target) {
-                drawbuf.GetClipRect( &orig_clip ); // Backup the original one
-                // Set a new one to the target area
-                lvRect target_clip;
-                if (draw_vertical) {
-                    target_clip = lvRect(vertical_screen_left, vertical_screen_top,
-                                         vertical_screen_right, vertical_screen_bottom);
-                }
-                else {
-                    target_clip = lvRect(x0+doc_x, y0+doc_y, x0+doc_x+target_width, y0+doc_y+target_height);
-                }
-                // But don't overflow the current clip, in case target spans multiple pages
-                if ( target_clip.left < orig_clip.left )
-                    target_clip.left = orig_clip.left;
-                if ( target_clip.right > orig_clip.right )
-                    target_clip.right = orig_clip.right;
-                if ( target_clip.top < orig_clip.top )
-                    target_clip.top = orig_clip.top;
-                if ( target_clip.bottom > orig_clip.bottom )
-                    target_clip.bottom = orig_clip.bottom;
-                drawbuf.SetClipRect( &target_clip );
-            }
-            // Draw
-            if (draw_vertical) {
-                drawbuf.Draw(transformed, vertical_screen_left+draw_x,
-                             vertical_screen_top+draw_y, transform_w, transform_h);
-            }
-            else {
-                drawbuf.Draw(transformed, x0+doc_x+draw_x, y0+doc_y+draw_y, transform_w, transform_h);
-            }
-            if (clip_to_target) {
-                drawbuf.SetClipRect( &orig_clip ); // Restore the original one
-            }
-        }
-    }
-}
-
-
 //=======================================================================
 // Draw document
 //=======================================================================
@@ -11242,15 +10554,15 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * enode, int x0, int y0, int dx
                 else {
                     // Regular element: draw bgcolor or image inside its border box
                     if ( draw_bg_color ) {
-                        if ( css_wm_is_vertical(resolveEffectiveDrawWritingMode(enode, drawbuf)) )
-                            DrawBackgroundColorVertical(drawbuf, enode, x0, y0, doc_x, doc_y, fmt, bg_color);
+                        if ( css_wm_is_vertical(blaze::resolveEffectiveDrawWritingMode(enode, drawbuf)) )
+                            blaze::DrawBackgroundColorVertical(drawbuf, enode, x0, y0, doc_x, doc_y, fmt, bg_color, DEBUG_TREE_DRAW);
                         else
                             FillBackgroundRect(drawbuf, enode, style, fmt, x0 + doc_x, y0 + doc_y, bg_color);
                     }
                     if ( draw_bg_image ) {
-                        if ( css_wm_is_vertical(resolveEffectiveDrawWritingMode(enode, drawbuf)) )
-                            DrawBackgroundImageVertical(enode, drawbuf, x0, y0, doc_x, doc_y,
-                                                    fmt.getWidth(), fmt.getHeight(), true);
+                        if ( css_wm_is_vertical(blaze::resolveEffectiveDrawWritingMode(enode, drawbuf)) )
+                            blaze::DrawBackgroundImageVertical(enode, drawbuf, x0, y0, doc_x, doc_y,
+                                                    fmt.getWidth(), fmt.getHeight());
                         else
                             DrawBackgroundImage(enode, drawbuf, x0, y0, doc_x, doc_y, fmt.getWidth(), fmt.getHeight());
                         // (Commented identical calls below as they seem redundant with what was just done here)
@@ -11317,8 +10629,8 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * enode, int x0, int y0, int dx
                 // rendered by Firefox (they are rendered only when border-collapse, when
                 // they did collapse to the cell, and made out the cell border)
                 if ( !isTableRowLike && !isHidden && !skip_initial_borders ) {
-                    if ( css_wm_is_vertical(resolveEffectiveDrawWritingMode(enode, drawbuf)) )
-                        DrawBorderVertical(enode, drawbuf, x0, y0, doc_x, doc_y, fmt);
+                    if ( css_wm_is_vertical(blaze::resolveEffectiveDrawWritingMode(enode, drawbuf)) )
+                        blaze::DrawBorderVertical(enode, drawbuf, x0, y0, doc_x, doc_y, fmt);
                     else
                         DrawBorder(enode, drawbuf, x0, y0, doc_x, doc_y, fmt);
                 }
@@ -11372,7 +10684,7 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * enode, int x0, int y0, int dx
                     }
                     int list_marker_width;
                     renderListItemMarker( enode, list_marker_width, NULL, txform.get(), txt_flags);
-                    int marker_writing_mode = resolveEffectiveWritingMode(enode);
+                    int marker_writing_mode = blaze::resolveEffectiveWritingMode(enode);
                     lvrend_record_list_marker_diag(
                         css_wm_is_vertical(marker_writing_mode));
                     /*
@@ -11524,8 +10836,8 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * enode, int x0, int y0, int dx
                 // the border (some glyphs like 'J' at start or 'f' at end may be drawn
                 // outside the text content box).
                 if ( !isHidden && !skip_initial_borders ) {
-                    if ( css_wm_is_vertical(resolveEffectiveDrawWritingMode(enode, drawbuf)) )
-                        DrawBorderVertical(enode, drawbuf, x0, y0, doc_x, doc_y, fmt);
+                    if ( css_wm_is_vertical(blaze::resolveEffectiveDrawWritingMode(enode, drawbuf)) )
+                        blaze::DrawBorderVertical(enode, drawbuf, x0, y0, doc_x, doc_y, fmt);
                     else
                         DrawBorder(enode, drawbuf, x0, y0, doc_x, doc_y, fmt);
                 }
@@ -11546,7 +10858,7 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * enode, int x0, int y0, int dx
                     // Note: this computation is wrong for paddings in %, as they should
                     // apply against the parent container width, not this block width.
                     bool draw_padding_bg = true; //( enode->getRendMethod()==erm_final );
-                    CSSLogical DL((css_writing_mode_t)resolveEffectiveWritingMode(enode));
+                    CSSLogical DL((css_writing_mode_t)blaze::resolveEffectiveWritingMode(enode));
                     padding_left = !draw_padding_bg ? 0 : lengthToPx( enode, style->padding[DL.padIS()], width ) + DEBUG_TREE_DRAW+measureBorder(enode,DL.brdIS());
                     int padding_right = !draw_padding_bg ? 0 : lengthToPx( enode, style->padding[DL.padIE()], width ) + DEBUG_TREE_DRAW+measureBorder(enode,DL.brdIE());
                     padding_top = !draw_padding_bg ? 0 : lengthToPx( enode, style->padding[DL.padBS()], width ) + DEBUG_TREE_DRAW+measureBorder(enode,DL.brdBS());
@@ -11578,7 +10890,7 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * enode, int x0, int y0, int dx
                     }
                     int list_marker_width;
                     renderListItemMarker( enode, list_marker_width, NULL, txform.get(), txt_flags);
-                    int marker_writing_mode = resolveEffectiveWritingMode(enode);
+                    int marker_writing_mode = blaze::resolveEffectiveWritingMode(enode);
                     lvrend_record_list_marker_diag(
                         css_wm_is_vertical(marker_writing_mode));
                     /*
@@ -11617,7 +10929,7 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * enode, int x0, int y0, int dx
                         // In legacy mode, getAbsRect( ..., inner=true) did not have
                         // the inner geometry stored in fmt and computed. We need
                         // to correct it with paddings:
-                        CSSLogical DL((css_writing_mode_t)resolveEffectiveWritingMode(enode));
+                        CSSLogical DL((css_writing_mode_t)blaze::resolveEffectiveWritingMode(enode));
                         int padding_left = measureBorder(enode, DL.brdIS())
                             + lengthToPx(enode, enode->getStyle()->padding[DL.padIS()], rc.width());
                         int padding_right = measureBorder(enode, DL.brdIE())
@@ -11637,8 +10949,8 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * enode, int x0, int y0, int dx
                     }
                     int draw_x = doc_x+x0 + padding_left;
                     int draw_y = doc_y+y0 + padding_top;
-                    if ( shouldDebugForkVerticalBoxNode(enode)
-                            && css_wm_is_vertical(resolveEffectiveWritingMode(enode)) ) {
+                    if ( blaze::shouldDebugForkVerticalBoxNode(enode)
+                            && css_wm_is_vertical(blaze::resolveEffectiveWritingMode(enode)) ) {
                         LVInkMeasurementDrawBuf ink_buf(false, true, 1000000);
                         txform->Draw(&ink_buf, 0, 0, NULL, NULL);
                         lvRect ink_rect;
@@ -13013,7 +12325,7 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
             }
             // Account for any margin/border/padding around this inline node (no break
             // allowed between left/right pads and their followup/preceeding content)
-            CSSLogical L((css_writing_mode_t)resolveEffectiveWritingMode(node));
+            CSSLogical L((css_writing_mode_t)blaze::resolveEffectiveWritingMode(node));
             int pad_left  = lengthToPx( node, style->margin[L.marIS()], 0 )
                 + measureBorder(node, L.brdIS()) + lengthToPx( node, style->padding[L.padIS()], 0 );
             int pad_right = lengthToPx( node, style->margin[L.marIE()], 0 )
@@ -13543,7 +12855,7 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
 
         // These are logical inline-start/end insets.  Their historical names
         // are kept because this function returns the layout inline size.
-        CSSLogical L((css_writing_mode_t)resolveEffectiveWritingMode(node));
+        CSSLogical L((css_writing_mode_t)blaze::resolveEffectiveWritingMode(node));
         int padLeft = 0; // these will include padding, border and margin
         int padRight = 0;
         // For % values, we need to reverse-apply them as a whole.
@@ -13823,10 +13135,10 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
         lbCtx.lbpLang = lang_cfg->getLBProps();
         lb_process_next_char(&lbCtx, (utf32_t)(*txt));
         #endif
-        LVFontRef emphasis = bionicFont(node, font, text.length(), start,
+        LVFontRef emphasis = blaze::bionicFont(node, font, text.length(), start,
             !BLOCK_RENDERING_N(node, ENHANCED));
         auto runs = emphasis.isNull() ? std::vector<LVBionicRun>()
-            : lvBionicRuns(txt, text.length(), bionicContinuation(node));
+            : lvBionicRuns(txt, text.length(), blaze::bionicContinuation(node));
         while (true) {
             int chunk_len = len > MAX_TEXT_CHUNK_SIZE ? MAX_TEXT_CHUNK_SIZE : len;
             int chars_measured = 0;

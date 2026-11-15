@@ -589,29 +589,6 @@ void LVDocView::requestRender() {
 	m_doc->clearRendBlockCache();
 }
 
-bool LVDocView::swapLayout() {
-    if (!m_doc || !m_doc->swapLayout(&m_pages))
-        return false;
-    m_section_bounds_valid = false;
-    _posIsSet = false;
-    clearImageCache();
-    return true;
-}
-
-bool LVDocView::koblazeSaveLayout() {
-    return m_doc && m_is_rendered && m_doc->koblazeSaveLayout();
-}
-
-bool LVDocView::koblazeRestoreLayout() {
-    if (!m_doc || !m_doc->koblazeRestoreLayout(&m_pages))
-        return false;
-    m_section_bounds_valid = false;
-    _posIsSet = false;
-    clearImageCache();
-    m_is_rendered = true;
-    return true;
-}
-
 /// render document, if not rendered
 void LVDocView::checkRender() {
 	if (!m_is_rendered) {

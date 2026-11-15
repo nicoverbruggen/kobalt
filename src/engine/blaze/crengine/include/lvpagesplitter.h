@@ -232,67 +232,11 @@ public:
     int justificationProseLines = 0;
     int justificationProseHeight = 0;
     int justificationPrefix = 0;
-    void clearJustification() {
-        justificationLines.clear();
-        justificationGaps.clear();
-        justificationProseLines = justificationProseHeight = justificationPrefix = 0;
-    }
-    int justificationExtra(int available) const {
-        int count = justificationLines.length(), gaps = justificationGaps.length();
-        if (!count || !gaps || justificationProseLines < 6 || footnotes.length() ||
-            (flags & RN_PAGE_KEEP_VERTICAL_SPACING)) return 0;
-        int extra = available - justificationLines[count-1].y;
-        int average = justificationProseHeight / justificationProseLines;
-        return extra > 0 && extra <= available / 8 && extra <= gaps * average / 8 ? extra : 0;
-    }
-    int centeringOffset(int available) const {
-        if (!justificationLines.length() || !justificationProseLines || footnotes.length() || available <= justificationPrefix) return 0;
-        int first = 0;
-        while (first < justificationLines.length() && justificationLines[first].x < justificationPrefix) ++first;
-        if (first == justificationLines.length()) return 0;
-        int top = justificationLines[first].x;
-        int occupied = justificationLines[justificationLines.length()-1].y - top;
-        int room = available - justificationPrefix;
-        if (occupied > room || occupied * 10 < room * 9) return 0;
-        int offset = (room - occupied) / 2 - (top - justificationPrefix);
-        // An opening float stays attached to its paragraph. Do not pull the
-        // following text into the protected prefix or its authored margin.
-        return justificationPrefix && offset < 0 ? 0 : offset;
-    }
-    int justificationOffset(int y, int available, int mode, bool bottom=false) const {
-        if (bottom) --y;
-        if (y < justificationPrefix) return 0;
-        if (mode == 2) return centeringOffset(available);
-        int extra = justificationExtra(available);
-        if (!extra) return 0;
-        int lo=0, hi=justificationGaps.length();
-        while (lo < hi) {
-            int mid=(lo+hi)/2;
-            if (justificationGaps[mid] <= y) lo=mid+1;
-            else hi=mid;
-        }
-        return extra * lo / justificationGaps.length();
-    }
-    int justificationSourceY(int y, int available, int mode, bool pull) const {
-        if (mode == 2) {
-            if (y < justificationPrefix) return y;
-            int offset = centeringOffset(available);
-            if (justificationPrefix && y < justificationPrefix + offset)
-                return pull ? justificationPrefix : -1;
-            return y - offset;
-        }
-        int extra = justificationExtra(available);
-        if (!extra) return y;
-        int previous = 0;
-        for (int i=0; i<justificationGaps.length(); ++i) {
-            int offset = extra * (i+1) / justificationGaps.length();
-            int edge = justificationGaps[i];
-            if (y < edge + previous) return y - previous;
-            if (y < edge + offset) return pull ? edge : -1;
-            previous = offset;
-        }
-        return y - previous;
-    }
+    void clearJustification();
+    int justificationExtra(int available) const;
+    int centeringOffset(int available) const;
+    int justificationOffset(int y, int available, int mode, bool bottom=false) const;
+    int justificationSourceY(int y, int available, int mode, bool pull) const;
     int start; /// start of page
 
     int index;  /// index of page
@@ -628,6 +572,7 @@ class LVRendPageContext
     }
 
     void split();
+    void collectJustificationLines();
 public:
 
 

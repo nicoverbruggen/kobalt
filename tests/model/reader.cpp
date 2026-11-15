@@ -884,6 +884,27 @@ static void checkObfuscatedFonts()
         expectedPreview = hash(preview.image(0));
     }
 
+    // Two books can store different fonts at the same path with the same size.
+    {
+        QFile otherFont(
+                kobalt::test::readerAssets().file("fonts/ebook-core/NV_Bitter-Regular.ttf"));
+        require(otherFont.open(QIODevice::ReadOnly), "open second publisher font");
+        const auto other = otherFont.readAll();
+        const auto size = qMax(original.size(), other.size());
+        const auto render = [&](const QByteArray &bytes) {
+            kobalt::EngineDocument reader(kobalt::test::readerFonts());
+            require(reader.open(book(bytes.leftJustified(size, '\0'), {}, "test-identifier"),
+                                QSize(800, 1000), {}, &error),
+                    qPrintable(error));
+            require(reader.embeddedFontCount() == 1 && reader.style(32, 120, "", 36),
+                    "register the current book's publisher font");
+            return hash(reader.image(0));
+        };
+        require(render(original) == expected, "padding the font changed the reference page");
+        require(render(other) != expected, "the second book used the first book's font");
+        require(render(original) == expected, "reopening the first book used the second font");
+    }
+
     struct FontCase
     {
         QByteArray algorithm, identifier, extraIdentifiers, key;

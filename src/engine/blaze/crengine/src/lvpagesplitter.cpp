@@ -1403,74 +1403,7 @@ void LVRendPageContext::split()
                       vert_split_page_h > 0 ? vert_split_page_h : split_page_h,
                       page_h);
     s.splitToPages();
-    LVArray<int> unsuitable_pages;
-    LVArray<int> previous_prose;
-    for (int i=0; i<page_list->length(); ++i) { unsuitable_pages.add(0); previous_prose.add(0); }
-    // Retain text boxes while split lines still exist. Unknown content disables
-    // filling for its entire page. Footnotes and forced endings retain their spacing.
-    int spacing_group_page = -1;
-    for (int i=0; i<lines.length(); ++i) {
-        LVRendLineInfo *line = lines[i];
-        if ((line->flags & RN_SPLIT_FOOT_NOTE) || line->getHeight() <= 0) continue;
-        int lo=0, hi=page_list->length();
-        while (lo < hi) {
-            int mid=(lo+hi)/2;
-            if ((*page_list)[mid]->start + (*page_list)[mid]->height <= line->getStart()) lo=mid+1;
-            else hi=mid;
-        }
-        if (lo >= page_list->length()) continue;
-        LVRendPageInfo *page=(*page_list)[lo];
-        if (line->flags & RN_LINE_SPACING_GROUP_START) spacing_group_page = lo;
-        if (spacing_group_page >= 0 && spacing_group_page != lo) {
-            for (int p=spacing_group_page; p<=lo; ++p) {
-                unsuitable_pages[p] = 1;
-                (*page_list)[p]->flags |= RN_PAGE_KEEP_VERTICAL_SPACING;
-                (*page_list)[p]->clearJustification();
-            }
-        }
-        if (line->flags & RN_LINE_SPACING_GROUP_END) spacing_group_page = -1;
-        if (line->getEnd() > page->start + page->height) {
-            // An oversized object may span several engine pages. None of its
-            // fragments may acquire a map made only from neighbouring prose.
-            for (int p=lo; p<page_list->length() && (*page_list)[p]->start < line->getEnd(); ++p) {
-                unsuitable_pages[p] = 1;
-                (*page_list)[p]->flags |= RN_PAGE_KEEP_VERTICAL_SPACING;
-                (*page_list)[p]->clearJustification();
-            }
-        }
-        if (unsuitable_pages[lo]) continue;
-        if (line->flags & RN_LINE_WHITESPACE) continue;
-        bool anchored = (line->flags & RN_LINE_ANCHORED_SPACING) != 0;
-        bool prose = (line->flags & RN_LINE_JUSTIFIABLE_TEXT) != 0;
-        bool fixed = (line->flags & RN_LINE_FIXED_SPACING) != 0;
-        if ((!prose && !fixed) || line->getStart() < page->start ||
-            line->getEnd() > page->start + page->height ||
-            (page->justificationLines.length() && line->getStart()-page->start < page->justificationLines[page->justificationLines.length()-1].y &&
-             !anchored && line->getStart()-page->start >= page->justificationPrefix)) {
-            page->flags |= RN_PAGE_KEEP_VERTICAL_SPACING;
-            unsuitable_pages[lo] = 1;
-            page->clearJustification();
-            continue;
-        }
-        int top = line->getStart()-page->start, bottom = line->getEnd()-page->start;
-        if (anchored) {
-            page->justificationPrefix = bottom > page->justificationPrefix ? bottom : page->justificationPrefix;
-            page->justificationGaps.clear();
-            page->justificationProseLines = page->justificationProseHeight = 0;
-        }
-        if (top < page->justificationPrefix) prose = false;
-        if (prose) {
-            if (previous_prose[lo]) page->justificationGaps.add(top);
-            ++page->justificationProseLines;
-            page->justificationProseHeight += bottom-top;
-        }
-        previous_prose[lo] = prose;
-        int count = page->justificationLines.length();
-        if (count && top < page->justificationLines[count-1].y) {
-            if (bottom > page->justificationLines[count-1].y) page->justificationLines[count-1].y = bottom;
-        } else page->justificationLines.add(lvPoint(top, bottom));
-    }
-
+    collectJustificationLines();
     page_list->setHasMixedWritingModes( has_mixed_writing_modes );
 
 #else

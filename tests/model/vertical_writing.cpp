@@ -2,6 +2,7 @@
 #include "check.h"
 #include "engine/blaze/adapter/engine_document.h"
 #include <QGuiApplication>
+#include <QBuffer>
 #include <QColor>
 #include <cstdio>
 #include "engine/blaze/extensions/vertical/lvfntman_vert_buffer.h"
@@ -143,6 +144,61 @@ int main(int argc, char **argv)
         EngineDocument mixed(test::readerFonts());
         require(open(mixed, &error), qPrintable(error));
         require(!ink(mixed.image(0)).isEmpty(), "Inline mixed content rendered an empty page");
+    }
+    // Use an inherited writing mode on the decorated paragraph. Its background
+    // image belongs inside its painted column, including when the column is on the right.
+    QImage tile(8, 8, QImage::Format_RGB32);
+    tile.fill(Qt::black);
+    for (int y = 0; y < tile.height(); ++y)
+        tile.setPixelColor(0, y, Qt::white);
+    QBuffer png;
+    require(png.open(QIODevice::WriteOnly) && tile.save(&png, "PNG"), "Encode background tile");
+    data["tile.png"] = png.data();
+    data["book.opf"].replace("</manifest>",
+                             "<item id='tile' href='tile.png' media-type='image/png'/></manifest>");
+    for (const auto *mode : { "vertical-rl", "vertical-lr" }) {
+        QImage pages[4];
+        for (int variant = 0; variant < 4; ++variant) {
+            auto content = chapter(mode);
+            QByteArray rule = "p{border:3px solid black;background-color:";
+            rule += variant ? "#bbb;" : "white;";
+            if (variant == 2)
+                rule += "background-image:url(tile.png);background-repeat:no-repeat;"
+                        "background-position:50% 50%;";
+            if (variant == 3)
+                rule += "background-image:url(tile.png);background-repeat:repeat-y;"
+                        "background-size:8px 5%;background-position:50% 25%;";
+            content.replace("</style>", rule + "}</style>");
+            data["v.xhtml"] = content;
+            EngineDocument decorated(test::readerFonts());
+            require(open(decorated, &error), qPrintable(error));
+            pages[variant] = decorated.image(0);
+            require(!pages[variant].isNull(), "Cannot draw a decorated vertical box");
+            if (argc > 1)
+                require(pages[variant].save(QStringLiteral("%1/%2-box-%3.png")
+                                                    .arg(QString::fromLocal8Bit(argv[1]),
+                                                         QString::fromLatin1(mode))
+                                                    .arg(variant)),
+                        "Save vertical box capture");
+        }
+        const auto border = ink(pages[0]);
+        QRect fill, image, repeated;
+        for (int y = 0; y < pages[0].height(); ++y) {
+            for (int x = 0; x < pages[0].width(); ++x) {
+                if (pages[0].pixel(x, y) != pages[1].pixel(x, y))
+                    fill = fill.united(QRect(x, y, 1, 1));
+                if (pages[1].pixel(x, y) != pages[2].pixel(x, y))
+                    image = image.united(QRect(x, y, 1, 1));
+                if (pages[1].pixel(x, y) != pages[3].pixel(x, y))
+                    repeated = repeated.united(QRect(x, y, 1, 1));
+            }
+        }
+        require(fill.height() > 3 * fill.width() && border.contains(fill) && border != fill,
+                "The vertical background fill left its border");
+        require(image.width() > 1 && image.height() > 1 && fill.contains(image),
+                "The vertical background image left its filled column");
+        require(repeated.height() > 2 * image.height() && repeated.width() <= fill.width(),
+                "The vertical background tile did not repeat down the column");
     }
     // Combined decorations must equal the union of each separate stroke,
     // including an overline that continues through a nested underline span.

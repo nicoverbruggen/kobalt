@@ -36,6 +36,7 @@
 #include "../include/fb2def.h"
 #include "../include/lvrend.h"
 #include "../include/drawutil.h"
+#include "../../extensions/vertical/vertical_boxes.h"
 
 inline int myMax(int a, int b) { return a > b ? a : b; }
 inline int myMin(int a, int b) { return a < b ? a : b; }
@@ -1677,7 +1678,8 @@ void FillBackgroundRect(LVDrawBuf & drawbuf, ldomNode * enode, css_style_ref_t s
         drawbuf.FillRect(abs_x0, abs_y0, x1, y1, bg_color);
 }
 
-void DrawBackgroundImage(ldomNode *enode,LVDrawBuf & drawbuf,int x0,int y0,int doc_x,int doc_y, int width, int height, bool clip_to_target)
+static void drawBackgroundImage(ldomNode *enode, LVDrawBuf &drawbuf, int x0, int y0, int doc_x, int doc_y,
+                                int width, int height, bool clip_to_target, bool vertical)
 {
     // The caller passes us the node's border box (fmt.getWidth()/getHeight()), for
     // background-color's default background-clip: border-box. But background-position/-size
@@ -1706,6 +1708,17 @@ void DrawBackgroundImage(ldomNode *enode,LVDrawBuf & drawbuf,int x0,int y0,int d
             img = enode->getParentNode()->getDocument()->getObjectImageSource(DecodeHTMLUrlString(filepath));
         }
         if (!img.isNull() && width > 0 && height > 0) {
+            // CSS percentage widths use the logical padding box. Image positions
+            // and repeats use the painted box, which is rotated on a vertical page.
+            const int sizing_width = width;
+            if (vertical) {
+                const lvRect box = blaze::verticalBackgroundImageRect(enode, drawbuf, x0, y0, doc_x, doc_y, height);
+                x0 = box.left;
+                y0 = box.top;
+                doc_x = doc_y = 0;
+                width = box.width();
+                height = box.height();
+            }
             // Raw, undecoded-transform pixel size of the image file
             int native_img_w = img->GetWidth();
             int native_img_h = img->GetHeight();
@@ -1724,7 +1737,7 @@ void DrawBackgroundImage(ldomNode *enode,LVDrawBuf & drawbuf,int x0,int y0,int d
                 int new_h = 0;
                 // Use the (already border-inset) padding box as the basis for percentage
                 // sizes and for cover/contain scaling.
-                int container_w = width;
+                int container_w = sizing_width;
                 int container_h = height;
                 bool check_lengths = true;
                 if ( bg_w.type == css_val_unspecified && bg_h.type == css_val_unspecified ) {
@@ -1883,7 +1896,7 @@ void DrawBackgroundImage(ldomNode *enode,LVDrawBuf & drawbuf,int x0,int y0,int d
             // When the border box has a border-radius, clip to its rounded padding-box
             // shape instead of the plain rectangle.
             int rx[4]={0,0,0,0}, ry[4]={0,0,0,0};
-            bool rounded = clip_to_target && computeBorderRadiiPx(enode, style.get(), borderBoxX1 - borderBoxX0, borderBoxY1 - borderBoxY0, rx, ry);
+            bool rounded = clip_to_target && !vertical && computeBorderRadiiPx(enode, style.get(), borderBoxX1 - borderBoxX0, borderBoxY1 - borderBoxY0, rx, ry);
             lvRect orig_clip;
             if (clip_to_target)
                 drawbuf.GetClipRect( &orig_clip ); // Backup the original one
@@ -1891,6 +1904,10 @@ void DrawBackgroundImage(ldomNode *enode,LVDrawBuf & drawbuf,int x0,int y0,int d
                 if (clip_to_target) {
                     // Set a new one to the target area
                     lvRect target_clip = lvRect(x0+doc_x, y0+doc_y, x0+doc_x+width, y0+doc_y+height);
+                    if (vertical) { // Adjacent pages can share the same draw buffer.
+                        if (target_clip.left < orig_clip.left) target_clip.left = orig_clip.left;
+                        if (target_clip.right > orig_clip.right) target_clip.right = orig_clip.right;
+                    }
                     // But don't overflow page top and bottom, in case target spans multiple pages
                     if ( target_clip.top < orig_clip.top )
                         target_clip.top = orig_clip.top;
@@ -1950,6 +1967,17 @@ void DrawBackgroundImage(ldomNode *enode,LVDrawBuf & drawbuf,int x0,int y0,int d
             }
         }
     }
+}
+
+void DrawBackgroundImage(ldomNode *enode,LVDrawBuf & drawbuf,int x0,int y0,int doc_x,int doc_y, int width, int height, bool clip_to_target)
+{
+    drawBackgroundImage(enode, drawbuf, x0, y0, doc_x, doc_y, width, height, clip_to_target, false);
+}
+
+void blaze::DrawBackgroundImageVertical(ldomNode *enode, LVDrawBuf &drawbuf, int x0, int y0,
+                                        int doc_x, int doc_y, int width, int height)
+{
+    drawBackgroundImage(enode, drawbuf, x0, y0, doc_x, doc_y, width, height, true, true);
 }
 
 void DrawBodyBackground( LVDrawBuf & drawbuf, bool draw_bg_color, bool draw_bg_image, ldomNode * enode, int x0, int y0, int dx, int dy, int doc_x, int doc_y)

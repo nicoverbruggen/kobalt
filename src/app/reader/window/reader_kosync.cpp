@@ -13,6 +13,13 @@ QByteArray Reader::kosyncDocument() const
     return kosyncClient->filenameMatching() ? session->syncFilenameDigest() : session->syncDigest();
 }
 
+double Reader::kosyncPercentage() const
+{
+    if (session->state().contains("book_fraction"))
+        return session->progressFraction();
+    return session->pages() > 1 ? double(session->page()) / (session->pages() - 1) : 0;
+}
+
 void Reader::kosyncStatus(const QString &message)
 {
     kosyncMessage = message;
@@ -40,12 +47,7 @@ void Reader::buildKosync()
                 Coordinator::Context state;
                 state.document = kosyncDocument();
                 state.local.position = session->state().value("position").toString();
-                // With only a part of the book laid out, the page numbers
-                // are those of the part. The percentage is of the whole book.
-                state.local.percentage = session->state().contains("book_fraction")
-                        ? session->progressFraction()
-                        : session->pages() > 1 ? double(session->page()) / (session->pages() - 1)
-                                               : 0;
+                state.local.percentage = kosyncPercentage();
                 state.metadata = { session->syncFilename(), session->title().trimmed(),
                                    session->author().trimmed() };
                 const bool hidden =

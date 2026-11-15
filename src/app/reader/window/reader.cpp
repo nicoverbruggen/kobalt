@@ -145,8 +145,7 @@ void Reader::checkpoint()
             auto job = kosyncClient->deferredAccount();
             job["document"] = QString::fromLatin1(kosyncDocument());
             job["progress"] = session->state().value("position").toString();
-            job["percentage"] =
-                    session->pages() > 1 ? double(session->page()) / (session->pages() - 1) : 0;
+            job["percentage"] = kosyncPercentage();
             job["baseline"] = syncCoordinator->deferredBaseline();
             job["device"] = kosyncClient->deviceName();
             if (kosyncClient->sendMetadata())

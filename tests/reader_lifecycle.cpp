@@ -7176,9 +7176,11 @@ private slots:
     {
         QTest::addColumn<bool>("automatic");
         QTest::addColumn<bool>("signedIn");
-        QTest::newRow("automatic") << true << true;
-        QTest::newRow("manual") << false << true;
-        QTest::newRow("signed-out") << true << false;
+        QTest::addColumn<bool>("chapter");
+        QTest::newRow("automatic") << true << true << false;
+        QTest::newRow("automatic-chapter") << true << true << true;
+        QTest::newRow("manual") << false << true << false;
+        QTest::newRow("signed-out") << true << false << false;
     }
 
     // Pause hands off saved progress and reconciliation evidence only for an automatic account.
@@ -7186,6 +7188,9 @@ private slots:
     {
         QFETCH(bool, automatic);
         QFETCH(bool, signedIn);
+        QFETCH(bool, chapter);
+        renderingMode::setOverride(chapter ? 1 : 0);
+        const auto restoreMode = qScopeGuard([] { renderingMode::setOverride(-1); });
         const auto paths = testPaths();
         if (signedIn)
             QVERIFY(storage::writeJson(paths.syncAccount(),
@@ -7221,8 +7226,16 @@ private slots:
         QTRY_VERIFY(host.window()->readyForPresentation());
         host.window()->checkpoint();
         QVERIFY(queued.isEmpty());
-        QVERIFY(host.session()->go(1));
-        QTRY_VERIFY(!host.session()->busy());
+        for (int turn = 0; turn < 4; ++turn) {
+            QVERIFY(host.session()->turn(1));
+            QTRY_VERIFY(!host.session()->busy());
+        }
+        const auto frame = host.session()->state();
+        QCOMPARE(frame.contains("book_fraction"), chapter);
+        const double local = double(host.session()->page()) / qMax(1, host.session()->pages() - 1);
+        const double percentage = chapter ? frame.value("book_fraction").toDouble() : local;
+        if (chapter)
+            QVERIFY(local != percentage);
         const auto position = host.session()->state().value("position").toString();
         suspended = true;
         host.window()->checkpoint();
@@ -7232,6 +7245,7 @@ private slots:
         }
         QCOMPARE(queued.value("progress").toString(), position);
         QCOMPARE(persisted, position);
+        QCOMPARE(queued.value("percentage").toDouble(-1), percentage);
         QCOMPARE(queued.value("account_path").toString(), paths.syncAccount());
         QCOMPARE(queued.value("account").toObject().value("key_sha256").toString().size(), 64);
         QVERIFY(!queued.contains("key"));

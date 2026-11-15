@@ -353,6 +353,7 @@ private:
     void updateKosyncToolbar();
     void synchronizeKosync(bool interactive = false);
     QByteArray kosyncDocument() const;
+    double kosyncPercentage() const;
     void prepareKosyncPresentation(std::function<void(bool)> finished);
     // The Wi-Fi power saver runs as the last step before the reader takes
     // input, and at sleep after the sleep sync. At opening it applies only

@@ -1,9 +1,8 @@
 Blaze
 =====
 
-Blaze is an experimental fork of CREngine for use with Kobalt. It is the
-rendering engine of the Kobalt reader. It is not a general-purpose library
-and it is not meant to be used outside this repository.
+Blaze is Kobalt's EPUB rendering engine. It is a hard fork of KOReader's
+CREngine. Kobalt builds and maintains Blaze in this repository.
 
 CREngine is the e-book rendering library of CoolReader 3. Blaze starts from
 the CREngine that KOReader maintains (https://github.com/koreader/crengine,
@@ -16,8 +15,8 @@ Folders
 -------
 
 crengine   The library: the CREngine sources and headers, with the Blaze
-           changes. Changes that belong to Blaze are marked with KOBLAZE
-           in the code; crengine/include/koblaze.h lists them.
+           changes. crengine/include/koblaze.h declares the hooks for
+           chapter layout, shaping and cancellation.
 adapter    The Kobalt side: the code that drives the library for the
            reader (opening a book, pages, links, search, positions).
 data       The default style sheets of the engine, and the list of names

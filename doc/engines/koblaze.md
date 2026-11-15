@@ -1,6 +1,6 @@
-# Koblaze source
+# Blaze source and provenance
 
-Kobalt owns the engine source in `src/engine/blaze`. It is an ordinary source directory, not a submodule or a link to another checkout. Desktop, Kobo and Android builds use this directory. Kobalt’s adapter lives in `src/engine/blaze/adapter`; the imported library retains its upstream directory structure beside it. Engine objects stay in each platform build directory; the shared dependency cache supplies the external libraries.
+Blaze is Kobalt’s rendering engine, a hard fork of KOReader’s CREngine. Kobalt maintains it in `src/engine/blaze`. It is an ordinary source directory, not a submodule or a link to another checkout. Desktop, Kobo and Android builds use this directory. Kobalt’s adapter lives in `src/engine/blaze/adapter`; the imported library retains its upstream directory structure beside it. Engine objects stay in each platform build directory; the shared dependency cache supplies the external libraries.
 
 The initial import is the library portion of the local koblaze fork at `6d3946edf08ef69afe19a3c457b88af126ae64aa`, based on `koreader/crengine` commit `4ce1aed17e9d7852e047e0b9b0bf6a637486fd97`. These are the same source bytes used by the preceding Mac and Qt5 test builds. The original checkout and its Git history remain separate and unchanged. The import copies source files, not Git history.
 
@@ -9,6 +9,14 @@ The import holds the library sources and headers, the image scaler, the default 
 The engine knows a fixed list of hyphenation pattern names. `src/engine/blaze/data/hyphenation-patterns.txt` holds that list. The pattern files themselves are not part of the engine source: Kobalt ships its own selection from `assets/hyph`.
 
 Preserve the GPLv2 notice in `src/engine/blaze/README.TXT`, the license text in `src/engine/blaze/COPYING`, the image-scaler license, and the copyright headers. Make engine changes in the imported source. The former `dependencies/crengine-patches.txt` series and its patch files are retained in Git history. Their changes are integrated into this source; builds do not apply a second engine patch stack.
+
+## Bringing in upstream changes
+
+Compare the upstream change with the recorded KOReader base. In `crengine/`, keep upstream file names, indentation and declaration style. Kobalt’s [.clang-format-ignore](../../.clang-format-ignore) excludes these files. Format the adapter under `adapter/` with Kobalt’s Qt style.
+
+For a change to text layout, check both `lvtextfm.cpp` and `lvtextfm_vert.cpp`. The first includes the second in the same translation unit. In `lvfntman.cpp`, check the Blaze word-shaping paths as well as the original HarfBuzz path. Changes to block layout or the DOM also need testing with a chapter window and a complete document. Use the [layout regressions](../validation/layout.md) to compare them.
+
+## Cache compatibility
 
 Moving the same source into this repository does not change parsed-book or rendering cache formats. Later parser, preprocessing, shaping or layout changes must follow [Storage compatibility](../storage.md).
 

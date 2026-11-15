@@ -249,7 +249,7 @@
 "library.folder_unavailable" = "This folder cannot be read. Add it again to give Kobalt access.";
 
 /* about */
-"about.description" = "An alternative EPUB reader with a CREngine renderer and a Qt reading interface, with a focus on speed and an excellent user experience.";
+"about.description" = "An EPUB reader with a Qt interface, powered by Blaze, Kobalt’s fork of CREngine.";
 /* Arguments: %1, %2 */
 "about.version" = "Version %1 (Qt%2)";
 

@@ -1,4 +1,4 @@
-# Builds the repository-owned koblaze source for every platform. The shared
+# Builds the Blaze source for every platform. The shared
 # dependency cache supplies its libraries; engine objects stay in this
 # worktree so changing engine source rebuilds only the affected objects.
 include(ExternalProject)
@@ -11,7 +11,7 @@ function(kobalt_local_engine)
     if(NOT EXISTS "${engine}/crengine/include/lvdocview.h")
         message(FATAL_ERROR "Missing repository engine source: ${engine}")
     endif()
-    message(STATUS "CREngine: repository source ${engine}")
+    message(STATUS "Blaze: repository source ${engine}")
 
     find_program(KOBALT_HOST_PKG_CONFIG pkg-config NO_CMAKE_FIND_ROOT_PATH REQUIRED)
     # Keep the generated-header directory in sync with the include-path filter

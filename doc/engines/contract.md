@@ -212,7 +212,7 @@ A layout cache key contains the content revision, the engine name and version, t
 
 ### Feature classes
 
-This is a proposal from what Kobalt does today. The entries marked with a question are in [Decisions for the user](../engines.md#decisions-for-the-user).
+This is a proposal from what Kobalt does today. The entries marked with a question are from the original design discussion.
 
 | Class | Features |
 | --- | --- |

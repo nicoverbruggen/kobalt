@@ -2,7 +2,7 @@
   <img src="assets/kobalt.svg" alt="Kobalt" width="320" height="208">
 </p>
 
-**Kobalt is an alternative EPUB reader with a CREngine renderer and a Qt reading interface, with a focus on speed and an excellent user experience.**
+**Kobalt is an EPUB reader with a Qt reading interface. Its rendering engine is [Blaze](doc/engines.md), Kobalt’s hard fork of CREngine.**
 
 The reader app is its own thing, and as such is planned to be ported to various platforms. On Android, it runs as a standalone app, and on Kobo it runs somewhat integrated into Kobo's own OS.
 
@@ -90,6 +90,6 @@ For a complete list, please check out [the acknowledgements](doc/acknowledgement
 
 Like KOReader, this project is available under an open source license.
 
-Kobalt's own source code uses the MIT license in [LICENSE](LICENSE). CREngine patches use GNU GPL v2 or later, and Qt patches use Qt's licenses. Third-party code and assets retain their own licenses and notices in `assets/notices/` and `platforms/kobo/toolchains/nickelhook-qt6/`.
+Kobalt's own source code uses the MIT license in [LICENSE](LICENSE). Blaze and its changes to CREngine use GNU GPL v2 or later, and Qt patches use Qt's licenses. Third-party code and assets retain their own licenses and notices in `assets/notices/` and `platforms/kobo/toolchains/nickelhook-qt6/`.
 
 The combined package includes GPL and AGPL code and is distributed under GNU AGPL v3, without warranty. Binary releases include the corresponding source and dependency sources.

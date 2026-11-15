@@ -59,9 +59,9 @@
   },
   {
     "group": "engine",
-    "name": "CREngine",
-    "version": "KOReader fork, 4ce1aed17e9d",
-    "description": "Book layout and rendering. Based on Cool Reader by Vadim Lopatin and contributions from the KOReader community. Includes vertical writing from m-tky/crengine at 6a56ffa0f1afc95e9e5463c5ca6584f57022d047 and the rotated-text buffer fix from 86d3ffb73b46, plus local rendering changes.",
+    "name": "Blaze (CREngine)",
+    "version": "Based on KOReader CREngine 4ce1aed17e9d",
+    "description": "Blaze is Kobalt’s hard fork of KOReader’s CREngine, based on Cool Reader by Vadim Lopatin and contributions from the KOReader community. Includes vertical writing from m-tky/crengine at 6a56ffa0f1afc95e9e5463c5ca6584f57022d047 and the rotated-text buffer fix from 86d3ffb73b46, plus local rendering changes.",
     "license": "GNU GPL v2 or later",
     "url": "https://github.com/koreader/crengine",
     "notices": [

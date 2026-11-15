@@ -341,7 +341,7 @@ public:
     virtual QJsonObject state() const = 0;
 };
 
-// The engine that reads books: CREngine.
+// Creates the Blaze adapter used by the reader.
 std::unique_ptr<Engine> createEngine(EngineFontInputs fonts);
 
 // 1 opens the books that follow in chapter mode and 0 opens them as a whole.

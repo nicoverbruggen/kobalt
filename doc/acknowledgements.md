@@ -8,7 +8,7 @@ This list covers the Kobo, Android and macOS reader builds, adapted source, bund
 
 | Project | Authors and contributors | Use in Kobalt | Notices |
 | --- | --- | --- | --- |
-| [CREngine, KOReader fork](https://github.com/koreader/crengine) | Vadim Lopatin, original Cool Reader author, and the KOReader contributors. | EPUB parsing, layout, rendering, MathML and default book styles. | [CREngine](../assets/notices/CREngine-GPL-2) |
+| [CREngine, KOReader fork](https://github.com/koreader/crengine) | Vadim Lopatin, original Cool Reader author, and the KOReader contributors. | Blaze is Kobalt’s hard fork of this library. It inherits EPUB parsing, layout, rendering, MathML and default book styles. | [CREngine](../assets/notices/CREngine-GPL-2) |
 | [KOReader-base](https://github.com/koreader/koreader-base) | The KOReader contributors. | LunaSVG extensions for SVG text and images. | [AGPL](../assets/notices/AGPL-3) |
 | [Qt](https://www.qt.io/) | The Qt Company and the Qt contributors. | Interface controls, graphics, networking, sensors and database access. Kobo builds use the device's Qt libraries. Android bundles Qt 6.11.3. | [LGPL](../assets/notices/Qt-LGPL-3), [GPL](../assets/notices/Qt-GPL-3), [Android third-party notices](../assets/notices/Qt-Android-Third-Party) |
 | [LLVM C++ runtime](https://libcxx.llvm.org/) | The LLVM Project contributors. | Android NDK 27.2.12479018 supplies libc++, libc++abi and libunwind. | [Apache License 2.0 with LLVM exceptions and legacy notices](../assets/notices/Android-Cxx-Runtime) |
@@ -35,7 +35,7 @@ Kobalt's independent footnote matcher follows the popup detection rules develope
 
 | Project | Authors and contributors | Use in Kobalt | Notices |
 | --- | --- | --- | --- |
-| [m-tky/crengine](https://github.com/m-tky/crengine/tree/6a56ffa0f1afc95e9e5463c5ca6584f57022d047) | m-tky, with the original CREngine and KOReader contributors. | Vertical writing changes integrated into Kobalt's CREngine fork, including the [rotated-run buffer safety fix](https://github.com/m-tky/crengine/commit/86d3ffb73b460b88374265a4524d65b20e605442). | [CREngine](../assets/notices/CREngine-GPL-2) |
+| [m-tky/crengine](https://github.com/m-tky/crengine/tree/6a56ffa0f1afc95e9e5463c5ca6584f57022d047) | m-tky, with the original CREngine and KOReader contributors. | Vertical writing changes integrated into Blaze, including the [rotated-run buffer safety fix](https://github.com/m-tky/crengine/commit/86d3ffb73b460b88374265a4524d65b20e605442). | [CREngine](../assets/notices/CREngine-GPL-2) |
 | [Qt image scaling in CREngine](https://github.com/koreader/crengine) | Daniel M. Duley, Carsten Haitzler and the Qt, Imlib2 and CREngine contributors. | Image interpolation derived from Qt and Imlib2. | [Qt and Imlib2](../assets/notices/Qt-image-scaling) |
 | [NickelHook](https://github.com/pgaskin/NickelHook) | Patrick Gaskin and contributors; Qt6 adaptation by Nico Verbruggen. | Mod loading, hooks and crash recovery. Kobalt includes an adapted Qt6 port. | [NickelHook](../assets/notices/NickelHook), [port license](../platforms/kobo/toolchains/nickelhook-qt6/LICENSE) |
 | [NickelRotate](https://github.com/nicoverbruggen/NickelRotate) | Nico Verbruggen, with NickelHook by Patrick Gaskin. | Firmware 4 Clara touch orientation correction. | [NickelRotate](../assets/notices/NickelRotate-MIT) |

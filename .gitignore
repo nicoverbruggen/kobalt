@@ -2,6 +2,7 @@
 /platforms/*/CMakeUserPresets.json
 /.cache/
 /.claude/
+/vendor/
 /worktrees/
 __pycache__/
 *.py[cod]

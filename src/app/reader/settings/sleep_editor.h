@@ -2,6 +2,7 @@
 #include "reading/sleep_screen.h"
 #include "ui/controls/panels.h"
 
+#include <QCache>
 #include <QHash>
 #include <QImage>
 #include <QSet>
@@ -90,7 +91,8 @@ private:
     bool powerOff_ = false;
     QImage cover_, page_, overlay_;
     QStringList wallpapers_;
-    QHash<QString, QImage> wallpaperImages_;
+    // Keep the two screen previews while the reader switches between them.
+    QCache<QString, QImage> wallpaperImages_{ 2 };
     QSet<QString> wallpaperRequests_;
     QHash<int, sleep::Place> moved_;
     SleepEditorPreview *preview_ = nullptr;

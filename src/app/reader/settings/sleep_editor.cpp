@@ -444,9 +444,8 @@ QImage SleepEditor::wallpaper()
     const auto &current = layer();
     if (current.backdrop != sleep::Mode::Wallpaper || setup_.arrange)
         return {};
-    const auto found = wallpaperImages_.constFind(current.wallpaper);
-    if (found != wallpaperImages_.constEnd())
-        return *found;
+    if (const auto *image = wallpaperImages_.object(current.wallpaper))
+        return *image;
     if (!wallpaperRequests_.contains(current.wallpaper) && wallpaperWanted) {
         wallpaperRequests_.insert(current.wallpaper);
         wallpaperWanted(current.wallpaper);
@@ -519,7 +518,8 @@ void SleepEditor::setWallpapers(const QStringList &names)
 
 void SleepEditor::setWallpaper(const QString &name, const QImage &image)
 {
-    wallpaperImages_.insert(name, image);
+    wallpaperRequests_.remove(name);
+    wallpaperImages_.insert(name, new QImage(image));
     preview_->update();
 }
 } // namespace kobalt::reader

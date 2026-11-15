@@ -1,3 +1,4 @@
+#include "app/reader/settings/sleep_editor.h"
 #include "app/reader/views/annotation_exporter.h"
 #include "app/reader/panels/search_panel.h"
 #include <QVariant>
@@ -6046,6 +6047,14 @@ private slots:
         QVERIFY(editor);
         // Done kept the decoded cover, so it shows at once.
         QVERIFY(showsCover(editor));
+        auto *customEditor = dynamic_cast<reader::SleepEditor *>(editor);
+        QVERIFY(customEditor);
+        QImage first(16, 16, QImage::Format_RGB32);
+        customEditor->setWallpaper("first", first);
+        QVERIFY(!first.isDetached());
+        customEditor->setWallpaper("second", QImage());
+        customEditor->setWallpaper("third", QImage());
+        QVERIFY(first.isDetached());
     }
 
     void sleepGreetingEditor()

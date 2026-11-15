@@ -3,6 +3,7 @@
 #include "reading/reading_activity.h"
 #include "reading/reading_progress.h"
 #include "support/strings.h"
+#include "ui/style/styles.h"
 #include <QDateTime>
 #include <QUrl>
 
@@ -77,6 +78,64 @@ void Reader::loadActivity()
             });
 }
 
+// Hiding keeps the book's time and only takes it out of the lists, so it
+// needs no confirmation. Both changes are written on the profile writer.
+void Reader::hideActivityBook(const QString &key, bool hidden)
+{
+    if (!activityRecords || !book)
+        return;
+    QPointer<Reader> guard(this);
+    activityRecords->hide(key, hidden, [guard](bool) {
+        if (guard)
+            guard->loadActivity();
+    });
+}
+
+void Reader::deleteActivityBook(const QString &key, const QString &title)
+{
+    if (!activityRecords || !book || key == wordsBook())
+        return;
+    auto *choice = new ui::ChoiceModal(
+            this,
+            { strings::get("activity.delete_detail").arg(title),
+              strings::get("activity.delete_title"),
+              {} },
+            { strings::get("common.cancel"), "rrActivityKeepBook" },
+            { strings::get("activity.delete_confirm"), "rrActivityConfirmDelete" });
+    choice->setObjectName("rrActivityDelete");
+    choice->setDimmed(true);
+    choice->setGeometry(rect());
+    ui::readerStyle(choice->descriptionLabel(),
+                    ui::styles::font(ui::metrics::chrome::descriptionText)
+                            + "color:palette(placeholder-text);");
+    QPointer<ui::ChoiceModal> modal(choice);
+    QPointer<Reader> guard(this);
+    const auto finish = [modal, guard, key](bool remove) {
+        if (!modal)
+            return;
+        modal->hide();
+        modal->deleteLater();
+        if (!remove || !guard || !guard->activityRecords || !guard->book)
+            return;
+        if (guard->activityView)
+            guard->activityView->closeBook();
+        guard->activityRecords->remove(key, guard->book->readingOpeningId(), [guard](bool) {
+            if (guard)
+                guard->loadActivity();
+        });
+    };
+    connect(choice->secondaryButton(), &QPushButton::clicked, choice, [finish] { finish(false); });
+    connect(choice->primaryButton(), &QPushButton::clicked, choice, [finish] { finish(true); });
+    choice->dismissed = [finish] { finish(false); };
+    choice->card()->fitToWidth(qMin<int>(ui::metrics::notice::cardWidth,
+                                         width() - 2 * ui::metrics::notice::sideClearance));
+    choice->centerCard();
+    prepareRefresh(choice);
+    choice->show();
+    choice->raise();
+    refresh();
+}
+
 void Reader::openActivity()
 {
     if (activityView || !book || !book->tracksReadingHistory())
@@ -85,6 +144,13 @@ void Reader::openActivity()
     activityView = new ActivityView(this);
     activityView->setGeometry(textPresetGalleryBounds());
     activityView->closed = [this] { closeActivity(); };
+    activityView->setCurrentBook(wordsBook());
+    activityView->hideRequested = [this](const QString &key, bool hidden) {
+        hideActivityBook(key, hidden);
+    };
+    activityView->deleteRequested = [this](const QString &key, const QString &title) {
+        deleteActivityBook(key, title);
+    };
     activityView->bookRequested = [this](const QString &key) { mapActivityBook(key); };
     activityView->coversRequested = [this](const QVector<activity::BookTotal> &books, QSize size) {
         loadActivityCovers(books, size);

@@ -71,8 +71,11 @@ struct Summary
     int sessions = 0, daysRead = 0, daysSince = 0;
     int finished = 0, inProgress = 0, books = 0, booksThisMonth = 0;
     int words = 0, wordsThisWeek = 0;
-    // Newest month first.
+    // Newest month first. Hidden books are left out of the lists; their time
+    // still counts everywhere else.
     QVector<MonthBooks> months;
+    // The hidden books with their totals, most recently read first.
+    QVector<BookTotal> hiddenBooks;
     // Active milliseconds by local hour of the day, 0 to 23.
     QVector<qint64> hours;
     // The longest single session and the day with the most reading.

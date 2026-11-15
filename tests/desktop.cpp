@@ -1757,10 +1757,9 @@ void activityTour(Fixture &fixture, const Scene &scene, const Pages &pages)
     QTRY_VERIFY(fixture.visible("rrActivityCalendar"));
     QCOMPARE(labelText(fixture, "rrActivityLongestFigure"), QString("31"));
     QVERIFY(scene("stats-activity-calendar"));
+    // The Calendar stays on October through the reload below.
     QVERIFY(fixture.press("rrActivityMonthsPrevious"));
     QTRY_COMPARE(labelText(fixture, "rrActivityMonthTotalCaption"), QString("October"));
-    QVERIFY(fixture.press("rrActivityMonthsNext"));
-    QTRY_COMPARE(labelText(fixture, "rrActivityMonthTotalCaption"), QString("This month"));
     QVERIFY(fixture.press("rrActivityRecordsTab"));
     QTRY_VERIFY(fixture.visible("rrActivityRecords"));
     QVERIFY(scene("stats-activity-records"));
@@ -1788,8 +1787,55 @@ void activityTour(Fixture &fixture, const Scene &scene, const Pages &pages)
     QTRY_VERIFY(fixture.visible("rrActivityBookPage"));
     QVERIFY(fixture.visible("rrActivityBack"));
     QVERIFY(scene("stats-activity-book"));
+    // Deleting asks first; cancelling keeps the book.
+    QVERIFY(fixture.visible("rrActivityDeleteBook"));
+    QVERIFY(fixture.press("rrActivityDeleteBook"));
+    QTRY_VERIFY(fixture.visible("rrActivityDelete"));
+    QVERIFY(scene("stats-activity-delete"));
+    QVERIFY(fixture.press("rrActivityKeepBook"));
+    QTRY_VERIFY(!fixture.visible("rrActivityDelete"));
+    QVERIFY(fixture.visible("rrActivityBookPage"));
+    // Hiding takes the book out of Books and into its own list.
+    auto *hide = qobject_cast<QAbstractButton *>(fixture.widget("rrActivityHideBook"));
+    QVERIFY(hide && !hide->isChecked());
+    QVERIFY(fixture.press("rrActivityHideBook"));
+    QTRY_VERIFY(hide->isChecked());
     QVERIFY(fixture.press("rrActivityBack"));
     QTRY_VERIFY(fixture.visible("rrActivityBooks"));
+    QTRY_VERIFY(fixture.widget("rrActivityBook1")->accessibleName() != "War and Peace");
+    while (fixture.widget("rrActivityBooksNext")->isVisible()
+           && fixture.widget("rrActivityBooksNext")->isEnabled())
+        QVERIFY(fixture.press("rrActivityBooksNext"));
+    QTRY_VERIFY(fixture.visible("rrActivityHiddenBooks"));
+    const auto lastPage = labelText(fixture, "rrActivityBooksPage");
+    QVERIFY(!lastPage.startsWith("1 of"));
+    QVERIFY(fixture.press("rrActivityHiddenBooks"));
+    QTRY_VERIFY(fixture.visible("rrActivityHidden"));
+    QCOMPARE(fixture.widget("rrActivityHiddenBook1")->accessibleName(), QString("War and Peace"));
+    QTRY_COMPARE(fixture.widget("rrActivityHidden")->property("activity_covers_pending").toInt(),
+                 0);
+    QVERIFY(scene("stats-activity-hidden"));
+    // Shown again, the book returns and the empty list closes.
+    QVERIFY(fixture.press("rrActivityHiddenBook1"));
+    QTRY_VERIFY(fixture.visible("rrActivityBookPage"));
+    QVERIFY(fixture.press("rrActivityHideBook"));
+    QTRY_VERIFY(!hide->isChecked());
+    QVERIFY(fixture.press("rrActivityBack"));
+    QTRY_VERIFY(fixture.visible("rrActivityBooks"));
+    // Books stays on the page that was shown, and the Calendar on its month;
+    // the book is back on the first page.
+    QVERIFY(!fixture.visible("rrActivityHiddenBooks"));
+    QVERIFY(!labelText(fixture, "rrActivityBooksPage").startsWith("1 of"));
+    QVERIFY(fixture.press("rrActivityCalendarTab"));
+    QTRY_COMPARE(labelText(fixture, "rrActivityMonthTotalCaption"), QString("October"));
+    QVERIFY(fixture.press("rrActivityMonthsNext"));
+    QTRY_COMPARE(labelText(fixture, "rrActivityMonthTotalCaption"), QString("This month"));
+    QVERIFY(fixture.press("rrActivityBooksTab"));
+    QTRY_VERIFY(fixture.visible("rrActivityBooks"));
+    while (fixture.widget("rrActivityBooksPrevious")->isVisible()
+           && fixture.widget("rrActivityBooksPrevious")->isEnabled())
+        QVERIFY(fixture.press("rrActivityBooksPrevious"));
+    QTRY_COMPARE(fixture.widget("rrActivityBook1")->accessibleName(), QString("War and Peace"));
     // The open book's page maps its sessions into the current layout. Its row
     // can be on a later page on smaller screens.
     QByteArray open;
@@ -1813,6 +1859,9 @@ void activityTour(Fixture &fixture, const Scene &scene, const Pages &pages)
                         ->text()
                         .startsWith("PROGRESS"));
     QVERIFY(scene("stats-activity-open-book"));
+    // The open book's activity is still being written, so it has no delete.
+    QVERIFY(fixture.visible("rrActivityHideBook"));
+    QVERIFY(!fixture.visible("rrActivityDeleteBook"));
     QVERIFY(fixture.press("rrActivityClose"));
     QTRY_VERIFY(!fixture.visible("rrActivity"));
     QVERIFY(fixture.visible("rrChapterGraph"));
@@ -11740,6 +11789,56 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         activityTour(
                 fixture, [](const QString &) { return true; },
                 [](const QString &, const char *) {});
+    }
+
+    // Deleting a book's activity removes it from Books and its time from the
+    // totals once confirmed.
+    void activityDelete()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        openPrologueBody(fixture);
+        const auto position = fixture.state().value("position").toString();
+        seedActivity(fixture, position, position);
+        if (QTest::currentTestFailed())
+            return;
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavStats"));
+        QVERIFY(fixture.press("rrNavStats"));
+        QTRY_VERIFY(fixture.visible("rrGraphActivity") || fixture.visible("rrGraphActivityCell"));
+        QVERIFY(fixture.press(fixture.visible("rrGraphActivity") ? "rrGraphActivity"
+                                                                 : "rrGraphActivityCell"));
+        QTRY_VERIFY(fixture.visible("rrActivityWelcome"));
+        QVERIFY(fixture.press("rrActivityWelcomeClose"));
+        QTRY_VERIFY(fixture.visible("rrActivityOverview"));
+        const auto hours = labelText(fixture, "rrActivityReadingFigure");
+        QVERIFY(fixture.press("rrActivityBooksTab"));
+        QTRY_VERIFY(fixture.visible("rrActivityBooks"));
+        QCOMPARE(fixture.widget("rrActivityBook1")->accessibleName(), QString("War and Peace"));
+        QVERIFY(fixture.press("rrActivityBook1"));
+        QTRY_VERIFY(fixture.visible("rrActivityBookPage"));
+        QVERIFY(fixture.press("rrActivityDeleteBook"));
+        QTRY_VERIFY(fixture.visible("rrActivityDelete"));
+        QVERIFY(fixture.press("rrActivityConfirmDelete"));
+        QTRY_VERIFY(fixture.visible("rrActivityBooks"));
+        QTRY_VERIFY(fixture.widget("rrActivityBook1")->accessibleName() != "War and Peace");
+        // The book is gone from every month, not only the first page.
+        for (;;) {
+            for (auto *row : QApplication::allWidgets())
+                QVERIFY(!row->objectName().startsWith("rrActivityBook") || !row->isVisible()
+                        || row->accessibleName() != "War and Peace");
+            auto *next = fixture.widget("rrActivityBooksNext");
+            if (!next->isVisible() || !next->isEnabled())
+                break;
+            QVERIFY(fixture.press("rrActivityBooksNext"));
+        }
+        QVERIFY(fixture.press("rrActivityOverviewTab"));
+        QTRY_VERIFY(fixture.visible("rrActivityOverview"));
+        QTRY_VERIFY(labelText(fixture, "rrActivityReadingFigure") != hours);
     }
 
     void graphMode_data() { screenshotVariants(); }

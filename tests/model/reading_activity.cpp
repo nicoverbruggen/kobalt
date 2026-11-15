@@ -214,6 +214,186 @@ void storeReadsProfile()
                     && records.finished.contains("file:///b.epub"),
             "Book progress or the finished mark did not load");
 }
+
+void wait(const bool &done)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (!done && timer.elapsed() < 10000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    require(done, "The Activity store did not answer");
+}
+
+ActivityRecords load(ActivityRecordStore &store)
+{
+    bool done = false, ok = false;
+    ActivityRecords records;
+    store.load({}, {}, [&](bool success, ActivityRecords result) {
+        ok = success;
+        records = std::move(result);
+        done = true;
+    });
+    wait(done);
+    require(ok, "Activity records did not load");
+    return records;
+}
+
+// Hiding takes a book out of the lists only. Deleting removes its sessions
+// and their time from the daily totals, but never from the open opening's.
+void hideAndRemove()
+{
+    storage::closeProfile();
+    QTemporaryDir root;
+    const auto directory = root.path();
+    const auto insert = [&](const char *id, const char *book, const QDate &date, int hour,
+                            int minutes) {
+        const auto started = at(date, hour);
+        sql(directory,
+            "INSERT INTO reading_sessions(id,book,identity,fingerprint,source_key,title,author,"
+            "started,observed,active_ms,start_position,end_position,status) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'completed')",
+            { id, book, QString("file:///%1.epub").arg(book), QString(64, 'a'), "/x.epub",
+              QString("Title %1").arg(book), "Author", started, started + minutes * minute,
+              minutes * minute, "/body/p[1]", "/body/p[2]" });
+    };
+    insert("s1", "a", QDate(2026, 11, 10), 21, 30);
+    insert("s2", "a", QDate(2026, 11, 11), 20, 20);
+    insert("s3", "a", QDate(2026, 11, 12), 20, 40);
+    insert("s4", "b", QDate(2026, 11, 10), 8, 15);
+    const auto day = [&](const char *name, int minutes) {
+        sql(directory, "INSERT INTO profile_state(name,format,revision,payload) VALUES(?,1,0,?)",
+            { QString("reading-day:%1").arg(name),
+              QString("{\"milliseconds\":%1}").arg(minutes * minute) });
+    };
+    day("2026-11-10:op-a", 30);
+    day("2026-11-10:op-b", 15);
+    day("2026-11-10:op-keep", 5);
+    day("2026-11-11:op-a", 20);
+    // Only the open opening has a total on this date; it is never changed.
+    day("2026-11-12:op-keep", 40);
+
+    ActivityRecordStore store(directory);
+    bool done = false, ok = false;
+    store.hide("b", true, [&](bool success) {
+        ok = success;
+        done = true;
+    });
+    wait(done);
+    require(ok, "Hiding a book failed");
+    auto records = load(store);
+    require(records.hidden == QSet<QString>{ "b" }, "The hidden book did not load");
+    auto summary = activity::summarize(records, today);
+    for (const auto &month : summary.months)
+        for (const auto &book : month.books)
+            require(book.book != "b", "A hidden book stayed in the lists");
+    require(summary.hiddenBooks.size() == 1 && summary.hiddenBooks[0].book == "b"
+                    && summary.hiddenBooks[0].milliseconds == 15 * minute,
+            "The hidden book is not listed with its total");
+    require(summary.days.value(QDate(2026, 11, 10)) == 50 * minute,
+            "Hiding a book changed the daily totals");
+
+    done = ok = false;
+    store.remove("a", "op-keep", [&](bool success) {
+        ok = success;
+        done = true;
+    });
+    wait(done);
+    require(ok, "Deleting a book's activity failed");
+    records = load(store);
+    require(records.sessions.size() == 1 && records.sessions[0].book == "b",
+            "The deleted book's sessions remain");
+    require(records.days.value(QDate(2026, 11, 10)) == 20 * minute
+                    && !records.days.contains(QDate(2026, 11, 11)),
+            "The deleted time stayed in the daily totals");
+    require(records.days.value(QDate(2026, 11, 12)) == 40 * minute,
+            "The open opening's total was changed");
+    require(records.hidden == QSet<QString>{ "b" }, "Deleting a book changed another's hiding");
+
+    done = ok = false;
+    store.hide("b", false, [&](bool success) {
+        ok = success;
+        done = true;
+    });
+    wait(done);
+    require(ok && load(store).hidden.isEmpty(), "Showing a hidden book again failed");
+    require(sql(directory, "SELECT count(*) FROM profile_state WHERE name='activity-hidden-books'")
+                            .toInt()
+                    == 0,
+            "An empty hidden list was kept");
+}
+
+// Deleting splits a session's time at midnight as the reader does, keeps the
+// time of other books on a date from before daily totals, and runs even when
+// loads are posted around it. An unreadable hidden list is never replaced.
+void deleteEdgeCases()
+{
+    storage::closeProfile();
+    QTemporaryDir root;
+    const auto directory = root.path();
+    const auto insert = [&](const char *id, const char *book, qint64 started, int minutes) {
+        sql(directory,
+            "INSERT INTO reading_sessions(id,book,identity,fingerprint,source_key,title,author,"
+            "started,observed,active_ms,start_position,end_position,status) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'completed')",
+            { id, book, QString("file:///%1.epub").arg(book), QString(64, 'a'), "/x.epub",
+              QString("Title %1").arg(book), "Author", started, started + minutes * minute,
+              minutes * minute, "/body/p[1]", "/body/p[2]" });
+    };
+    const auto day = [&](const QString &name, int minutes) {
+        sql(directory, "INSERT INTO profile_state(name,format,revision,payload) VALUES(?,1,0,?)",
+            { "reading-day:" + name, QString("{\"milliseconds\":%1}").arg(minutes * minute) });
+    };
+    // Book c reads from 23:40 to 00:20; book a reads 30 minutes earlier that day.
+    insert("c1", "c", at(QDate(2026, 11, 20), 23, 40), 40);
+    insert("a1", "a", at(QDate(2026, 11, 20), 20), 30);
+    day("2026-11-20:op-a", 30);
+    day("2026-11-20:op-c", 20);
+    day("2026-11-21:op-c", 20);
+    // A date from before daily totals: only book y's later opening has one.
+    insert("x1", "x", at(QDate(2026, 11, 5), 9), 25);
+    insert("y1", "y", at(QDate(2026, 11, 5), 21), 15);
+    day("2026-11-05:op-y", 15);
+    // A hidden list from a newer build.
+    sql(directory, "INSERT INTO profile_state(name,format,revision,payload) VALUES(?,2,0,?)",
+        { "activity-hidden-books", QStringLiteral("{\"books\":[\"q\"],\"more\":1}") });
+
+    ActivityRecordStore store(directory);
+    int removals = 0, hides = 0;
+    bool removedOk = false, hiddenOk = true;
+    store.remove("c", "op-keep", [&](bool ok) {
+        removedOk = ok;
+        ++removals;
+    });
+    // A load posted between edits must not replace them.
+    bool loaded = false;
+    store.load({}, {}, [&](bool, ActivityRecords) { loaded = true; });
+    store.remove("x", "op-keep", [&](bool ok) {
+        removedOk = removedOk && ok;
+        ++removals;
+    });
+    store.hide("a", true, [&](bool ok) {
+        hiddenOk = ok;
+        ++hides;
+    });
+    QElapsedTimer timer;
+    timer.start();
+    while ((removals < 2 || hides < 1 || !loaded) && timer.elapsed() < 10000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    require(removals == 2 && hides == 1 && loaded, "A load replaced a pending edit");
+    require(removedOk, "Deleting failed");
+    require(!hiddenOk, "Hiding wrote over an unreadable hidden list");
+    const auto records = load(store);
+    require(records.days.value(QDate(2026, 11, 20)) == 30 * minute
+                    && !records.days.contains(QDate(2026, 11, 21)),
+            "A session past midnight was not split by date");
+    require(records.days.value(QDate(2026, 11, 5)) == 15 * minute,
+            "Another book's time was taken on a date before daily totals");
+    require(records.hidden.isEmpty(), "An unreadable hidden list hid books");
+    require(sql(directory, "SELECT format FROM profile_state WHERE name='activity-hidden-books'")
+                            .toInt()
+                    == 2,
+            "The newer hidden list was replaced");
+}
 } // namespace
 
 int main(int argc, char **argv)
@@ -226,6 +406,8 @@ int main(int argc, char **argv)
     shortSessions();
     milestones();
     storeReadsProfile();
+    hideAndRemove();
+    deleteEdgeCases();
     storage::closeProfile();
     return 0;
 }

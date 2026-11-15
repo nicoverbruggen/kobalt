@@ -394,6 +394,8 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "stats-activity-calendar", "Activity calendar" },
         { "stats-activity-books", "Activity books" },
         { "stats-activity-book", "Activity for another book" },
+        { "stats-activity-delete", "Delete a book's activity" },
+        { "stats-activity-hidden", "Hidden books" },
         { "stats-activity-open-book", "Activity for the open book" },
         { "stats-activity-records", "Activity records and milestones" },
         { "stats-activity-milestones", "All milestones" },

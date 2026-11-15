@@ -739,7 +739,11 @@ public:
     void setSummary(const activity::Summary &value, const ActivityRecords &) override
     {
         summary = value;
-        shown = QDate(summary.today.year(), summary.today.month(), 1);
+        // A reload, such as after hiding a book, keeps the month in view while
+        // it is still between the first month with reading and this one.
+        const QDate thisMonth(summary.today.year(), summary.today.month(), 1);
+        if (!shown.isValid() || shown > thisMonth || shown < firstMonth())
+            shown = thisMonth;
         streak->set(QString::number(summary.current.days),
                     summary.current.days == 1 ? strings::get("activity.day")
                                               : strings::get("activity.days"),
@@ -870,6 +874,50 @@ private:
         if (wide)
             paintVerticalRule(painter, this, width() * 2 / 3, 0, height());
     }
+};
+
+// A row that opens more: a title, a caption on the right and a chevron.
+class LinkRow final : public ui::Button
+{
+public:
+    LinkRow(QWidget *parent, const QString &name, const QString &label)
+        : ui::Button(QString(), parent), title(label)
+    {
+        setObjectName(name);
+        setAccessibleName(label);
+    }
+
+    void setCaption(const QString &text)
+    {
+        caption = text;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        const auto ink = ui::labelInk(this);
+        painter.fillRect(rect(),
+                         isDown() ? ui::themeColors(this).pressedPaper
+                                  : palette().color(QPalette::Window));
+        painter.fillRect(0, 0, width(), ui::metrics::control::border, ui::dividerColor(this));
+        painter.setRenderHint(QPainter::Antialiasing);
+        const int icon = chrome::cellIcon;
+        const int chevronLeft = width() - chrome::inset - icon;
+        ui::controlIcon(ui::ControlIcon::Next, ink)
+                .paint(&painter, QRect(chevronLeft, (height() - icon) / 2, icon, icon));
+        const QFont name(ui::interfaceFont(chrome::labelText));
+        drawText(painter, QRect(chrome::inset, 0, chevronLeft - chrome::inset, height()), title,
+                 Qt::AlignLeft | Qt::AlignVCenter, name, ink);
+        drawCaption(painter,
+                    QRect(chrome::inset, 0, chevronLeft - chapters::activityIconGap - chrome::inset,
+                          height()),
+                    caption, Qt::AlignRight | Qt::AlignVCenter, ink);
+    }
+
+private:
+    QString title, caption;
 };
 
 // Rows made after a load, on a page turn or a book's page, need the same
@@ -1024,32 +1072,58 @@ protected:
 class ActivityBooks final : public ActivityPage
 {
 public:
-    explicit ActivityBooks(QWidget *parent) : ActivityPage(parent)
+    // `name` names the page and its pager; `row` names its book rows. The
+    // hidden books' list has its own names and no row to itself.
+    ActivityBooks(QWidget *parent, const QString &name, const QString &row, bool hiddenRow)
+        : ActivityPage(parent), rowName(row)
     {
-        setObjectName("rrActivityBooks");
-        pager = new ui::PagerBar(this, "rrActivityBooks");
+        setObjectName(name);
+        pager = new ui::PagerBar(this, name);
         connect(pager->previous, &QPushButton::clicked, this,
                 [this] { showPage(pager->turnTarget(-1)); });
         connect(pager->next, &QPushButton::clicked, this,
                 [this] { showPage(pager->turnTarget(1)); });
         empty = new ui::InterfaceLabel(strings::get("activity.no_books"), this);
-        empty->setObjectName("rrActivityBooksEmpty");
+        empty->setObjectName(name + "Empty");
         empty->setAlignment(Qt::AlignCenter);
         empty->setWordWrap(true);
         ui::readerStyle(empty, ui::styles::font(chrome::labelText) + "background:transparent;");
+        if (!hiddenRow)
+            return;
+        hiddenLink =
+                new LinkRow(this, "rrActivityHiddenBooks", strings::get("activity.hidden_books"));
+        hiddenLink->hide();
+        connect(hiddenLink, &QPushButton::clicked, this, [this] {
+            if (hiddenRequested)
+                hiddenRequested();
+        });
     }
 
     void setSummary(const activity::Summary &summary, const ActivityRecords &) override
     {
-        months = summary.months;
-        today = summary.today;
-        showPage(0);
+        setGroups(summary.months, int(summary.hiddenBooks.size()));
+    }
+
+    // The books in groups, each under its band, and a row to the hidden
+    // books after them when there are any. A group without a month is the
+    // hidden books' own list.
+    void setGroups(const QVector<activity::MonthBooks> &groups, int hidden)
+    {
+        months = groups;
+        hiddenCount = hidden;
+        // A reload, such as after hiding a book, keeps the page in view.
+        showPage(page);
     }
 
     std::function<void(const QString &)> chosen;
+    std::function<void()> hiddenRequested;
 
 protected:
     void resizeEvent(QResizeEvent *) override { showPage(page); }
+
+    // Covers are asked for only while the page shows: the hidden books' list
+    // and Books share one cover loader, whose newest request wins.
+    void showEvent(QShowEvent *) override { showPage(page); }
 
 private:
     struct Item
@@ -1058,7 +1132,9 @@ private:
     };
 
     QVector<activity::MonthBooks> months;
-    QDate today;
+    QString rowName;
+    int hiddenCount = 0;
+    LinkRow *hiddenLink = nullptr;
     QVector<QVector<Item>> pages;
     QVector<ui::ListHeader *> bands;
     QVector<BookRow *> rows;
@@ -1093,9 +1169,19 @@ private:
                 used += row;
             }
         }
+        // The row to the hidden books ends the list.
+        if (hiddenCount && hiddenLink) {
+            if (!current.isEmpty() && used + chapters::activityHeight > room) {
+                pages.append(current);
+                current.clear();
+            }
+            current.append({ hiddenItem, hiddenItem });
+        }
         if (!current.isEmpty())
             pages.append(current);
     }
+
+    static constexpr int hiddenItem = -2;
 
     void showPage(int target)
     {
@@ -1103,14 +1189,26 @@ private:
         page = qBound(0, target, qMax(0, int(pages.size()) - 1));
         int bandsUsed = 0, rowsUsed = 0, y = 0;
         QVector<activity::BookTotal> wanted;
+        if (hiddenLink)
+            hiddenLink->hide();
         if (!pages.isEmpty())
             for (const auto &item : pages[page]) {
+                if (item.month == hiddenItem) {
+                    hiddenLink->setCaption(QString::number(hiddenCount));
+                    hiddenLink->setGeometry(0, y, width(), chapters::activityHeight);
+                    hiddenLink->show();
+                    y += chapters::activityHeight;
+                    continue;
+                }
                 const auto &month = months[item.month];
                 if (item.book < 0) {
                     if (bandsUsed == bands.size())
                         bands.append(band(this, "rrActivityMonthBand"));
                     auto *header = bands[bandsUsed++];
-                    setBand(header, english().toString(month.month, QStringLiteral("MMMM yyyy")),
+                    setBand(header,
+                            month.month.isValid()
+                                    ? english().toString(month.month, QStringLiteral("MMMM yyyy"))
+                                    : strings::get("activity.hidden"),
                             plural("activity.book_count", "activity.books_count",
                                    month.books.size())
                                     + QStringLiteral(" · ") + duration(month.milliseconds));
@@ -1133,7 +1231,7 @@ private:
                               missingBooks.contains(month.books[item.book].book));
                 if (!known.contains(month.books[item.book].book))
                     wanted.append(month.books[item.book]);
-                row->setObjectName(QString("rrActivityBook%1").arg(rowsUsed));
+                row->setObjectName(rowName + QString::number(rowsUsed));
                 row->setGeometry(0, y, width(), BookRow::preferredHeight());
                 row->show();
                 y += BookRow::preferredHeight();
@@ -1149,7 +1247,7 @@ private:
         // Only the shown rows ask for covers. A new request replaces an older
         // one that has not finished. Tests wait until the shown rows have theirs.
         setProperty("activity_covers_pending", int(wanted.size()));
-        if (!wanted.isEmpty() && coversRequested)
+        if (!wanted.isEmpty() && coversRequested && isVisible())
             coversRequested(wanted, BookRow::coverSize());
         prepareRows(this);
     }
@@ -1488,50 +1586,6 @@ private:
     bool named = true;
 };
 
-// A row that opens more: a title, a caption on the right and a chevron.
-class LinkRow final : public ui::Button
-{
-public:
-    LinkRow(QWidget *parent, const QString &name, const QString &label)
-        : ui::Button(QString(), parent), title(label)
-    {
-        setObjectName(name);
-        setAccessibleName(label);
-    }
-
-    void setCaption(const QString &text)
-    {
-        caption = text;
-        update();
-    }
-
-protected:
-    void paintEvent(QPaintEvent *) override
-    {
-        QPainter painter(this);
-        const auto ink = ui::labelInk(this);
-        painter.fillRect(rect(),
-                         isDown() ? ui::themeColors(this).pressedPaper
-                                  : palette().color(QPalette::Window));
-        painter.fillRect(0, 0, width(), ui::metrics::control::border, ui::dividerColor(this));
-        painter.setRenderHint(QPainter::Antialiasing);
-        const int icon = chrome::cellIcon;
-        const int chevronLeft = width() - chrome::inset - icon;
-        ui::controlIcon(ui::ControlIcon::Next, ink)
-                .paint(&painter, QRect(chevronLeft, (height() - icon) / 2, icon, icon));
-        const QFont name(ui::interfaceFont(chrome::labelText));
-        drawText(painter, QRect(chrome::inset, 0, chevronLeft - chrome::inset, height()), title,
-                 Qt::AlignLeft | Qt::AlignVCenter, name, ink);
-        drawCaption(painter,
-                    QRect(chrome::inset, 0, chevronLeft - chapters::activityIconGap - chrome::inset,
-                          height()),
-                    caption, Qt::AlignRight | Qt::AlignVCenter, ink);
-    }
-
-private:
-    QString title, caption;
-};
-
 // For Records: per kind, the last milestone reached and the next one, or the
 // first two while none is reached.
 QVector<activity::Milestone> milestonePicks(const QVector<activity::Milestone> &all)
@@ -1597,10 +1651,12 @@ public:
         fitHoursBand();
         setBand(recordsBand, strings::get("activity.records"));
         records[0]->setRecord(strings::get("activity.longest_session"),
-                              summary.longestSession
-                                      ? summary.longestSessionTitle + QStringLiteral(" · ")
-                                              + day(summary.longestSessionDate)
-                                      : QString(),
+                              // A hidden book's title stays out of the record.
+                              !summary.longestSession ? QString()
+                                      : summary.longestSessionTitle.isEmpty()
+                                      ? day(summary.longestSessionDate)
+                                      : summary.longestSessionTitle + QStringLiteral(" · ")
+                                              + day(summary.longestSessionDate),
                               summary.longestSession);
         records[1]->setRecord(strings::get("activity.most_in_day"),
                               summary.bestDay ? english().toString(summary.bestDayDate,
@@ -2511,6 +2567,10 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
     back->setRule(Qt::RightEdge);
     back->hide();
     connect(back, &QPushButton::clicked, this, [this] {
+        if (detail == Detail::Book) {
+            closeBook();
+            return;
+        }
         detail = Detail::None;
         arrange();
     });
@@ -2518,6 +2578,26 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
     title->setObjectName("rrActivityTitle");
     title->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     ui::readerStyle(title, ui::styles::brand(chrome::titleText) + "background:transparent;");
+    // A book's page can hide the book from the lists or delete its activity.
+    hideCell = new ui::CellButton(ui::ControlIcon::Hidden, header);
+    hideCell->setObjectName("rrActivityHideBook");
+    hideCell->setCheckable(true);
+    hideCell->setRule(Qt::LeftEdge);
+    hideCell->hide();
+    connect(hideCell, &QPushButton::clicked, this, [this](bool hidden) {
+        if (hideRequested)
+            hideRequested(bookKey, hidden);
+    });
+    deleteCell = new ui::CellButton(ui::ControlIcon::Trash, header);
+    deleteCell->setObjectName("rrActivityDeleteBook");
+    deleteCell->setAccessibleName(strings::get("activity.delete_book"));
+    deleteCell->setToolTip(strings::get("activity.delete_book"));
+    deleteCell->setRule(Qt::LeftEdge);
+    deleteCell->hide();
+    connect(deleteCell, &QPushButton::clicked, this, [this] {
+        if (deleteRequested)
+            deleteRequested(bookKey, activity::bookTotal(records, bookKey, summary.today).title);
+    });
     close = new ui::CellButton(ui::ControlIcon::Close, header);
     close->setObjectName("rrActivityClose");
     close->setAccessibleName(strings::get("activity.close"));
@@ -2533,12 +2613,22 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
     ui::readerStyle(message, ui::styles::font(chrome::labelText) + "background:transparent;");
     overview = new ActivityOverview(this);
     calendar = new ActivityCalendar(this);
-    books = new ActivityBooks(this);
+    books = new ActivityBooks(this, "rrActivityBooks", "rrActivityBook", true);
     books->chosen = [this](const QString &key) { openBook(key); };
     books->coversRequested = [this](const QVector<activity::BookTotal> &wanted, QSize size) {
         if (coversRequested)
             coversRequested(wanted, size);
     };
+    books->hiddenRequested = [this] {
+        detail = Detail::Hidden;
+        arrange();
+    };
+    hiddenPage = new ActivityBooks(this, "rrActivityHidden", "rrActivityHiddenBook", false);
+    hiddenPage->chosen = [this](const QString &key) {
+        openBook(key);
+        bookReturn = Detail::Hidden;
+    };
+    hiddenPage->coversRequested = books->coversRequested;
     recordsPage = new ActivityRecordsPage(this);
     bookPage = new ActivityBookPage(this);
     milestonesPage = new ActivityMilestones(this);
@@ -2593,6 +2683,18 @@ void ActivityView::setRecords(ActivityRecords value, activity::Summary computed)
     overview->setSummary(summary, records);
     calendar->setSummary(summary, records);
     books->setSummary(summary, records);
+    activity::MonthBooks hidden;
+    hidden.books = summary.hiddenBooks;
+    for (const auto &book : hidden.books)
+        hidden.milliseconds += book.milliseconds;
+    hiddenPage->setGroups(hidden.books.isEmpty() ? QVector<activity::MonthBooks>()
+                                                 : QVector<activity::MonthBooks>{ hidden },
+                          0);
+    // The last hidden book shown again leaves an empty list behind.
+    if (detail == Detail::Hidden && hidden.books.isEmpty())
+        detail = Detail::None;
+    if (bookReturn == Detail::Hidden && hidden.books.isEmpty())
+        bookReturn = Detail::None;
     recordsPage->setSummary(summary, records);
     milestonesPage->setMilestones(summary.milestones, summary.current, summary.longest);
     if (detail == Detail::Book)
@@ -2607,9 +2709,16 @@ void ActivityView::setOpenBook(const ActivityOpenBook &book)
         bookPage->setBook(bookKey, records, summary.today, openBookData);
 }
 
+void ActivityView::setCurrentBook(const QString &book)
+{
+    currentBook = book;
+    arrange();
+}
+
 void ActivityView::setCover(const QString &book, const QImage &cover, bool missing)
 {
     books->setCover(book, cover, missing);
+    hiddenPage->setCover(book, cover, missing);
 }
 
 void ActivityView::showSection(Section section)
@@ -2625,11 +2734,21 @@ void ActivityView::openBook(const QString &book)
     // keeps the page.
     bookPage->forget();
     bookKey = book;
+    bookReturn = Detail::None;
     detail = Detail::Book;
     bookPage->setBook(bookKey, records, summary.today, openBookData);
     arrange();
     if (bookRequested)
         bookRequested(book);
+}
+
+void ActivityView::closeBook()
+{
+    if (detail != Detail::Book)
+        return;
+    detail = bookReturn;
+    bookReturn = Detail::None;
+    arrange();
 }
 
 void ActivityView::resizeEvent(QResizeEvent *event)
@@ -2648,7 +2767,8 @@ void ActivityView::arrange()
     title->setText(detail == Detail::Book ? strings::get("activity.book_title")
                            : detail == Detail::Milestones
                            ? strings::get("activity.milestones_title")
-                           : strings::get("activity.title"));
+                           : detail == Detail::Hidden ? strings::get("activity.hidden_title")
+                                                      : strings::get("activity.title"));
     // The section cells give way to the title on a narrow screen.
     const int titleWidth = ui::interfaceTextWidth(title->text(), ui::brandFont(chrome::titleText))
             + 2 * chrome::inset;
@@ -2657,9 +2777,21 @@ void ActivityView::arrange()
                                   int(chrome::cellWidth));
     back->setGeometry(0, 0, cell, cellHeight);
     close->setGeometry(width() - cell, 0, cell, cellHeight);
-    const int tabsLeft = width() - cell * (sub ? 1 : 1 + int(tabs.size()));
-    title->setGeometry(sub ? cell : 0, 0, tabsLeft - (sub ? cell : 0), cellHeight);
+    // A book's page puts its actions where the sections were.
     const bool ready = !loading && !unavailable && message->text().isEmpty();
+    const bool book = detail == Detail::Book && ready;
+    const bool hidden = records.hidden.contains(bookKey);
+    hideCell->setVisible(book);
+    hideCell->setChecked(hidden);
+    const auto hideLabel = strings::get(hidden ? "activity.show_book" : "activity.hide_book");
+    hideCell->setAccessibleName(hideLabel);
+    hideCell->setToolTip(hideLabel);
+    deleteCell->setVisible(book && bookKey != currentBook);
+    const int actions = book ? 1 + int(deleteCell->isVisibleTo(header)) : 0;
+    deleteCell->setGeometry(width() - 2 * cell, 0, cell, cellHeight);
+    hideCell->setGeometry(width() - cell * (1 + actions), 0, cell, cellHeight);
+    const int tabsLeft = width() - cell * (sub ? 1 + actions : 1 + int(tabs.size()));
+    title->setGeometry(sub ? cell : 0, 0, tabsLeft - (sub ? cell : 0), cellHeight);
     for (int index = 0; index < tabs.size(); ++index) {
         tabs[index]->setVisible(!sub);
         tabs[index]->setGeometry(tabsLeft + index * cell, 0, cell, cellHeight);
@@ -2678,6 +2810,8 @@ void ActivityView::arrange()
     bookPage->setGeometry(body);
     milestonesPage->setVisible(ready && detail == Detail::Milestones);
     milestonesPage->setGeometry(body);
+    hiddenPage->setVisible(ready && detail == Detail::Hidden);
+    hiddenPage->setGeometry(body);
     update();
 }
 } // namespace kobalt

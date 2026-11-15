@@ -1121,6 +1121,18 @@
 "activity.title" = "Activity";
 /* The page of one book in Activity. */
 "activity.book_title" = "Book Activity";
+"activity.hidden_title" = "Hidden Books";
+/* The row at the end of Books that opens the hidden books. */
+"activity.hidden_books" = "Hidden books";
+/* The band over the hidden books' list. */
+"activity.hidden" = "Hidden";
+"activity.hide_book" = "Hide from Books";
+"activity.show_book" = "Show in Books";
+"activity.delete_book" = "Delete activity";
+"activity.delete_title" = "Delete Reading Activity?";
+/* Arguments: %1 is the book's title. */
+"activity.delete_detail" = "All reading sessions of “%1” will be deleted, and their time removed from your daily totals and streaks. This cannot be undone.";
+"activity.delete_confirm" = "Delete";
 "activity.close" = "Close Activity";
 /* The alert the first time Activity opens. */
 "activity.welcome_title" = "Welcome to Activity";

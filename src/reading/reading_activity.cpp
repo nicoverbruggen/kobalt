@@ -139,6 +139,7 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
 
     QSet<QString> todayBooks, allBooks, monthBooks, bestDayBooks;
     QMap<QDate, QHash<QString, BookTotal>> months;
+    QHash<QString, BookTotal> hiddenBooks;
     for (const auto &session : records.sessions) {
         if (!countsAsSession(session))
             continue;
@@ -155,12 +156,16 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
         }
         if (date == summary.bestDayDate)
             bestDayBooks.insert(session.book);
+        const bool hidden = records.hidden.contains(session.book);
         if (session.milliseconds > summary.longestSession) {
             summary.longestSession = session.milliseconds;
             summary.longestSessionDate = date;
-            summary.longestSessionTitle = session.title;
+            summary.longestSessionTitle = hidden ? QString() : session.title;
         }
-        add(months[monthOf(date)][session.book], session);
+        if (hidden)
+            add(hiddenBooks[session.book], session);
+        else
+            add(months[monthOf(date)][session.book], session);
         spread(summary.hours, session);
     }
     summary.todayBooks = todayBooks.size();
@@ -189,6 +194,16 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
                   });
         summary.months.append(month);
     }
+
+    for (auto book : hiddenBooks) {
+        describe(book, records);
+        summary.hiddenBooks.append(book);
+    }
+    std::sort(summary.hiddenBooks.begin(), summary.hiddenBooks.end(),
+              [](const BookTotal &left, const BookTotal &right) {
+                  return left.last != right.last ? left.last > right.last
+                                                 : left.title < right.title;
+              });
 
     summary.finished = records.finished.size();
     QSet<QString> reading;

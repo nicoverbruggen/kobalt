@@ -34,6 +34,8 @@ struct ActivityRecords
     QSet<QString> finished;
     // UTC milliseconds at which each saved word was first looked up.
     QVector<qint64> words;
+    // Book keys hidden from Activity's book lists. Their time still counts.
+    QSet<QString> hidden;
 };
 
 // Reads run on the profile writer thread, so the interface never waits for
@@ -45,21 +47,32 @@ public:
     // Work on the loaded records that belongs on the store's thread too, such
     // as a summary the interface would otherwise compute.
     using Prepare = std::function<void(const ActivityRecords &)>;
+    using Done = std::function<void(bool ok)>;
     explicit ActivityRecordStore(QString directory, QObject *parent = nullptr);
     ~ActivityRecordStore() override;
     // `excludeOpening` leaves out that opening's daily totals, so the reader
-    // can add its own unsaved time without counting the saved part twice. A
-    // newer load replaces one that has not started; only its result arrives.
+    // can add its own unsaved time without counting the saved part twice.
+    // Only the newest load's result arrives.
     // `prepare` runs after a successful read.
     void load(const QString &excludeOpening, Prepare prepare, Loaded loaded);
+    // Hides a book from the lists, or shows it again.
+    void hide(const QString &book, bool hidden, Done done);
+    // Deletes a book's sessions and takes their time out of the daily totals
+    // of their dates. `keepOpening` is the open book's opening, whose totals
+    // the reader keeps writing; they are never changed. This cannot be undone.
+    void remove(const QString &book, const QString &keepOpening, Done done);
 
     // The same read, for callers already on a thread that may wait.
     static bool read(const QString &directory, const QString &excludeOpening,
                      ActivityRecords *records);
+    static bool remove(const QString &directory, const QString &book, const QString &keepOpening);
 
 private:
+    void post(std::function<bool()> work, Done done);
     QString directory;
     quint64 generation = 0;
-    storage::RecordWriter writer;
+    // Every load and edit runs, in the order posted, after any save posted
+    // before it. Only the newest load's result arrives.
+    storage::RecordWriter writer{ storage::RecordWriter::Delivery::All };
 };
 } // namespace kobalt

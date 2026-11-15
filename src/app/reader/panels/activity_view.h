@@ -45,8 +45,13 @@ public:
     // interface thread.
     void setRecords(ActivityRecords records, activity::Summary summary);
     void setOpenBook(const ActivityOpenBook &book);
+    // The book open in the reader. Its activity cannot be deleted while it
+    // is open: the reader is still writing it.
+    void setCurrentBook(const QString &book);
     void showSection(Section section);
     void openBook(const QString &book);
+    // Leaves a book's page for where it opened from.
+    void closeBook();
 
     Section section() const { return current; }
 
@@ -59,6 +64,10 @@ public:
     std::function<void()> closed;
     // The book page opened; the reader answers with setOpenBook() for its book.
     std::function<void(const QString &book)> bookRequested;
+    // A book's page asked to hide the book from the lists or show it again.
+    std::function<void(const QString &book, bool hidden)> hideRequested;
+    // A book's page asked to delete its activity. The reader confirms first.
+    std::function<void(const QString &book, const QString &title)> deleteRequested;
     // The books on the shown page of Books whose covers are not known yet,
     // and the cover size. The reader answers with setCover() for each.
     std::function<void(const QVector<activity::BookTotal> &books, QSize size)> coversRequested;
@@ -75,18 +84,20 @@ private:
     ActivityOpenBook openBookData;
     QString bookKey;
     Section current = Section::Overview;
-    // A book's page or every milestone, opened from a section with a back cell.
-    enum class Detail { None, Book, Milestones };
-    Detail detail = Detail::None;
+    // A book's page, every milestone or the hidden books, opened from a
+    // section with a back cell. A book's page returns to where it opened.
+    enum class Detail { None, Book, Milestones, Hidden };
+    Detail detail = Detail::None, bookReturn = Detail::None;
+    QString currentBook;
     bool loading = true, unavailable = false;
     QWidget *header;
     QLabel *title;
-    ui::CellButton *back, *close;
+    ui::CellButton *back, *close, *hideCell, *deleteCell;
     QVector<ui::CellButton *> tabs;
     QLabel *message;
     class ActivityOverview *overview;
     class ActivityCalendar *calendar;
-    class ActivityBooks *books;
+    class ActivityBooks *books, *hiddenPage;
     class ActivityRecordsPage *recordsPage;
     class ActivityBookPage *bookPage;
     class ActivityMilestones *milestonesPage;

@@ -685,6 +685,8 @@ private:
     // Shown the first time Activity opens: the history covers this device only.
     QPointer<ui::ModalOverlay> activityWelcome;
     void showActivityWelcome();
+    void hideActivityBook(const QString &book, bool hidden);
+    void deleteActivityBook(const QString &book, const QString &title);
     QDate activityToday() const;
     void openActivity();
     void closeActivity();

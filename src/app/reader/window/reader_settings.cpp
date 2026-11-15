@@ -106,11 +106,12 @@ kobalt::headerfooter::Values Reader::chromeValues()
         values.chapterPagesEstimated = state.value("rough_item_pages_estimated").toBool();
     } else if (state.contains("book_fraction")) {
         values.page = values.pages = values.chapterPage = values.chapterPages = 0;
-        values.percentRead = session->progressPercent();
+        values.percentTenths = int(session->progressFraction() * 1000);
         const int itemPages = session->state().value("rough_item_pages").toInt();
         if (itemPages > 0)
-            values.chapterPercentRead = pageProgressPercent(
-                    session->state().value("rough_item_page").toInt() - 1, itemPages);
+            values.chapterPercentTenths =
+                    int(1000LL * qBound(1, state.value("rough_item_page").toInt(), itemPages)
+                        / itemPages);
     }
     const auto battery = services.battery();
     values.battery = battery.percent;

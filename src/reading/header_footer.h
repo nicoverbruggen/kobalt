@@ -147,9 +147,9 @@ struct Values
     // field then shows its percent form in the same place: the book page
     // shows "N% read", pages left in the chapter shows "N% left", and a
     // page beside a name shows a percent. Negative when the page numbers
-    // are known. chapterPercentRead is the same for the chapter, or
+    // are known. chapterPercentTenths is the same for the chapter, or
     // negative when it is not known.
-    int percentRead = -1, chapterPercentRead = -1;
+    int percentTenths = -1, chapterPercentTenths = -1;
     int battery = -1;
     bool charging = false;
     // False on hosts that hide device status, such as the desktop app. It

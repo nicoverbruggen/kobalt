@@ -264,6 +264,11 @@ QImage decodeWallpaper(const QString &path, QSize bound)
     // Photos keep the orientation the camera recorded. Qt 5.2 cannot read it.
     reader.setAutoTransform(true);
 #endif
+#if QT_VERSION >= QT_VERSION_CHECK(5, 5, 0)
+    // The decoder scales before applying the photo's orientation.
+    if (reader.transformation().testFlag(QImageIOHandler::TransformationRotate90))
+        bound.transpose();
+#endif
     const QSize size = reader.size();
     // JPEG decodes straight at a smaller size. Other formats decode in full
     // first, so their size is capped harder to bound the memory they take.

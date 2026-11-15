@@ -6086,11 +6086,30 @@ private slots:
         QVERIFY(showsCover(editor));
         auto *customEditor = dynamic_cast<reader::SleepEditor *>(editor);
         QVERIFY(customEditor);
+        auto *preview = customEditor->findChild<QWidget *>("rrSleepEditorPreview");
+        auto *next = customEditor->findChild<QPushButton *>("rrSleepEditorBackdropNext");
+        QVERIFY(preview && next);
+        QSize bound;
+        customEditor->wallpaperWanted = [&](const QString &, QSize requested) {
+            bound = requested;
+        };
+        for (int i = 0; i < 3; ++i)
+            next->click();
+        preview->grab();
+        QVERIFY(!bound.isEmpty());
+        QVERIFY(bound.height() < preview->height() * preview->devicePixelRatioF());
+        QVERIFY(bound.width() < preview->width() * preview->devicePixelRatioF());
+        const auto oldBound = bound;
+        preview->setFixedHeight(preview->height() / 2);
+        preview->grab();
+        QVERIFY(bound.height() < oldBound.height());
         QImage first(16, 16, QImage::Format_RGB32);
-        customEditor->setWallpaper("first", first);
+        customEditor->setWallpaper("first", oldBound, first);
+        QVERIFY(first.isDetached());
+        customEditor->setWallpaper("first", bound, first);
         QVERIFY(!first.isDetached());
-        customEditor->setWallpaper("second", QImage());
-        customEditor->setWallpaper("third", QImage());
+        customEditor->setWallpaper("second", bound, QImage());
+        customEditor->setWallpaper("third", bound, QImage());
         QVERIFY(first.isDetached());
     }
 

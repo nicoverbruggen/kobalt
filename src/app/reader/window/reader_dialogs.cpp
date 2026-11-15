@@ -1136,22 +1136,26 @@ void Reader::openSleepEditor(sleep::Design design)
         loadGalleryCover();
     editor->setWallpapers(sleepWallpaperNames);
     const QPointer<SleepEditor> guard(editor);
-    editor->wallpaperWanted = [this, guard](const QString &name) {
+    const auto requestWallpapers = [this, guard](const QStringList &wanted, QSize bound) {
         if (!session || services.sleepWallpaperDirectories.isEmpty())
             return;
-        const QSize screen = page ? page->size() : size();
-        const int side = qMax(screen.width(), screen.height());
-        session->sleepWallpapers(services.sleepWallpaperDirectories, { name }, QSize(side, side),
-                                 [this, guard, name](QStringList names, QVector<QImage> images) {
-                                     sleepWallpaperNames = names;
-                                     if (!guard)
-                                         return;
-                                     guard->setWallpapers(names);
-                                     guard->setWallpaper(name, images.value(0));
-                                 });
+        session->sleepWallpapers(
+                services.sleepWallpaperDirectories, wanted, bound,
+                [this, guard, wanted, bound](QStringList names, QVector<QImage> images) {
+                    sleepWallpaperNames = names;
+                    if (!guard)
+                        return;
+                    guard->setWallpapers(names);
+                    if (!wanted.isEmpty())
+                        guard->setWallpaper(wanted.first(), bound, images.value(0));
+                });
     };
-    // The list of files, for the background row.
-    editor->wallpaperWanted(setup.custom.sleep.wallpaper);
+    editor->wallpaperWanted = [requestWallpapers](const QString &name, QSize bound) {
+        requestWallpapers({ name }, bound);
+    };
+    // List the choices before the first paint. Only a visible wallpaper needs decoding.
+    if (!setup.arrange)
+        requestWallpapers({}, {});
     editor->help = [this] { showSleepWallpaperHelp(); };
     editor->done = [this, guard] {
         if (!guard)

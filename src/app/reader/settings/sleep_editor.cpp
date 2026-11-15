@@ -146,8 +146,9 @@ protected:
             shot.dark = true;
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        const QSize pixels = painter.deviceTransform().mapRect(QRectF(area)).size().toSize();
         paintSleepPreview(painter, QRectF(area), editor->setup_.screen, editor->cover_,
-                          editor->page_, editor->overlay_, shot, editor->wallpaper(),
+                          editor->page_, editor->overlay_, shot, editor->wallpaper(pixels),
                           off ? SleepStatus::PoweredOff : SleepStatus::Sleeping);
         // The same thin frame as an unselected gallery preview.
         const int gap = ui::px(8);
@@ -439,16 +440,21 @@ void SleepEditor::stepStatus(int direction)
     refresh();
 }
 
-QImage SleepEditor::wallpaper()
+QImage SleepEditor::wallpaper(QSize bound)
 {
     const auto &current = layer();
     if (current.backdrop != sleep::Mode::Wallpaper || setup_.arrange)
         return {};
+    if (wallpaperBound_ != bound) {
+        wallpaperImages_.clear();
+        wallpaperRequests_.clear();
+        wallpaperBound_ = bound;
+    }
     if (const auto *image = wallpaperImages_.object(current.wallpaper))
         return *image;
     if (!wallpaperRequests_.contains(current.wallpaper) && wallpaperWanted) {
         wallpaperRequests_.insert(current.wallpaper);
-        wallpaperWanted(current.wallpaper);
+        wallpaperWanted(current.wallpaper, bound);
     }
     return {};
 }
@@ -516,8 +522,10 @@ void SleepEditor::setWallpapers(const QStringList &names)
     refresh();
 }
 
-void SleepEditor::setWallpaper(const QString &name, const QImage &image)
+void SleepEditor::setWallpaper(const QString &name, QSize bound, const QImage &image)
 {
+    if (bound != wallpaperBound_)
+        return;
     wallpaperRequests_.remove(name);
     wallpaperImages_.insert(name, new QImage(image));
     preview_->update();

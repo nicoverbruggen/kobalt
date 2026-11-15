@@ -54,7 +54,7 @@ public:
     // The files in the wallpaper folders, sorted.
     void setWallpapers(const QStringList &names);
     // A decoded wallpaper; an empty name is the random one.
-    void setWallpaper(const QString &name, const QImage &image);
+    void setWallpaper(const QString &name, QSize bound, const QImage &image);
 
     sleep::Custom custom() const { return setup_.custom; }
 
@@ -73,7 +73,7 @@ public:
     // The question cell in the Custom editor's header: where wallpapers go.
     std::function<void()> help;
     // Asks the reader to decode a wallpaper and to list the folder.
-    std::function<void(const QString &name)> wallpaperWanted;
+    std::function<void(const QString &name, QSize bound)> wallpaperWanted;
 
 private:
     friend class SleepEditorPreview;
@@ -85,7 +85,7 @@ private:
     void stepBackdrop(int direction);
     void stepStatus(int direction);
     void refresh();
-    QImage wallpaper();
+    QImage wallpaper(QSize bound);
 
     Setup setup_;
     bool powerOff_ = false;
@@ -94,6 +94,7 @@ private:
     // Keep the two screen previews while the reader switches between them.
     QCache<QString, QImage> wallpaperImages_{ 2 };
     QSet<QString> wallpaperRequests_;
+    QSize wallpaperBound_;
     QHash<int, sleep::Place> moved_;
     SleepEditorPreview *preview_ = nullptr;
     QWidget *stateRow_ = nullptr;

@@ -10190,22 +10190,19 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrHeaderFooterFieldsClose"));
     }
 
-    // The Book status field shows Fast with the whole-book build's progress
-    // in Hybrid, then Full with how long the whole book took, each after the
-    // last turn time. It follows the build every 5 seconds while it is in a
+    // The Book status field shows the last turn time and fast with the
+    // background layout's progress in Hybrid, then full with how long the
+    // whole book took. It follows the build every 5 seconds while it is in a
     // shown header or footer, and only then.
     void headerFooterBookStatus()
     {
         using namespace headerfooter;
-        QFile references(QStringLiteral(KOBALT_SCREENSHOT_REFERENCES));
-        QVERIFY(references.open(QIODevice::ReadOnly));
-        const auto reference =
-                QJsonDocument::fromJson(references.readAll()).object()["war-and-peace"].toObject();
-        const auto large =
-                QStringLiteral(KOBALT_SCREENSHOT_BOOKS) + '/' + reference["filename"].toString();
-        QVERIFY(QFileInfo::exists(large));
         Fixture fixture;
         QVERIFY(fixture.prepared);
+        // Many spine items keep the background layout busy long enough to
+        // see its progress. The page estimate measures one item at a time.
+        QVERIFY(test::writeBook(fixture.directory.path(), "songs.epub", test::songbook(3000)));
+        const auto large = fixture.directory.filePath("songs.epub");
         auto layout = presetLayout(Preset::Default);
         layout.slotFields[1] = Field::BookStatus;
         layout.uppercase[1] = false;

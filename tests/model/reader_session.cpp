@@ -310,13 +310,19 @@ static void mixedSpreadHandoff()
         while (hybrid.busy() || whole.busy())
             frame.exec();
         require(hybrid.image() == whole.image(), "The turn after the handoff lost its next spread");
+        // The rendering mode is global: each session resizes in its own.
         hybrid.resize(portrait);
+        renderingMode::setOverride(0);
         whole.resize(portrait);
+        renderingMode::setOverride(2);
         while (hybrid.busy() || whole.busy())
             frame.exec();
         require(hybrid.image() == whole.image(),
                 "Rotating after adoption lost the visible passage");
+        require(hybrid.state().contains("book_fraction"),
+                "Rotating after adoption must go back to the chapter, not lay out the whole book");
         if (direction > 0) {
+            renderingMode::setOverride(0);
             whole.resize(landscape);
             frame.exec();
             require(whole.go(0), "Cannot restore the reference cover");

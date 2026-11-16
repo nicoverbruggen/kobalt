@@ -2407,6 +2407,15 @@ void ReaderSession::resize(QSize size)
     if (size == desiredSize || size.width() < 320 || size.height() < 240)
         return;
     desiredSize = size;
+    // Hybrid rendering: another page size goes back to the chapter, as
+    // another appearance does in requestAppearance(). Laying out the whole
+    // book again would hold up the reader; it follows in the background.
+    if (!preview_ && renderingMode::countsInBackground()) {
+        quietTurns_ = 0;
+        backgroundCount_->store(false);
+        fullDocumentPending_ = false;
+        desiredChapterMode = 1;
+    }
     request(true, RenderReason::PageLayout);
 }
 

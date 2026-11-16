@@ -132,9 +132,35 @@ bool workerReady()
 
 // Run only on the event worker. The default database is also the one used
 // by savePendingEvents() and EventManager's transient cache.
+// Once per run with verbose diagnostics: which connections the event save and
+// the reading-time write use on this thread, and Nickel's own busy timeouts.
+// Two connections to one file can wait on each other's locks.
+void describeConnections()
+{
+    static bool described = false;
+    if (described || !diagnosticsActive())
+        return;
+    described = true;
+    const auto describe = [](const QString &name) {
+        auto connection = api().connection(name, true);
+        QSqlQuery query(connection);
+        const int timeout = query.exec(QStringLiteral("PRAGMA busy_timeout")) && query.next()
+                ? query.value(0).toInt()
+                : -1;
+        return kobalt::qt::object({ { "connection", connection.connectionName() },
+                                    { "database", connection.databaseName() },
+                                    { "busy_timeout_ms", timeout } });
+    };
+    const auto &a = api();
+    diagnostic("native-db-connections",
+               kobalt::qt::object({ { "default", describe(QString()) },
+                                    { "named", describe(a.dbName(a.device())) } }));
+}
+
 bool saveEvents(QObject *engine, const nickel::NativeSaveTrace &trace)
 {
     mainthread::BlockingOperation operation("nickel-events-save");
+    describeConnections();
     const QString db;
     trace.stage("connection");
     NativeDatabaseWait wait(api().connection(db, true), 2000);

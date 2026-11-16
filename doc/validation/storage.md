@@ -14,6 +14,7 @@ These checks cover the profile database, record writers, saves at close and slee
 | `model.reading-history` | Reading history, its migration and its recovery |
 | `session.reading-book` | Saved book state, background saves and retries, reading time and history in the session |
 | `platform.nickel-event-save` | Nickel's event flush against a competing database writer |
+| `platform.nickel-save-trace` | The `native-save-slow` warning of a slow Nickel save, with its stages |
 | `platform.nickel-reading-save` | The native reading-time save worker: queued intervals, held flushes and timeouts |
 | `lifecycle.closeWaitsFor*`, `lifecycle.closeRetriesRequiredNativeSaves`, `lifecycle.sleepWaitsForNativeTimeBeforePosition` | Saves and their order at close and sleep |
 | `lifecycle.background*`, `lifecycle.standaloneReadingHistory`, `lifecycle.activityBatchesAndLowBattery` | Reading history and activity saves through background, resume and low battery |

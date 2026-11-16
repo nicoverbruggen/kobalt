@@ -583,7 +583,11 @@ private:
     // Header and footer and the field list fill the reading area like
     // Chapters, over the Layout panel, which stays open beneath them.
     kobalt::reader::HeaderFooterView *headerFooterView = nullptr;
+    // Made the first time a header or footer slot is chosen.
     kobalt::reader::FieldChooser *fieldChooser = nullptr;
+    kobalt::reader::FieldChooser *ensureFieldChooser();
+    std::function<void(const std::function<void(kobalt::headerfooter::Layout &)> &)>
+            fieldChooserEdit;
     QWidget *chromeView() const;
     void openHeaderFooterView();
     void closeChromeViews();

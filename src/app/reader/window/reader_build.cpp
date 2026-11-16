@@ -1428,7 +1428,29 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
             editCustom([on](kobalt::headerfooter::Layout &custom) { custom.progressBar = on; });
         });
     }
+    fieldChooserEdit = editCustom;
+    // The views belong to the Layout panel and leave with it. The Text tab
+    // replaces it with the Text page, which also closes them.
+    menu->installEventFilter(this);
+    connect(panels, &QStackedWidget::currentChanged, this, [this](int index) {
+        if (index == int(kobalt::reader::AppearancePage::Typography))
+            closeChromeViews();
+    });
+    syncChromeControls();
+    // Every appearance page uses the same row gap.
+    for (auto *rows : { typeRows, pageRows, layout.headerFooterRows }) {
+        rows->setSpacing(metrics::control::rowGap);
+        rows->addStretch();
+    }
+}
+
+kobalt::reader::FieldChooser *Reader::ensureFieldChooser()
+{
+    if (fieldChooser)
+        return fieldChooser;
     fieldChooser = new kobalt::reader::FieldChooser(this);
+    fieldChooser->hide();
+    const auto editCustom = fieldChooserEdit;
     fieldChooser->selected = [this, editCustom](kobalt::headerfooter::Field field) {
         const int slot = fieldChooser->slot();
         editCustom([slot, field](kobalt::headerfooter::Layout &custom) {
@@ -1443,19 +1465,11 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
                 [slot, on](kobalt::headerfooter::Layout &custom) { custom.uppercase[slot] = on; });
     };
     fieldChooser->done = [this] { closeFieldChooser(); };
-    // The views belong to the Layout panel and leave with it. The Text tab
-    // replaces it with the Text page, which also closes them.
-    menu->installEventFilter(this);
-    connect(panels, &QStackedWidget::currentChanged, this, [this](int index) {
-        if (index == int(kobalt::reader::AppearancePage::Typography))
-            closeChromeViews();
-    });
-    syncChromeControls();
-    // Every appearance page uses the same row gap.
-    for (auto *rows : { typeRows, pageRows, layout.headerFooterRows }) {
-        rows->setSpacing(metrics::control::rowGap);
-        rows->addStretch();
-    }
+    // The reader's text, as the widgets built with the window have it.
+    textRefresh(fieldChooser);
+    for (auto *child : fieldChooser->findChildren<QWidget *>())
+        textRefresh(child);
+    return fieldChooser;
 }
 
 void Reader::buildSettings()
@@ -1753,7 +1767,14 @@ void Reader::buildSettings()
         for (auto *widget : acknowledgments->findChildren<QWidget *>())
             textRefresh(widget);
     });
-    connect(settings->confirmDefaults, &QPushButton::clicked, this, [this] {
+    // A dialog that the panel makes later gets the reader's text, as the
+    // widgets built with the window did.
+    settings->widgetCreated = [this](QWidget *widget) {
+        textRefresh(widget);
+        for (auto *child : widget->findChildren<QWidget *>())
+            textRefresh(child);
+    };
+    settings->restoreDefaultsConfirmed = [this] {
         restoringDefaults = true;
         inpageFootnotesOption->setChecked(false);
         settingsUiFontFace.clear();
@@ -1787,13 +1808,13 @@ void Reader::buildSettings()
         resetDefaults->setText(strings::get("reader.defaults_selected"));
         resetDefaults->setEnabled(false);
         settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
-    });
-    connect(settings->confirmPresets, &QPushButton::clicked, this, [this, settings] {
+    };
+    settings->restorePresetsConfirmed = [this, settings] {
         restoringPresets = true;
         settings->resetPresets->setText(strings::get("text_presets.restore_selected"));
         settings->resetPresets->setEnabled(false);
         settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
-    });
+    };
     if (settings->debugProgress)
         connect(settings->debugProgress, &QPushButton::clicked, this,
                 [this] { showProgressDebug(); });

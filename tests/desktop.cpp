@@ -7830,6 +7830,14 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             graph->open();
             counterName = "rrGraphPage";
         } else if (view == "fields") {
+            // The list is made the first time a slot is chosen.
+            QVERIFY(fixture.press("rrPage"));
+            QTRY_VERIFY(fixture.visible("rrNavLayout"));
+            QVERIFY(fixture.press("rrNavLayout"));
+            QVERIFY(fixture.press("rrHeaderFooter"));
+            QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+            QVERIFY(fixture.press("rrHeaderFooterSlot0"));
+            QTRY_VERIFY(fixture.visible("rrHeaderFooterChooser"));
             auto *fields = dynamic_cast<kobalt::reader::FieldChooser *>(
                     fixture.widget("rrHeaderFooterChooser"));
             QVERIFY(fields);

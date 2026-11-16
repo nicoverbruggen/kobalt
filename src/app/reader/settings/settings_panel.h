@@ -79,6 +79,12 @@ public:
     // Receives a confirmed choice for Open books automatically in Kobalt.
     // Turning it off asks first; turning it on applies at once.
     std::function<void(bool)> automaticOpeningChosen;
+    // A confirmed restore of the appearance defaults or of the text presets,
+    // after its dialog closed.
+    std::function<void()> restoreDefaultsConfirmed, restorePresetsConfirmed;
+    // Each confirmation dialog is made the first time it is needed. The
+    // reader prepares its text as it does for the widgets it built itself.
+    std::function<void(QWidget *)> widgetCreated;
     void showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
                          const QString &current, const QString &emptyLabel,
                          std::function<void(const QString &)> chosen);
@@ -197,8 +203,6 @@ public:
                       *annotationInteractionButton = nullptr, *chapterGroupsButton = nullptr;
     ui::DescribedOption *bionicOption = nullptr;
     ui::CaptionButton *refreshButton = nullptr, *resetDefaults = nullptr, *resetPresets = nullptr;
-    QPushButton *keepDefaults = nullptr, *confirmDefaults = nullptr;
-    QPushButton *keepPresets = nullptr, *confirmPresets = nullptr;
     QPushButton *openAcknowledgments = nullptr, *debugProgress = nullptr;
     DictionariesPage *dictionaries = nullptr;
     KosyncPage *kosync = nullptr;
@@ -251,6 +255,13 @@ private:
     static void styleListAction(ui::CaptionButton *button);
     QPointer<ui::ChoiceModal> standbyDialog;
     QPointer<ui::ChoiceModal> automaticOpeningDialog;
+    // The window that holds the confirmation dialogs.
+    QWidget *dialogParent = nullptr;
+    ui::ChoiceModal *restoreConfirmation();
+    ui::ChoiceModal *restorePresetsConfirmation();
+    ui::ChoiceModal *standbyConfirmation();
+    ui::ChoiceModal *automaticOpeningConfirmation();
+    void dialogCreated(ui::ChoiceModal *dialog);
     QHash<int, StyleSample> stylingSamples;
     // The open styling sheet, if any, and the option its preview shows.
     QPointer<QWidget> stylingPreview;

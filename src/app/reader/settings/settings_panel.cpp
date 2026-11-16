@@ -455,6 +455,7 @@ void SettingsTitle::paintEvent(QPaintEvent *event)
 SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     : ui::Panel(parent, Qt::BottomEdge)
 {
+    dialogParent = parent;
     setObjectName("rrGeneralSettings");
     setSoftEdges(true);
     auto *generalRows = new QVBoxLayout(this);
@@ -814,10 +815,11 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             ui::makeCaptionButton(defaultsPage, resetRow, "rrRestoreDefaults",
                                   strings::get("reader.restore_appearance_defaults"), [this] {
                                       settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
-                                      restoreDialog->fitCard();
-                                      restoreDialog->show();
-                                      restoreDialog->raise();
-                                      restoreDialog->setFocus();
+                                      auto *dialog = restoreConfirmation();
+                                      dialog->fitCard();
+                                      dialog->show();
+                                      dialog->raise();
+                                      dialog->setFocus();
                                   });
     // A list action paints its own label; a text link's underline does not belong here.
     readerStyle(resetDefaults, styles::font(metrics::text::secondary));
@@ -832,10 +834,11 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             ui::makeCaptionButton(defaultsPage, presetsRow, "rrRestorePresets",
                                   strings::get("text_presets.restore"), [this] {
                                       settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
-                                      restorePresetsDialog->fitCard();
-                                      restorePresetsDialog->show();
-                                      restorePresetsDialog->raise();
-                                      restorePresetsDialog->setFocus();
+                                      auto *dialog = restorePresetsConfirmation();
+                                      dialog->fitCard();
+                                      dialog->show();
+                                      dialog->raise();
+                                      dialog->setFocus();
                                   });
     readerStyle(resetPresets, styles::font(metrics::text::secondary));
     resetPresets->setFixedHeight(metrics::about::actionHeight);
@@ -925,16 +928,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     if (inputs.automaticBookOpeningSupported) {
         // Turning automatic opening off sends every later book to Kobo's
         // reader, so ask first.
-        automaticOpeningDialog = new ui::ChoiceModal(
-                parent,
-                { strings::get("settings.automatic_book_opening_off_description"),
-                  strings::get("settings.automatic_book_opening_off_title"),
-                  {} },
-                { strings::get("common.cancel"), "rrKeepAutomaticBookOpening" },
-                { strings::get("settings.automatic_book_opening_off"),
-                  "rrConfirmAutomaticBookOpeningOff" });
-        automaticOpeningDialog->setObjectName("rrAutomaticBookOpeningConfirmation");
-        automaticOpeningDialog->setDimmed(true);
         connect(automaticOpeningOption, &QCheckBox::clicked, this, [this](bool checked) {
             if (checked) {
                 if (automaticOpeningChosen)
@@ -943,19 +936,12 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             }
             // An unanswered confirmation must never turn the choice off.
             automaticOpeningOption->setChecked(true);
-            automaticOpeningDialog->fitCard();
-            automaticOpeningDialog->show();
-            automaticOpeningDialog->raise();
-            automaticOpeningDialog->secondaryButton()->setFocus();
+            auto *dialog = automaticOpeningConfirmation();
+            dialog->fitCard();
+            dialog->show();
+            dialog->raise();
+            dialog->secondaryButton()->setFocus();
         });
-        connect(automaticOpeningDialog->secondaryButton(), &QPushButton::clicked, this,
-                [this] { dismissAutomaticOpeningConfirmation(); });
-        connect(automaticOpeningDialog->primaryButton(), &QPushButton::clicked, this, [this] {
-            dismissAutomaticOpeningConfirmation();
-            if (automaticOpeningChosen)
-                automaticOpeningChosen(false);
-        });
-        automaticOpeningDialog->dismissed = [this] { dismissAutomaticOpeningConfirmation(); };
     }
     section(systemPage, systemRows, "rrSystemVisibilitySection",
             strings::get("settings.section_feature_visibility"));
@@ -982,32 +968,17 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                                      strings::get("settings.disable_reader_standby"),
                                      strings::get("settings.disable_reader_standby_description"));
         systemRows->addWidget(disableStandbyOption);
-        standbyDialog = new ui::ChoiceModal(
-                parent,
-                { strings::get("settings.disable_reader_standby_warning"),
-                  strings::get("settings.disable_reader_standby_title"),
-                  {} },
-                { strings::get("common.cancel"), "rrKeepReaderStandby" },
-                { strings::get("settings.disable_reader_standby"), "rrConfirmDisableStandby" });
-        standbyDialog->setObjectName("rrStandbyConfirmation");
-        standbyDialog->setDimmed(true);
         connect(disableStandbyOption, &QCheckBox::clicked, this, [this](bool checked) {
             if (!checked)
                 return;
             // An unanswered confirmation must never enable the preference.
             disableStandbyOption->setChecked(false);
-            standbyDialog->fitCard();
-            standbyDialog->show();
-            standbyDialog->raise();
-            standbyDialog->secondaryButton()->setFocus();
+            auto *dialog = standbyConfirmation();
+            dialog->fitCard();
+            dialog->show();
+            dialog->raise();
+            dialog->secondaryButton()->setFocus();
         });
-        connect(standbyDialog->secondaryButton(), &QPushButton::clicked, this,
-                [this] { dismissStandbyConfirmation(); });
-        connect(standbyDialog->primaryButton(), &QPushButton::clicked, this, [this] {
-            disableStandbyOption->setChecked(true);
-            dismissStandbyConfirmation();
-        });
-        standbyDialog->dismissed = [this] { dismissStandbyConfirmation(); };
     }
     if (inputs.wifiPowerSaverSupported) {
         wifiPowerSaverOption =
@@ -1136,37 +1107,6 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     // The version reads as a description, not as a chosen value.
     zenAboutButton->setDescription(aboutPage->findChild<QLabel *>("rrAboutVersion")->text());
     zenRows->addStretch(1);
-    restoreDialog = new ui::ChoiceModal(
-            parent,
-            { strings::get(
-                      "reader.your_reading_position_stays_the_same_the_defaults_apply_when_you_c"),
-              strings::get("reader.restore_appearance_defaults_prompt"),
-              {},
-              "rrRestoreTitle" },
-            { strings::get("common.cancel"), "rrKeepDefaults" },
-            { strings::get("reader.restore_defaults"), "rrConfirmDefaults" });
-    restoreDialog->setObjectName("rrRestoreConfirmation");
-    restoreDialog->setDimmed(true);
-    restoreDialog->descriptionLabel()->setObjectName("rrRestoreDescription");
-    keepDefaults = restoreDialog->secondaryButton();
-    confirmDefaults = restoreDialog->primaryButton();
-    connect(keepDefaults, &QPushButton::clicked, this, [this] { dismissRestore(); });
-    connect(confirmDefaults, &QPushButton::clicked, this, [this] { dismissRestore(); });
-    restoreDialog->dismissed = [this] { dismissRestore(); };
-    restorePresetsDialog = new ui::ChoiceModal(
-            parent,
-            { strings::get("text_presets.restore_detail"),
-              strings::get("text_presets.restore_prompt"),
-              {} },
-            { strings::get("common.cancel"), "rrKeepPresets" },
-            { strings::get("text_presets.restore_confirm"), "rrConfirmPresets" });
-    restorePresetsDialog->setObjectName("rrRestorePresetsConfirmation");
-    restorePresetsDialog->setDimmed(true);
-    keepPresets = restorePresetsDialog->secondaryButton();
-    confirmPresets = restorePresetsDialog->primaryButton();
-    connect(keepPresets, &QPushButton::clicked, this, [this] { dismissRestore(); });
-    connect(confirmPresets, &QPushButton::clicked, this, [this] { dismissRestore(); });
-    restorePresetsDialog->dismissed = [this] { dismissRestore(); };
     settingsError = new ui::InterfaceLabel(this);
     settingsError->setWordWrap(true);
     settingsError->hide();
@@ -2506,6 +2446,115 @@ void SettingsPanel::presentSheet()
     sheet->setFocus();
     if (sheetShown)
         sheetShown(sheet);
+}
+
+void SettingsPanel::dialogCreated(ui::ChoiceModal *dialog)
+{
+    dialog->setDimmed(true);
+    dialog->hide();
+    if (widgetCreated)
+        widgetCreated(dialog);
+}
+
+ui::ChoiceModal *SettingsPanel::restoreConfirmation()
+{
+    if (restoreDialog)
+        return restoreDialog;
+    restoreDialog = new ui::ChoiceModal(
+            dialogParent,
+            { strings::get(
+                      "reader.your_reading_position_stays_the_same_the_defaults_apply_when_you_c"),
+              strings::get("reader.restore_appearance_defaults_prompt"),
+              {},
+              "rrRestoreTitle" },
+            { strings::get("common.cancel"), "rrKeepDefaults" },
+            { strings::get("reader.restore_defaults"), "rrConfirmDefaults" });
+    restoreDialog->setObjectName("rrRestoreConfirmation");
+    restoreDialog->descriptionLabel()->setObjectName("rrRestoreDescription");
+    connect(restoreDialog->secondaryButton(), &QPushButton::clicked, this,
+            [this] { dismissRestore(); });
+    connect(restoreDialog->primaryButton(), &QPushButton::clicked, this, [this] {
+        dismissRestore();
+        if (restoreDefaultsConfirmed)
+            restoreDefaultsConfirmed();
+    });
+    restoreDialog->dismissed = [this] { dismissRestore(); };
+    dialogCreated(restoreDialog);
+    return restoreDialog;
+}
+
+ui::ChoiceModal *SettingsPanel::restorePresetsConfirmation()
+{
+    if (restorePresetsDialog)
+        return restorePresetsDialog;
+    restorePresetsDialog = new ui::ChoiceModal(
+            dialogParent,
+            { strings::get("text_presets.restore_detail"),
+              strings::get("text_presets.restore_prompt"),
+              {} },
+            { strings::get("common.cancel"), "rrKeepPresets" },
+            { strings::get("text_presets.restore_confirm"), "rrConfirmPresets" });
+    restorePresetsDialog->setObjectName("rrRestorePresetsConfirmation");
+    connect(restorePresetsDialog->secondaryButton(), &QPushButton::clicked, this,
+            [this] { dismissRestore(); });
+    connect(restorePresetsDialog->primaryButton(), &QPushButton::clicked, this, [this] {
+        dismissRestore();
+        if (restorePresetsConfirmed)
+            restorePresetsConfirmed();
+    });
+    restorePresetsDialog->dismissed = [this] { dismissRestore(); };
+    dialogCreated(restorePresetsDialog);
+    return restorePresetsDialog;
+}
+
+ui::ChoiceModal *SettingsPanel::automaticOpeningConfirmation()
+{
+    if (automaticOpeningDialog)
+        return automaticOpeningDialog;
+    // Turning automatic opening off sends every later book to Kobo's
+    // reader, so ask first.
+    automaticOpeningDialog =
+            new ui::ChoiceModal(dialogParent,
+                                { strings::get("settings.automatic_book_opening_off_description"),
+                                  strings::get("settings.automatic_book_opening_off_title"),
+                                  {} },
+                                { strings::get("common.cancel"), "rrKeepAutomaticBookOpening" },
+                                { strings::get("settings.automatic_book_opening_off"),
+                                  "rrConfirmAutomaticBookOpeningOff" });
+    automaticOpeningDialog->setObjectName("rrAutomaticBookOpeningConfirmation");
+    connect(automaticOpeningDialog->secondaryButton(), &QPushButton::clicked, this,
+            [this] { dismissAutomaticOpeningConfirmation(); });
+    connect(automaticOpeningDialog->primaryButton(), &QPushButton::clicked, this, [this] {
+        dismissAutomaticOpeningConfirmation();
+        if (automaticOpeningChosen)
+            automaticOpeningChosen(false);
+    });
+    automaticOpeningDialog->dismissed = [this] { dismissAutomaticOpeningConfirmation(); };
+    dialogCreated(automaticOpeningDialog);
+    return automaticOpeningDialog;
+}
+
+ui::ChoiceModal *SettingsPanel::standbyConfirmation()
+{
+    if (standbyDialog)
+        return standbyDialog;
+    standbyDialog = new ui::ChoiceModal(
+            dialogParent,
+            { strings::get("settings.disable_reader_standby_warning"),
+              strings::get("settings.disable_reader_standby_title"),
+              {} },
+            { strings::get("common.cancel"), "rrKeepReaderStandby" },
+            { strings::get("settings.disable_reader_standby"), "rrConfirmDisableStandby" });
+    standbyDialog->setObjectName("rrStandbyConfirmation");
+    connect(standbyDialog->secondaryButton(), &QPushButton::clicked, this,
+            [this] { dismissStandbyConfirmation(); });
+    connect(standbyDialog->primaryButton(), &QPushButton::clicked, this, [this] {
+        disableStandbyOption->setChecked(true);
+        dismissStandbyConfirmation();
+    });
+    standbyDialog->dismissed = [this] { dismissStandbyConfirmation(); };
+    dialogCreated(standbyDialog);
+    return standbyDialog;
 }
 
 void SettingsPanel::dismissRestore()

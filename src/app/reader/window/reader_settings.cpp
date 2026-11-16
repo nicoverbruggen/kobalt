@@ -246,7 +246,7 @@ void Reader::syncChromeControls()
                          starred ? strings::get("header_footer.preset.modified_name")
                                            .arg(presetLabel(chromePreset))
                                  : presetLabel(chromePreset)));
-    if (fieldChooser->isVisible())
+    if (fieldChooser && fieldChooser->isVisible())
         fieldChooser->open(fieldChooser->slot(), current.slotFields[fieldChooser->slot()], values,
                            current.uppercase[fieldChooser->slot()],
                            fieldChooser->slot() < 3 ? page->headerTextPixels()
@@ -266,7 +266,8 @@ void Reader::openHeaderFooterView()
 {
     if (session->temporaryTypography() || !menu->isVisible())
         return;
-    fieldChooser->hide();
+    if (fieldChooser)
+        fieldChooser->hide();
     syncChromeControls();
     headerFooterView->show();
     headerFooterView->raise();
@@ -277,7 +278,8 @@ void Reader::closeChromeViews()
 {
     if (!chromeView())
         return;
-    fieldChooser->hide();
+    if (fieldChooser)
+        fieldChooser->hide();
     headerFooterView->hide();
     refresh();
 }
@@ -287,18 +289,19 @@ void Reader::openFieldChooser(int slot)
     if (session->temporaryTypography() || !menu->isVisible())
         return;
     const auto &current = page->chrome;
-    fieldChooser->open(slot, current.slotFields[slot], chromeValues(), current.uppercase[slot],
-                       slot < 3 ? page->headerTextPixels() : page->footerTextPixels());
+    auto *chooser = ensureFieldChooser();
+    chooser->open(slot, current.slotFields[slot], chromeValues(), current.uppercase[slot],
+                  slot < 3 ? page->headerTextPixels() : page->footerTextPixels());
     headerFooterView->hide();
-    fieldChooser->show();
-    fieldChooser->raise();
+    chooser->show();
+    chooser->raise();
     refresh();
 }
 
 // A choice or the close cell returns to Header and footer.
 void Reader::closeFieldChooser()
 {
-    if (!fieldChooser->isVisible())
+    if (!fieldChooser || !fieldChooser->isVisible())
         return;
     fieldChooser->hide();
     headerFooterView->show();

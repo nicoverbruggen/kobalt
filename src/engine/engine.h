@@ -333,6 +333,9 @@ public:
     // header's chapter. Empty when the book has no usable contents.
     virtual QString chapterTitle(const QString &position) const = 0;
     virtual QJsonObject state() const = 0;
+    // state() without the page estimate, which costs more to make. Enough
+    // to compare the settings.
+    virtual QJsonObject settingsState() const = 0;
 };
 
 // Creates the Blaze adapter used by the reader.

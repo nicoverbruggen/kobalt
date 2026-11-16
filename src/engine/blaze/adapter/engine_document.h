@@ -332,6 +332,7 @@ public:
     // header's chapter. Empty when the book has no usable contents.
     QString chapterTitle(const QString &position) const override;
     QJsonObject state() const override;
+    QJsonObject settingsState() const override;
 
 private:
     // Sets the current and next entries of `links` around `position`.
@@ -569,8 +570,6 @@ private:
     RoughPlace roughPlace() const;
     // Forgets the pages that the layout gave before a change of settings.
     void forgetObservedPages();
-    // The values of state() without the page estimate.
-    QJsonObject settingsState() const;
     // A digest of everything that decides the pages, from settingsState().
     QString layoutFontDigest() const;
     QString estimateKey(const QJsonObject &settings) const;

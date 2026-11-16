@@ -2704,7 +2704,7 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                 EngineSlowdownScope slowdown(true, [latest, job, lease] {
                     return latest->load() != job || !lease || lease->revoked();
                 });
-                const auto before = engine->state();
+                const auto before = engine->settingsState();
                 const auto oldSize = engine->viewport();
                 auto oldPage = engine->page();
                 const auto oldImage = engine->cachedImageKey(oldPage);
@@ -2754,7 +2754,7 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                     result.error = strings::get("error.could_not_update_text");
                 else {
                     appearanceChanged = !unchanged && !refused
-                            && ((modeChanged && !swap) || !appearance::same(before, engine->state())
+                            && ((modeChanged && !swap) || !appearance::same(before, engine->settingsState())
                                 || oldSize != engine->viewport());
                     if (swap && modeChanged && !refused) {
                         // The same page in the document of the whole book:

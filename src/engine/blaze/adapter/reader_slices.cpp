@@ -229,13 +229,33 @@ QVector<int> EngineDocument::spineItemStarts(int first, int last,
     static constexpr int group = 32;
     const auto items = spineItems();
     last = qMin(last, int(items.size()) - 1);
+    if (!engine_)
+        return {};
+    // The fragment of each spine item, from one walk over the fragments.
+    // positionOf() would walk them again for every spine item.
+    QHash<QString, ldomNode *> fragments;
+    if (auto *root = engine_->getDocument()->nodeFromXPath(U"/body")) {
+        for (int i = 0; i < root->getChildCount(); ++i) {
+            auto *node = root->getChildNode(i);
+            if (!node->isElement() || !node->isNodeName("DocFragment"))
+                continue;
+            const auto href =
+                    QString::fromUtf8(UnicodeToUtf8(node->getAttributeValue("Source")).c_str());
+            if (!fragments.contains(href))
+                fragments.insert(href, node);
+        }
+    }
+    // The start of a spine item, as positionOf() gives it for a location
+    // without a path.
     QStringList starts;
     for (int i = first; i <= last; ++i) {
         if ((i - first) % group == 0 && current && !current())
             return {};
-        Location start;
-        start.href = items[i];
-        starts.append(positionOf(start));
+        auto *fragment = items[i].isEmpty() ? nullptr : fragments.value(items[i]);
+        starts.append(fragment && enginelocation::body(fragment)
+                              ? QString::fromUtf8(
+                                        UnicodeToUtf8(ldomXPointer(fragment, 0).toString()).c_str())
+                              : QString());
     }
     QVector<int> pages;
     for (int from = 0; from < starts.size(); from += group) {

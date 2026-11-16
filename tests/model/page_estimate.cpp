@@ -170,6 +170,28 @@ struct ReaderLocationProbe
 
     static int retired(const EngineDocument &model) { return int(model.retired_.size()); }
 
+    static QVector<int> spineItemStarts(const EngineDocument &model)
+    {
+        return model.spineItemStarts(0, model.spineItemCount_ - 1);
+    }
+
+    // The same through positionOf(), one spine item at a time.
+    static QVector<int> spineItemStartsByLocation(const EngineDocument &model)
+    {
+        QStringList starts;
+        for (const auto &href : model.spineItems()) {
+            Location start;
+            start.href = href;
+            starts.append(model.positionOf(start));
+        }
+        auto pages = model.pagesOf(starts);
+        for (int i = pages.size() - 1; i >= 0; --i) {
+            if (pages[i] < 0 && !starts[i].isEmpty())
+                pages[i] = i + 1 < pages.size() ? pages[i + 1] : model.pages();
+        }
+        return pages;
+    }
+
     // True when the prepared whole book knows where its spine items start.
     static bool wholeBookStartsFound(const EngineDocument &model)
     {
@@ -2659,6 +2681,27 @@ void retiredUntilIdle()
             "The chapter must read on after the release");
 }
 
+// Where each spine item starts in the whole book, from one walk over its
+// fragments, is where positionOf() puts the start of each.
+void spineItemStartsInOneWalk()
+{
+    QFile book(QStringLiteral(KOBALT_TEST_FIXTURES) + "/trevelyans-type-tester.kepub.epub");
+    require(book.open(QIODevice::ReadOnly), "Cannot read the Type Tester");
+    const auto bytes = book.readAll();
+    for (const auto &files : { pagesBook(), test::engineBook(false, 6, 20) }) {
+        EngineDocument model(test::readerFonts());
+        openResources(model, files, { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+        const auto starts = Probe::spineItemStarts(model);
+        require(!starts.isEmpty() && starts == Probe::spineItemStartsByLocation(model),
+                "The spine items must start where positionOf() puts them");
+    }
+    EngineDocument tester(test::readerFonts());
+    QString error;
+    require(tester.open(bytes, { 600, 800 }, {}, &error), qPrintable(error));
+    require(Probe::spineItemStarts(tester) == Probe::spineItemStartsByLocation(tester),
+            "The spine items of the Type Tester must start where positionOf() puts them");
+}
+
 // A parked build goes on only with room for the documents of the package
 // files: a document made without room would share the nodes of another one.
 void fullBuildWaitsForRoom()
@@ -3219,6 +3262,7 @@ int main(int argc, char **argv)
     reopenWholeBook();
     chapterStartsNeedNoRead();
     fullBuildWaitsForRoom();
+    spineItemStartsInOneWalk();
     retiredUntilIdle();
     measurementsKeptAcrossLayouts();
     stoppedNextSliceKeepsImages();

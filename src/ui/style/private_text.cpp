@@ -878,9 +878,14 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
             if (!face) {
                 return false;
             }
+            // Control characters, such as a tab or the line breaks a label
+            // measures, and format characters have no glyph to find. No
+            // bundled font maps them, so counting them as missing would
+            // open every fallback file, the CJK collection included.
             for (int i = 0; i < clusterSize; ++i) {
                 const auto character = cluster[i];
-                if (character != '\t' && QChar::category(character) != QChar::Other_Format
+                const auto category = QChar::category(character);
+                if (category != QChar::Other_Control && category != QChar::Other_Format
                     && !FT_Get_Char_Index(face, character)) {
                     return false;
                 }

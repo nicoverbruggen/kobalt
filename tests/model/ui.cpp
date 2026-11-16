@@ -341,6 +341,38 @@ int main(int argc, char **argv)
     }
     checkPrivateInterfaceText(kobalt::test::readerAssets());
     {
+        // A line break is not a missing glyph. Labels measure their whole
+        // text, line breaks included, so a notice with a paragraph break
+        // must not open the bundled fallbacks on the GUI thread.
+        using namespace kobalt::ui;
+        const auto &assets = kobalt::test::readerAssets();
+        int loads = 0;
+        kobalt::setDiagnosticObserver([&](const QJsonObject &event) {
+            if (event.value("event").toString() == "font-load-start")
+                ++loads;
+        });
+        require(initializePrivateInterfaceText(assets), "Cannot reset private interface text");
+        measurePrivateText(QStringLiteral("Latin"), interfaceFont(24));
+        loads = 0;
+        measurePrivateText(QStringLiteral("first\nsecond\r\n\nthird\tfourth"), interfaceFont(24));
+        require(loads == 0, "Line breaks loaded fallback fonts");
+        const auto notice = [&](bool savedLocally) {
+            require(initializePrivateInterfaceText(assets), "Cannot reset private interface text");
+            loads = 0;
+            QWidget parent;
+            parent.resize(1072, 1448);
+            kobalt::SaveErrorView view(&parent, {}, false, kobalt::SaveErrorView::Cause::TimedOut,
+                                       savedLocally);
+            view.setGeometry(parent.rect());
+            parent.grab();
+            return loads;
+        };
+        // The close-now text adds a paragraph break to the same notice.
+        require(notice(true) == notice(false),
+                "The save timeout notice with a paragraph break loaded fallback fonts");
+        kobalt::setDiagnosticObserver({});
+    }
+    {
         using namespace kobalt::ui;
         const auto &assets = kobalt::test::readerAssets();
         const QStringList files{ assets.file("fonts/IBMPlexSans-Regular.ttf") };

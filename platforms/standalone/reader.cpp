@@ -217,6 +217,11 @@ void ReaderController::begin(const QString &path, QSize pixels)
         identity, path, viewport, saved, {}, paths.layoutCache(), lease, source->resources(lease)
     };
 #ifdef Q_OS_ANDROID
+    // The parsed book, as on Kobo: Hybrid shows the whole book soon after a
+    // reopening instead of building it again. The app's cache folder holds
+    // it, so the system can reclaim the space and backups leave it out.
+    request.documentCachePath =
+            QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/blaze-documents";
     // Materialize the selected document trees before the engine discovers
     // fonts. This factory runs on the opening worker, after the old reader drains.
     const auto resources = request.resources;

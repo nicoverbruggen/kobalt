@@ -126,6 +126,18 @@ kobalt::headerfooter::Values Reader::chromeValues()
     values.pageTurnMilliseconds = pageTurnMilliseconds;
     if (state.contains("chapter_load_ms"))
         values.chapterLoadMilliseconds = qint64(state.value("chapter_load_ms").toDouble());
+    values.wholeBook = !state.contains("book_fraction");
+    values.wholeBookFailed = !values.wholeBook && state.value("whole_book_failed").toBool();
+    values.wholeBookPercent = values.wholeBook ? -1 : kobalt::wholeBookBuildPercent();
+    // The time of the whole book is taken when it first shows after the
+    // opening or a new layout.
+    if (session->layoutStarts() != statusLayout) {
+        statusLayout = session->layoutStarts();
+        statusWholeBookMilliseconds = -1;
+    }
+    if (values.wholeBook && statusWholeBookMilliseconds < 0 && !session->busy())
+        statusWholeBookMilliseconds = session->layoutMilliseconds();
+    values.wholeBookMilliseconds = values.wholeBook ? statusWholeBookMilliseconds : -1;
     return values;
 }
 
@@ -155,6 +167,49 @@ bool Reader::chromeTicks() const
             || field == Field::ChapterTimeLeft || field == Field::BookTimeLeft)
             return true;
     return false;
+}
+
+bool Reader::bookStatusShown() const
+{
+    using namespace kobalt::headerfooter;
+    const auto &layout = page->chrome;
+    for (int slot = 0; slot < slotCount; ++slot)
+        if (layout.slotFields[slot] == Field::BookStatus
+            && (footerSlot(slot) ? layout.footerEnabled : layout.headerEnabled))
+            return true;
+    return false;
+}
+
+void Reader::syncStatusTimer()
+{
+    if (!bookStatusShown() || !isVisible() || lifecycleHidden || closing || services.suspended()) {
+        if (statusTimer)
+            statusTimer->stop();
+        return;
+    }
+    if (!statusTimer) {
+        statusTimer = new QTimer(this);
+        statusTimer->setObjectName("rrBookStatusTimer");
+        statusTimer->setInterval(5000);
+        connect(statusTimer, &QTimer::timeout, this, [this] {
+            if (!bookStatusShown() || !isVisible() || lifecycleHidden || closing
+                || services.suspended()) {
+                statusTimer->stop();
+                return;
+            }
+            // Panels over the page draw their own status; the strips wait.
+            if (topControls->isVisible() || settingsVisible() || dictionaryPanel->isVisible()
+                || searchPanel->isVisible() || linksActive())
+                return;
+            const auto before = page->slotContents;
+            showChapterText();
+            // Like a clock tick, it changes the strips, not the book page.
+            if (page->slotContents != before)
+                page->refreshContent();
+        });
+    }
+    if (!statusTimer->isActive())
+        statusTimer->start();
 }
 
 void Reader::loadChrome()

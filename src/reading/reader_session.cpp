@@ -66,6 +66,7 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
     }
     if (const double fraction = engine.bookFraction(); fraction >= 0) {
         result.state["book_fraction"] = fraction;
+        result.state["whole_book_failed"] = engine.fullDocumentFailed();
         result.state["slice_start"] = engine.pageStart(0);
         const auto rough = engine.roughPages();
         result.state["rough_page"] = rough.page;
@@ -362,6 +363,8 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
         return;
     }
     estimate.state["page_estimate"] = engine->state().value("page_estimate");
+    if (engine->bookFraction() >= 0)
+        estimate.state["whole_book_failed"] = engine->fullDocumentFailed();
     kobalt::qt::invoke(
             qApp,
             [guard, job, lease, estimate] {
@@ -621,6 +624,8 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     ++revision;
     layoutReady_ = false;
     newestLayout->fetch_add(1);
+    layoutClock_.start();
+    ++layoutStarts_;
     newest->store(revision);
     cancelSearch();
     lease_ = request.lease;
@@ -971,8 +976,12 @@ void ReaderSession::requestAppearance(const appearance::Requested &settings, QSi
                 ? (nextBionic == "off" ? RenderReason::DisableBionic : RenderReason::EnableBionic)
                 : (next == desired && resized ? RenderReason::PageLayout
                                               : RenderReason::Appearance);
+        // Only the chapter mode changes: Hybrid shows the whole book that its
+        // build laid out.
+        switchingMode_ = next == desired && !resized;
         desired = next;
         request(true, reason);
+        switchingMode_ = false;
     }
 }
 
@@ -2674,6 +2683,11 @@ void ReaderSession::request(bool appearanceChange, RenderReason reason)
         fullDocumentPending_ = false;
         layoutReady_ = false;
         newestLayout->fetch_add(1);
+        // Hybrid's switch to the whole book keeps the layout it has timed.
+        if (!switchingMode_) {
+            layoutClock_.start();
+            ++layoutStarts_;
+        }
         interruptSearch();
     } else {
         cancelSearch();

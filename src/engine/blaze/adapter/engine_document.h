@@ -224,6 +224,8 @@ public:
     int preparedSpreadTurn(int direction) const override;
     bool fullDocumentStarted() const override;
 
+    bool fullDocumentFailed() const override { return !fullFailed_.isEmpty(); }
+
     bool continuesAfter() const override
     {
         return windowFirst_ >= 0

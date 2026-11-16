@@ -1027,8 +1027,10 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
         carryTextKnowledge(*full);
         if (adoptLayout(*full, current))
             return true;
-        if (!current || current())
+        if (!current || current()) {
             fullFailed_ = fullKey_;
+            diagnostic("whole-book-failed", { { "step", "adopt" } }, DiagnosticSeverity::Warning);
+        }
         // A whole book can write its cache file as it goes: not in this turn.
         retire(std::move(full));
         return false;
@@ -1341,6 +1343,17 @@ std::unique_ptr<EngineDocument> EngineDocument::openSide(const QJsonObject &sett
 #endif
 }
 
+namespace {
+// The Book status field reads the progress of the whole-book build from the
+// GUI thread while the build runs on its own.
+std::atomic_int buildPercent{ -1 };
+} // namespace
+
+int wholeBookBuildPercent()
+{
+    return buildPercent.load();
+}
+
 #if __has_include(<koblaze.h>) && defined(KOBLAZE_CANCEL_CHECK)
 namespace {
 // QThread::create() came with Qt 5.10; Kobo firmware 4 has Qt 5.2.
@@ -1374,9 +1387,11 @@ struct EngineDocument::FullBuild
     QSize size;
     int parks = 0;
     QThread *thread = nullptr;
+    QString failure;
 
     ~FullBuild()
     {
+        buildPercent = -1;
         if (!thread)
             return;
         mainthread::blocking("whole-book-build-end");
@@ -1573,6 +1588,9 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
         saved["koblaze_last_spine_item"] = -1;
         auto build = std::make_shared<FullBuild>();
         build->key = key;
+        // A new appearance tries again after a failed build.
+        fullFailed_.clear();
+        buildPercent = 0;
         build->size = size_;
         // What the build reads is copied here: this document goes on with
         // other work between the runs of the build.
@@ -1596,18 +1614,29 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
             }
             auto document = std::move(*next);
             bool opened = false;
+            QString error;
             if (!state->abandoned) {
                 const std::function<bool()> wanted = [state] { return state->wanted(); };
                 document->openInterrupt_ = [state] { return !state->wanted(); };
-                QString error;
                 document->openingFontSource_ = source->fontIdentity;
                 koblazeSetPausePoint(&FullBuild::pausePoint, state);
                 try {
                     const StopCheck check(wanted);
+                    // The text, its styles and its pages each count for a
+                    // third. Each slice of pages counts from zero again.
+                    const OpeningProgress progress = [](OpeningStage stage, int percent) {
+                        const int part = stage == OpeningStage::Styles ? 1
+                                : stage == OpeningStage::Pages         ? 2
+                                                                       : 0;
+                        const int done = (part * 100 + qBound(0, percent, 100)) / 3;
+                        int seen = buildPercent.load();
+                        while (seen >= 0 && done > seen
+                               && !buildPercent.compare_exchange_weak(seen, done)) { }
+                    };
                     opened = source->resources
                             ? document->openResources(source->resources->fresh(), source->sizes,
-                                                      size, saved, &error)
-                            : document->open(source->bytes, size, saved, &error);
+                                                      size, saved, &error, progress)
+                            : document->open(source->bytes, size, saved, &error, progress);
                     if (opened && document->pages() > 0) {
                         document->wordCounts(wanted);
                         // The record for the next opening needs them. The
@@ -1624,6 +1653,10 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
                 document->openInterrupt_ = nullptr;
             }
             const bool usable = opened && !state->abandoned && document->pages() > 0;
+            // Why a build that was not given up has no book, for the log.
+            if (!usable && !state->abandoned)
+                state->failure = !opened ? (error.isEmpty() ? QStringLiteral("open") : error)
+                                         : QStringLiteral("no-pages");
             if (!usable) {
                 // A build that stopped half-way leaves no half book in the
                 // cache file: writing it would hold up the work that gave
@@ -1649,9 +1682,14 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
         return FullDocument::Stopped;
     auto next = std::move(building_->document);
     const int parks = building_->parks;
+    const auto failure = building_->failure;
     building_.reset();
     if (!next) {
         fullFailed_ = key;
+        // The chapter path read this book, so a whole book that does not
+        // open is a fault to look into.
+        diagnostic("whole-book-failed", { { "step", "build" }, { "reason", failure } },
+                   DiagnosticSeverity::Warning);
         return FullDocument::None;
     }
     if (diagnosticsActive())

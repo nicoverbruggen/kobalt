@@ -229,6 +229,8 @@ void Reader::prepareTransition(std::function<void()> finished, bool usb)
     if (kosyncPage)
         kosyncPage->dismissEditor();
     clockTimer->stop();
+    if (statusTimer)
+        statusTimer->stop();
     setEnabled(false);
     auto completed = std::make_shared<bool>(false);
     auto complete = [this, request, usb, finished](const QString &location, const QString &error,
@@ -702,6 +704,8 @@ void Reader::sleepReader()
     appearanceEdit.clearContinuation();
     lifecycleHidden = true;
     clockTimer->stop();
+    if (statusTimer)
+        statusTimer->stop();
     // The session worker writes to the same database as the bookmark. Let it
     // finish before attempting the nonblocking bookmark transaction. Keep the
     // sleep interval intact so a short sleep can resume the same local session.
@@ -1477,6 +1481,8 @@ void Reader::hideEvent(QHideEvent *event)
         imageViewer->closeImage();
     if (clockTimer)
         clockTimer->stop();
+    if (statusTimer)
+        statusTimer->stop();
     if (pageScrubber)
         pageScrubber->cancel();
     renderNoticeTimer.stop();
@@ -2116,6 +2122,9 @@ bool Reader::paceNeeded() const
 // reader's other periodic work runs on the same tick.
 void Reader::startClock(int now)
 {
+    // Called where the clock's consumers or the reader's visibility change,
+    // which are the Book status field's conditions too.
+    syncStatusTimer();
     // Without a consumer the reader does not wake at all. A consumer that
     // appears later starts the clock: see the callers of startClock().
     if (!clockNeeded()) {

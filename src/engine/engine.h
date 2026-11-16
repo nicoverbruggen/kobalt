@@ -301,6 +301,10 @@ public:
     // True once the build of that document has started.
     virtual bool fullDocumentStarted() const { return false; }
 
+    // True when the last build for the appearance in force gave no usable
+    // book. It is not tried again until the appearance changes.
+    virtual bool fullDocumentFailed() const { return false; }
+
     // Turns `delta` pages. Past the first or the last page that the engine
     // has, it loads the spine item there and continues. False at an end of
     // the book.
@@ -361,6 +365,10 @@ public:
 
 // Creates the Blaze adapter used by the reader.
 std::unique_ptr<Engine> createEngine(EngineFontInputs fonts);
+
+// How far the whole-book build of Hybrid rendering is, in percent, or -1
+// while none runs. Any thread may read it: the Book status field shows it.
+int wholeBookBuildPercent();
 
 // 1 opens the books that follow in chapter mode and 0 opens them as a whole.
 // The application sets it through renderingMode in reading/rendering_mode.h.

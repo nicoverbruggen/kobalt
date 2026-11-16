@@ -539,9 +539,18 @@
 "header_footer.field.battery_warning" = "Battery warning";
 "header_footer.field.page_turn_time" = "Page turn time";
 "header_footer.field.chapter_load_time" = "Chapter load time";
+"header_footer.field.book_status" = "Book status";
 /* Arguments: %1 */
 "header_footer.field_description.battery_warning" = "Shows the battery only below %1%.";
 "header_footer.field_description.time_left" = "Estimated from your reading pace.";
+"header_footer.field_description.book_status" = "Fast while one chapter is laid out, Full once the whole book is. Updates every 5 seconds.";
+"header_footer.status.fast" = "Fast";
+/* Arguments: %1 */
+"header_footer.status.fast_progress" = "Fast · %1%";
+"header_footer.status.fast_failed" = "Fast · failed";
+"header_footer.status.full" = "Full";
+/* Arguments: %1 */
+"header_footer.status.full_time" = "Full · %1 s";
 
 /* image */
 "image.unavailable" = "Image could not be loaded";

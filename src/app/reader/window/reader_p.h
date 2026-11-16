@@ -644,6 +644,16 @@ private:
     void closeFieldChooser();
     // True when a slot shows something that changes with the clock.
     bool chromeTicks() const;
+    // The Book status field refreshes every 5 seconds, and only while it
+    // shows in a header or footer of the reading page. Without it nothing
+    // wakes the reader for it.
+    bool bookStatusShown() const;
+    void syncStatusTimer();
+    QTimer *statusTimer = nullptr;
+    // How long the whole book took after the session's layout start that
+    // statusLayout names, or -1 until it shows.
+    quint64 statusLayout = 0;
+    qint64 statusWholeBookMilliseconds = -1;
     bool clockNeeded() const;
     bool paceNeeded() const;
     kobalt::ui::SettingSlider *sizeSlider = nullptr, *opticalSizeSlider = nullptr,

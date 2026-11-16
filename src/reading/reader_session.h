@@ -213,6 +213,17 @@ public:
     // Source and pagination generation. Navigation within the same layout keeps it.
     quint64 layoutRevision() const { return newestLayout->load(); }
 
+    // Milliseconds since the opening or the last new layout, which is a new
+    // appearance or page size; -1 before the opening. The Book status field
+    // shows how long the whole book took from there.
+    qint64 layoutMilliseconds() const
+    {
+        return layoutClock_.isValid() ? layoutClock_.elapsed() : -1;
+    }
+
+    // Counts the openings and new layouts that restart that clock.
+    quint64 layoutStarts() const { return layoutStarts_; }
+
     // Bookmark lookups on the engine thread. They report nothing when the
     // layout changed before they finished; the caller asks again.
     void bookmarkLocations(QStringList positions, std::function<void(BookmarkLocations)> finished,
@@ -557,6 +568,9 @@ private:
     bool layoutReady_ = false;
     RenderProgress renderProgress_;
     QElapsedTimer renderTimer;
+    QElapsedTimer layoutClock_;
+    quint64 layoutStarts_ = 0;
+    bool switchingMode_ = false;
     void beginRenderProgress(RenderReason reason);
     void clearRenderProgress();
     void loadImages();

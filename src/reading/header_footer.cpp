@@ -109,6 +109,22 @@ QString milliseconds(qint64 value)
     return value >= 0 ? strings::get("header_footer.milliseconds").arg(value) : QString();
 }
 
+// Fast while the engine lays out a chapter at a time, Full once it has the
+// whole book: with the build's progress, its failure or how long it took.
+QString bookStatus(const Values &values)
+{
+    if (values.wholeBook)
+        return values.wholeBookMilliseconds >= 0
+                ? strings::get("header_footer.status.full_time")
+                          .arg(QString::number(values.wholeBookMilliseconds / 1000.0, 'f', 1))
+                : strings::get("header_footer.status.full");
+    if (values.wholeBookFailed)
+        return strings::get("header_footer.status.fast_failed");
+    if (values.wholeBookPercent >= 0)
+        return strings::get("header_footer.status.fast_progress").arg(values.wholeBookPercent);
+    return strings::get("header_footer.status.fast");
+}
+
 QString joined(const QString &name, const QString &position)
 {
     if (name.isEmpty() || position.isEmpty())
@@ -242,6 +258,8 @@ QString fieldValue(Field field)
         return QStringLiteral("page_turn_time");
     case Field::ChapterLoadTime:
         return QStringLiteral("chapter_load_time");
+    case Field::BookStatus:
+        return QStringLiteral("book_status");
     }
     return QStringLiteral("nothing");
 }
@@ -471,6 +489,9 @@ Content content(Field field, const Values &values, bool uppercase)
     case Field::ChapterLoadTime:
         result.text = milliseconds(values.chapterLoadMilliseconds);
         break;
+    case Field::BookStatus:
+        result.text = bookStatus(values);
+        break;
     }
     if (uppercase) {
         result.text = result.text.toUpper();
@@ -528,6 +549,8 @@ QString fieldLabel(Field field)
         return strings::get("header_footer.field.page_turn_time");
     case Field::ChapterLoadTime:
         return strings::get("header_footer.field.chapter_load_time");
+    case Field::BookStatus:
+        return strings::get("header_footer.field.book_status");
     }
     return {};
 }
@@ -541,6 +564,8 @@ QString fieldDescription(Field field)
     case Field::ChapterTimeLeft:
     case Field::BookTimeLeft:
         return strings::get("header_footer.field_description.time_left");
+    case Field::BookStatus:
+        return strings::get("header_footer.field_description.book_status");
     default:
         return {};
     }

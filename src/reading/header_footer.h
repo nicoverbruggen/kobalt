@@ -30,6 +30,7 @@ enum class Field {
     BatteryPercentOnly,
     PageTurnTime,
     ChapterLoadTime,
+    BookStatus,
 };
 // Every field, for reading saved layouts.
 inline constexpr Field fields[] = {
@@ -39,7 +40,7 @@ inline constexpr Field fields[] = {
     Field::BatteryPercent,   Field::Battery,         Field::Time,
     Field::ChapterTimeLeft,  Field::BookTimeLeft,    Field::ChapterPercent,
     Field::BookPercent,      Field::BatteryWarning,  Field::BatteryPercentOnly,
-    Field::PageTurnTime,     Field::ChapterLoadTime,
+    Field::PageTurnTime,     Field::ChapterLoadTime, Field::BookStatus,
 };
 // The fields a slot offers, grouped: the book, the chapter, the whole book,
 // the device, the fields that need a description to explain them, then the
@@ -51,7 +52,7 @@ inline constexpr Field choosableFields[] = {
     Field::BookPercent,    Field::TitleAndPage,       Field::Time,
     Field::BatteryPercent, Field::BatteryPercentOnly, Field::Battery,
     Field::BatteryWarning, Field::ChapterTimeLeft,    Field::BookTimeLeft,
-    Field::PageTurnTime,   Field::ChapterLoadTime,
+    Field::PageTurnTime,   Field::ChapterLoadTime,    Field::BookStatus,
 };
 // What the field list shows for the page turn time before the first turn.
 inline constexpr qint64 samplePageTurnMilliseconds = 12;
@@ -164,6 +165,14 @@ struct Values
     // part of a chapter. Negative when not known: before the first turn, and
     // for the chapter load when the engine has the whole book.
     qint64 pageTurnMilliseconds = -1, chapterLoadMilliseconds = -1;
+    // The Book status field: whether the whole book is laid out, how far
+    // its build is in percent (-1 when none runs), how long the whole book
+    // took from the opening or the last new layout (-1 when not known), and
+    // whether its build failed.
+    bool wholeBook = false;
+    int wholeBookPercent = -1;
+    qint64 wholeBookMilliseconds = -1;
+    bool wholeBookFailed = false;
 };
 
 // One slot's text, and a battery icon drawn after it when `batteryIcon` is set.

@@ -10189,6 +10189,65 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrHeaderFooterFieldsClose"));
     }
 
+    // The Book status field shows Fast with the whole-book build's progress
+    // in Hybrid, then Full with how long the whole book took. Its 5-second
+    // refresh runs only while the field is in a shown header or footer.
+    void headerFooterBookStatus()
+    {
+        using namespace headerfooter;
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        auto layout = presetLayout(Preset::Default);
+        layout.slotFields[1] = Field::BookStatus;
+        layout.uppercase[1] = false;
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences[presetKey] = presetValue(Preset::Custom);
+        preferences[customKey] = toJson(layout);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        renderingMode::setOverride(2);
+        const int quiet = renderingMode::buildQuietMilliseconds();
+        renderingMode::setBuildQuietMilliseconds(0);
+        const auto restore = qScopeGuard([quiet] {
+            renderingMode::setOverride(-1);
+            renderingMode::setBuildQuietMilliseconds(quiet);
+        });
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        auto *reader = fixture.window.readerWindow();
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page);
+        const auto status = [page] { return page->slotContents[1].text; };
+        QVERIFY2(status().startsWith(QStringLiteral("Fast")), qPrintable(status()));
+        auto *timer = reader->findChild<QTimer *>("rrBookStatusTimer");
+        QVERIFY(timer && timer->isActive());
+        QCOMPARE(timer->interval(), 5000);
+        // The whole book shows from the next page turn after its build.
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(
+                [&] {
+                    QTest::keyClick(&fixture.window, Qt::Key_PageDown);
+                    return QTest::qWaitFor(
+                            [&] { return !fixture.state().contains("book_fraction"); }, 100);
+                }(),
+                30000);
+        QTRY_VERIFY2_WITH_TIMEOUT(QRegularExpression(QStringLiteral("^Full · \\d+\\.\\d s$"))
+                                          .match(status())
+                                          .hasMatch(),
+                                  qPrintable(status()), 10000);
+        // Without the field in a strip, nothing refreshes it.
+        layout.slotFields[1] = Field::BookPage;
+        preferences[customKey] = toJson(layout);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        reader->close();
+        QTRY_VERIFY(fixture.window.idle());
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
+        reader = fixture.window.readerWindow();
+        timer = reader->findChild<QTimer *>("rrBookStatusTimer");
+        QVERIFY(!timer || !timer->isActive());
+    }
+
     void headerFooterDismissal_data() { bookmarks_data(); }
 
     void headerFooterDismissal()

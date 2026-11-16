@@ -9872,6 +9872,132 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
     }
 
+    void hybridReopensCounted_data()
+    {
+        QTest::addColumn<int>("slicePages");
+        QTest::newRow("whole-chapters") << 0;
+        QTest::newRow("slices") << 2;
+    }
+
+    // A book that Hybrid laid out as a whole opens again in the chapter with
+    // the pages of the whole book, not with an estimate. With slices of two
+    // pages the saved page is in a later slice of its chapter.
+    void hybridReopensCounted()
+    {
+        using namespace headerfooter;
+        QFETCH(int, slicePages);
+        const auto previousPages = qgetenv("KOBALT_CHAPTER_PAGES");
+        if (slicePages > 0)
+            qputenv("KOBALT_CHAPTER_PAGES", QByteArray::number(slicePages));
+        Fixture fixture(false);
+        QVERIFY(fixture.prepared);
+        auto layout = presetLayout(Preset::Default);
+        layout.slotFields = { Field::BookTitle, Field::Nothing, Field::BookPage,
+                              Field::Chapter,   Field::Nothing, Field::ChapterPage };
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences[presetKey] = presetValue(Preset::Custom);
+        preferences[customKey] = toJson(layout);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        renderingMode::setOverride(2);
+        const int quiet = renderingMode::buildQuietMilliseconds();
+        renderingMode::setBuildQuietMilliseconds(400);
+        const auto restore = qScopeGuard([quiet, previousPages] {
+            renderingMode::setOverride(-1);
+            renderingMode::setBuildQuietMilliseconds(quiet);
+            if (previousPages.isNull())
+                qunsetenv("KOBALT_CHAPTER_PAGES");
+            else
+                qputenv("KOBALT_CHAPTER_PAGES", previousPages);
+        });
+        bool ready = false;
+        QTemporaryDir logs;
+        QVERIFY(logs.isValid());
+        initializeDiagnostics(logs.path());
+        pauseDiagnostics(false);
+        setDiagnosticObserver([&](const QJsonObject &event) {
+            ready = ready || event.value("event") == QLatin1String("full-document-ready");
+        });
+        const auto quietLog = qScopeGuard([] {
+            setDiagnosticObserver({});
+            pauseDiagnostics(true);
+        });
+        const auto turnOne = [&] {
+            const auto before = fixture.state().value("position").toString();
+            test::skipPageTurnWindow();
+            fixture.window.readerWindow()->pageButton(1);
+            return QTest::qWaitFor(
+                    [&] {
+                        return !fixture.state().value("busy").toBool()
+                                && fixture.state().value("position").toString() != before;
+                    },
+                    5000);
+        };
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        // Into the middle of a chapter of more than one slice.
+        for (int turn = 0; turn < 8; ++turn)
+            QVERIFY(turnOne());
+        QTRY_VERIFY_WITH_TIMEOUT(ready, 15000);
+        bool whole = false;
+        for (int turn = 0; turn < 3 && !whole; ++turn) {
+            QVERIFY(turnOne());
+            whole = !fixture.state().contains("book_fraction");
+        }
+        QVERIFY(whole);
+        // Past the first slice of the chapter, which ends after the nominal
+        // slice size.
+        for (int turn = 0; turn < 5; ++turn)
+            QVERIFY(turnOne());
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page);
+        // The book page and the chapter page of the whole book, here and on
+        // the next two pages.
+        QStringList bookPages{ page->slotContents[2].text },
+                chapterPages{ page->slotContents[5].text };
+        for (int turn = 0; turn < 2; ++turn) {
+            QVERIFY(turnOne());
+            bookPages.append(page->slotContents[2].text);
+            chapterPages.append(page->slotContents[5].text);
+        }
+        for (int turn = 0; turn < 2; ++turn) {
+            const auto before = fixture.state().value("position").toString();
+            test::skipPageTurnWindow();
+            fixture.window.readerWindow()->pageButton(-1);
+            QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool()
+                                             && fixture.state().value("position").toString()
+                                                     != before,
+                                     5000);
+        }
+        QCOMPARE(page->slotContents[2].text, bookPages.first());
+        QVERIFY2(!bookPages.first().contains('~'), qPrintable(bookPages.first()));
+
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY(!fixture.window.readerWindow());
+        QSignalSpy reopened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(reopened.count(), 1, 30000);
+        page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page);
+        // In the chapter, at once, with the pages of the whole book.
+        QVERIFY(fixture.state().contains("book_fraction"));
+        if (slicePages > 0) {
+            // The page in the slice comes before the page in the chapter.
+            const int inChapter = chapterPages[0].section(' ', 0, 0).toInt();
+            QVERIFY2(fixture.state().value("page").toInt() + 1 < inChapter,
+                     qPrintable(chapterPages[0]));
+        }
+        QCOMPARE(page->slotContents[2].text, bookPages[0]);
+        QCOMPARE(page->slotContents[5].text, chapterPages[0]);
+        for (int turn = 1; turn < bookPages.size(); ++turn) {
+            QVERIFY(turnOne());
+            QVERIFY(fixture.state().contains("book_fraction"));
+            QCOMPARE(page->slotContents[2].text, bookPages[turn]);
+            QCOMPARE(page->slotContents[5].text, chapterPages[turn]);
+        }
+    }
+
     void headerFooterChapterMode_data()
     {
         QTest::addColumn<int>("preset");

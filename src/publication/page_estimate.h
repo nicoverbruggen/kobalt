@@ -242,6 +242,10 @@ struct PageEstimateRecord
     };
 
     QVector<Part> parts;
+    // True when the place and `read` come from a layout of the whole book.
+    // The place is then in the whole spine item: its first character is 0
+    // and its page counts from the start of the item.
+    bool wholeBook = false;
 
     QJsonObject toJson() const;
     // False for a missing record or one that is not valid. Invalid parts of
@@ -288,11 +292,14 @@ public:
     // the engine's count for the whole item. A new observation replaces the
     // ones of the same item that it overlaps.
     void observe(int item, int first, int last, int characters, int pages);
-    // The real pages of the spine items whose every part has a layout.
+    // The real pages of the spine items whose every part has a layout, or
+    // that kept their restored pages.
     QMap<int, int> completeItems() const;
     // Gives the real pages of whole spine items, from an earlier reading. They
     // count as observations but do not change the weights, which already
-    // contain them.
+    // contain them. A later layout of a part of such an item replaces them
+    // there, and the restored pages stay the item's pages until every part
+    // of the item has a layout.
     void restore(const QMap<int, int> &pages);
     // The parts of the spine items of completeItems() that have several.
     QVector<PageEstimateRecord::Part> completeParts() const;
@@ -339,6 +346,8 @@ private:
         bool ready = false;
         // False for restored pages, which the weights already contain.
         bool fit = true;
+        // True for the restored pages of a whole item.
+        bool restored = false;
     };
 
     struct Item
@@ -360,6 +369,11 @@ private:
     double estimate(int index, double fraction) const;
     // The same for an item without a measurement, from its bytes.
     double byteEstimate(int index, double fraction) const;
+    // The items whose observed parts cover them without a gap.
+    QMap<int, int> observedItems() const;
+    // Erases an observation. The restored pages of a whole item stay in
+    // `restoredPages_`.
+    QMap<qint64, Observed>::iterator forget(QMap<qint64, Observed>::iterator it);
     void refit();
     void update();
 
@@ -367,6 +381,9 @@ private:
     QVector<double> starts_;
     // By item and first character, in order.
     QMap<qint64, Observed> observed_;
+    // The restored pages of the items that a layout of a part replaced, by
+    // item. They count for the item until all its parts have a layout.
+    QMap<int, int> restoredPages_;
     PageEstimateLayout layout_;
     PageEstimateModel prior_ = PageEstimateModel::reference(), model_ = prior_;
     int sliceCharacters_ = 0, measuredCount_ = 0;

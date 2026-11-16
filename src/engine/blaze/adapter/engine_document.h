@@ -574,12 +574,19 @@ private:
     // A digest of everything that decides the pages, from settingsState().
     QString layoutFontDigest() const;
     QString estimateKey(const QJsonObject &settings) const;
+    // The same for slices of `slicePages` pages.
+    QString estimateKey(const QJsonObject &settings, int slicePages) const;
     // The key of a prepared document of the whole book. Unlike estimateKey()
     // it also holds the settings that change pixels only: a document made
     // before dark mode changed must not be shown after it.
     QString fullDocumentKey(const QJsonObject &settings) const;
-    // The saved page estimate, or empty outside chapter mode.
+    // The saved page estimate. Outside chapter mode, the pages of a layout
+    // of the whole book, for the next opening in chapter mode.
     QJsonObject pageEstimateRecord(const QJsonObject &settings) const;
+    QJsonObject wholeBookEstimateRecord(const QJsonObject &settings) const;
+    // The first page of each spine item from `first` to `last`. A spine
+    // item without pages starts where the next one starts.
+    QVector<int> spineItemStarts(int first, int last) const;
     // Continues from a saved page estimate when the book opens.
     void restorePageEstimate(const QJsonValue &saved);
     // Lays out the slice that starts at `first` characters.

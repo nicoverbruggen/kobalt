@@ -438,6 +438,15 @@ int chapterModePages()
 
 } // namespace
 
+// KOBALT_CHAPTER_PAGES sets the pages of one layout. The default is 25.
+int chapterSlicePages()
+{
+    const auto pages = qgetenv("KOBALT_CHAPTER_PAGES");
+    return !pages.isEmpty()          ? qMax(0, pages.toInt())
+            : chapterModePages() > 0 ? chapterModePages()
+                                     : 25;
+}
+
 int spineItemIndex(const QString &position)
 {
     static const QRegularExpression fragment(QStringLiteral("/DocFragment(?:\\[(\\d+)\\])?"));
@@ -643,12 +652,7 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     // the spine item of the saved position and its two neighbors only.
     if (chapterMode() && !saved.contains("koblaze_first_spine_item") && !source->parent) {
         const int item = qMax(0, spineItemIndex(saved.value("position").toString()));
-        // KOBALT_CHAPTER_PAGES sets the pages of one layout. The default is
-        // 25. Zero loads three spine items as a whole.
-        const auto pages = qgetenv("KOBALT_CHAPTER_PAGES");
-        slicePages_ = !pages.isEmpty()   ? qMax(0, pages.toInt())
-                : chapterModePages() > 0 ? chapterModePages()
-                                         : 25;
+        slicePages_ = chapterSlicePages();
         firstSpineItem = slicePages_ > 0 ? item : qMax(0, item - 1);
         lastSpineItem = slicePages_ > 0 ? item : item + 1;
     }
@@ -978,6 +982,10 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
         }
         full->interrupt_ = interrupt_;
         full->nativeLocation_ = nativeLocation_;
+        // The weights that this book corrected go into the record of the
+        // whole book, for the next opening.
+        if (windowFirst_ >= 0 && spineItemCount_ > 0 && full->spineItemCount_ == spineItemCount_)
+            full->pageMap().setPrior(pageMap().model());
         if (adoptLayout(*full, current))
             return true;
         if (!current || current())

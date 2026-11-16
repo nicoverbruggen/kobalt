@@ -53,6 +53,20 @@ bool hasFloatFootprint(ldomNode *block)
     rect.getNextFloatMinYs(minLeft, minRight);
     return topLeft > 0 || topRight > 0 || minLeft > 0 || minRight > 0;
 }
+
+// Keeps the read spine items nearest to `item`, at most as many as a
+// record holds.
+void keepNearestRead(QMap<int, int> &read, int item)
+{
+    while (read.size() > PageEstimateRecord::maxRead) {
+        const int first = read.firstKey(), last = read.lastKey();
+        if (item - first > last - item)
+            read.remove(first);
+        else
+            read.remove(last);
+    }
+}
+
 } // namespace
 
 int EngineDocument::sliceSize() const
@@ -190,22 +204,7 @@ void EngineDocument::observeLayout()
         return;
     }
     // Each spine item of the window as a whole.
-    const auto items = spineItems();
-    QStringList starts;
-    for (int i = windowFirst_; i <= windowLast_ && i < items.size(); ++i) {
-        Location start;
-        start.href = items[i];
-        starts.append(positionOf(start));
-    }
-    auto first = pagesOf(starts);
-    if (first.size() != starts.size())
-        return;
-    // A spine item without a page, such as an empty one, starts where the
-    // next one starts. It is complete with no pages.
-    for (int i = first.size() - 1; i >= 0; --i) {
-        if (first[i] < 0 && !starts[i].isEmpty())
-            first[i] = i + 1 < first.size() ? first[i + 1] : pages();
-    }
+    const auto first = spineItemStarts(windowFirst_, windowLast_);
     for (int i = 0; i < first.size(); ++i) {
         const int end = i + 1 < first.size() ? first[i + 1] : pages();
         if (first[i] >= 0 && end >= first[i])
@@ -213,7 +212,33 @@ void EngineDocument::observeLayout()
     }
 }
 
+QVector<int> EngineDocument::spineItemStarts(int first, int last) const
+{
+    const auto items = spineItems();
+    QStringList starts;
+    for (int i = first; i <= last && i < items.size(); ++i) {
+        Location start;
+        start.href = items[i];
+        starts.append(positionOf(start));
+    }
+    auto pages = pagesOf(starts);
+    if (pages.size() != starts.size())
+        return {};
+    // A spine item without a page, such as an empty one, starts where the
+    // next one starts. It is complete with no pages.
+    for (int i = pages.size() - 1; i >= 0; --i) {
+        if (pages[i] < 0 && !starts[i].isEmpty())
+            pages[i] = i + 1 < pages.size() ? pages[i + 1] : this->pages();
+    }
+    return pages;
+}
+
 QString EngineDocument::estimateKey(const QJsonObject &settings) const
+{
+    return estimateKey(settings, slicePages_);
+}
+
+QString EngineDocument::estimateKey(const QJsonObject &settings, int slicePages) const
 {
     auto key = settings;
     // These do not change the pages. The outline thickness and the text
@@ -222,8 +247,8 @@ QString EngineDocument::estimateKey(const QJsonObject &settings) const
                               "weight_steps", "normalize_text_colors" })
         key.remove(name);
     key["viewport"] = QString("%1x%2").arg(size_.width()).arg(size_.height());
-    key["slice_pages"] = slicePages_;
-    if (slicePages_ > 0)
+    key["slice_pages"] = slicePages;
+    if (slicePages > 0)
         key["slice_offsets"] = 1;
     key["registered_fonts"] = layoutFontDigest();
     key["rendering_policy"] = QString::fromLatin1(KOBALT_RENDERING_POLICY);
@@ -246,7 +271,9 @@ QString EngineDocument::fullDocumentKey(const QJsonObject &settings) const
 
 QJsonObject EngineDocument::pageEstimateRecord(const QJsonObject &settings) const
 {
-    if (windowFirst_ < 0 || spineItemCount_ <= 0 || !source_ || source_->parent || !engine_)
+    if (windowFirst_ < 0)
+        return wholeBookEstimateRecord(settings);
+    if (spineItemCount_ <= 0 || !source_ || source_->parent || !engine_)
         return {};
     // Places the page first, so that the record holds the page on screen.
     const auto rough = roughPages();
@@ -286,14 +313,51 @@ QJsonObject EngineDocument::pageEstimateRecord(const QJsonObject &settings) cons
                      [](const PageEstimateRecord::Part &a, const PageEstimateRecord::Part &b) {
                          return a.item != b.item ? a.item < b.item : a.first < b.first;
                      });
-    // Keep the spine items nearest to the reading position.
-    while (record.read.size() > PageEstimateRecord::maxRead) {
-        const int firstItem = record.read.firstKey(), lastItem = record.read.lastKey();
-        if (estimate.lastItem - firstItem > lastItem - estimate.lastItem)
-            record.read.remove(firstItem);
-        else
-            record.read.remove(lastItem);
+    keepNearestRead(record.read, estimate.lastItem);
+    return record.toJson();
+}
+
+QJsonObject EngineDocument::wholeBookEstimateRecord(const QJsonObject &settings) const
+{
+    // A layout of the whole book has the real pages of every spine item.
+    // The record holds them for chapter mode, so that the book opens there
+    // with its counted pages. The key is the one of chapter mode.
+    const int slicePages = chapterSlicePages();
+    if (slicePages <= 0 || slicePages_ > 0 || spineItemCount_ <= 0 || !source_ || source_->parent
+        || !engine_ || pages() <= 0)
+        return {};
+    auto &estimate = source_->pageEstimate;
+    const auto key = estimateKey(settings, slicePages);
+    if (estimate.wholeKey != key) {
+        // Once for each layout: a checkpoint asks for the record after
+        // every page turn.
+        estimate.wholeStarts = spineItemStarts(0, spineItemCount_ - 1);
+        estimate.wholeKey = key;
     }
+    const auto &starts = estimate.wholeStarts;
+    if (starts.size() != spineItemCount_)
+        return {};
+    PageEstimateRecord record;
+    record.model = pageMap().model();
+    record.layout = key;
+    record.spineItems = spineItemCount_;
+    record.wholeBook = true;
+    for (int i = 0; i < starts.size(); ++i) {
+        const int end = i + 1 < starts.size() ? starts[i + 1] : pages();
+        if (starts[i] >= 0 && end >= starts[i])
+            record.read.insert(i, end - starts[i]);
+    }
+    const int item = qBound(0, spineItemOf(position()), spineItemCount_ - 1);
+    const int pageInItem = page() - starts[item];
+    const int itemPages = record.read.value(item, -1);
+    if (pageInItem >= 0 && pageInItem < itemPages) {
+        record.item = item;
+        record.page = pageInItem;
+        record.partPages = itemPages;
+        record.shown = page() + 1;
+        record.itemShown = pageInItem + 1;
+    }
+    keepNearestRead(record.read, item);
     return record.toJson();
 }
 
@@ -323,6 +387,7 @@ void EngineDocument::restorePageEstimate(const QJsonValue &saved)
     estimate.lastLast = INT_MAX;
     estimate.lastPage = record.page;
     estimate.lastPages = record.partPages;
+    estimate.lastWhole = record.wholeBook;
 }
 
 bool EngineDocument::refinePageEstimate(const std::function<bool()> &current)
@@ -465,6 +530,10 @@ Engine::RoughPages EngineDocument::roughPages() const
                  there = order(estimate.lastItem, estimate.lastFirst);
     if (estimate.lastItem < 0) {
         step = Step::Jump;
+    } else if (estimate.lastWhole) {
+        // The book opens where a layout of the whole book saved its page.
+        // That page counts in the whole spine item, not in a slice.
+        step = place.item == estimate.lastItem ? Step::Same : Step::Jump;
     } else if (here == there) {
         step = place.page == estimate.lastPage        ? Step::Same
                 : place.page == estimate.lastPage + 1 ? Step::Forward
@@ -523,6 +592,7 @@ Engine::RoughPages EngineDocument::roughPages() const
         // page number after that comes from the map.
         estimate.book.reset();
     }
+    estimate.lastWhole = false;
     estimate.lastItem = place.item;
     estimate.lastFirst = place.first;
     estimate.lastLast = place.last;

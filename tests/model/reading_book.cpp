@@ -473,6 +473,9 @@ int main(int argc, char **argv)
             // The page estimate is optional and can be rebuilt. Over the byte
             // limit its read spine items go first, then the record, and only
             // then image views.
+            // Without chapter slices the whole book saves no record of its
+            // own over the seeded one.
+            qputenv("KOBALT_CHAPTER_PAGES", "0");
             const auto views = [](int count) {
                 QVector<QPair<QString, QJsonObject>> result;
                 for (int i = 0; i < count; ++i)
@@ -538,6 +541,7 @@ int main(int argc, char **argv)
                     require(record.isEmpty() && kept > 0 && kept < 64,
                             "The page estimate must go before image views are trimmed");
             }
+            qunsetenv("KOBALT_CHAPTER_PAGES");
         }
 #if __has_include(<koblaze.h>)
         {

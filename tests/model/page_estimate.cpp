@@ -762,6 +762,29 @@ void record()
     for (int i = 0; i < F::Count; ++i)
         require(restored.model().weight[i] == before.weight[i],
                 "Restored pages do not change the weights");
+    // A layout of a part of a restored spine item does not make it
+    // incomplete: the restored pages stay until every part has a layout.
+    restored.restore({ { 0, 12 } });
+    require(restored.counted(), "Every spine item has its pages");
+    restored.observe(1, 0, 100, 250, 4);
+    require(restored.counted() && restored.completeItems().value(1) == 30
+                    && std::fabs(restored.itemPages(1) - 30) < 1e-9,
+            "A layout of one part dropped the restored pages of its spine item");
+    restored.restoreParts({ { 0, 0, 100, 250, 5 } });
+    require(restored.counted() && restored.completeItems().value(0) == 12,
+            "Restored parts dropped the restored pages of their spine item");
+    restored.observe(1, 100, 250, 250, 25);
+    require(restored.completeItems().value(1) == 29,
+            "The parts of a spine item replace its restored pages once they cover it");
+    restored.setLayout(PageEstimateLayout(), 0);
+    require(!restored.counted(), "Another page forgets the restored pages");
+
+    PageEstimateRecord whole = record;
+    whole.wholeBook = true;
+    require(PageEstimateRecord::fromJson(whole.toJson(), &loaded) && loaded.wholeBook,
+            "A record of the whole book keeps its mark");
+    require(PageEstimateRecord::fromJson(json, &loaded) && !loaded.wholeBook,
+            "A record of chapter mode has no mark");
 }
 
 #if __has_include(<koblaze.h>)
@@ -2479,6 +2502,63 @@ void reopenCounted()
             "A damaged part must not drop the rest of the record");
 }
 
+// A layout of the whole book saves the real pages of every spine item. The
+// book opens in chapter mode with them, also in a later slice of a long
+// spine item, and reads on with the page numbers of the whole book.
+void reopenWholeBook()
+{
+    const auto previous = qgetenv("KOBALT_CHAPTER_PAGES");
+    qputenv("KOBALT_CHAPTER_PAGES", "6");
+    const auto restore = qScopeGuard([previous] {
+        if (previous.isNull())
+            qunsetenv("KOBALT_CHAPTER_PAGES");
+        else
+            qputenv("KOBALT_CHAPTER_PAGES", previous);
+    });
+    const auto files = pagesBook();
+    EngineDocument chapter(test::readerFonts());
+    openFiles(chapter, files);
+    QString error;
+    require(chapter.showSpineItems(3, 3, &error) && chapter.go(0), qPrintable(error));
+    for (int turn = 0; turn < 10; ++turn)
+        require(chapter.turnInWindow(1), "The fixture is too short to read on");
+    require(Probe::sliceFirst(chapter) > 0, "The fixture needs a later slice");
+    const auto middle = chapter.pageStart(chapter.page());
+
+    EngineDocument whole(test::readerFonts());
+    openResources(whole, files, { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+    QStringList starts;
+    for (int page = 0; page < whole.pages(); ++page)
+        starts.append(whole.pageStart(page));
+    require(whole.goTo(middle) && starts.indexOf(middle) == whole.page(),
+            "The page of chapter mode must be a page of the whole book");
+    auto saved = whole.state();
+    PageEstimateRecord record;
+    require(PageEstimateRecord::fromJson(saved.value("page_estimate"), &record) && record.wholeBook
+                    && record.read.size() == record.spineItems && record.shown == whole.page() + 1,
+            "The whole book must save the pages of every spine item");
+    saved["koblaze_first_spine_item"] = 3;
+    saved["koblaze_last_spine_item"] = 3;
+
+    EngineDocument model(test::readerFonts());
+    model.setChapterSlices(6);
+    openResources(model, files, saved);
+    require(Probe::sliceFirst(model) > 0, "The book must open in a later slice");
+    auto rough = model.roughPages();
+    std::printf("reopened whole book: page %d of %d, whole book page %d of %d\n", rough.page,
+                rough.pages, whole.page() + 1, whole.pages());
+    require(!rough.pagesEstimated && rough.page == whole.page() + 1 && rough.pages == whole.pages(),
+            "The book must open with the pages of the whole book");
+    for (int turn = 0; turn < 12; ++turn) {
+        require(model.turnInWindow(1), "The fixture is too short to read on");
+        rough = model.roughPages();
+        const int page = starts.indexOf(model.pageStart(model.page()));
+        require(page >= 0 && !rough.pagesEstimated && rough.page == page + 1
+                        && rough.pages == whole.pages(),
+                "Reading on must keep the pages of the whole book");
+    }
+}
+
 // The first complete estimate stays while the reader reads. A spine item
 // that gets its real pages later moves neither the page number nor the
 // total. Only a book with the real pages of every spine item replaces it.
@@ -2930,6 +3010,7 @@ int main(int argc, char **argv)
     laterCounted();
     chaptersMeasuredInIdle();
     reopenCounted();
+    reopenWholeBook();
     manyItemJumps();
     fullDocument();
     fullDocumentKeepsPublisherFonts();

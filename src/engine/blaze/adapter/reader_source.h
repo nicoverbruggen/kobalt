@@ -67,14 +67,24 @@ struct ReaderSource
         // last character of its slice, its page in that part and the pages
         // of the part.
         int lastItem = -1, lastFirst = -1, lastLast = -1, lastPage = -1, lastPages = 0;
+        // True when the last placed page came from a layout of the whole
+        // book. Its page then counts from the start of the spine item.
+        bool lastWhole = false;
         // True when the last placed page came from the kept estimate.
         bool lastKept = false;
         // The estimateKey() of the settings that gave the observed pages.
         QString key;
+        // A layout of the whole book: the first page of each spine item,
+        // for the settings with the estimateKey() `wholeKey`.
+        QString wholeKey;
+        QVector<int> wholeStarts;
     } pageEstimate;
 };
 
 // The spine item that a position names as DocFragment[n], counted from zero,
 // or -1.
 int spineItemIndex(const QString &position);
+// The pages of one slice in chapter mode. Zero lays out three spine items
+// as a whole.
+int chapterSlicePages();
 } // namespace kobalt

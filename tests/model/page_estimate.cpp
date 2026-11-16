@@ -2522,6 +2522,26 @@ void reopenCounted()
             "A damaged part must not drop the rest of the record");
 }
 
+// A parked build goes on only with room for the documents of the package
+// files: a document made without room would share the nodes of another one.
+void fullBuildWaitsForRoom()
+{
+    EngineDocument model(test::readerFonts());
+    openFiles(model, pagesBook());
+    int seen = 0;
+    require(model.prepareFullDocument([&] { return ++seen <= 3; }) == Engine::FullDocument::Stopped,
+            "The build must park");
+    std::vector<std::unique_ptr<ldomDocument>> others;
+    while (ldomDocument::koblazeFreeDocumentSlots() > 2)
+        others.push_back(std::make_unique<ldomDocument>());
+    require(model.prepareFullDocument({}) == Engine::FullDocument::None,
+            "A build without room for its documents must wait");
+    others.clear();
+    require(model.prepareFullDocument({}) == Engine::FullDocument::Ready
+                    && model.setChapterMode(false, appearance::Patch(QJsonObject{}), {}, {}, {}),
+            "The build must go on once there is room");
+}
+
 // The contents of spine items without a layout point to their starts. A
 // read of the XHTML finds the start of the text there, which the book pages
 // skip.
@@ -3055,6 +3075,7 @@ int main(int argc, char **argv)
     reopenCounted();
     reopenWholeBook();
     chapterStartsNeedNoRead();
+    fullBuildWaitsForRoom();
     manyItemJumps();
     fullDocument();
     fullDocumentKeepsPublisherFonts();

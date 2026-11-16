@@ -1598,6 +1598,14 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
         build->thread->start();
         building_ = std::move(build);
     }
+    // The build makes short-lived documents for the package files, also
+    // after a park. The engine has room for 16 documents, and a document
+    // made without room shares the nodes of another one. The kept units
+    // make room. Without room the build waits for a later idle moment.
+    if (ldomDocument::koblazeFreeDocumentSlots() < 3)
+        kept_.clear();
+    if (ldomDocument::koblazeFreeDocumentSlots() < 3)
+        return FullDocument::None;
     if (building_->run(current) != FullBuild::State::Done)
         return FullDocument::Stopped;
     auto next = std::move(building_->document);

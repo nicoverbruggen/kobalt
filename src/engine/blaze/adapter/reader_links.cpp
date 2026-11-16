@@ -126,25 +126,46 @@ int linkTargetExists(ReaderSource &source, const QString &path, const QString &i
     return xml.hasError() ? -1 : remember(false);
 }
 
-bool token(ldomNode *node, const char *name, const char *value, bool anyNamespace = false)
+lString32 attributeOf(ldomNode *node, const char *name, bool anyNamespace = false)
 {
-    const auto attribute = anyNamespace
+    return anyNamespace
             ? node->getAttributeValue(LXML_NS_ANY,
                                       node->getDocument()->getAttrNameIndex(
                                               domText(QString::fromLatin1(name)).c_str()))
             : node->getAttributeValue(name);
-    return text(attribute)
-            .split(QRegularExpression("\\s+"), kobalt::qt::skipEmptyParts)
-            .contains(value, Qt::CaseInsensitive);
 }
 
+// One of the words of an attribute, separated by white space. Most elements
+// have no such attribute: those need no split.
+bool hasToken(const lString32 &attribute, const char *value)
+{
+    if (attribute.empty())
+        return false;
+    static const QRegularExpression space(QStringLiteral("\\s+"));
+    return text(attribute)
+            .split(space, kobalt::qt::skipEmptyParts)
+            .contains(QString::fromLatin1(value), Qt::CaseInsensitive);
+}
+
+bool token(ldomNode *node, const char *name, const char *value, bool anyNamespace = false)
+{
+    return hasToken(attributeOf(node, name, anyNamespace), value);
+}
+
+// A link on a page asks this of each ancestor of its target: each
+// attribute is read once.
 bool noteElement(ldomNode *node)
 {
-    return token(node, "type", "footnote", true) || token(node, "type", "endnote", true)
-            || token(node, "type", "note", true) || token(node, "type", "rearnote", true)
-            || token(node, "role", "doc-footnote") || token(node, "role", "doc-endnote")
-            || token(node, "role", "doc-note") || token(node, "role", "doc-rearnote")
-            || token(node, "class", "footnote") || token(node, "class", "endnote");
+    const auto type = attributeOf(node, "type", true);
+    for (const auto *value : { "footnote", "endnote", "note", "rearnote" })
+        if (hasToken(type, value))
+            return true;
+    const auto role = attributeOf(node, "role");
+    for (const auto *value : { "doc-footnote", "doc-endnote", "doc-note", "doc-rearnote" })
+        if (hasToken(role, value))
+            return true;
+    const auto classes = attributeOf(node, "class");
+    return hasToken(classes, "footnote") || hasToken(classes, "endnote");
 }
 
 enum class NoteMatch { Unmarked, Explicit, Passage };

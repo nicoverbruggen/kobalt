@@ -82,6 +82,12 @@ struct Fonts
     QMap<QString, QByteArray> sources;
     QMap<QString, qint64> sizes;
     QMap<QString, QString> bundledPaths;
+    // The file on disk of each pending font, so its character map can be
+    // read without loading the font into memory.
+    QMap<QString, QString> pendingPaths;
+    // The characters each pending face maps, as sorted [first, last] ranges.
+    QHash<QString, QVector<QPair<uint, uint>>> coverage;
+    QSet<QString> unreadable;
     QStringList recent;
     QSet<QString> pinned;
     int rendering = 0;
@@ -133,6 +139,49 @@ struct Fonts
         recent.append(file);
         if (rendering)
             pinned.insert(file);
+    }
+
+    // False only when `file` is a pending font whose character map lacks
+    // `character`. The fallback search asks this before it loads a file:
+    // loading reads and verifies the whole file, 26 MB for the CJK
+    // collection, while the character map is a small part of it. The map
+    // is read once with FreeType from the file and the file is closed again.
+    bool mayCover(const QString &file, int index, uint character)
+    {
+        if (sources.contains(file) || paths.contains(file) || !pending.contains(file))
+            return true;
+        const auto path = pendingPaths.value(file);
+        if (path.isEmpty())
+            return true;
+        const QString key = file + ':' + QString::number(index);
+        if (unreadable.contains(key))
+            return true;
+        auto found = coverage.find(key);
+        if (found == coverage.end()) {
+            QVector<QPair<uint, uint>> ranges;
+            FT_Face face = nullptr;
+            if (FT_New_Face(library, QFile::encodeName(path).constData(), index, &face)) {
+                // An unreadable file stays a candidate, as before, without
+                // opening it again for every character.
+                unreadable.insert(key);
+                return true;
+            }
+            FT_UInt glyph = 0;
+            for (FT_ULong code = FT_Get_First_Char(face, &glyph); glyph;
+                 code = FT_Get_Next_Char(face, code, &glyph)) {
+                if (!ranges.isEmpty() && ranges.last().second + 1 == code)
+                    ranges.last().second = uint(code);
+                else
+                    ranges.append({ uint(code), uint(code) });
+            }
+            FT_Done_Face(face);
+            found = coverage.insert(key, ranges);
+        }
+        const auto &ranges = found.value();
+        const auto range = std::lower_bound(
+                ranges.cbegin(), ranges.cend(), character,
+                [](const QPair<uint, uint> &value, uint code) { return value.second < code; });
+        return range != ranges.cend() && range->first <= character;
     }
 
     QMap<QString, std::function<QByteArray()>> pending;
@@ -434,7 +483,11 @@ FT_Face primaryFace(const QFont &font)
     return face;
 }
 
-FT_Face fallbackFace(const QString &regular, const QFont &font, int index = 0)
+// `usable` says whether a file may hold the text, from its character map.
+// A style file can lack characters its Regular file has, so each style file
+// is checked before it is loaded, not only the Regular file.
+FT_Face fallbackFace(const QString &regular, const QFont &font, int index = 0,
+                     const std::function<bool(const QString &)> &usable = {})
 {
     if (regular.endsWith("-Regular.ttf")) {
         const auto stem = regular.left(regular.size() - QStringLiteral("Regular.ttf").size());
@@ -450,8 +503,9 @@ FT_Face fallbackFace(const QString &regular, const QFont &font, int index = 0)
         }
         for (const auto &style : styles) {
             const auto file = stem + style + ".ttf";
-            if (fonts().pending.contains(file) || fonts().sources.contains(file)
-                || fonts().paths.contains(file)) {
+            if ((fonts().pending.contains(file) || fonts().sources.contains(file)
+                 || fonts().paths.contains(file))
+                && (!usable || usable(file))) {
                 if (const auto face = fonts().face(file, index)) {
                     return face;
                 }
@@ -508,15 +562,22 @@ FT_Face faceFor(uint character, QChar::Script script, FT_Face primary, const QFo
     default:
         break;
     }
-    if (!preferred.isEmpty()) {
-        const auto face = fallbackFace(preferred, font, index);
+    const auto usable = [character](int index) {
+        return [character, index](const QString &file) {
+            return fonts().mayCover(file, index, character);
+        };
+    };
+    if (!preferred.isEmpty() && fonts().mayCover(preferred, index, character)) {
+        const auto face = fallbackFace(preferred, font, index, usable(index));
         if (face && FT_Get_Char_Index(face, character)) {
             return face;
         }
     }
     for (const auto &file :
          { QStringLiteral("NotoSerif-Regular.ttf"), QStringLiteral("NotoSansMath-Regular.ttf") }) {
-        const auto face = fallbackFace(file, font);
+        if (!fonts().mayCover(file, 0, character))
+            continue;
+        const auto face = fallbackFace(file, font, 0, usable(0));
         if (face && FT_Get_Char_Index(face, character)) {
             return face;
         }
@@ -578,6 +639,9 @@ bool initializePrivateInterfaceText(const AssetBundle &assets, bool opening,
     state.sources.clear();
     state.sizes.clear();
     state.bundledPaths.clear();
+    state.pendingPaths.clear();
+    state.coverage.clear();
+    state.unreadable.clear();
     state.recent.clear();
     state.pinned.clear();
     state.pending = pending;
@@ -585,6 +649,7 @@ bool initializePrivateInterfaceText(const AssetBundle &assets, bool opening,
         const auto path = assets.file("fonts/" + it.key());
         state.sizes.insert(it.key(), QFileInfo(path).size());
         state.bundledPaths.insert(QFileInfo(path).absoluteFilePath(), it.key());
+        state.pendingPaths.insert(it.key(), QFileInfo(path).absoluteFilePath());
     }
     for (auto it = checked.cbegin(); it != checked.cend(); ++it)
         if (pending.contains(it.key()) && !it.value().isEmpty())
@@ -674,6 +739,7 @@ bool registerPrivateInterfaceFont(const QString &path, const QString &expectedFa
     }
     if (!state.pending.contains(key)) {
         state.sizes.insert(key, size);
+        state.pendingPaths.insert(key, path);
         state.pending.insert(key, [path, size] {
             QFile file(path);
             if (!file.open(QIODevice::ReadOnly) || file.size() != size)
@@ -737,7 +803,19 @@ void forgetPrivateInterfaceFonts(const QString &directory)
         state.sizes.remove(key);
         state.recent.removeAll(key);
         state.pinned.remove(key);
+        state.pendingPaths.remove(key);
     }
+    // A file at the same path can be replaced before it is registered again.
+    for (auto it = state.coverage.begin(); it != state.coverage.end();)
+        if (removed.contains(it.key().section(':', 0, -2)))
+            it = state.coverage.erase(it);
+        else
+            ++it;
+    for (auto it = state.unreadable.begin(); it != state.unreadable.end();)
+        if (removed.contains(it->section(':', 0, -2)))
+            it = state.unreadable.erase(it);
+        else
+            ++it;
     setDiagnosticFontBytes(state.bytes());
 }
 
@@ -929,7 +1007,18 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
                             continue;
                         }
                     }
-                    const auto candidate = fallbackFace(file, *requestedFont);
+                    const auto possible = [&](const QString &candidate) {
+                        for (int i = 0; i < clusterSize; ++i) {
+                            const auto category = QChar::category(cluster[i]);
+                            if (category != QChar::Other_Control && category != QChar::Other_Format
+                                && !fonts().mayCover(candidate, 0, cluster[i]))
+                                return false;
+                        }
+                        return true;
+                    };
+                    if (!possible(file))
+                        continue;
+                    const auto candidate = fallbackFace(file, *requestedFont, 0, possible);
                     if (covers(candidate)) {
                         face = candidate;
                         break;

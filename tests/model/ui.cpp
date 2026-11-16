@@ -23,6 +23,7 @@
 #include "support/strings.h"
 #include "ui/style/fonts.h"
 #include "app/reader/window/font_registration.h"
+#include <QFileInfo>
 #include <QFontInfo>
 #include <QFontDatabase>
 #include <QJsonObject>
@@ -356,6 +357,48 @@ int main(int argc, char **argv)
         loads = 0;
         measurePrivateText(QStringLiteral("first\nsecond\r\n\nthird\tfourth"), interfaceFont(24));
         require(loads == 0, "Line breaks loaded fallback fonts");
+        // A fallback loads only when its character map has the character. The
+        // Japanese full stop has the Common script, so no script picks the CJK
+        // collection for it; the search must skip every file without it.
+        QVector<double> sizes;
+        kobalt::setDiagnosticObserver([&](const QJsonObject &event) {
+            if (event.value("event").toString() == "font-load-start") {
+                ++loads;
+                sizes.append(event.value("file_bytes").toDouble());
+            }
+        });
+        const auto loadsFor = [&](const QString &text) {
+            require(initializePrivateInterfaceText(assets), "Cannot reset private interface text");
+            measurePrivateText(QStringLiteral("Latin"), interfaceFont(24));
+            loads = 0;
+            sizes.clear();
+            measurePrivateText(text, interfaceFont(24));
+            return loads;
+        };
+        const double collection = QFileInfo(assets.file("fonts/NotoSerifCJK-Regular.ttc")).size();
+        require(loadsFor(QString(QChar(0x3002))) == 1 && sizes.value(0) == collection,
+                "A Japanese full stop loaded fonts that lack it");
+        require(loadsFor(QString::fromUcs4(U"\U00010400")) == 0,
+                "A character no bundled font maps loaded fallback fonts");
+        // Noto Serif Italic lacks U+20C0, which Noto Serif Regular maps. Italic
+        // text must not load the italic file for it.
+        const auto loadsInFont = [&](const QString &text, const QFont &font) {
+            require(initializePrivateInterfaceText(assets), "Cannot reset private interface text");
+            measurePrivateText(QStringLiteral("Latin"), font);
+            loads = 0;
+            sizes.clear();
+            measurePrivateText(text, font);
+            return loads;
+        };
+        auto italic = interfaceFont(24);
+        italic.setItalic(true);
+        const double regularSerif = QFileInfo(assets.file("fonts/NotoSerif-Regular.ttf")).size();
+        require(loadsInFont(QString(QChar(0x20C0)), italic) == 1 && sizes.value(0) == regularSerif,
+                "Italic text loaded a style file that lacks the character");
+        kobalt::setDiagnosticObserver([&](const QJsonObject &event) {
+            if (event.value("event").toString() == "font-load-start")
+                ++loads;
+        });
         const auto notice = [&](bool savedLocally) {
             require(initializePrivateInterfaceText(assets), "Cannot reset private interface text");
             loads = 0;

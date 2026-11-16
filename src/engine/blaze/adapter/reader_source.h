@@ -81,6 +81,9 @@ struct ReaderSource
         QString wholeKey;
         QVector<int> wholeStarts;
         QJsonObject wholeRecord;
+        // The spine item that `wholeRecord` keeps its nearest spine items
+        // around, in a book with more than the record holds.
+        int wholeRecordItem = -1;
         // The record of chapter mode without the place, for the map
         // generation `recordGeneration`, the estimateKey() `recordKey` and
         // the spine item `recordItem`, which decides what a full record

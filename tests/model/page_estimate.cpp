@@ -2702,6 +2702,34 @@ void spineItemStartsInOneWalk()
             "The spine items of the Type Tester must start where positionOf() puts them");
 }
 
+// A book with more spine items than the record holds keeps those nearest to
+// the page. The record is made again only in another spine item, and is the
+// same as a new one.
+void largeWholeBookRecord()
+{
+    EngineDocument whole(test::readerFonts());
+    openResources(whole, test::engineBook(false, PageEstimateRecord::maxRead + 20, 1),
+                  { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+    require(whole.pages() > PageEstimateRecord::maxRead, "The fixture needs many spine items");
+    const QVector<int> pages{ 0, 1, whole.pages() / 2, whole.pages() / 2 + 1, whole.pages() - 1 };
+    // Read on without forgetting: the record is kept between the pages.
+    QVector<QJsonValue> kept;
+    for (const int page : pages) {
+        require(whole.go(page), "Cannot go to a page of the large book");
+        kept.append(whole.state().value("page_estimate"));
+    }
+    for (int i = 0; i < pages.size(); ++i) {
+        require(whole.go(pages[i]), "Cannot go to a page of the large book");
+        Probe::forgetRecord(whole);
+        const auto fresh = whole.state().value("page_estimate");
+        PageEstimateRecord record;
+        require(PageEstimateRecord::fromJson(fresh, &record)
+                        && record.read.size() == PageEstimateRecord::maxRead,
+                "A large book keeps the most spine items that a record holds");
+        require(kept[i] == fresh, "A kept record of a large book differs from a new one");
+    }
+}
+
 // A parked build goes on only with room for the documents of the package
 // files: a document made without room would share the nodes of another one.
 void fullBuildWaitsForRoom()
@@ -3263,6 +3291,7 @@ int main(int argc, char **argv)
     chapterStartsNeedNoRead();
     fullBuildWaitsForRoom();
     spineItemStartsInOneWalk();
+    largeWholeBookRecord();
     retiredUntilIdle();
     measurementsKeptAcrossLayouts();
     stoppedNextSliceKeepsImages();

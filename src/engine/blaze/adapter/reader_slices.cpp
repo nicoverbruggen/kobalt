@@ -417,7 +417,7 @@ QJsonObject EngineDocument::wholeBookEstimateRecord(const QJsonObject &settings)
     // with more spine items than the record holds keeps those nearest to
     // the page.
     const bool nearest = spineItemCount_ > PageEstimateRecord::maxRead;
-    if (estimate.wholeRecord.isEmpty() || nearest) {
+    if (estimate.wholeRecord.isEmpty() || (nearest && estimate.wholeRecordItem != item)) {
         record.model = pageMap().model();
         record.layout = key;
         record.spineItems = spineItemCount_;
@@ -429,6 +429,7 @@ QJsonObject EngineDocument::wholeBookEstimateRecord(const QJsonObject &settings)
         }
         keepNearestRead(record.read, item);
         estimate.wholeRecord = record.toJson();
+        estimate.wholeRecordItem = item;
     }
     auto result = estimate.wholeRecord;
     const int pageInItem = page() - starts[item];

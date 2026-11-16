@@ -10,7 +10,7 @@ The Rendering engine setting selects how Blaze lays out the book.
 
 | Mode | What happens when a book opens |
 | --- | --- |
-| Hybrid (default) | Blaze opens at the saved passage using chapter layout, then prepares the whole book in the background. The reader adopts the completed layout on a page turn. |
+| Hybrid (default) | Blaze opens at the saved passage using chapter layout, then prepares the whole book in the background. The reader adopts the completed layout on a page turn. Another appearance or a rotation goes back to the chapter, and the whole book follows again. |
 | More accurate | Blaze lays out the whole book before it opens. The reader has exact page numbers from the start. |
 | Fast (debug override) | Blaze keeps using chapter layout. This exercises reading, search and navigation while whole-book pages are unavailable. |
 

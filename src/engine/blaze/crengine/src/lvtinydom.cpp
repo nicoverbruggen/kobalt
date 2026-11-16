@@ -16858,6 +16858,12 @@ ldomDocument * LVParseXMLStream( LVStreamRef stream,
 {
     if ( stream.isNull() )
         return NULL;
+    // Blaze: a document made without a free slot shares the nodes of
+    // another one (the 4-bit _docIndex wraps to 15). Callers handle NULL.
+    if ( ldomDocument::koblazeFreeDocumentSlots() <= 0 ) {
+        CRLog::error("%s: no free document slot", "LVParseXMLStream");
+        return NULL;
+    }
     bool error = true;
     ldomDocument * doc;
     doc = new ldomDocument();
@@ -16900,6 +16906,12 @@ ldomDocument * LVParseHTMLStream( LVStreamRef stream,
 {
     if ( stream.isNull() )
         return NULL;
+    // Blaze: a document made without a free slot shares the nodes of
+    // another one (the 4-bit _docIndex wraps to 15). Callers handle NULL.
+    if ( ldomDocument::koblazeFreeDocumentSlots() <= 0 ) {
+        CRLog::error("%s: no free document slot", "LVParseHTMLStream");
+        return NULL;
+    }
     bool error = true;
     ldomDocument * doc;
     doc = new ldomDocument();

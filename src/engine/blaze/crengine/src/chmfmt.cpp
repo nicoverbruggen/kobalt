@@ -878,6 +878,9 @@ ldomDocument * LVParseCHMHTMLStream( LVStreamRef stream, lString32 defEncodingNa
 {
     if ( stream.isNull() )
         return NULL;
+    // Blaze: see LVParseHTMLStream, a document needs a free slot.
+    if ( ldomDocument::koblazeFreeDocumentSlots() <= 0 )
+        return NULL;
 
 #if 0
     // detect encondig

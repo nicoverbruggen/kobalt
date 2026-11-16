@@ -2618,6 +2618,12 @@ void fullBuildWaitsForRoom()
         others.push_back(std::make_unique<ldomDocument>());
     require(model.prepareFullDocument({}) == Engine::FullDocument::None,
             "A build without room for its documents must wait");
+    // The engine itself refuses a short-lived document without a slot.
+    while (ldomDocument::koblazeFreeDocumentSlots() > 0)
+        others.push_back(std::make_unique<ldomDocument>());
+    static char xml[] = "<package><metadata/></package>";
+    require(!LVParseXMLStream(LVCreateMemoryStream(xml, int(sizeof(xml) - 1), true, LVOM_READ)),
+            "A document without a free slot would share another document's nodes");
     others.clear();
     require(model.prepareFullDocument({}) == Engine::FullDocument::Ready
                     && model.setChapterMode(false, appearance::Patch(QJsonObject{}), {}, {}, {}),

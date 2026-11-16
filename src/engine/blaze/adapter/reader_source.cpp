@@ -952,6 +952,29 @@ bool EngineDocument::adoptLayout(EngineDocument &next, const std::function<bool(
     return true;
 }
 
+void EngineDocument::carryTextKnowledge(EngineDocument &next) const
+{
+    if (!source_ || !next.source_ || source_ == next.source_ || spineItemCount_ <= 0
+        || next.spineItemCount_ != spineItemCount_)
+        return;
+    const auto &from = *source_;
+    auto &to = *next.source_;
+    if (from.pageEstimate.map.items() == spineItemCount_) {
+        // The weights that this book corrected, and the measured text.
+        auto &map = next.pageMap();
+        map.setPrior(from.pageEstimate.map.model());
+        map.takeMeasurements(from.pageEstimate.map);
+    }
+    for (auto it = from.textFractions.cbegin(); it != from.textFractions.cend(); ++it)
+        to.textFractions.insert(it.key(), it.value());
+    for (auto it = from.textWordPrefixes.cbegin(); it != from.textWordPrefixes.cend(); ++it)
+        to.textWordPrefixes.insert(it.key(), it.value());
+    for (auto it = from.linkTargets.cbegin(); it != from.linkTargets.cend(); ++it)
+        to.linkTargets.insert(it.key(), it.value());
+    if (to.searchTexts.isEmpty())
+        to.searchTexts = from.searchTexts;
+}
+
 void EngineDocument::retire(std::unique_ptr<EngineDocument> old)
 {
     if (!old)
@@ -1001,10 +1024,7 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
         }
         full->interrupt_ = interrupt_;
         full->nativeLocation_ = nativeLocation_;
-        // The weights that this book corrected go into the record of the
-        // whole book, for the next opening.
-        if (windowFirst_ >= 0 && spineItemCount_ > 0 && full->spineItemCount_ == spineItemCount_)
-            full->pageMap().setPrior(pageMap().model());
+        carryTextKnowledge(*full);
         if (adoptLayout(*full, current))
             return true;
         if (!current || current())
@@ -1048,6 +1068,7 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
 #  endif
     next.openInterrupt_ = nullptr;
     next.bypassDocumentCache_ = false;
+    carryTextKnowledge(next);
     if (fast) {
         next.setChapters(contents_, graph_);
         next.externalChapters_ = externalChapters_;

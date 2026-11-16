@@ -650,6 +650,31 @@ void PageMap::setMeasured(int item, const PageEstimateItem &measurement)
     refit();
 }
 
+void PageMap::takeMeasurements(const PageMap &other)
+{
+    if (other.items_.size() != items_.size())
+        return;
+    bool changed = false;
+    for (int i = 0; i < items_.size(); ++i) {
+        const auto &from = other.items_[i];
+        auto &item = items_[i];
+        if (!from.measured || item.measured)
+            continue;
+        item.measurement = from.measurement;
+        item.measured = true;
+        item.features = pageEstimateFeatures(item.measurement, layout_);
+        ++measuredCount_;
+        // Observations of the item before its measurement have no counts yet.
+        const auto key = qint64(i) << 32;
+        for (auto it = observed_.lowerBound(key); it != observed_.end() && it.key() >> 32 == i;
+             ++it)
+            it->ready = false;
+        changed = true;
+    }
+    if (changed)
+        refit();
+}
+
 bool PageMap::setLayout(const PageEstimateLayout &layout, int sliceCharacters)
 {
     sliceCharacters = qMax(0, sliceCharacters);

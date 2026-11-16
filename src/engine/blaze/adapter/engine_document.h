@@ -470,6 +470,10 @@ private:
     std::unique_ptr<EngineDocument> full_;
     // Documents that this one replaced, until releaseRetired().
     std::vector<std::unique_ptr<EngineDocument>> retired_;
+    // Gives `next`, another document of this book, what the page estimate,
+    // search and links learned about the text. None of it depends on the
+    // layout, so a change of appearance does not measure the book again.
+    void carryTextKnowledge(EngineDocument &next) const;
     // Keeps `old`, which this document replaced, for releaseRetired().
     void retire(std::unique_ptr<EngineDocument> old);
     QString fullKey_, fullFailed_;

@@ -2564,6 +2564,25 @@ void stoppedNextSliceKeepsImages()
     }
 }
 
+// What the page estimate measured in the text does not depend on the layout:
+// the whole book and a new text size keep it.
+void measurementsKeptAcrossLayouts()
+{
+    EngineDocument model(test::readerFonts());
+    openFiles(model, pagesBook());
+    while (model.refinePageEstimate()) { }
+    require(Probe::map(model).allMeasured(), "The chapter must measure the book");
+    require(model.prepareFullDocument({}) == Engine::FullDocument::Ready
+                    && model.setChapterMode(false, appearance::Patch(QJsonObject{}), {}, {}, {}),
+            "The whole book must be shown");
+    require(Probe::map(model).allMeasured(), "The whole book must keep the measurements");
+    require(model.setChapterMode(true, appearance::Patch(qt::object({ { "font_pixels", 30 } })), {},
+                                 {}, {}),
+            "A new text size must go back to the chapter");
+    require(Probe::map(model).allMeasured() && !model.refinePageEstimate(),
+            "A new text size must not measure the book again");
+}
+
 // The documents that a switch replaces wait for idle time: their teardown
 // can write the parsed-book cache.
 void retiredUntilIdle()
@@ -3140,6 +3159,7 @@ int main(int argc, char **argv)
     chapterStartsNeedNoRead();
     fullBuildWaitsForRoom();
     retiredUntilIdle();
+    measurementsKeptAcrossLayouts();
     stoppedNextSliceKeepsImages();
     manyItemJumps();
     fullDocument();

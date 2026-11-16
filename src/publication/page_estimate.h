@@ -279,6 +279,9 @@ public:
     bool complete() const;
 
     void setMeasured(int item, const PageEstimateItem &measurement);
+    // Takes the measurements of `other`, a map of the same book, for the
+    // items that have none. They do not depend on the page.
+    void takeMeasurements(const PageMap &other);
 
     // Sets the page. A new page or slice size forgets the observations,
     // because they were for the old one, and returns true. Slices of zero

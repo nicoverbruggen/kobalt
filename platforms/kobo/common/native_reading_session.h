@@ -21,7 +21,16 @@ public:
     bool estimates(ReadingEstimates *result) { return estimates(activity_.current(), result); }
 
     void stop();
+    // Waits for every queued reading-time write, for a lifecycle handoff.
     void finish(std::function<void(bool)> done);
+    // Ends the session for a close without waiting for its reading time.
+    // `done` runs once Nickel's database is free for the close's progress
+    // write; the reading time follows after the reader has closed.
+    void finishForClose(std::function<void(bool)> done);
+
+    // Starts no new reading-time write until finishForClose() has run and the
+    // reader is gone, or reading resumes.
+    void holdSaves() { saves.hold(); }
 
     void retryFailedSave(std::function<void(bool)> done = {},
                          ReadingSaveRetry mode = ReadingSaveRetry::Explicit)
@@ -42,7 +51,11 @@ public:
     {
         // `ending` can retain a failed synchronous stop. It is not a worker
         // using storage and must not keep a terminal handoff pending forever.
-        return startFlushes > 0 || (saves.pending() && !saves.failed());
+        // A held write is not pending either: the close that holds it waits
+        // for this to be false before the reader goes, and the reader going
+        // releases it. A handoff that needs it saved calls finish(), which
+        // releases the hold first.
+        return saves.pending() && !saves.failed() && !saves.isHeld();
     }
 
     std::function<void()> estimatesChanged;
@@ -77,12 +90,11 @@ private:
     QString book;
     double percent = 0;
     bool running = false, ending = false;
-    // Session-start flushes still running on Nickel's event thread.
-    int startFlushes = 0;
-    std::shared_ptr<NativeReadingSession *> alive = std::make_shared<NativeReadingSession *>(this);
     nickel::PageReadingActivity activity_;
     nickel::ReadingPaceCache pace_{ nickel::ReadingPaceCache::refreshInterval,
                                     nickel::ReadingPaceCache::Schedule::Ticked };
-    nickel::NativeReadingSave saves;
+    // One queue for the process, so a book's reading time can still be
+    // written after its reader has closed.
+    nickel::NativeReadingSave &saves = nickel::NativeReadingSave::shared();
 };
 } // namespace kobalt

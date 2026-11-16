@@ -3028,6 +3028,9 @@ void Reader::finishExit()
     }
 #endif
     book->stopReading(true);
+    // In the same turn, so the session's reading-time write cannot start
+    // before the close has written the host's progress.
+    book->holdReadingSaves();
     setEnabled(false);
     closeStage.start();
     const auto request = ++closeRequest;
@@ -3089,9 +3092,10 @@ void Reader::finishExitNative(quint64 request, const QString &location, const QS
     closingTimes.add("native", closeStage);
     closeStage.restart();
     const QPointer<Reader> guard(this);
-    // stopReading already started the time save while local saving and mapping
-    // ran. Let it release Nickel's database before writing the position.
-    book->finishReading(
+    // The reading time is held until the reader has closed, as Nickel's own
+    // reader leaves its session to the event engine. This waits only for an
+    // earlier write that still holds Nickel's database.
+    book->finishReadingForClose(
             [this, guard, request, location, error](NativeActivityResult activityResult) {
                 if (!guard || request != closeRequest || !exportRunning || lifecycleHidden)
                     return;

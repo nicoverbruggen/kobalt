@@ -76,8 +76,14 @@ public:
     void stopReading(bool background = false, bool nativeAllowed = true);
     void sleepReading(const QJsonObject &preferences);
     void finishReading(std::function<void(NativeActivityResult)> done);
+    // Ends reading for a close. `done` runs when the close can write the
+    // host's progress; the host's reading time may still be writing.
+    void finishReadingForClose(std::function<void(NativeActivityResult)> done);
+    // Starts no new host reading-time write until the close or a later
+    // finish releases it.
+    void holdReadingSaves();
     // Drain native writes without completing the local session retained by sleep.
-    void drainReadingSave(std::function<void(NativeActivityResult)> done);
+    void drainReadingSave(std::function<void(NativeActivityResult)> done, bool close = false);
     bool readingSavePending() const;
     void retryFailedReadingSave(std::function<void(NativeActivityResult)> done = {},
                                 ReadingSaveRetry mode = ReadingSaveRetry::Explicit);

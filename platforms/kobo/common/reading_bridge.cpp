@@ -92,6 +92,15 @@ public:
         });
     }
 
+    void holdReadingSaves() override { reading_.holdSaves(); }
+
+    void finishReadingForClose(std::function<void(NativeActivityResult)> done) override
+    {
+        reading_.finishForClose([done = std::move(done)](bool saved) {
+            done(saved ? NativeActivityResult::Completed : NativeActivityResult::Failed);
+        });
+    }
+
     bool readingSavePending() const override { return reading_.savePending(); }
 
     void retryFailedReadingSave(std::function<void(NativeActivityResult)> done,

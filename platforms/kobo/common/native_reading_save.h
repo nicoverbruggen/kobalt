@@ -38,17 +38,22 @@ private:
     QVariantMap expected;
 };
 
-// GUI-thread queue. An interval is removed only after both operations succeed.
-// The writer retains its own commit state, so retrying verification cannot add
-// the interval twice. Owners must drain active calls before releasing storage;
-// retained failures require an explicit lifecycle policy or user choice.
-// Both operations report through their completion, so on a device neither
-// has to run on the GUI thread: a tap can arrive while they write.
+// GUI-thread queue of reading-time writes. An interval is removed only after
+// its write succeeds. The writer retains its own commit state, so retrying
+// verification cannot add the interval twice. Owners must drain active calls
+// before releasing storage; retained failures require an explicit lifecycle
+// policy or user choice. A write reports through its completion, so on a
+// device it does not have to run on the GUI thread: a tap can arrive while
+// it writes.
+//
+// A close holds the queue while it writes Nickel's progress on the GUI thread,
+// so a reading-time write cannot keep Nickel's database busy at that moment.
+// The write then follows in the background. A caller of finish() waits for
+// every interval, so finish() releases the hold.
 class NativeReadingSave final : public QObject
 {
 public:
     using Completion = std::function<void(bool)>;
-    using Flush = std::function<void(Completion)>;
     using Write = std::function<void(Completion)>;
 
     explicit NativeReadingSave(int retryMilliseconds = 100, int timeoutMilliseconds = 2000,
@@ -62,12 +67,12 @@ public:
         connect(&timer, &QTimer::timeout, this, [this] { advance(); });
     }
 
-    void append(Flush flush, Write write)
+    void append(Write write)
     {
-        intervals.push_back({ std::move(flush), std::move(write), false });
+        intervals.push_back(std::move(write));
         if (!elapsed.isValid())
             elapsed.start();
-        if (!failed_ && !active && !timer.isActive())
+        if (!failed_ && !active && !held && !timer.isActive())
             timer.start(0);
     }
 
@@ -76,6 +81,39 @@ public:
     bool inFlight() const { return active; }
 
     bool failed() const { return failed_; }
+
+    bool isHeld() const { return held; }
+
+    // The process's queue for Nickel's reading time. It is never destroyed,
+    // so a write that outlives a reader still reports back.
+    static NativeReadingSave &shared()
+    {
+        static auto *queue = new NativeReadingSave;
+        return *queue;
+    }
+
+    // Runs `done` once no write is in flight, at once when none is.
+    void whenIdle(std::function<void()> done)
+    {
+        if (!active) {
+            done();
+            return;
+        }
+        idle.push_back(std::move(done));
+    }
+
+    // Starts no new write until release() or finish(). A write already in
+    // flight continues.
+    void hold() { held = true; }
+
+    void release()
+    {
+        if (!held)
+            return;
+        held = false;
+        if (pending() && !failed_ && !active)
+            timer.start(0);
+    }
 
     // Activity retries only after cooldown. A distinct lifecycle boundary or
     // explicit user retry may start sooner; finish itself never renews a job.
@@ -106,6 +144,7 @@ public:
             return;
         }
         completions.push_back(std::move(done));
+        held = false;
         if (!active) {
             timer.start(0);
         }
@@ -132,39 +171,21 @@ private:
         }
     }
 
-    struct Interval
-    {
-        Flush flush;
-        Write write;
-        bool flushed;
-    };
-
     void advance()
     {
-        if (failed_ || active || intervals.empty())
+        if (failed_ || active || held || intervals.empty())
             return;
-        if (!intervals.front().flushed) {
-            active = true;
-            const QPointer<NativeReadingSave> guard(this);
-            intervals.front().flush([guard](bool saved) {
-                if (!guard)
-                    return;
-                guard->active = false;
-                if (saved)
-                    guard->intervals.front().flushed = true;
-                if (saved)
-                    guard->timer.start(0);
-                else
-                    guard->retry();
-            });
-            return;
-        }
         active = true;
         const QPointer<NativeReadingSave> guard(this);
-        intervals.front().write([guard](bool saved) {
+        intervals.front()([guard](bool saved) {
             if (!guard)
                 return;
             guard->active = false;
+            for (const auto &done : std::exchange(guard->idle, {})) {
+                done();
+                if (!guard)
+                    return;
+            }
             if (saved)
                 guard->written();
             else
@@ -178,7 +199,8 @@ private:
         failures = 0;
         if (!intervals.empty()) {
             elapsed.start();
-            timer.start(0);
+            if (!held)
+                timer.start(0);
             return;
         }
         const auto ready = std::exchange(completions, {});
@@ -199,9 +221,11 @@ private:
     QElapsedTimer failedSince;
     QTimer timer;
     QElapsedTimer elapsed;
-    std::deque<Interval> intervals;
+    std::deque<Write> intervals;
     std::vector<Completion> completions;
+    std::vector<std::function<void()>> idle;
     bool active = false;
+    bool held = false;
     bool failed_ = false;
     int failures = 0;
 };

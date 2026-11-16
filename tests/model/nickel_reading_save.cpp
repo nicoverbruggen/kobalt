@@ -22,7 +22,7 @@ void waitFor(const std::function<bool()> &ready)
 }
 } // namespace
 
-// Checks the native reading-time save worker: queued intervals, held flushes, repeated finishes and timeouts.
+// Checks the native reading-time save worker: queued intervals, holds for a close, repeated finishes and timeouts.
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
@@ -63,56 +63,44 @@ int main(int argc, char **argv)
     }
     {
         NativeReadingSave saves(1, 20);
-        NativeReadingSave::Completion flush;
+        NativeReadingSave::Completion first;
         int writes = 0, completions = 0;
-        saves.append([&](auto done) { flush = std::move(done); },
-                     [&](auto done) {
-                         ++writes;
-                         done(true);
-                     });
+        saves.append([&](auto done) { first = std::move(done); });
         saves.finish([&](bool saved) {
-            require(saved, "Held flush failed");
+            require(saved, "Held write failed");
             ++completions;
         });
         saves.finish([&](bool saved) {
             require(saved, "Repeated finish failed");
             ++completions;
         });
-        waitFor([&] { return bool(flush); });
+        waitFor([&] { return bool(first); });
         bool heartbeat = false;
         kobalt::qt::invoke(&app, [&] { heartbeat = true; }, Qt::QueuedConnection);
         waitFor([&] { return heartbeat; });
-        require(saves.pending() && writes == 0 && completions == 0,
-                "Finish passed an unfinished event flush");
-        saves.append([](auto done) { done(true); },
-                     [&](auto done) {
-                         ++writes;
-                         done(true);
-                     });
-        flush(true);
+        require(saves.pending() && completions == 0, "Finish passed an unfinished write");
+        saves.append([&](auto done) {
+            ++writes;
+            done(true);
+        });
+        first(true);
         waitFor([&] { return completions == 2; });
-        require(!saves.pending() && writes == 2, "Queued intervals were lost or duplicated");
+        require(!saves.pending() && writes == 1, "Queued intervals were lost or duplicated");
     }
     {
         NativeReadingSave saves(1, 10);
         bool writable = false, completed = false, result = true;
-        int flushes = 0, writes = 0;
-        saves.append(
-                [&](auto done) {
-                    ++flushes;
-                    done(true);
-                },
-                [&](auto done) {
-                    ++writes;
-                    done(writable);
-                });
+        int writes = 0;
+        saves.append([&](auto done) {
+            ++writes;
+            done(writable);
+        });
         saves.finish([&](bool saved) {
             result = saved;
             completed = true;
         });
         waitFor([&] { return completed; });
-        require(!result && saves.pending() && flushes == 1,
-                "Timeout discarded the pending interval");
+        require(!result && saves.pending(), "Timeout discarded the pending interval");
         writable = true;
         completed = false;
         const int exhaustedWrites = writes;
@@ -125,18 +113,62 @@ int main(int argc, char **argv)
             completed = true;
         });
         waitFor([&] { return completed; });
-        require(result && !saves.pending() && flushes == 1 && writes > 1,
-                "Explicit retry repeated the event flush or lost the delta");
+        require(result && !saves.pending() && writes > 1, "Explicit retry lost the delta");
+    }
+    {
+        // A close holds the queue while it writes Nickel's progress. The held
+        // write waits; a write already in flight is reported idle first.
+        NativeReadingSave saves(1, 20);
+        NativeReadingSave::Completion running;
+        int started = 0;
+        saves.append([&](auto done) {
+            ++started;
+            running = std::move(done);
+        });
+        waitFor([&] { return bool(running); });
+        saves.append([&](auto done) {
+            ++started;
+            done(true);
+        });
+        saves.hold();
+        bool idle = false;
+        saves.whenIdle([&] {
+            require(started == 1 && !saves.inFlight(),
+                    "Idle report came while a write still held the database");
+            idle = true;
+        });
+        require(!idle, "Idle report passed a write in flight");
+        running(true);
+        require(idle, "Finished write did not report idle");
+        bool heartbeat = false;
+        kobalt::qt::invoke(&app, [&] { heartbeat = true; }, Qt::QueuedConnection);
+        waitFor([&] { return heartbeat; });
+        require(started == 1 && saves.pending(), "A held queue started its next write");
+        bool immediate = false;
+        saves.whenIdle([&] { immediate = true; });
+        require(immediate, "An idle queue did not report at once");
+        saves.release();
+        waitFor([&] { return !saves.pending(); });
+        require(started == 2, "Released write did not run once");
+        // finish() waits for every interval, so it also releases a hold.
+        saves.hold();
+        saves.append([&](auto done) {
+            ++started;
+            done(true);
+        });
+        bool finished = false;
+        saves.finish([&](bool saved) { finished = saved; });
+        waitFor([&] { return finished; });
+        require(started == 3, "Finish did not release a held write");
     }
     {
         NativeReadingSave saves(1, 10);
         bool writable = false;
         int attempts = 0;
-        saves.append([](auto done) { done(true); },
-                     [&](auto done) {
-                         ++attempts;
-                         done(writable);
-                     });
+        saves.append([&](auto done) {
+            ++attempts;
+            done(writable);
+        });
         waitFor([&] { return saves.failed(); });
         const int exhaustedAttempts = attempts;
         QElapsedTimer timeout;
@@ -154,11 +186,10 @@ int main(int argc, char **argv)
         NativeReadingSave saves(1, 100, 30);
         int attempts = 0;
         bool writable = false;
-        saves.append([](auto done) { done(true); },
-                     [&](auto done) {
-                         ++attempts;
-                         done(writable);
-                     });
+        saves.append([&](auto done) {
+            ++attempts;
+            done(writable);
+        });
         waitFor([&] { return saves.failed(); });
         require(attempts == 3, "Failed native job did not stop after three attempts");
         saves.retryIfDue();
@@ -174,19 +205,15 @@ int main(int argc, char **argv)
     }
     {
         auto saves = std::make_unique<NativeReadingSave>(1, 10);
-        NativeReadingSave::Completion flush;
-        bool wrote = false, completed = false;
-        saves->append([&](auto done) { flush = std::move(done); },
-                      [&](auto done) {
-                          wrote = true;
-                          done(true);
-                      });
+        NativeReadingSave::Completion write;
+        bool completed = false;
+        saves->append([&](auto done) { write = std::move(done); });
         saves->finish([&](bool) { completed = true; });
-        waitFor([&] { return bool(flush); });
+        waitFor([&] { return bool(write); });
         saves.reset();
-        flush(true);
+        write(true);
         QCoreApplication::processEvents();
-        require(!wrote && !completed, "Destroyed queue performed late work or called its owner");
+        require(!completed, "Destroyed queue called its owner");
     }
     {
         // On a device the write runs on Nickel's event thread. The queue stays
@@ -194,7 +221,7 @@ int main(int argc, char **argv)
         NativeReadingSave saves(1, 20);
         NativeReadingSave::Completion write;
         bool completed = false;
-        saves.append([](auto done) { done(true); }, [&](auto done) { write = std::move(done); });
+        saves.append([&](auto done) { write = std::move(done); });
         saves.finish([&](bool saved) {
             require(saved, "Asynchronous write failed");
             completed = true;
@@ -210,5 +237,5 @@ int main(int argc, char **argv)
         require(!saves.pending(), "Completed asynchronous write stayed pending");
     }
     std::puts(
-            "PASS: native interval retry, commit verification, flush ordering, responsiveness and cancellation");
+            "PASS: native interval retry, commit verification, close holds, responsiveness and cancellation");
 }

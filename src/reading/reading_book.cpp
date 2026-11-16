@@ -188,7 +188,20 @@ void ReadingBook::finishReading(std::function<void(NativeActivityResult)> done)
     drainReadingSave(std::move(done));
 }
 
-void ReadingBook::drainReadingSave(std::function<void(NativeActivityResult)> done)
+void ReadingBook::holdReadingSaves()
+{
+    if (bridge)
+        bridge->holdReadingSaves();
+}
+
+void ReadingBook::finishReadingForClose(std::function<void(NativeActivityResult)> done)
+{
+    sleepingReading = false;
+    stopReading(true);
+    drainReadingSave(std::move(done), true);
+}
+
+void ReadingBook::drainReadingSave(std::function<void(NativeActivityResult)> done, bool close)
 {
     if (!bridge) {
         done(NativeActivityResult::NotRequired);
@@ -199,12 +212,16 @@ void ReadingBook::drainReadingSave(std::function<void(NativeActivityResult)> don
         return;
     const auto generation = ++nativeFinishGeneration;
     const std::weak_ptr<ReadingBook *> guard = alive;
-    bridge->finishReading([guard, generation](NativeActivityResult result) {
+    auto finished = [guard, generation](NativeActivityResult result) {
         // Whatever the bridge did, its reading save is no longer pending.
         saves::settled();
         if (const auto book = guard.lock())
             (*book)->finishNativeReading(generation, result);
-    });
+    };
+    if (close)
+        bridge->finishReadingForClose(std::move(finished));
+    else
+        bridge->finishReading(std::move(finished));
 }
 
 void ReadingBook::finishNativeReading(quint64 generation, NativeActivityResult result)

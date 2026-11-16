@@ -28,13 +28,18 @@ struct TextPresetView
     // The preset's thickness steps, and its variable weight when the font
     // has a weight axis, so the card's sample is as heavy as the page text.
     int thickness = 0, axisWeight = 0;
+    // The preset's alignment ("left", "justify" or "publisher") and
+    // hyphenation ("off", "on" or "auto"). The preview shows the alignment
+    // but not hyphenation, so badges name both.
+    QString alignment, hyphenation;
 
     bool operator==(const TextPresetView &other) const
     {
         return id == other.id && name == other.name && detail == other.detail
                 && font.family == other.font.family && font.files == other.font.files
                 && font.identity == other.font.identity && thickness == other.thickness
-                && axisWeight == other.axisWeight;
+                && axisWeight == other.axisWeight && alignment == other.alignment
+                && hyphenation == other.hyphenation;
     }
 
     bool operator!=(const TextPresetView &other) const { return !(*this == other); }

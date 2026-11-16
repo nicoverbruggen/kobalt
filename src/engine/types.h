@@ -3,6 +3,8 @@
 #include <QPoint>
 #include <QRect>
 #include <QString>
+#include <QStringList>
+#include <QSize>
 #include <QVector>
 #include <functional>
 
@@ -38,6 +40,33 @@ struct SearchHit
 };
 
 enum class SearchScope { Book, Chapter, Before, After };
+
+// A few lines of text drawn with the reading fonts, without a document: a
+// centred heading, then paragraphs. For previews of text settings.
+struct TextSampleRequest
+{
+    // The reading font, or empty for the default one.
+    QString face;
+    // The text size in pixels of the canvas.
+    int pixels = 0;
+    // The line height in percent of the text size, as the reader sets it.
+    int lineSpacing = 100;
+    // "left", "justify", "center" or "right".
+    QString alignment;
+    // Breaks words at line ends, as the reader does with hyphenation on.
+    bool hyphenate = false;
+    // The value of a variable weight axis, or 400.
+    int weight = 400;
+    // The reader's weight_steps: added thickness in steps of 1/256 em.
+    int extraWeight = 0;
+    // In points; 0 follows the text size at `ppi`.
+    double opticalSize = 0;
+    int ppi = 300;
+    QSize canvas;
+    int margin = 0;
+    QString heading;
+    QStringList paragraphs;
+};
 
 struct SearchCursor
 {

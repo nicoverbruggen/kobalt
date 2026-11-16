@@ -345,6 +345,14 @@ public:
     // The title of the chapter that contains `position`, chosen like the
     // header's chapter. Empty when the book has no usable contents.
     virtual QString chapterTitle(const QString &position) const = 0;
+
+    // Draws `request` in gray: white paper, black ink. Null when the engine
+    // cannot draw text samples.
+    virtual QImage drawTextSample(const TextSampleRequest &request)
+    {
+        Q_UNUSED(request);
+        return {};
+    }
     virtual QJsonObject state() const = 0;
     // state() without the page estimate, which costs more to make. Enough
     // to compare the settings.

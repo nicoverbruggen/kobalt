@@ -833,26 +833,26 @@ private:
     // page or a close replaces it.
     QVector<QByteArray> textPresetPreviewKeys;
     std::shared_ptr<std::atomic_bool> textPresetPreviewRender;
-    kobalt::StyleSampleRequest textPresetPreviewRequest(const kobalt::textpresets::Preset &preset,
-                                                        QSize size);
+    // The preset's sample on the fixed tile canvas. It depends only on the
+    // preset, so its tile is the same on every device and in every book.
+    kobalt::TextSampleRequest textPresetSample(const kobalt::textpresets::Preset &preset);
 
     struct TextPresetPreview
     {
-        QString id, face;
-        kobalt::StyleSampleRequest request;
-        // Everything that decides the finished tile's pixels.
+        QString id;
+        kobalt::TextSampleRequest request;
+        // Everything that decides the sample's pixels.
         QByteArray tile;
     };
 
     QVector<TextPresetPreview>
-    textPresetPreviews(const QVector<kobalt::textpresets::Preset> &presets, const QStringList &ids,
-                       QSize size);
-    // Lays the preview out on the engine, keeps the finished tile and calls
-    // `finished` with it, or with a null image when it failed or was cancelled.
-    void renderTextPresetTile(TextPresetPreview preview, QSize size,
-                              std::shared_ptr<std::atomic_bool> cancelled,
-                              std::function<void(const QImage &)> finished,
-                              std::function<void()> yielded = {});
+    textPresetPreviews(const QVector<kobalt::textpresets::Preset> &presets, const QStringList &ids);
+    // Draws the sample on the engine worker, keeps it and calls `finished`
+    // with it, or with a null image when it failed.
+    void drawTextPresetTile(const TextPresetPreview &preview,
+                            std::function<void(const QImage &)> finished);
+    // Draws the missing tiles of the user's presets.
+    void drawTextPresetTiles(const QVector<kobalt::textpresets::Preset> &presets);
     kobalt::storage::PreviewStore &textPresetTiles();
     std::unique_ptr<kobalt::storage::PreviewStore> textPresetTileStore;
     // The presets, the one in force and whether the text differs from it.
@@ -862,29 +862,6 @@ private:
                                      const QVector<kobalt::textpresets::Preset> &presets,
                                      const QString &selected);
     QRect textPresetGalleryBounds() const;
-    // Once a book shows its first page, the reader prepares the All grid's
-    // first page: from storage, or else on the engine, one tile at a time
-    // and only while the reader is idle. Opening All then shows a complete
-    // page in one screen update.
-    void startTextPresetPrerender();
-    // Draws the previews of the text presets that are not stored yet, while
-    // the host still shows its opening view, so that the first page turns
-    // do not wait for them. Stored previews need no work, so this takes
-    // time only on the first opening with a new preset, size or theme.
-    void prepareTextPresetPresentation(std::function<void()> finished);
-    void finishTextPresetPresentation();
-    std::function<void()> textPresetPresentationReady;
-    void prerenderTextPresets();
-    void prerenderNextTextPreset();
-    // Continues a prerender that waits for the engine. ReaderSession::idle
-    // calls it, so no timer wakes the reader while it sits open.
-    void resumeTextPresetPrerender();
-    bool textPresetPrerenderStarted = false;
-    bool textPresetPrerenderWaiting = false;
-    QWidget *textPresetProbeHost = nullptr;
-    QVector<TextPresetPreview> textPresetPrerenderQueue;
-    QSize textPresetPrerenderSize;
-    std::shared_ptr<std::atomic_bool> textPresetPrerenderCancel;
     void showTextPresetActions(const QString &id);
     void confirmDeleteTextPreset(const QString &id);
     void openTextPresetGallery();

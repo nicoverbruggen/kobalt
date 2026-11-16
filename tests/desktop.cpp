@@ -13917,9 +13917,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
         QTRY_COMPARE_WITH_TIMEOUT(gallery()->property("previews_shown").toInt(), wanted, 30000);
         auto *reader = fixture.window.readerWindow();
-        QCOMPARE(gallery()->property("preview_renders").toInt()
-                         + reader->property("text_preset_prerender_renders").toInt(),
-                 wanted);
+        QCOMPARE(gallery()->property("preview_renders").toInt(), wanted);
         QCOMPARE(gallery()->geometry().bottom(), reader->rect().bottom());
         auto *tab = fixture.widget("rrNavText");
         QVERIFY(tab);
@@ -13958,9 +13956,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         const auto unblock = qScopeGuard([gate] { gate->release.release(); });
         QTRY_VERIFY(gate->entered.load());
         reader = fixture.window.readerWindow();
-        QTRY_VERIFY_WITH_TIMEOUT(reader->property("text_presets_prerendered").toBool(), 10000);
         QVERIFY(openAll());
-        QCOMPARE(gallery()->property("previews_shown").toInt(), wanted);
+        QTRY_COMPARE_WITH_TIMEOUT(gallery()->property("previews_shown").toInt(), wanted, 10000);
         QCOMPARE(gallery()->property("preview_renders").toInt(), 0);
         QCOMPARE(gallery()->grab().toImage(), shown);
         // Galleries use the standard pager route even though they are not one
@@ -15045,7 +15042,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 paths, fixtureFonts(), fixturePlaceholder(),
                 [] {
                     auto services = desktop::readerHostServices();
-                    services.textPresetsBeforePresentation = true;
                     services.suspended = [] { return false; };
                     return services;
                 },
@@ -15056,20 +15052,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 QTest::qFail("Opening controller did not drain", __FILE__, __LINE__);
         });
         QVector<int> progress;
-        bool completedWithPreviews = false;
         connect(&controller, &standalone::ReaderController::openingProgress, &controller,
-                [&](int percent) {
-                    progress.append(percent);
-                    if (percent == 100)
-                        completedWithPreviews = controller.window()
-                                && controller.window()
-                                           ->property("text_presets_prerendered")
-                                           .toBool();
-                });
+                [&](int percent) { progress.append(percent); });
         QSignalSpy opened(&controller, &standalone::ReaderController::opened);
         controller.open(book, QSize(600, 800));
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
-        QVERIFY(completedWithPreviews);
         QVERIFY(progress.contains(60) && progress.contains(80));
         QCOMPARE(progress.last(), 100);
         QCOMPARE(progress.count(100), 1);

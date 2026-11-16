@@ -31,6 +31,11 @@ void kobalt::setExtraFontWeight(int steps)
         fontMan->clearGlyphCache();
 }
 
+int kobalt::extraFontWeight()
+{
+    return extraWeight;
+}
+
 // Only the private CREngine archive references these names. Nickel and Qt
 // continue to call FreeType directly.
 extern "C" FT_Error kobalt_font_render_glyph(FT_GlyphSlot slot, FT_Render_Mode mode)

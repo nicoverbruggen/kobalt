@@ -86,6 +86,14 @@ struct StyleSample
 void renderStyleSample(EngineFontInputs fonts, StyleSampleRequest request, QObject *context,
                        std::function<void(StyleSample)> finished,
                        std::function<void()> yielded = {});
+// Draws a text sample with the engine's fonts on the shared engine worker,
+// without a sample document, and calls `finished` on the GUI thread unless
+// `context` was destroyed first. A sample that cannot be drawn gives a null
+// image.
+void renderTextSample(EngineFontInputs fonts, TextSampleRequest request, QObject *context,
+                      std::function<void(QImage)> finished);
+// The heading and opening paragraphs of the layout sample, for a text sample.
+void setTextSampleText(TextSampleRequest &request);
 // Reading settings without the book-specific keys a sample cannot use.
 QJsonObject styleSampleSettings(QJsonObject state);
 // Page-break previews use one fixed page, font and size, so the sample shows

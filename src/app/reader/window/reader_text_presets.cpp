@@ -4,6 +4,7 @@
 #include "app/reader/settings/text_presets_panel.h"
 #include "assets/font_catalog.h"
 #include "reading/style_sample.h"
+#include "reading/style_sample_cache.h"
 #include "reading/text_presets.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
@@ -93,22 +94,43 @@ QString presetSummary(const Preset &preset)
     return fontDisplayName(preset.fontFace) + QStringLiteral(" · ") + presetDetail(preset);
 }
 
-constexpr qreal previewScale = 0.8;
+// Preset tiles are drawn once on this canvas, whatever the device, and
+// scaled to the gallery's tiles. Its pixels are at 300 PPI, so a preset's
+// text size in points decides its size on the canvas.
+constexpr int sampleCanvasPpi = 300;
+constexpr int sampleCanvasWidth = 680, sampleCanvasHeight = 480;
+constexpr int sampleMargin = 32;
 
-// A gallery tile's preview: the sample's first lines on the theme's paper.
-// A failed sample gives a null image.
-QImage presetPreviewImage(const StyleSample &sample, QSize size, bool dark)
+// A gallery tile: the top of a preset's sample, scaled to the tile's width
+// and drawn in the theme's ink on its paper.
+QImage presetTileImage(const QImage &sample, QSize size, const ui::ThemeColors &colors)
 {
-    if (!sample.valid() || sample.crops.isEmpty())
+    if (sample.isNull() || size.isEmpty())
         return {};
+    const auto source = sample.convertToFormat(QImage::Format_RGB32);
+    QImage grey(source.size(), QImage::Format_Indexed8);
+    for (int y = 0; y < source.height(); ++y) {
+        const auto *from = reinterpret_cast<const QRgb *>(source.constScanLine(y));
+        auto *to = grey.scanLine(y);
+        for (int x = 0; x < source.width(); ++x)
+            to[x] = uchar(qGray(from[x]));
+    }
+    // The sample's black becomes the ink and its white the paper.
+    const auto ink = colors.ink, paper = colors.paper;
+    QVector<QRgb> table(256);
+    for (int level = 0; level < 256; ++level) {
+        const auto mix = [level](int dark, int light) {
+            return (dark * (255 - level) + light * level + 127) / 255;
+        };
+        table[level] = qRgb(mix(ink.red(), paper.red()), mix(ink.green(), paper.green()),
+                            mix(ink.blue(), paper.blue()));
+    }
+    grey.setColorTable(table);
     QImage image(size, QImage::Format_ARGB32_Premultiplied);
-    image.fill(ui::themeColors(dark).paper);
+    image.fill(paper);
     QPainter painter(&image);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform);
-    // The crop spans the sample page's width; fit that width and keep the
-    // first lines.
-    const auto crop = sample.crops.first().scaledToWidth(size.width(), Qt::SmoothTransformation);
-    painter.drawImage(QPoint(), crop, QRect(QPoint(), size));
+    const auto scaled = grey.scaledToWidth(size.width(), Qt::SmoothTransformation);
+    painter.drawImage(QPoint(), scaled, QRect(QPoint(), size));
     painter.end();
     return image;
 }
@@ -128,6 +150,8 @@ TextPresetView Reader::textPresetView(const Preset &preset)
     view.id = preset.id;
     view.name = preset.name;
     view.detail = presetDetail(preset);
+    view.alignment = preset.alignment;
+    view.hyphenation = preset.hyphenation;
     const auto face =
             preset.fontFace.isEmpty() ? QString::fromLatin1(defaultFontFace) : preset.fontFace;
     for (const auto &font : textPresetSettings()->fontCatalog())
@@ -144,10 +168,6 @@ TextPresetView Reader::textPresetView(const Preset &preset)
 
 void Reader::buildTextPresets()
 {
-    // Holds the prerender's hidden gallery probe. It inherits the reader's
-    // style sheet, so the probe measures the same tiles as the gallery.
-    textPresetProbeHost = new QWidget(this);
-    textPresetProbeHost->hide();
     textPresetSection = new TextPresetSection(menu);
     menu->setTopSection(textPresetSection);
     textPresetSection->toggled = [this] {
@@ -256,6 +276,7 @@ bool Reader::saveTextPresets(QJsonObject next, const QVector<Preset> &presets)
         return false;
     }
     preferences = next;
+    drawTextPresetTiles(presets);
     syncTextPresets();
     if (general && general->isVisible()) {
         showTextPresetSettings();
@@ -457,30 +478,30 @@ void Reader::editTextPresetName(const QString &id)
         platform::textRefresh(widget);
 }
 
-StyleSampleRequest Reader::textPresetPreviewRequest(const Preset &preset, QSize size)
+TextSampleRequest Reader::textPresetSample(const Preset &preset)
 {
-    // The book's own settings with the preset's text, at the size of the
-    // reading page. The preview shows the opening lines at 80%, so a tile
-    // can show a few lines even of a large preset.
-    auto settings = styleSampleSettings(session->state());
-    const auto values = textpresets::values(preset);
-    for (auto it = values.begin(); it != values.end(); ++it)
-        settings[it.key()] = it.value();
-    const int margin = ui::px(24);
-    StyleSampleRequest request;
-    request.settings = settings;
-    request.settings["margin_pixels"] = margin;
-    request.settings["top_margin_pixels"] = margin;
-    request.key = "font_pixels";
-    request.values = { values.value("font_pixels") };
-    const QSize page(qRound(size.width() / previewScale),
-                     qRound(size.height() / previewScale) + 4 * margin);
-    request.page = page;
-    request.thumbnail = QSize(1, 1);
-    request.cropOrigin = { 0, 0 };
-    request.boldHeading = true;
-    request.firstPageOnly = true;
-    request.crop = QSize(page.width(), qRound(size.height() / previewScale));
+    // Only the preset decides the sample, not the book or the device, so a
+    // tile is drawn once and kept.
+    TextSampleRequest request;
+    request.face =
+            preset.fontFace.isEmpty() ? QString::fromLatin1(defaultFontFace) : preset.fontFace;
+    request.ppi = sampleCanvasPpi;
+    request.pixels = qRound(preset.halfPoints * sampleCanvasPpi / 144.0);
+    request.lineSpacing = preset.lineSpacing;
+    request.alignment = preset.alignment;
+    // Automatic hyphenation follows the book, and the sample has no rules.
+    request.hyphenate = preset.hyphenation == QLatin1String("on");
+    request.extraWeight = qBound(0, preset.weightSteps, 12);
+    request.opticalSize = preset.opticalSize;
+    // A face without a weight axis is read at its regular weight.
+    for (const auto &font : session->fontCatalog())
+        if (font.family.compare(request.face, Qt::CaseInsensitive) == 0
+            && font.weightAxis.available())
+            request.weight =
+                    qBound(font.weightAxis.minimum, preset.fontWeight, font.weightAxis.maximum);
+    request.canvas = QSize(sampleCanvasWidth, sampleCanvasHeight);
+    request.margin = sampleMargin;
+    setTextSampleText(request);
     return request;
 }
 
@@ -571,10 +592,6 @@ void Reader::openTextPresetGallery()
 {
     if (textPresetGallery)
         return;
-    // The gallery renders what the prerender has not finished.
-    if (textPresetPrerenderCancel)
-        textPresetPrerenderCancel->store(true);
-    textPresetPrerenderQueue.clear();
     textPresetGallery = new TextPresetGallery(this);
     textPresetGallery->setGeometry(textPresetGalleryBounds());
     textPresetGallery->closed = [this] { closeTextPresetGallery(); };
@@ -610,44 +627,57 @@ storage::PreviewStore &Reader::textPresetTiles()
 }
 
 QVector<Reader::TextPresetPreview> Reader::textPresetPreviews(const QVector<Preset> &presets,
-                                                              const QStringList &ids, QSize size)
+                                                              const QStringList &ids)
 {
     const auto fonts = session->fontInputs();
     const auto catalog = session->fontCatalog();
-    // The tile's size and the paper colour also decide its pixels.
-    const QByteArray tile = QByteArray::number(size.width()) + 'x'
-            + QByteArray::number(size.height()) + (darkTheme ? 'd' : 'l');
     QVector<TextPresetPreview> previews;
     for (const auto &id : ids)
         if (const auto *preset = textpresets::find(presets, id)) {
-            TextPresetPreview preview{
-                preset->id, preset->fontFace, textPresetPreviewRequest(*preset, size), {}
-            };
-            preview.tile = styleSampleKey(fonts, preview.request, catalog) + tile;
+            TextPresetPreview preview{ preset->id, textPresetSample(*preset), {} };
+            preview.tile = textSampleKey(fonts, preview.request, catalog);
             previews.append(preview);
         }
     return previews;
 }
 
-void Reader::renderTextPresetTile(TextPresetPreview preview, QSize size,
-                                  std::shared_ptr<std::atomic_bool> cancelled,
-                                  std::function<void(const QImage &)> finished,
-                                  std::function<void()> yielded)
+void Reader::drawTextPresetTile(const TextPresetPreview &preview,
+                                std::function<void(const QImage &)> finished)
 {
-    registerPickerFonts(preview.face);
-    preview.request.cancelled = cancelled;
-    const bool dark = darkTheme;
-    renderStyleSample(
-            session->fontInputs(), preview.request, this,
-            [this, cancelled, size, dark, key = preview.tile,
-             finished = std::move(finished)](StyleSample sample) {
-                const auto image = presetPreviewImage(sample, size, dark);
-                // Keep a finished tile even when its page was
-                // replaced: turning back shows it at once.
-                textPresetTiles().insert(key, image);
-                finished(cancelled->load() ? QImage() : image);
-            },
-            std::move(yielded));
+    // Tests read how many tiles this reader drew.
+    setProperty("text_preset_tile_draws", property("text_preset_tile_draws").toInt() + 1);
+    renderTextSample(session->fontInputs(), preview.request, this,
+                     [this, key = preview.tile, finished = std::move(finished)](QImage sample) {
+                         if (!sample.isNull())
+                             textPresetTiles().insert(key, sample);
+                         finished(sample);
+                     });
+}
+
+void Reader::drawTextPresetTiles(const QVector<Preset> &presets)
+{
+    // A saved preset's tile is drawn now, so the gallery shows it at once.
+    // The examples are drawn the first time a gallery needs them. An open
+    // gallery draws the tiles it shows itself.
+    if (textPresetGallery)
+        return;
+    QStringList ids;
+    for (const auto &preset : presets)
+        if (!preset.example)
+            ids.append(preset.id);
+    const auto previews = textPresetPreviews(presets, ids);
+    QVector<QByteArray> keys;
+    for (const auto &preview : previews)
+        keys.append(preview.tile);
+    if (keys.isEmpty())
+        return;
+    textPresetTiles().load(keys, this, [this, previews] {
+        for (const auto &preview : previews) {
+            QImage kept;
+            if (!textPresetTiles().find(preview.tile, &kept))
+                drawTextPresetTile(preview, [](const QImage &) { });
+        }
+    });
 }
 
 void Reader::renderTextPresetGallery()
@@ -660,15 +690,15 @@ void Reader::renderTextPresetGallery()
     if (size.isEmpty())
         return;
     const auto wanted =
-            textPresetPreviews(textPresetGalleryEntries, textPresetGallery->visibleIds(), size);
+            textPresetPreviews(textPresetGalleryEntries, textPresetGallery->visibleIds());
+    // The tile's size and the theme decide how a sample is shown.
     QVector<QByteArray> keys{ QByteArray::number(size.width()) + 'x'
-                              + QByteArray::number(size.height()) };
+                              + QByteArray::number(size.height()) + (darkTheme ? 'd' : 'l') };
     for (const auto &preview : wanted)
         keys.append(preview.tile);
     if (keys == textPresetPreviewKeys)
         return;
-    // A newer page replaces an unfinished one. Its renders stop, so the
-    // engine is free for the page the reader shows.
+    // A newer page replaces an unfinished one.
     if (textPresetPreviewRender)
         textPresetPreviewRender->store(true);
     textPresetPreviewKeys = keys;
@@ -687,14 +717,17 @@ void Reader::renderTextPresetGallery()
     auto round = std::make_shared<Round>();
     round->pending = wanted.size();
     const QPointer<TextPresetGallery> gallery(textPresetGallery);
-    const auto finished = [gallery, round, cancelled](const QString &id, const QImage &image) {
+    const auto colors = ui::themeColors(darkTheme);
+    const auto finished = [gallery, round, cancelled, size, colors](const QString &id,
+                                                                    const QImage &sample) {
         // A failed sample still finishes, so a page of previews is not held
         // back by one of them.
-        if (!image.isNull())
-            round->images.insert(id, image);
-        if (--round->pending > 0 || cancelled->load() || !gallery)
+        if (cancelled->load() || !gallery)
             return;
-        gallery->setPreviews(round->images);
+        if (!sample.isNull())
+            round->images.insert(id, presetTileImage(sample, size, colors));
+        if (--round->pending == 0)
+            gallery->setPreviews(round->images);
     };
     QVector<TextPresetPreview> missing;
     QVector<QByteArray> missingKeys;
@@ -711,160 +744,25 @@ void Reader::renderTextPresetGallery()
         return;
     // Then storage, read on its worker, and the engine for the rest.
     textPresetTiles().load(
-            missingKeys, textPresetGallery, [this, gallery, missing, finished, cancelled, size] {
+            missingKeys, textPresetGallery, [this, gallery, missing, finished, cancelled] {
+                if (cancelled->load())
+                    return;
                 int started = 0;
                 for (const auto &preview : missing) {
                     QImage kept;
-                    if (cancelled->load()) {
-                        finished(preview.id, {});
-                    } else if (textPresetTiles().find(preview.tile, &kept)) {
+                    if (textPresetTiles().find(preview.tile, &kept)) {
                         finished(preview.id, kept);
                     } else {
                         ++started;
-                        renderTextPresetTile(preview, size, cancelled,
-                                             [finished, id = preview.id](const QImage &image) {
-                                                 finished(id, image);
-                                             });
+                        drawTextPresetTile(preview,
+                                           [finished, id = preview.id](const QImage &sample) {
+                                               finished(id, sample);
+                                           });
                     }
                 }
                 // Tests read how many tiles this gallery sent to the engine.
                 gallery->setProperty("preview_renders",
                                      gallery->property("preview_renders").toInt() + started);
-            });
-}
-
-void Reader::startTextPresetPrerender()
-{
-    if (textPresetPrerenderStarted)
-        return;
-    textPresetPrerenderStarted = true;
-    // After the first page and the work that follows the opening: the
-    // engine reports idle once it has drawn the pages beside this one.
-    textPresetPrerenderWaiting = true;
-    if (!session->busy() && !session->preparingNeighbours())
-        qt::later(0, this, [this] { resumeTextPresetPrerender(); });
-}
-
-void Reader::prepareTextPresetPresentation(std::function<void()> finished)
-{
-    DiagnosticOperation setup("reader-text-preset-presentation");
-    // A preview that cannot be drawn in this time must not keep the book
-    // closed. What is left is drawn after the first page, as before. The
-    // previews wait for the pages beside the first one, which a slow
-    // device prepares for several seconds.
-    static constexpr int limit = 15000;
-    textPresetPresentationReady = std::move(finished);
-    textPresetPrerenderStarted = true;
-    textPresetPrerenderWaiting = false;
-    qt::later(limit, this, [this] { finishTextPresetPresentation(); });
-    prerenderTextPresets();
-}
-
-void Reader::finishTextPresetPresentation()
-{
-    if (auto finished = std::exchange(textPresetPresentationReady, {}))
-        finished();
-}
-
-void Reader::resumeTextPresetPrerender()
-{
-    if (!std::exchange(textPresetPrerenderWaiting, false))
-        return;
-    if (textPresetPrerenderCancel)
-        prerenderNextTextPreset();
-    else
-        prerenderTextPresets();
-}
-
-void Reader::prerenderTextPresets()
-{
-    DiagnosticOperation setup("reader-text-preset-prerender");
-    // Landscape has no presets bar, so no All.
-    if (closing || exitPending || lifecycleHidden || textPresetGallery || !textPresetProbeHost
-        || width() > height()) {
-        finishTextPresetPresentation();
-        return;
-    }
-    QVector<Preset> presets;
-    QString selected;
-    bool modified = false;
-    textPresetChoice(&presets, &selected, &modified);
-    // Lay the gallery out without showing it, for its first page and tile size.
-    QSize size;
-    QStringList ids;
-    {
-        // A child added to or removed from the reader repaints the page,
-        // so the probe lives in a hidden holder made with the window.
-        DiagnosticOperation setup("reader-text-preset-probe");
-        TextPresetGallery probe(textPresetProbeHost);
-        probe.setGeometry(textPresetGalleryBounds());
-        // The presets decide whether the pager shows, so lay out after them.
-        setTextPresetGalleryPresets(&probe, presets, selected);
-        probe.layout()->activate();
-        size = probe.previewSize();
-        ids = probe.visibleIds();
-    }
-    if (size.isEmpty() || ids.isEmpty()) {
-        finishTextPresetPresentation();
-        return;
-    }
-    if (textPresetPrerenderCancel)
-        textPresetPrerenderCancel->store(true);
-    textPresetPrerenderCancel = std::make_shared<std::atomic_bool>(false);
-    textPresetPrerenderSize = size;
-    textPresetPrerenderQueue = textPresetPreviews(presets, ids, size);
-    QVector<QByteArray> keys;
-    for (const auto &preview : textPresetPrerenderQueue)
-        keys.append(preview.tile);
-    textPresetTiles().load(keys, this, [this] { prerenderNextTextPreset(); });
-}
-
-void Reader::prerenderNextTextPreset()
-{
-    if (!textPresetPrerenderCancel || textPresetPrerenderCancel->load())
-        return;
-    QImage kept;
-    while (!textPresetPrerenderQueue.isEmpty()
-           && textPresetTiles().find(textPresetPrerenderQueue.first().tile, &kept))
-        textPresetPrerenderQueue.removeFirst();
-    if (textPresetPrerenderQueue.isEmpty()) {
-        // Tests read when the first page is ready.
-        setProperty("text_presets_prerendered", true);
-        finishTextPresetPresentation();
-        return;
-    }
-    // One tile at a time, only while nothing else needs the engine, so a page
-    // turn waits for one tile at most.
-    if (closing || exitPending || lifecycleHidden || services.suspended()) {
-        finishTextPresetPresentation();
-        return;
-    }
-    if (session->busy() || appearanceEdit.applying()
-        || appearanceEdit.previewState() == AppearanceEditSession::PreviewState::Opening
-        || stylingSamplesPending > 0) {
-        // Continue when the engine is next idle, at the latest after the
-        // next page turn.
-        textPresetPrerenderWaiting = true;
-        return;
-    }
-    const auto preview = textPresetPrerenderQueue.takeFirst();
-    renderTextPresetTile(
-            preview, textPresetPrerenderSize, textPresetPrerenderCancel,
-            [this](const QImage &image) {
-                if (!image.isNull())
-                    setProperty("text_preset_prerender_renders",
-                                property("text_preset_prerender_renders").toInt() + 1);
-                prerenderNextTextPreset();
-            },
-            [this, preview, cancelled = textPresetPrerenderCancel] {
-                if (cancelled != textPresetPrerenderCancel || cancelled->load())
-                    return;
-                // Reader work overtook this queued tile. Retry it
-                // after that work, without delaying the next turn.
-                textPresetPrerenderQueue.prepend(preview);
-                textPresetPrerenderWaiting = true;
-                if (!session->busy() && !session->preparingNeighbours())
-                    qt::later(0, this, [this] { resumeTextPresetPrerender(); });
             });
 }
 

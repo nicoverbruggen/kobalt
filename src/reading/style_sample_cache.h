@@ -8,6 +8,10 @@ namespace kobalt {
 // request, the font inputs and the build's rendering policy.
 QByteArray styleSampleKey(const EngineFontInputs &fonts, const StyleSampleRequest &request,
                           const QVector<ReadingFont> &catalog = {});
+// The same for a text sample, which depends on nothing outside the request
+// but the fonts.
+QByteArray textSampleKey(const EngineFontInputs &fonts, const TextSampleRequest &request,
+                         const QVector<ReadingFont> &catalog);
 
 // Rendered Styling samples of one open book, kept in memory so that opening a
 // sample again does not lay it out again. GUI thread only. Portrait and

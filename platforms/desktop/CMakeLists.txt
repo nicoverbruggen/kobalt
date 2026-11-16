@@ -425,7 +425,7 @@ if(BUILD_TESTING)
             sleepSnapshotReplacesEachClockWithoutChangingTheReadingPage sleepTimeLeftUsesHoursAboveTwoHours sleepTimeLeftApproximate timeRemainingFormatShared
             sleepScreenDefaultsMigrateOnce sleepPngOverlaysUseEitherFolder sleepNativePreviewFollowsSettings sleepSettingsShowWhereToAddPngs sleepGreetingEditor sleepOverlayUsesTheDimmedPage sleepCoverFitsWithoutCroppingOrDimming
             sleepCoverDecodingIsBoundedAndHonorsSourceCancellation wifiStatus readingTimeStatsVisibility readingTimeStatus remoteKeyActivityRequiresActiveReading
-            textPresetsBeforePresentation panelsAfterBackgroundWork finishChoiceSurvivesSleepAndRequiresActiveReader finishPromptPersistence progressPercentagesAgree kosyncAccountGating kosyncOpening kosyncNetwork kosyncBackgroundWifi kosyncWifiRelease kosyncMoments minuteClock clockRestsWithoutConsumers clockAsksPaceForTimeLeft turnSkipsHiddenControls idleTimers readerStandbySetting wifiPowerSaver wifiPowerSaverAtSleep kosyncManualToolbar kosyncManualConnection kosyncDialogResume kosyncFailure kosyncMissingProgress kosyncMetadata kosyncPasswordSleep kosyncSleepSavesSyncTime kosyncPause kosyncFinal nativeProgressWaitsForSleep appearanceRetryCooldown closeWithUnusableSettings recoveryNoticeAfterFirstPage benchmarkNoticeAfterRun activityBatchesAndLowBattery usbFinalSave developmentOptions developmentStateReports annotationExportHandoff annotationExportOwnerDestruction
+            textPresetsWithoutOpeningWait panelsAfterBackgroundWork finishChoiceSurvivesSleepAndRequiresActiveReader finishPromptPersistence progressPercentagesAgree kosyncAccountGating kosyncOpening kosyncNetwork kosyncBackgroundWifi kosyncWifiRelease kosyncMoments minuteClock clockRestsWithoutConsumers clockAsksPaceForTimeLeft turnSkipsHiddenControls idleTimers readerStandbySetting wifiPowerSaver wifiPowerSaverAtSleep kosyncManualToolbar kosyncManualConnection kosyncDialogResume kosyncFailure kosyncMissingProgress kosyncMetadata kosyncPasswordSleep kosyncSleepSavesSyncTime kosyncPause kosyncFinal nativeProgressWaitsForSleep appearanceRetryCooldown closeWithUnusableSettings recoveryNoticeAfterFirstPage benchmarkNoticeAfterRun activityBatchesAndLowBattery usbFinalSave developmentOptions developmentStateReports annotationExportHandoff annotationExportOwnerDestruction
             progressChoiceKeepAndGo progressChoiceWaitsForSettings progressChoiceWaitsForBookmarks
             finishedSyncWithoutPositionKeepsLocalReading
             progressChoiceForOlderAlert progressChoiceUnavailablePosition
@@ -663,6 +663,11 @@ if(BUILD_TESTING)
                 qt_add_resources(kobalt-${name}-tests android_asset_fixture PREFIX "/android-assets" BASE "${fixture}"
                     FILES "${fixture}/manifest.json" "${fixture}/hyph/fixture.pattern")
             endif()
+            # Text samples read their heading and paragraphs from the Styling sample.
+            if(check STREQUAL "text_sample")
+                qt_add_resources(kobalt-${name}-tests samples PREFIX "/kobalt" BASE "${kobalt_notice_base}"
+                    FILES ${kobalt_notice_samples})
+            endif()
             target_compile_definitions(kobalt-${name}-tests PRIVATE
                 KOBALT_TEST_ASSET_ROOT="${KOBALT_ASSETS}" KOBALT_FONT_DIRECTORY="${KOBALT_ASSETS}/fonts"
                 KOBALT_INSTALLED_FONTS)
@@ -739,7 +744,7 @@ if(BUILD_TESTING)
     kobalt_regressions(model font_axes touch_rotation)
     kobalt_regressions(platform reader_orientation font_sources system_fonts nickel_dictionary_selection
         nickel_reading_pace_cache nickel_reading_save nickel_event_save nickel_account nickel_session_calls nickel_session_volume nickel_book_menu nickel_font_scale native_progress native_sync_network native_dialog_overlay native_lifecycle standby_input standby_diagnostics usb_removal page_transition_native page_animation)
-    kobalt_regressions(engine large_toc vertical_spacing source_index location_round_trip engine_contract page_estimate layout_interrupt spine_window chapter_slices chapter_parity fast_surfaces fast_shaping columns advanced_text paragraph_spacing beautifier alignment indentation page_layout vertical_writing mathml line_breaking
+    kobalt_regressions(engine large_toc vertical_spacing source_index location_round_trip engine_contract text_sample page_estimate layout_interrupt spine_window chapter_slices chapter_parity fast_surfaces fast_shaping columns advanced_text paragraph_spacing beautifier alignment indentation page_layout vertical_writing mathml line_breaking
         fallback_styles svg_limits image_proportions figure_layout whitespace links search word_selection reader publisher_markup local_reader document_word_count document_cache alternate_layout)
     kobalt_regressions(component ui acknowledgments kosync_ui)
     target_sources(kobalt-page-animation-tests PRIVATE "${KOBALT_ROOT}/platforms/kobo/display/page_animation.cpp")
@@ -787,7 +792,7 @@ if(BUILD_TESTING)
         "sleep:^(lifecycle\\.(sleep.*|readerStandbySetting|readerUsesSelectedSleepScreen|closedReaderDoesNotSaveSleepScreen|usb.*|persistedSleepScreen.*|homeSleepScreen.*|pageTurnsResumeWhenReaderIsShownAfterSleep|shutdownFinalSaveTimesOut|teardownRemovesApplicationFilter)|platform\\.(shutdown|sleep-persistence|kobo-power-screen|usb-removal|native-lifecycle)|desktop\\.deviceEmulation|model\\.engine-activity)$"
         "diagnostics:^(model\\.(diagnostics|crash-reports)|desktop\\.(engineMonitor|engineMonitorSlowdown|engineMonitorReading|fastConsecutiveChapterJumps|diagnostics|storageDiagnostics|settingChangesLogged)|lifecycle\\.developmentStateReports|platform\\.standby-(input|diagnostics))$"
         "kobo:^(platform\\.(startup-recovery|native-startup-wait|screensaver-loader|native-dialog-overlay|nickel-.*)|lifecycle\\.nativeOpeningStatus|model\\.qt-compat)$"
-        "settings:^(desktop\\.(settings.*|backgroundStyleSamplesYieldToReader|lightDarkModeShortcut|themeChanges)|lifecycle\\.(appearance.*|textPresetsBeforePresentation|panelsAfterBackgroundWork|uneditedPanelTransitions|overflowClosesCurrentPanel|turnSkipsHiddenControls)|model\\.(appearance-settings|text-presets|style-sample-cache|preview-store)|component\\.(ui|acknowledgments)|ui\\.(openingCoverDisabled|regularIconWeight|connectedModalFooter|modalListDividers|modalClosesOnBackdropOnly|choiceSheetListFillsCard))$"
+        "settings:^(desktop\\.(settings.*|backgroundStyleSamplesYieldToReader|lightDarkModeShortcut|themeChanges)|lifecycle\\.(appearance.*|textPresetsWithoutOpeningWait|panelsAfterBackgroundWork|uneditedPanelTransitions|overflowClosesCurrentPanel|turnSkipsHiddenControls)|model\\.(appearance-settings|text-presets|style-sample-cache|preview-store)|component\\.(ui|acknowledgments)|ui\\.(openingCoverDisabled|regularIconWeight|connectedModalFooter|modalListDividers|modalClosesOnBackdropOnly|choiceSheetListFillsCard))$"
         "layout:^(engine\\..*|corpus\\..*|desktop\\.(columns|globalLayout|advancedText|verticalJustification|stylesheet)|model\\.layout-(cache|compatibility))$"
         "reading:^(desktop\\.(startup|reading|openingProgressStages|errors|formattingWarning|features)|ui\\.openingCover(Layout|Upgrade|Disabled)|session\\.reader-session|model\\.(local-resources|zip-resource|resource-cache|plain-archive))$"
         "build:^build\\..*$")

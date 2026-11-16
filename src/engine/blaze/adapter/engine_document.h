@@ -333,6 +333,7 @@ public:
     // The title of the chapter that contains `position`, chosen like the
     // header's chapter. Empty when the book has no usable contents.
     QString chapterTitle(const QString &position) const override;
+    QImage drawTextSample(const TextSampleRequest &request) override;
     QJsonObject state() const override;
     QJsonObject settingsState() const override;
 

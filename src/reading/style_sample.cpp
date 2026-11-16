@@ -448,6 +448,48 @@ StyleSample render(const EngineFontInputs &fonts, const StyleSampleRequest &requ
 }
 } // namespace
 
+void setTextSampleText(TextSampleRequest &request)
+{
+    static const auto text = [] {
+        QPair<QString, QStringList> result;
+        for (const auto &block : sampleDocument(false, false).blocks) {
+            if (!block.paragraph && result.first.isEmpty() && result.second.isEmpty())
+                result.first = block.text;
+            else if (block.paragraph && result.second.size() < paragraphSampleCount)
+                result.second.append(block.text);
+        }
+        return result;
+    }();
+    request.heading = text.first;
+    request.paragraphs = text.second;
+}
+
+void renderTextSample(EngineFontInputs fonts, TextSampleRequest request, QObject *context,
+                      std::function<void(QImage)> finished)
+{
+    QPointer<QObject> guard(context);
+    // The sample uses CREngine's global fonts, so it is drawn on the
+    // reader's engine worker. A document that is never opened costs nothing.
+    kobalt::qt::invoke(
+            engineWorker(),
+            [guard, fonts = std::move(fonts), request = std::move(request),
+             finished = std::move(finished)] {
+                QImage image;
+                {
+                    EngineJob activity;
+                    image = createEngine(fonts)->drawTextSample(request);
+                }
+                kobalt::qt::invoke(
+                        qApp,
+                        [guard, finished, image = std::move(image)] {
+                            if (guard)
+                                finished(image);
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+
 QJsonObject styleSampleSettings(QJsonObject state)
 {
     for (const auto *key :

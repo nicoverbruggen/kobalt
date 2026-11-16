@@ -440,7 +440,6 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
         refreshRenderNotice();
     };
     this->session->turnBoundary = [this](int direction) { turnPage(direction, 0, false); };
-    this->session->idle = [this] { resumeTextPresetPrerender(); };
     this->session->settled = [this] { preparePanels(); };
     connect(QGuiApplication::primaryScreen(), &QScreen::geometryChanged, this,
             [this](const QRect &geometry) {

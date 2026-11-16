@@ -8254,33 +8254,26 @@ private slots:
         QCOMPARE(openSettings(host), settings);
     }
 
-    // Checks that a host with an opening view gets the reader only after the missing text preset previews are drawn.
-    void textPresetsBeforePresentation()
+    // Checks that opening a book draws no text preset tiles: a tile depends
+    // only on its preset and is drawn when a preset is saved or a gallery
+    // first needs it, so presentation never waits for one.
+    void textPresetsWithoutOpeningWait()
     {
         auto paths = testPaths();
         ReaderFixture host(paths, testFonts, testPlaceholder);
-        host.configureServices = [](ReaderHostServices &services) {
-            services.textPresetsBeforePresentation = true;
-        };
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);
         host.open(textBook, nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         bool presented = false;
         host.window()->preparePresentation([&](bool ready) { presented = ready; });
-        // A new profile has no stored previews: they are drawn first.
-        QVERIFY(!presented);
         QTRY_VERIFY_WITH_TIMEOUT(presented, 10000);
-        QVERIFY(host.window()->property("text_presets_prerendered").toBool());
-        const int drawn = host.window()->property("text_preset_prerender_renders").toInt();
-        QVERIFY(drawn > 0);
-        // Nothing is left to draw after the reader is shown.
         Canvas canvas(host.window(), nativeSize);
         const int start = host.session()->page();
         QVERIFY(host.session()->turn(1));
         QTRY_COMPARE(host.session()->page(), start + 1);
         QTRY_VERIFY(!host.session()->busy());
-        QCOMPARE(host.window()->property("text_preset_prerender_renders").toInt(), drawn);
+        QCOMPARE(host.window()->property("text_preset_tile_draws").toInt(), 0);
     }
 
     // While a book sits open and nobody reads, nothing on the main thread may

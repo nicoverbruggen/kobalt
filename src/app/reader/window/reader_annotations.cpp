@@ -1174,10 +1174,7 @@ void Reader::preparePresentation(std::function<void(bool)> finished)
                 book->markNativeReading();
                 saveWifiPower([this, finished] { finished(!closing && !lifecycleHidden); });
             };
-            if (services.textPresetsBeforePresentation)
-                prepareTextPresetPresentation(present);
-            else
-                present();
+            present();
         });
     });
 }

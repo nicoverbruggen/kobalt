@@ -541,8 +541,14 @@ QByteArray EngineDocument::documentCachePolicy() const
     if (userStyleSheet_.isEmpty()) {
         return cachePolicy_;
     }
-    return cachePolicy_ + ":user-css-v1:"
+    if (!policy_.isEmpty() && policySheet_.isSharedWith(userStyleSheet_)
+        && policyBase_ == cachePolicy_)
+        return policy_;
+    policySheet_ = userStyleSheet_;
+    policyBase_ = cachePolicy_;
+    policy_ = cachePolicy_ + ":user-css-v1:"
             + QCryptographicHash::hash(userStyleSheet_, QCryptographicHash::Sha256).toHex();
+    return policy_;
 }
 
 bool EngineDocument::saveDocumentCache()

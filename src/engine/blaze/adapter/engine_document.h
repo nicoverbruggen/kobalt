@@ -643,6 +643,9 @@ private:
     QString cacheDirectory_;
     QByteArray cacheFingerprint_, cachePolicy_;
     QByteArray userStyleSheet_;
+    // documentCachePolicy() for the user style sheet that shares its bytes
+    // with `policySheet_`: the page estimate asks for it on every turn.
+    mutable QByteArray policySheet_, policyBase_, policy_;
     QByteArray documentCachePolicy() const;
     qint64 cacheBytes_ = 0;
     bool openedFromCache_ = false;

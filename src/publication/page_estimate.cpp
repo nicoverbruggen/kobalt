@@ -631,16 +631,7 @@ bool PageMap::measured(int item) const
 
 bool PageMap::complete() const
 {
-    if (items_.isEmpty())
-        return false;
-    if (allMeasured())
-        return true;
-    const auto counted = completeItems();
-    for (int i = 0; i < items_.size(); ++i) {
-        if (!items_[i].measured && !counted.contains(i))
-            return false;
-    }
-    return true;
+    return complete_;
 }
 
 void PageMap::setMeasured(int item, const PageEstimateItem &measurement)
@@ -773,6 +764,7 @@ void PageMap::restoreKept(const QVector<double> &pages)
     for (int i = 0; i < pages.size(); ++i)
         keptStarts_[i + 1] = keptStarts_[i] + qMax(0.0, pages[i]);
     kept_ = true;
+    ++generation_;
 }
 
 void PageMap::restore(const QMap<int, int> &pages)
@@ -945,6 +937,7 @@ void PageMap::refit()
 
 void PageMap::update()
 {
+    ++generation_;
     // An item that kept its restored pages has them, until all its parts
     // have a layout.
     const auto observed = restoredPages_.isEmpty() ? QMap<int, int>() : observedItems();
@@ -979,8 +972,12 @@ void PageMap::update()
         }
         starts_[i + 1] = starts_[i] + items_[i].pages;
     }
-    counted_ = !items_.isEmpty() && completeItems().size() == items_.size();
-    if (!kept_ && complete() && layout_.valid()) {
+    const auto complete = completeItems();
+    counted_ = !items_.isEmpty() && complete.size() == items_.size();
+    complete_ = !items_.isEmpty();
+    for (int i = 0; i < items_.size() && complete_ && !allMeasured(); ++i)
+        complete_ = items_[i].measured || complete.contains(i);
+    if (!kept_ && complete_ && layout_.valid()) {
         kept_ = true;
         keptStarts_ = starts_;
         keptPages_.resize(items_.size());

@@ -81,6 +81,14 @@ struct ReaderSource
         QString wholeKey;
         QVector<int> wholeStarts;
         QJsonObject wholeRecord;
+        // The record of chapter mode without the place, for the map
+        // generation `recordGeneration`, the estimateKey() `recordKey` and
+        // the spine item `recordItem`, which decides what a full record
+        // leaves out.
+        QJsonObject record;
+        quint64 recordGeneration = 0;
+        QString recordKey;
+        int recordItem = -1;
     } pageEstimate;
 };
 

@@ -160,6 +160,14 @@ struct ReaderLocationProbe
         return model.readTextFraction(item, position);
     }
 
+    // Drops the saved part of the page estimate record, so that the next
+    // state() makes it again.
+    static void forgetRecord(EngineDocument &model)
+    {
+        model.source_->pageEstimate.record = {};
+        model.source_->pageEstimate.wholeRecord = {};
+    }
+
     // True when the prepared whole book knows where its spine items start.
     static bool wholeBookStartsFound(const EngineDocument &model)
     {
@@ -2508,6 +2516,9 @@ void reopenCounted()
         require(!next.pagesEstimated && next.page == rough.page + 1 && next.pages == shown.pages,
                 "Reading on in a counted book must keep its real page numbers");
         rough = next;
+        const auto cached = model.state();
+        Probe::forgetRecord(model);
+        require(model.state() == cached, "A kept record differs from a new one");
     }
     // A damaged part drops only the parts of its spine item.
     auto damaged = saved.value("page_estimate").toObject();

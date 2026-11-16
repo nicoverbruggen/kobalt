@@ -316,7 +316,15 @@ public:
     // True when every spine item has the real pages of all its parts.
     bool counted() const { return counted_; }
 
-    void keepFirstEstimate(bool keep) { keep_ = keep; }
+    void keepFirstEstimate(bool keep)
+    {
+        keep_ = keep;
+        ++generation_;
+    }
+
+    // Changes with everything that the saved record holds: the weights,
+    // the real pages and the kept estimate.
+    quint64 generation() const { return generation_; }
 
     // True while the numbers are the kept estimate.
     bool keeping() const { return keep_ && kept_ && !counted_; }
@@ -393,7 +401,8 @@ private:
     double pagesPerByte_ = 0;
     // The kept estimate: the pages of each item and where each starts.
     QVector<double> keptPages_, keptStarts_;
-    bool keep_ = false, kept_ = false, counted_ = false;
+    bool keep_ = false, kept_ = false, counted_ = false, complete_ = false;
+    quint64 generation_ = 0;
 };
 
 // Keeps a shown page number from moving backward while the user reads

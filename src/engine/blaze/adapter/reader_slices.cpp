@@ -303,41 +303,56 @@ QJsonObject EngineDocument::pageEstimateRecord(const QJsonObject &settings) cons
     const auto &map = pageMap();
     if (map.total() <= 0)
         return {};
-    const auto &estimate = source_->pageEstimate;
-    PageEstimateRecord record;
-    record.model = map.model();
-    record.layout = estimateKey(settings);
-    record.spineItems = spineItemCount_;
-    record.item = estimate.lastItem;
-    record.first = estimate.lastFirst;
-    record.page = estimate.lastPage;
-    record.partPages = estimate.lastPages;
+    auto &estimate = source_->pageEstimate;
+    const auto key = estimateKey(settings);
+    // Everything but the place changes only with the map. A page turn
+    // makes the rest again only in another spine item, which decides what
+    // a full record leaves out.
+    if (estimate.record.isEmpty() || estimate.recordGeneration != map.generation()
+        || estimate.recordKey != key || estimate.recordItem != estimate.lastItem) {
+        PageEstimateRecord record;
+        record.model = map.model();
+        record.layout = key;
+        record.spineItems = spineItemCount_;
+        record.read = map.completeItems();
+        if (map.keeping())
+            record.kept = map.keptPages();
+        // The parts of the spine items that stay in the record, the nearest
+        // to the reading position first.
+        auto parts = map.completeParts();
+        std::stable_sort(parts.begin(), parts.end(),
+                         [&](const PageEstimateRecord::Part &a, const PageEstimateRecord::Part &b) {
+                             return qAbs(a.item - estimate.lastItem)
+                                     < qAbs(b.item - estimate.lastItem);
+                         });
+        for (const auto &part : parts) {
+            if (record.parts.size() >= PageEstimateRecord::maxParts)
+                break;
+            if (record.read.contains(part.item))
+                record.parts.append(part);
+        }
+        std::stable_sort(record.parts.begin(), record.parts.end(),
+                         [](const PageEstimateRecord::Part &a, const PageEstimateRecord::Part &b) {
+                             return a.item != b.item ? a.item < b.item : a.first < b.first;
+                         });
+        keepNearestRead(record.read, estimate.lastItem);
+        estimate.record = record.toJson();
+        estimate.recordGeneration = map.generation();
+        estimate.recordKey = key;
+        estimate.recordItem = estimate.lastItem;
+    }
+    PageEstimateRecord place;
+    place.item = estimate.lastItem;
+    place.first = estimate.lastFirst;
+    place.page = estimate.lastPage;
+    place.partPages = estimate.lastPages;
     // While the reader shows percentages, the number held for the page, such
     // as one restored at the open. None after a turn.
-    record.shown = estimate.book.shown();
-    record.itemShown = rough.itemPage;
-    record.read = map.completeItems();
-    if (map.keeping())
-        record.kept = map.keptPages();
-    // The parts of the spine items that stay in the record, the nearest to
-    // the reading position first.
-    auto parts = map.completeParts();
-    std::stable_sort(parts.begin(), parts.end(),
-                     [&](const PageEstimateRecord::Part &a, const PageEstimateRecord::Part &b) {
-                         return qAbs(a.item - estimate.lastItem) < qAbs(b.item - estimate.lastItem);
-                     });
-    for (const auto &part : parts) {
-        if (record.parts.size() >= PageEstimateRecord::maxParts)
-            break;
-        if (record.read.contains(part.item))
-            record.parts.append(part);
-    }
-    std::stable_sort(record.parts.begin(), record.parts.end(),
-                     [](const PageEstimateRecord::Part &a, const PageEstimateRecord::Part &b) {
-                         return a.item != b.item ? a.item < b.item : a.first < b.first;
-                     });
-    keepNearestRead(record.read, estimate.lastItem);
-    return record.toJson();
+    place.shown = estimate.book.shown();
+    place.itemShown = rough.itemPage;
+    auto result = estimate.record;
+    place.writePlace(result);
+    return result;
 }
 
 void EngineDocument::findWholeBookStarts(const std::function<bool()> &current) const

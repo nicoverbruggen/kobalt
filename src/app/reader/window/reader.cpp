@@ -64,7 +64,8 @@ Reader::~Reader()
     mainthread::AllowBlocking allow("closing reader");
     // QWidget hides children after Reader's members are destroyed. Stop child-owned
     // callbacks now; removing this Reader's own event filters does not stop them.
-    appearancePreview->followPanel(nullptr, {});
+    if (appearancePreview)
+        appearancePreview->followPanel(nullptr, {});
     if (general)
         static_cast<SettingsPanel *>(general)->stylingHidden = {};
     cancelStylingSamples();
@@ -1078,7 +1079,7 @@ bool Reader::event(QEvent *event)
                 ? QRect(partialPanel->mapTo(this, QPoint()), partialPanel->size())
                 : QRect();
         // A margin change redraws the preview above the panel without a flash.
-        if (partialPanel == menu && appearancePreview->isVisible())
+        if (partialPanel == menu && appearancePreview && appearancePreview->isVisible())
             partialControls |= appearancePreview->geometry();
         setProperty("reader_partial_controls", partialControls);
     }
@@ -3548,7 +3549,7 @@ bool Reader::save(bool snapshot, bool background, bool persist)
     state["contents_page"] = choices->chapterPage();
     state["font_samples"] = choices->fontSamples();
     state["native_font_families"] = QJsonArray::fromStringList(pickerNativeFamilies);
-    state["font_button_family"] = fontButton->resolvedFace();
+    state["font_button_family"] = fontButton ? fontButton->resolvedFace() : QString();
     state["graph_page"] = chapterGraph->graphPage();
     state["graph_pages"] = chapterGraph->graphPages();
     state["active_panel"] =

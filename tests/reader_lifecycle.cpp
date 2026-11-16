@@ -8234,9 +8234,10 @@ private slots:
         QCOMPARE(host.session()->state().value("position"), position);
     }
 
-    // Checks that Settings is not built with the window, and that the reader
-    // builds it by itself once the book's background work has settled and
-    // nobody has touched the screen, so that its first opening is quick.
+    // Checks that neither the Text and Layout controls nor Settings are built
+    // with the window, and that the reader builds them by itself, one after
+    // the other, once the book's background work has settled and nobody has
+    // touched the screen, so that their first opening is quick.
     void panelsAfterBackgroundWork()
     {
         auto paths = testPaths();
@@ -8245,6 +8246,10 @@ private slots:
         QSignalSpy opened(&host, &ReaderFixture::opened);
         host.open(textBook, nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QVERIFY(!host.window()->findChild<QWidget *>("rrTextSize"));
+        QVERIFY(!host.window()->findChild<QWidget *>("rrGeneralSettings"));
+        QTRY_VERIFY_WITH_TIMEOUT(host.window()->findChild<QWidget *>("rrTextSize"), 15000);
+        // One panel per quiet moment: Settings comes later.
         QVERIFY(!host.window()->findChild<QWidget *>("rrGeneralSettings"));
         QTRY_VERIFY_WITH_TIMEOUT(host.window()->findChild<QWidget *>("rrGeneralSettings"), 15000);
         auto *settings = host.window()->findChild<QWidget *>("rrGeneralSettings");

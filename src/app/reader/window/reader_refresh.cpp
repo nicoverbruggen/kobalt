@@ -350,6 +350,8 @@ void Reader::syncAppearancePreview()
             && panels->currentIndex() == int(kobalt::reader::AppearancePage::Typography);
     if (!layoutOpen)
         appearancePreviewAxis = Axis::None;
+    if (!appearancePreview)
+        return;
     if ((!layoutOpen && !textOpen) || !appearancePreviewFits()) {
         // Navigation can cancel this request without changing the reading image.
         previewPageKey = previewPageRequested = 0;
@@ -537,6 +539,12 @@ void Reader::syncAppearanceControls(bool pickingFont)
     previewLabel->setText(appearanceEdit.error());
     previewLabel->setVisible(!pickingFont && !appearanceEdit.error().isEmpty());
     if (appearanceEdit.previewState() == AppearanceEditSession::PreviewState::Opening) {
+        return;
+    }
+    // The controls are set when they are built; the book's preset follows
+    // the text before that too.
+    if (!appearanceBuilt) {
+        syncTextPresets();
         return;
     }
     if (!sizeSlider->interacting()) {

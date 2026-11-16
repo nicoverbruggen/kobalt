@@ -380,12 +380,12 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     built("toolbar");
     buildBottomControls();
     built("bottom_controls");
-    const auto appearanceLayout = buildMenu();
+    appearanceLayout = buildMenu();
     built("menu");
     buildOverlays();
     built("overlays");
-    buildAppearance(appearanceLayout);
-    built("appearance");
+    // The Text and Layout controls are built when the menu first opens one
+    // of them; see ensureAppearance().
     // Settings is built when it first opens; see ensureSettings(). KOSync
     // runs without it, and lookups use the book's language.
     buildKosync();
@@ -1481,24 +1481,65 @@ void Reader::preparePanels()
 {
     // Long enough that a reader who just turned a page is reading it.
     static constexpr qint64 quietMilliseconds = 2000;
-    if (general || panelsWaiting || closing || exitPending || lifecycleHidden
+    if ((general && appearanceBuilt) || panelsWaiting || closing || exitPending || lifecycleHidden
         || services.suspended())
         return;
     const qint64 quiet = inputQuiet.isValid() ? inputQuiet.elapsed() : quietMilliseconds;
-    if (quiet < quietMilliseconds || session->busy()) {
+    // One panel at a time, so a tap meets one build at most.
+    if (quiet < quietMilliseconds || session->busy() || builtPanelNow) {
         // One timer at a time, and only while a book is being read: a hidden
         // reader builds the panels when they first open.
         panelsWaiting = true;
         const qint64 wait =
                 quiet < quietMilliseconds ? quietMilliseconds - quiet : quietMilliseconds;
+        builtPanelNow = false;
         qt::later(int(wait), this, [this] {
             panelsWaiting = false;
             preparePanels();
         });
         return;
     }
-    DiagnosticOperation prepare("reader-panels-prepare");
-    ensureSettings();
+    {
+        // Text and Layout open more often than Settings, so they come first.
+        DiagnosticOperation prepare("reader-panels-prepare");
+        if (!appearanceBuilt)
+            ensureAppearance();
+        else
+            ensureSettings();
+    }
+    builtPanelNow = true;
+    preparePanels();
+}
+
+void Reader::ensureAppearance()
+{
+    if (appearanceBuilt)
+        return;
+    appearanceBuilt = true;
+    QSet<QWidget *> before;
+    for (auto *widget : findChildren<QWidget *>())
+        before.insert(widget);
+    // The window built these controls before it had a theme. Some take
+    // colours from the theme while they are made, so they are made without
+    // it and get it below.
+    const auto dark = property("reader_dark");
+    setProperty("reader_dark", QVariant());
+    buildAppearance(appearanceLayout);
+    setProperty("reader_dark", dark);
+    // As for Settings: polishing applies the style sheets, which replace the
+    // gray roles, and the theme restores them, as for the window's widgets.
+    QVector<QWidget *> added;
+    for (auto *widget : findChildren<QWidget *>())
+        if (!before.contains(widget)) {
+            widget->ensurePolished();
+            added.append(widget);
+        }
+    for (auto *widget : added) {
+        if (themeReady)
+            themeWidget(widget, themePalette);
+        else
+            textRefresh(widget);
+    }
 }
 
 void Reader::ensureSettings()

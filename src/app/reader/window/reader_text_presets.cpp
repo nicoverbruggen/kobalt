@@ -217,8 +217,6 @@ void Reader::setTextPresetGalleryPresets(TextPresetGallery *gallery, const QVect
 
 void Reader::syncTextPresets()
 {
-    if (!textPresetSection)
-        return;
     QVector<Preset> presets;
     QString selected;
     bool modified = false;
@@ -227,6 +225,9 @@ void Reader::syncTextPresets()
     // there without a tap, so a later change shows as a change to it.
     if (!selected.isEmpty() && !modified && book && selected != book->textPreset())
         book->setTextPreset(selected);
+    // The bar is built with the Text controls.
+    if (!textPresetSection)
+        return;
     QVector<TextPresetView> cards;
     int selectedIndex = -1;
     for (int index = 0; index < presets.size(); ++index) {

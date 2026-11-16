@@ -347,6 +347,12 @@ private:
     kobalt::reader::AppearanceLayout buildMenu();
     void buildOverlays();
     void buildAppearance(const kobalt::reader::AppearanceLayout &layout);
+    // The Text and Layout controls, the text presets bar and the Header and
+    // footer rows are built when a Text or Layout page first opens, or by
+    // preparePanels. Until then their controls are null or empty.
+    void ensureAppearance();
+    kobalt::reader::AppearanceLayout appearanceLayout;
+    bool appearanceBuilt = false;
     // Settings is built when it first opens. Most readings never open it,
     // and building it takes a large part of the window build on a Kobo.
     // Until then general, kosyncPage and the Settings controls are null.
@@ -369,6 +375,8 @@ private:
     // Since the last press or key. Invalid before the first one.
     QElapsedTimer inputQuiet;
     bool panelsWaiting = false;
+    // preparePanels built one panel in this call; the next waits its turn.
+    bool builtPanelNow = false;
 
     bool settingsVisible() const { return general && general->isVisible(); }
 
@@ -536,7 +544,7 @@ private:
               *hideTabLabelsOption = nullptr, *zenModeOption = nullptr, *saveWordsOption = nullptr;
     QCheckBox *wifiPowerSaverOption = nullptr;
     QCheckBox *disableStandbyOption = nullptr;
-    QPushButton *autoRotateOption;
+    QPushButton *autoRotateOption = nullptr;
     bool hideNativeStatus() const;
 
     // Zen mode keeps only Chapters, Search, Annotate and Bookmarks in the reading menu.
@@ -597,7 +605,7 @@ private:
     // Settings > Defaults > Restore default presets was confirmed. It applies
     // when Settings closes.
     bool restoringPresets = false;
-    kobalt::ui::FontButton *fontButton;
+    kobalt::ui::FontButton *fontButton = nullptr;
     QVector<QPushButton *> alignmentButtons, hyphenButtons;
     // Header and footer. The preset is saved per book; the Custom layout is
     // shared by every book that selects it.
@@ -638,8 +646,10 @@ private:
     bool chromeTicks() const;
     bool clockNeeded() const;
     bool paceNeeded() const;
-    kobalt::ui::SettingSlider *sizeSlider, *opticalSizeSlider, *weightSlider, *variableWeightSlider,
-            *spacingSlider, *marginSlider, *verticalMarginSlider, *bookSlider;
+    kobalt::ui::SettingSlider *sizeSlider = nullptr, *opticalSizeSlider = nullptr,
+                              *weightSlider = nullptr, *variableWeightSlider = nullptr,
+                              *spacingSlider = nullptr, *marginSlider = nullptr,
+                              *verticalMarginSlider = nullptr, *bookSlider = nullptr;
     kobalt::reader::AppearanceEditSession appearanceEdit;
     QSize appearanceViewport;
     quint64 warmScheduledGeneration = 0;

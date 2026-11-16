@@ -210,6 +210,9 @@ void Reader::syncChromeControls()
         if (paceNeeded())
             book->minuteTick();
     }
+    // The Header and footer rows follow the layout once they exist.
+    if (!appearanceBuilt)
+        return;
     const auto values = chromeValues();
     const auto contents = [&values](const Layout &layout) {
         kobalt::reader::SlotContents result;
@@ -1299,6 +1302,7 @@ void Reader::openPanel(int index)
         return;
     if (session->busy())
         return;
+    ensureAppearance();
     session->cancelPendingTurn();
     appearanceEdit.cancelDeferredApply();
     // Only the selected font is drawn here. Load the other faces when the

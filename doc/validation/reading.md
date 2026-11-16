@@ -8,7 +8,7 @@ A numbered jump during handoff uses the displayed chapter. A second number can b
 
 My Words resolves a saved passage while Hybrid switches to whole-book pagination. The returned page must match an Accurate session. `desktop.savedWords` also checks the page number on the action in the word detail view.
 
-The engine checks compare Nickel positions in unloaded chapters without changing the reading page. Imports preserve the exact source offset in sliced and unsliced chapter windows. Both layouts also resolve the chapter title and direction of a KOSync position outside the displayed chapter.
+The engine checks compare Nickel positions in unloaded chapters without changing the reading page. The Nickel position codec keeps the parsed source of the last chapter file: `engine.reader` encodes every page of three fixtures in order and in an order that changes the file at almost every page, and requires the same positions. Imports preserve the exact source offset in sliced and unsliced chapter windows. Both layouts also resolve the chapter title and direction of a KOSync position outside the displayed chapter.
 
 Native and synced position imports cancel outstanding page previews. An import interrupted by font edits must finish on the final frame, where its caller can save the position and turn the page. Replacing or revoking the source discards its old completion.
 

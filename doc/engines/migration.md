@@ -218,7 +218,7 @@ In chapter mode only the slice on the screen has a layout. The rough page number
 
 The page fields of the header and footer show these numbers. The chapter of the chapter page is the spine item. Until every spine item is measured or has all its pages, the total is only a guess from the bytes. In that time there is no book page number and no total, and each page field shows its percent form. That percent is the bytes of the whole book before the page: the spine items before it, and the characters before the page in its spine item. Once the map is complete, the page fields show page numbers at the next page turn or repaint that happens anyway; there is no extra repaint. A total is estimated until every spine item of the book, or every part of the spine item, had a layout. A spine item that had a layout without pages counts with zero pages.
 
-The measuring runs on the engine worker after the pages beside the current page, in the idle time after a turn. It takes at most 32 parts in one idle time and stops when the user asks for another page. Until a spine item is measured, its pages come from its size in bytes and the pages per byte of the measured spine items.
+The measuring runs on the engine worker after the pages beside the current page, in the idle time after a turn. Before the user reads, Hybrid first tries the whole book from the parsed-book cache, which has the real pages. Measuring starts when there is no cache file. A change of appearance keeps the measurements: they do not depend on the layout. It takes at most 32 parts in one idle time and stops when the user asks for another page. Until a spine item is measured, its pages come from its size in bytes and the pages per byte of the measured spine items.
 
 #### Fast interactions
 

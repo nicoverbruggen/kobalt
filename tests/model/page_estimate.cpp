@@ -2533,6 +2533,35 @@ void reopenCounted()
             "A damaged part must not drop the rest of the record");
 }
 
+// A next slice that other work stops brings the shown slice back with the
+// pages that were drawn, so that the waiting turn need not draw them again.
+void stoppedNextSliceKeepsImages()
+{
+    EngineDocument model(test::readerFonts());
+    openFiles(model, pagesBook());
+    QString error;
+    require(model.showSpineItems(3, 3, &error) && model.go(0), qPrintable(error));
+    int turns = 0;
+    while (Probe::visiblePages(model) <= 0 || model.page() < Probe::visiblePages(model)) {
+        require(model.turnInWindow(1) && ++turns < 100, "The fixture needs a later slice");
+    }
+    const int page = model.page();
+    model.image(page);
+    model.image(page - 1);
+    const int cached = model.cachedPages();
+    const auto key = model.cachedImageKey(page);
+    const int first = Probe::sliceFirst(model);
+    for (int budget = 1; budget < 40; budget += 3) {
+        int seen = 0;
+        model.prepareAhead([&] { return ++seen <= budget; });
+        if (Probe::sliceFirst(model) != first)
+            break;
+        require(model.page() == page && model.cachedPages() == cached
+                        && model.cachedImageKey(page) == key,
+                "A stopped next slice dropped the drawn pages of the shown slice");
+    }
+}
+
 // A parked build goes on only with room for the documents of the package
 // files: a document made without room would share the nodes of another one.
 void fullBuildWaitsForRoom()
@@ -3087,6 +3116,7 @@ int main(int argc, char **argv)
     reopenWholeBook();
     chapterStartsNeedNoRead();
     fullBuildWaitsForRoom();
+    stoppedNextSliceKeepsImages();
     manyItemJumps();
     fullDocument();
     fullDocumentKeepsPublisherFonts();

@@ -1006,6 +1006,12 @@ bool EngineDocument::enterNextSlice(const std::function<bool()> &current)
     const auto history = sliceHistory_;
     const qint64 loadMs = windowLoadMs_;
     if (current && engine_->koblazeSaveLayout()) {
+        // What is known about the pages of this slice comes back with it:
+        // the turn that stopped the layout need not draw them again.
+        const auto images = cache_;
+        const auto damage = damage_;
+        const auto sourceIndex = sourceIndex_;
+        const auto searchText = searchText_;
         sliceHistory_.append({ sliceFirst_, sliceForcedEnd_ });
         bool done = false;
         {
@@ -1030,6 +1036,10 @@ bool EngineDocument::enterNextSlice(const std::function<bool()> &current)
         if (engine_->koblazeRestoreLayout()) {
             engine_->groupColumns(hideNonlinearFragments_);
             visiblePages_ = visible;
+            cache_ = images;
+            damage_ = damage;
+            sourceIndex_ = sourceIndex;
+            searchText_ = searchText;
             layoutInterrupted_ = false;
             return go(shown) && false;
         }

@@ -154,6 +154,12 @@ struct ReaderLocationProbe
 
     static void forgetRefusedFullDocument(EngineDocument &model) { model.fullFailed_.clear(); }
 
+    // The place of `position` in its spine item, read from its XHTML.
+    static double readTextFraction(const EngineDocument &model, int item, const QString &position)
+    {
+        return model.readTextFraction(item, position);
+    }
+
     // True when the prepared whole book knows where its spine items start.
     static bool wholeBookStartsFound(const EngineDocument &model)
     {
@@ -2516,6 +2522,29 @@ void reopenCounted()
             "A damaged part must not drop the rest of the record");
 }
 
+// The contents of spine items without a layout point to their starts. A
+// read of the XHTML finds the start of the text there, which the book pages
+// skip.
+void chapterStartsNeedNoRead()
+{
+    for (const auto &files : { pagesBook(), test::engineBook(false, 6, 20) }) {
+        EngineDocument model(test::readerFonts());
+        openFiles(model, files);
+        int starts = 0;
+        for (const auto &chapter : model.chapters()) {
+            const int item = spineItemIndex(chapter.position);
+            if (item <= 0)
+                continue;
+            ++starts;
+            // A spine item without text has no place: the book pages count
+            // it as its start.
+            require(Probe::readTextFraction(model, item, chapter.position) <= 0,
+                    "The start of an unread spine item must be the start of its text");
+        }
+        require(starts > 0, "The fixture needs chapters outside the window");
+    }
+}
+
 // A layout of the whole book saves the real pages of every spine item. The
 // book opens in chapter mode with them, also in a later slice of a long
 // spine item, and reads on with the page numbers of the whole book.
@@ -3025,6 +3054,7 @@ int main(int argc, char **argv)
     chaptersMeasuredInIdle();
     reopenCounted();
     reopenWholeBook();
+    chapterStartsNeedNoRead();
     manyItemJumps();
     fullDocument();
     fullDocumentKeepsPublisherFonts();

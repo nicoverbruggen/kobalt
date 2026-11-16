@@ -54,6 +54,15 @@ bool hasFloatFootprint(ldomNode *block)
     return topLeft > 0 || topRight > 0 || minLeft > 0 || minRight > 0;
 }
 
+// The part of a position after the DocFragment of its spine item.
+QString pathInSpineItem(const QString &position)
+{
+    static const QRegularExpression fragment(QStringLiteral("^/body(?:\\[1\\])?/DocFragment[^/]*"));
+    auto path = position;
+    path.remove(fragment);
+    return path;
+}
+
 // Keeps the read spine items nearest to `item`, at most as many as a
 // record holds.
 void keepNearestRead(QMap<int, int> &read, int item)
@@ -1100,6 +1109,13 @@ double EngineDocument::textFraction(int item, const QString &position, bool prev
     const auto known = source_->textFractions.constFind(key);
     if (known != source_->textFractions.cend())
         return known.value();
+    // The contents of a spine item without a layout point to its start, a
+    // path without elements. That place needs no read of its XHTML.
+    if (!previous && pathInSpineItem(position).section('.', 0, 0).isEmpty()) {
+        source_->textFractions.insert(key, 0);
+        source_->textWordPrefixes.insert(position, 0);
+        return 0;
+    }
     if (source_->textFractions.size() > 4096) {
         source_->textFractions.clear();
         source_->textWordPrefixes.clear();
@@ -1136,12 +1152,9 @@ double EngineDocument::readTextFraction(int item, const QString &position, bool 
         offset += int(read);
     }
     xhtml.resize(offset);
-    // The position goes on after the DocFragment of its spine item.
-    static const QRegularExpression fragment(QStringLiteral("^/body(?:\\[1\\])?/DocFragment[^/]*"));
-    auto path = position;
-    path.remove(fragment);
     qint64 words = -1;
-    const double fraction = pageEstimateTextFraction(xhtml, path, previous, &words, current);
+    const double fraction =
+            pageEstimateTextFraction(xhtml, pathInSpineItem(position), previous, &words, current);
     if (!previous && words >= 0)
         source_->textWordPrefixes.insert(position, words);
     return fraction;
@@ -1209,10 +1222,17 @@ QVector<int> EngineDocument::bookPages(const QStringList &positions,
             const int page = pagesOf({ position }).value(0, -1);
             if (slices()) {
                 const int before = textBefore(position);
+                const int characters = qMax(1, spineItemText());
                 if (page >= 0 && before >= sliceFirst_ && before < sliceEnd_)
                     pages = qRound(map.pagesBefore(item)
-                                   + map.pagesBefore(item, sliceFirst_, qMax(1, spineItemText())))
+                                   + map.pagesBefore(item, sliceFirst_, characters))
                             + page;
+                else if (before >= 0)
+                    // Outside the slice the spine item has its text but no
+                    // layout. Its characters place the text without a read
+                    // of the XHTML, in the unit of the page map.
+                    pages = std::floor(map.pagesBefore(item)
+                                       + map.pagesBefore(item, before, characters));
             } else if (page >= 0 && itemStarts.size() > item - windowFirst_ + 1) {
                 const int start = qMax(0, itemStarts[item - windowFirst_]);
                 pages = qRound(map.pagesBefore(item)) + qMax(0, page - start);

@@ -81,18 +81,6 @@ public:
     // Keep the bridge alive until completion before returning native storage.
     virtual void finishReading(std::function<void(NativeActivityResult)> done) = 0;
 
-    // The same for a close. A bridge may let its reading time finish after
-    // the reader has closed, as long as it does not keep the host's storage
-    // busy when `done` runs, because the close writes the host's progress next.
-    virtual void finishReadingForClose(std::function<void(NativeActivityResult)> done)
-    {
-        finishReading(std::move(done));
-    }
-
-    // A close calls this when the session ends. A bridge that lets its
-    // reading time follow the close starts no new write until then.
-    virtual void holdReadingSaves() { }
-
     // A bridge whose pending save ends outside finishReading's completion
     // reports it with saves::settled(), so a waiting close continues at once.
     virtual bool readingSavePending() const { return false; }

@@ -6,8 +6,7 @@
 
 namespace kobalt {
 // Change only the calling thread's connection, and restore Nickel's setting
-// before releasing it. Progress saves remain nonblocking. The event worker
-// can wait for its transaction before calling a destructive firmware flush.
+// before releasing it. Progress and reading-time saves remain nonblocking.
 class NativeDatabaseWait
 {
 public:

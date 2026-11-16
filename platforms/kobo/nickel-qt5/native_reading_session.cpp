@@ -4,7 +4,6 @@
 #include "platforms/kobo/common/native_database_wait.h"
 #include "platforms/kobo/common/publication_source.h"
 #include "platforms/kobo/common/native_reading_session.h"
-#include "platforms/kobo/common/native_save_trace.h"
 #include "platforms/kobo/common/native_session_volume.h"
 #include "native_location.h"
 #include "session_calls.h"
@@ -122,10 +121,8 @@ bool workerReady()
     return thread && thread != QThread::currentThread() && thread->isRunning();
 }
 
-// Run only on the event worker. The default database is also the one used
-// by savePendingEvents() and EventManager's transient cache.
-// Once per run with verbose diagnostics: which connections the reading-time
-// write uses on Nickel's event thread, and Nickel's own busy timeouts.
+// Once per run with verbose diagnostics: which connections a reading-time
+// transaction of its own uses on the GUI thread, and Nickel's busy timeouts.
 void describeConnections()
 {
     static bool described = false;
@@ -148,127 +145,6 @@ void describeConnections()
                                     { "named", describe(a.dbName(a.device())) } }));
 }
 
-// A successful commit consumes the delta even when independent readback is
-// temporarily unavailable. Further attempts only verify that same write.
-bool addTime(const QString &book, int seconds, nickel::NativeReadingTime &write,
-             const nickel::NativeSaveTrace &trace)
-{
-    kobalt::mainthread::BlockingOperation blockingOperation("nickel-reading-time");
-    if (seconds <= 0 || seconds >= 86400)
-        return seconds == 0;
-    const auto &a = api();
-    if (!NativeLifecycle::nativeSessionSaveAllowed() || !a.open())
-        return false;
-    const auto db = a.dbName(a.device());
-    describeConnections();
-    trace.stage("connection");
-    NativeDatabaseWait wait(a.connection(db, true), true);
-    if (!wait.ready())
-        return false;
-    return write.save(
-            [&](QVariantMap &expected) {
-                trace.stage("begin");
-                if (!a.begin(db))
-                    return false;
-                trace.stage("read-volume");
-                auto volume = a.get(book, db);
-                const auto before = a.values(&volume);
-                if (before.value("ContentID").toString() != book) {
-                    write.uncertain = !a.commit(db, false);
-                    return false;
-                }
-                const auto total = qint64(a.time(&volume)) + seconds;
-                if (total > std::numeric_limits<int>::max()) {
-                    write.uncertain = !a.commit(db, false);
-                    return false;
-                }
-                a.setTime(&volume, QVariant(int(total)));
-                const auto after = a.values(&volume);
-                QVariantMap changed;
-                for (auto it = after.cbegin(); it != after.cend(); ++it)
-                    if (it.value() != before.value(it.key()))
-                        changed.insert(it.key(), it.value());
-                // A fresh Volume and a field-only update preserve incoming bookmarks.
-                trace.stage("update-time");
-                const bool updated = a.update(book, changed, { { "ContentID", book } }, db);
-                trace.stage(updated ? "commit" : "rollback");
-                const bool committed = a.commit(db, updated);
-                if (!updated || !committed) {
-                    // endTransaction(false) is the rollback when update failed. When
-                    // COMMIT failed, explicitly roll back before retrying the delta.
-                    const bool rolledBack = updated ? a.commit(db, false) : committed;
-                    write.uncertain = !rolledBack;
-                    a.refresh(db);
-                    return false;
-                }
-                expected = std::move(changed);
-                return true;
-            },
-            [&](const QVariantMap &expected) {
-                trace.stage("verify");
-                bool verified = false;
-                {
-                    auto check = QSqlDatabase::addDatabase("QSQLITE", "kobalt-session-check");
-                    check.setDatabaseName(a.connection(db, false).databaseName());
-                    check.setConnectOptions("QSQLITE_OPEN_READONLY;QSQLITE_BUSY_TIMEOUT=0");
-                    verified = check.open();
-                    if (verified) {
-                        QSqlQuery query(check);
-                        query.prepare(
-                                "SELECT * FROM content WHERE ContentID = ? AND ContentType = 6");
-                        query.addBindValue(book);
-                        verified = query.exec() && query.next();
-                        if (verified)
-                            for (auto it = expected.cbegin(); it != expected.cend(); ++it)
-                                if (query.value(it.key()) != it.value())
-                                    verified = false;
-                    }
-                    check.close();
-                }
-                QSqlDatabase::removeDatabase("kobalt-session-check");
-                if (!verified)
-                    a.refresh(db);
-                return verified;
-            });
-}
-
-// Adds a stopped session's time on Nickel's EventEngine thread. addTime()
-// builds its own Volume there, as the pace query does, so no GUI-owned
-// firmware object changes thread. The write needs nothing from the session:
-// it can still run after the reader has closed.
-void writeLater(const QString &book, int seconds,
-                const std::shared_ptr<nickel::NativeReadingTime> &write,
-                std::function<void(bool)> done)
-{
-    auto *engine = api().engine();
-    if (!workerReady()) {
-        done(false);
-        return;
-    }
-    auto completion = std::make_shared<std::function<void(bool)>>(std::move(done));
-    const nickel::NativeSaveTrace trace("reading-time");
-    if (!kobalt::qt::invoke(
-                engine,
-                [book, seconds, write, completion, trace] {
-                    trace.stage("worker-start");
-                    QElapsedTimer timer;
-                    timer.start();
-                    const bool saved = addTime(book, seconds, *write, trace);
-                    diagnostic("reading-session-end",
-                               kobalt::qt::object({ { "seconds", seconds },
-                                                    { "persisted", saved },
-                                                    { "time_saved", saved },
-                                                    { "time_committed", write->committed },
-                                                    { "milliseconds", timer.elapsed() } }),
-                               saved ? DiagnosticSeverity::Activity : DiagnosticSeverity::Error);
-                    trace.stage("finished");
-                    kobalt::qt::invoke(
-                            qApp, [completion, saved] { (*completion)(saved); },
-                            Qt::QueuedConnection);
-                },
-                Qt::QueuedConnection))
-        (*completion)(false);
-}
 } // namespace
 
 struct NativeReadingSession::Record
@@ -289,10 +165,7 @@ NativeReadingSession::NativeReadingSession(QString identity) : book(std::move(id
 
 NativeReadingSession::~NativeReadingSession()
 {
-    // Queued reading time continues without this session. A close holds the
-    // queue only until its reader is gone.
-    saves.release();
-    if (running || ending)
+    if (running || ending || pendingSeconds >= 0)
         diagnostic("reading-session-disposed-unsaved", {}, DiagnosticSeverity::Error);
 }
 
@@ -303,11 +176,17 @@ bool NativeReadingSession::available()
 
 void NativeReadingSession::start(const ReadingActivity &activity)
 {
-    // A close that did not complete held the queue. Reading resumes.
-    saves.release();
-    saves.retryIfDue();
-    if (running || ending || !available() || !api().open() || !workerReady()
-        || api().tolino(api().device()))
+    if (running)
+        return;
+    if (ending) {
+        // Nickel's session is still open: the reader was hidden, not left.
+        running = true;
+        ending = false;
+        startPace();
+        diagnostic("reading-session-resume");
+        return;
+    }
+    if (!available() || !api().open() || !workerReady() || api().tolino(api().device()))
         return;
     auto *engine = api().engine();
     auto volume = api().get(book, api().dbName(api().device()));
@@ -329,18 +208,7 @@ void NativeReadingSession::start(const ReadingActivity &activity)
 #ifndef KOBALT_READER_HARDWARE
     testActive = this;
 #endif
-    if (api().pace) {
-        const auto identity = book;
-        pace_.start(engine, [identity] {
-            if (!api().open()) {
-                return -1.0;
-            }
-            const auto volume = api().get(identity, api().dbName(api().device()));
-            return api().values(&volume).value("ContentID").toString() == identity
-                    ? api().pace(volume)
-                    : -1.0;
-        });
-    }
+    startPace();
     diagnostic("reading-session-start",
                kobalt::qt::object({ { "milliseconds", timer.elapsed() } }));
 }
@@ -389,6 +257,20 @@ bool NativeReadingSession::estimates(const ReadingActivity &activity, ReadingEst
     return true;
 }
 
+void NativeReadingSession::startPace()
+{
+    if (!api().pace)
+        return;
+    const auto identity = book;
+    pace_.start(api().engine(), [identity] {
+        if (!api().open())
+            return -1.0;
+        const auto volume = api().get(identity, api().dbName(api().device()));
+        return api().values(&volume).value("ContentID").toString() == identity ? api().pace(volume)
+                                                                               : -1.0;
+    });
+}
+
 void NativeReadingSession::stop()
 {
     pace_.stop();
@@ -398,68 +280,113 @@ void NativeReadingSession::stop()
     if (testActive == this)
         testActive = nullptr;
 #endif
-    if (!running && !ending)
-        return;
+    // Nickel's own reader keeps its session open under a dialog. It ends the
+    // session only when it leaves the book or the device sleeps, inside the
+    // transaction that saves the progress and the reading time. A stop only
+    // pauses: endIn() or endNow() ends the session at that boundary.
     if (running) {
-        saves.retryFailed();
         running = false;
         ending = true;
+        diagnostic("reading-session-pause");
     }
-    if (!NativeLifecycle::nativeSessionSaveAllowed() || !api().open() || !workerReady()) {
-        pace_.clear();
-        diagnostic("reading-session-stop-deferred");
+}
+
+void NativeReadingSession::endSession()
+{
+    if (!ending)
         return;
-    }
-    auto volume = api().get(book, api().dbName(api().device()));
-    if (api().values(&volume).value("ContentID").toString() != book) {
-        diagnostic("reading-session-stop-deferred");
-        return;
-    }
-    QElapsedTimer timer;
-    timer.start();
-    prepareVolume(volume, activity_.current());
+    // Nickel's event thread runs at idle priority, so nothing here waits for
+    // it. endReadingSession only queues the session's events there; Nickel
+    // saves them on its own schedule and at shutdown, as it does for its own
+    // reader. Called inside a transaction, that thread's write waits for the
+    // commit instead of holding the database before it. A separate Volume
+    // keeps the session's position out of the row that the transaction saves.
+    auto copy = api().get(book, api().dbName(api().device()));
+    prepareVolume(copy, activity_.current());
     SessionPosition state;
     state.percent = percent;
-    const int seconds = api().sessions.end(api().engine(), volume, state, {});
-    api().fire(api().engine(), "readerHidden", volume, {});
+    const int seconds = api().sessions.end(api().engine(), copy, state, {});
+    api().fire(api().engine(), "readerHidden", copy, {});
     ending = false;
-    diagnostic("reading-session-stop",
-               kobalt::qt::object({ { "seconds", seconds }, { "milliseconds", timer.elapsed() } }));
-    const auto identity = book;
-    const auto write = std::make_shared<nickel::NativeReadingTime>();
-    // Nickel's own reader leaves the session's events to its event engine,
-    // which saves them on its own schedule and at shutdown. Kobalt does the
-    // same and queues only the reading time.
-    saves.append([identity, seconds, write](std::function<void(bool)> done) {
-        writeLater(identity, seconds, write, std::move(done));
-    });
+    if (seconds > 0)
+        pendingSeconds = qMax(0, pendingSeconds) + seconds;
+    diagnostic("reading-session-stop", kobalt::qt::object({ { "seconds", seconds } }));
 }
 
-void NativeReadingSession::finish(std::function<void(bool)> done)
+void NativeReadingSession::endIn(void *target)
 {
-    stop();
-    if (ending) {
-        done(false);
+    auto &volume = *static_cast<Volume *>(target);
+    endSession();
+    // A delta of a day or more is not a reading session.
+    if (pendingSeconds <= 0 || pendingSeconds >= 86400)
         return;
-    }
-    saves.finish(std::move(done));
+    const auto total = qint64(api().time(&volume)) + pendingSeconds;
+    if (total <= std::numeric_limits<int>::max())
+        api().setTime(&volume, QVariant(int(total)));
 }
 
-void NativeReadingSession::finishForClose(std::function<void(bool)> done)
+void NativeReadingSession::saved(bool committed)
+{
+    if (committed && !ending)
+        pendingSeconds = -1;
+}
+
+bool NativeReadingSession::endNow()
 {
     stop();
-    if (ending) {
-        done(false);
-        return;
+    if (!ending && pendingSeconds < 0)
+        return true;
+    kobalt::mainthread::BlockingOperation operation("nickel-reading-time");
+    const auto &a = api();
+    // The same gate as the progress write, which this replaces when no
+    // progress was written.
+    if (!NativeLifecycle::nativeProgressSaveAllowed() || !a.open()) {
+        endSession();
+        return false;
     }
-    // Nickel's event thread runs at idle priority, so a write there can take
-    // seconds while the device is busy. The close writes Nickel's progress
-    // next, on the GUI thread, and does not wait for the reading time: it
-    // follows once the reader has closed. Only a write that already holds
-    // Nickel's database is waited for.
-    saves.hold();
-    saves.whenIdle([done = std::move(done)] { done(true); });
+    const auto db = a.dbName(a.device());
+    describeConnections();
+    NativeDatabaseWait wait(a.connection(db, true), true);
+    if (!wait.ready() || !a.begin(db)) {
+        // End the session all the same, so a resumed reader starts a new one
+        // and the time until now is not counted twice or with the sleep. The
+        // next progress write or endNow() saves the seconds.
+        endSession();
+        return false;
+    }
+    auto volume = a.get(book, db);
+    const auto before = a.values(&volume);
+    if (before.value("ContentID").toString() != book) {
+        a.commit(db, false);
+        endSession();
+        return false;
+    }
+    endIn(&volume);
+    const auto after = a.values(&volume);
+    QVariantMap changed;
+    for (auto it = after.cbegin(); it != after.cend(); ++it)
+        if (it.value() != before.value(it.key()))
+            changed.insert(it.key(), it.value());
+    // A fresh Volume and a field-only update preserve incoming bookmarks.
+    const bool updated =
+            changed.isEmpty() || a.update(book, changed, { { "ContentID", book } }, db);
+    // endTransaction(false) is the rollback when the update failed. When
+    // COMMIT failed, roll back explicitly so later native saves can begin.
+    const bool ended = a.commit(db, updated);
+    const bool committed = updated && ended;
+    if (!committed) {
+        if (updated)
+            a.commit(db, false);
+        a.refresh(db);
+    }
+    const int seconds = pendingSeconds;
+    saved(committed);
+    diagnostic("reading-session-end",
+               kobalt::qt::object({ { "persisted", committed }, { "seconds", seconds } }),
+               committed ? DiagnosticSeverity::Activity : DiagnosticSeverity::Error);
+    return committed;
 }
+
 #ifndef KOBALT_READER_HARDWARE
 void NativeReadingSession::testCommand()
 {

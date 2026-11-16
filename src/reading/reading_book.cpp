@@ -188,20 +188,7 @@ void ReadingBook::finishReading(std::function<void(NativeActivityResult)> done)
     drainReadingSave(std::move(done));
 }
 
-void ReadingBook::holdReadingSaves()
-{
-    if (bridge)
-        bridge->holdReadingSaves();
-}
-
-void ReadingBook::finishReadingForClose(std::function<void(NativeActivityResult)> done)
-{
-    sleepingReading = false;
-    stopReading(true);
-    drainReadingSave(std::move(done), true);
-}
-
-void ReadingBook::drainReadingSave(std::function<void(NativeActivityResult)> done, bool close)
+void ReadingBook::drainReadingSave(std::function<void(NativeActivityResult)> done)
 {
     if (!bridge) {
         done(NativeActivityResult::NotRequired);
@@ -212,16 +199,12 @@ void ReadingBook::drainReadingSave(std::function<void(NativeActivityResult)> don
         return;
     const auto generation = ++nativeFinishGeneration;
     const std::weak_ptr<ReadingBook *> guard = alive;
-    auto finished = [guard, generation](NativeActivityResult result) {
+    bridge->finishReading([guard, generation](NativeActivityResult result) {
         // Whatever the bridge did, its reading save is no longer pending.
         saves::settled();
         if (const auto book = guard.lock())
             (*book)->finishNativeReading(generation, result);
-    };
-    if (close)
-        bridge->finishReadingForClose(std::move(finished));
-    else
-        bridge->finishReading(std::move(finished));
+    });
 }
 
 void ReadingBook::finishNativeReading(quint64 generation, NativeActivityResult result)
@@ -351,8 +334,8 @@ void ReadingBook::stopReading(bool background, bool nativeAllowed)
         else
             history->stop(completedReadingMilliseconds, position);
     }
-    // End Nickel's interval before local storage work, so its clock does not
-    // include that I/O and its asynchronous flush can run alongside our save.
+    // Pause the host's interval. Kobo ends it at the boundary, inside the
+    // transaction that saves the host's progress, as Nickel's reader does.
     if (bridge && nativeAllowed)
         bridge->stopReading(readingActivity());
     if (!background)

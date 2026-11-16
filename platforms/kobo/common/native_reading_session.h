@@ -1,9 +1,9 @@
 #pragma once
 #include <QString>
+#include <functional>
 #include <memory>
 #include "reading_estimates.h"
 #include "reading_pace_cache.h"
-#include "native_reading_save.h"
 #include "reading/native_activity_result.h"
 
 namespace kobalt {
@@ -20,42 +20,33 @@ public:
 
     bool estimates(ReadingEstimates *result) { return estimates(activity_.current(), result); }
 
+    // Pauses the session. Nickel's session stays open until a boundary ends it.
     void stop();
-    // Waits for every queued reading-time write, for a lifecycle handoff.
-    void finish(std::function<void(bool)> done);
-    // Ends the session for a close without waiting for its reading time.
-    // `done` runs once Nickel's database is free for the close's progress
-    // write; the reading time follows after the reader has closed.
-    void finishForClose(std::function<void(bool)> done);
+    // Ends a paused session inside the transaction that saves Nickel's
+    // progress, as Nickel's reader does when it leaves a book or the device
+    // sleeps, and adds the session's reading time to `volume`, the record
+    // that transaction saves. Call saved() with the outcome.
+    void endIn(void *volume);
+    // Ends a paused session in Nickel without saving its time, which stays
+    // in pendingSeconds for the next save.
+    void endSession();
+    void saved(bool committed);
+    // Ends the session and saves its reading time in a short transaction of
+    // its own, for a boundary where no progress write carried it. On the GUI
+    // thread, at a boundary where no input can arrive.
+    bool endNow();
 
-    // Starts no new reading-time write until finishForClose() has run and the
-    // reader is gone, or reading resumes.
-    void holdSaves() { saves.hold(); }
+    void finish(std::function<void(bool)> done) { done(endNow()); }
 
-    void retryFailedSave(std::function<void(bool)> done = {},
-                         ReadingSaveRetry mode = ReadingSaveRetry::Explicit)
+    // An explicit retry saves now, at a boundary where no input can arrive.
+    // A background retry, such as on wake, writes nothing: the user can read
+    // then, and the next progress write carries the time.
+    void retryFailedSave(std::function<void(bool)> done, bool explicitRetry)
     {
-        saves.retryFailed();
-        if (!done)
-            return;
-        // A deferred stop still owns the old interval. Never stop a new, running interval.
-        if (ending && mode == ReadingSaveRetry::Explicit)
-            stop();
-        if (ending)
-            done(false);
+        if (explicitRetry)
+            done(endNow());
         else
-            saves.finish(std::move(done));
-    }
-
-    bool savePending() const
-    {
-        // `ending` can retain a failed synchronous stop. It is not a worker
-        // using storage and must not keep a terminal handoff pending forever.
-        // A held write is not pending either: the close that holds it waits
-        // for this to be false before the reader goes, and the reader going
-        // releases it. A handoff that needs it saved calls finish(), which
-        // releases the hold first.
-        return saves.pending() && !saves.failed() && !saves.isHeld();
+            done(true);
     }
 
     std::function<void()> estimatesChanged;
@@ -89,12 +80,13 @@ private:
     quint64 recordGeneration = 0;
     QString book;
     double percent = 0;
+    void startPace();
+    // `ending`: paused, with Nickel's session still open. `pendingSeconds`:
+    // the time of ended sessions that no transaction has saved yet, or -1.
     bool running = false, ending = false;
+    int pendingSeconds = -1;
     nickel::PageReadingActivity activity_;
     nickel::ReadingPaceCache pace_{ nickel::ReadingPaceCache::refreshInterval,
                                     nickel::ReadingPaceCache::Schedule::Ticked };
-    // One queue for the process, so a book's reading time can still be
-    // written after its reader has closed.
-    nickel::NativeReadingSave &saves = nickel::NativeReadingSave::shared();
 };
 } // namespace kobalt

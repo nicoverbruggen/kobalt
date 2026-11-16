@@ -9,6 +9,18 @@ namespace kobalt {
 struct ReadingEstimates;
 struct ReadingActivity;
 
+// Work that rides the progress transaction. Nickel's reader ends its reading
+// session and saves the reading time in the transaction that saves the
+// progress; Kobalt does the same through this.
+struct NativeProgressExtra
+{
+    // Runs inside the transaction on the Nickel Volume about to be saved,
+    // passed as void * because each firmware defines its own Volume.
+    std::function<void(void *volume)> apply;
+    // Set when the transaction that ran `apply` committed.
+    bool committed = false;
+};
+
 class NativeProgress : public QObject
 {
     Q_OBJECT
@@ -19,7 +31,8 @@ public:
     ReadingProgress read(QString *error = nullptr) const;
     NativeSaveResult write(const ReadingProgress &expected, const QString &location, double percent,
                            bool finished, const ReadingEstimates *estimates = nullptr,
-                           const ReadingActivity *activity = nullptr);
+                           const ReadingActivity *activity = nullptr,
+                           NativeProgressExtra *extra = nullptr);
     bool markReading();
     // Records the book as recently read for Nickel's Home screen, as Nickel's
     // reader does when a book closes. Best effort; a busy database skips it.

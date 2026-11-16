@@ -20,8 +20,10 @@ struct HostProgress
     QString writeError = "The database is busy.";
     int writes = 0, writeAttempts = 0, openingAttempts = 0;
     bool holdFinish = false, failFinish = false, finishPending = false;
-    bool rejectWriteWhileFinishing = false;
     int finishAttempts = 0;
+    // The write counts when the last finish began, so a test can check
+    // that the progress was written before the reading-time finish.
+    int writesAtFinish = -1, writeAttemptsAtFinish = -1;
     int saveRetries = 0;
     std::function<void(bool)> retryDone;
     int stopAttempts = 0, destroyed = 0;
@@ -104,8 +106,7 @@ public:
                            bool finished, const ReadingActivity &) override
     {
         ++progress->writeAttempts;
-        if (progress->failWrite
-            || (progress->rejectWriteWhileFinishing && progress->finishPending)) {
+        if (progress->failWrite) {
             return progress->busyBeforeWrite
                     ? NativeSaveResult::busyBeforeWrite(progress->writeError)
                     : NativeSaveResult::unverified(progress->writeError);
@@ -139,16 +140,13 @@ public:
 
     void minuteTick() override { ++progress->minuteTicks; }
 
-    void stopReading() override
-    {
-        ++progress->stopAttempts;
-        if (progress->rejectWriteWhileFinishing && progress->holdFinish)
-            progress->finishPending = true;
-    }
+    void stopReading() override { ++progress->stopAttempts; }
 
     void finishReading(std::function<void(NativeActivityResult)> done) override
     {
         ++progress->finishAttempts;
+        progress->writesAtFinish = progress->writes;
+        progress->writeAttemptsAtFinish = progress->writeAttempts;
         progress->finishPending = true;
         progress->finishDone = [done = std::move(done)](bool saved) {
             done(saved ? NativeActivityResult::Completed : NativeActivityResult::Failed);

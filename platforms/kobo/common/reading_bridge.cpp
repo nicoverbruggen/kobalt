@@ -49,8 +49,13 @@ public:
     {
         ReadingEstimates estimates;
         const bool available = reading_.estimates(activity, &estimates);
-        return progress_->write(expected, location, percent, finished,
-                                available ? &estimates : nullptr, &activity);
+        // The session ends, and its reading time is saved, in this transaction.
+        NativeProgressExtra extra;
+        extra.apply = [this](void *volume) { reading_.endIn(volume); };
+        const auto result = progress_->write(expected, location, percent, finished,
+                                             available ? &estimates : nullptr, &activity, &extra);
+        reading_.saved(extra.committed);
+        return result;
     }
 
     NativeActivityResult markReading() override
@@ -92,29 +97,16 @@ public:
         });
     }
 
-    void holdReadingSaves() override { reading_.holdSaves(); }
-
-    void finishReadingForClose(std::function<void(NativeActivityResult)> done) override
-    {
-        reading_.finishForClose([done = std::move(done)](bool saved) {
-            done(saved ? NativeActivityResult::Completed : NativeActivityResult::Failed);
-        });
-    }
-
-    bool readingSavePending() const override { return reading_.savePending(); }
-
     void retryFailedReadingSave(std::function<void(NativeActivityResult)> done,
                                 ReadingSaveRetry mode) override
     {
-        if (!done) {
-            reading_.retryFailedSave();
+        if (!done)
             return;
-        }
         reading_.retryFailedSave(
                 [done = std::move(done)](bool saved) {
                     done(saved ? NativeActivityResult::Completed : NativeActivityResult::Failed);
                 },
-                mode);
+                mode == ReadingSaveRetry::Explicit);
     }
 
 private:

@@ -661,7 +661,7 @@
       "id": "native-sync.page-turn",
       "kind": "e2e",
       "opt_in": true,
-      "paths": ["platforms/kobo/nickel-qt5/native_reading_session.cpp","platforms/kobo/nickel-qt6/native_reading_session.cpp","platforms/kobo/common/native_reading_save.h"],
+      "paths": ["platforms/kobo/nickel-qt5/native_reading_session.cpp","platforms/kobo/nickel-qt6/native_reading_session.cpp"],
       "book": "benchmark",
       "needs": ["native-sync"],
       "repeat": 5,
@@ -688,8 +688,6 @@
         {"key":"PageDown"},
         {"event":"page-turn-painted","as":"turn5"},
         {"mark_end":true},
-        {"event":"operation-end","where":{"operation":"nickel-session-stop-flush"},"earlier":true,"as":"stop-save","timeout":30000},
-        {"event":"operation-end","where":{"operation":"nickel-session-start-flush"},"earlier":true,"as":"start-save","timeout":30000},
         {"event":"native-sync-end","earlier":true,"as":"sync","timeout":600000}
       ],
       "after": [
@@ -706,7 +704,7 @@
         {"event":"page-turn-painted"},
         {"settle":true}
       ],
-      "sample": {"timer":true,"stages":{"turn1_ms":{"event":"turn1","field":"elapsed_ms"},"turn2_ms":{"event":"turn2","field":"elapsed_ms"},"turn3_ms":{"event":"turn3","field":"elapsed_ms"},"turn4_ms":{"event":"turn4","field":"elapsed_ms"},"turn5_ms":{"event":"turn5","field":"elapsed_ms"},"stop_save_ms":{"event":"stop-save","field":"elapsed_ms"},"start_save_ms":{"event":"start-save","field":"elapsed_ms"},"sync_ms":{"event":"sync","field":"elapsed_ms"}}}
+      "sample": {"timer":true,"stages":{"turn1_ms":{"event":"turn1","field":"elapsed_ms"},"turn2_ms":{"event":"turn2","field":"elapsed_ms"},"turn3_ms":{"event":"turn3","field":"elapsed_ms"},"turn4_ms":{"event":"turn4","field":"elapsed_ms"},"turn5_ms":{"event":"turn5","field":"elapsed_ms"},"sync_ms":{"event":"sync","field":"elapsed_ms"}}}
     },
     {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.open", "steps": [{"close": true}, {"event": "book-close"}, {"open": "songbook-1024"}, {"event": "reader-shown"}], "sample": {"event": "reader-shown", "field": "total_ms", "stages": true}},
     {"kind": "e2e", "paths": ["src/engine/blaze/adapter/", "src/app/reader/", "src/reading/"], "book": "songbook-1024", "opt_in": true, "repeat": 3, "id": "toc.1024.panel", "steps": [{"press": "rrPage", "unless": "rrNavChapters"}, {"visible": "rrNavChapters"}, {"mark": true}, {"press": "rrNavChapters"}, {"visible": "rrChapter0"}, {"settle": true}], "sample": {"timer": true}, "after": [{"press": "rrContentsClose"}, {"hidden": "rrContents"}]},

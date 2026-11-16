@@ -262,7 +262,7 @@ void NativeProgress::markRecent()
 NativeSaveResult NativeProgress::write(const ReadingProgress &expected, const QString &position,
                                        double percent, bool finished,
                                        const ReadingEstimates *estimates,
-                                       const ReadingActivity *activity)
+                                       const ReadingActivity *activity, NativeProgressExtra *extra)
 {
     // Nickel's Volume API runs on the GUI thread at lifecycle boundaries.
     kobalt::mainthread::BlockingOperation blockingOperation("nickel-progress-write");
@@ -392,6 +392,8 @@ NativeSaveResult NativeProgress::write(const ReadingProgress &expected, const QS
         if (chapter >= 0)
             native.setChapterProgress(&volume, QVariant(chapter));
     }
+    if (extra && extra->apply)
+        extra->apply(&volume);
     auto after = native.values(&volume);
     if (timeOnly && !tolino) {
         // Nickel stores the time in whole seconds, as updateBookmark does.
@@ -422,6 +424,8 @@ NativeSaveResult NativeProgress::write(const ReadingProgress &expected, const QS
     }
 #endif
     const bool committed = commitAllowed && transaction.commit();
+    if (extra)
+        extra->committed = committed;
     if (!committed) {
         if (transaction.owned) {
             native.end(db, false);

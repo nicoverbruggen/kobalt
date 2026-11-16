@@ -1151,6 +1151,61 @@ void searchLongItem()
             "The text around the hits must not move the page on screen");
 }
 
+// Chapter mode rules out the spine items that cannot hold a query before it
+// loads them. A word that markup or hidden text splits stays findable, as in
+// the whole book.
+void searchSplitWords()
+{
+    // Each spine item is long enough to be a unit of its own, so that the
+    // search must decide whether to load it.
+    const QByteArray filler = "<p>"
+            + QByteArray("The reader turns the page and the text goes on without a break. ")
+                      .repeated(3)
+            + "</p>";
+    const auto page = [&](const QByteArray &head, const QByteArray &body) {
+        return "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>Part</title>" + head
+                + "</head><body>" + filler.repeated(300) + body + "</body></html>";
+    };
+    test::BookFiles files;
+    files["start.xhtml"] = page({}, "<p>Nothing to find here.</p>");
+    files["markup.xhtml"] = page({}, "<p>The ze<i>bra</i> runs.</p>");
+    files["hidden.xhtml"] = page("<style>.gone{display:none}</style>",
+                                 "<p>A ze<span class=\"gone\">qq</span>bra hides.</p>");
+    files["apart.xhtml"] = page({}, "<p>Zest and bravery, all apart.</p>");
+    files["across.xhtml"] = page({}, "<p>The <b>z</b><i>e</i>bra<span>s</span> run.</p>");
+    files = test::publisherPackage(
+            "en", "Split", files,
+            "<itemref idref=\"start.xhtml\"/><itemref idref=\"markup.xhtml\"/>"
+            "<itemref idref=\"hidden.xhtml\"/><itemref idref=\"apart.xhtml\"/>"
+            "<itemref idref=\"across.xhtml\"/>");
+    const auto hits = [](EngineDocument &model, const QString &query) {
+        QStringList starts;
+        SearchCursor cursor;
+        for (int round = 0; round < 100000; ++round) {
+            const auto batch = model.searchText(query, cursor, 100);
+            for (const auto &hit : batch.hits)
+                starts.append(hit.start);
+            cursor = batch.cursor;
+            if (batch.done)
+                return starts;
+        }
+        require(false, "The search must end");
+        return starts;
+    };
+    EngineDocument whole(test::readerFonts());
+    openResources(whole, files, { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
+    EngineDocument model(test::readerFonts());
+    openFiles(model, files);
+    for (const auto *query : { "zebra", "zebras", "bravery", "zest", "nothing" }) {
+        const auto expected = hits(whole, QString::fromLatin1(query));
+        require(hits(model, QString::fromLatin1(query)) == expected,
+                qPrintable(QString("Chapter mode must find \"%1\" as the whole book does")
+                                   .arg(QString::fromLatin1(query))));
+        if (QByteArray(query) == "zebra")
+            require(expected.size() >= 3, "The fixture splits the word three times");
+    }
+}
+
 // In a long spine item, a forward step to the first page of a slice that is
 // not the next one shows the estimate there, not one more than the last
 // page. Steps to the next slice never go down.
@@ -3240,6 +3295,7 @@ int main(int argc, char **argv)
     emptyItem();
     laterSlice();
     searchLongItem();
+    searchSplitWords();
     keptObservations();
 #endif
     std::printf("PASS: page estimate measurement, map, saved record and chapter mode pages\n");

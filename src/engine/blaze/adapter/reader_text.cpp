@@ -1894,17 +1894,69 @@ QString searchKey(const QString &text)
     return qstring(ldomFoldSearchPattern(cre(text), searchFlags)).remove(QLatin1Char(' '));
 }
 
+// Separates the runs of text between tags in a chapter search key. XML
+// text cannot hold it.
+const QChar searchSegmentBreak(0x1);
+
+// The searchable text of a chapter: the runs of text between tags, each
+// folded, joined by searchSegmentBreak.
 QString chapterSearchKey(const QByteArray &xhtml)
 {
     QXmlStreamReader xml(xhtml);
-    QString text;
+    QString key, run;
+    const auto finish = [&] {
+        const auto folded = searchKey(run);
+        run.clear();
+        if (folded.isEmpty())
+            return;
+        if (!key.isEmpty())
+            key += searchSegmentBreak;
+        key += folded;
+    };
     while (!xml.atEnd()) {
-        if (xml.readNext() == QXmlStreamReader::Characters)
-            text += xml.text().toString();
+        const auto token = xml.readNext();
+        if (token == QXmlStreamReader::Characters)
+            run += xml.text().toString();
+        else if (token == QXmlStreamReader::StartElement || token == QXmlStreamReader::EndElement)
+            finish();
     }
+    finish();
     // The renderer accepts some markup and named entities beyond strict XML.
     // Only a complete parse can rule out a match in this chapter.
-    return xml.hasError() ? QStringLiteral("") : searchKey(text);
+    return xml.hasError() ? QStringLiteral("") : key;
+}
+
+// Whether `pattern` can be visible text made of the runs of `key`. It can
+// lie in one run, or start at the end of a run and go on at the start of
+// later ones. CSS can hide the runs between those, so any run can be left
+// out.
+bool searchKeyMayHold(const QString &key, const QString &pattern)
+{
+    if (key.contains(pattern))
+        return true;
+    const int length = pattern.size();
+    // The lengths of the starts of `pattern` that end a run.
+    QVector<bool> started(length, false);
+    for (const auto &run : key.split(searchSegmentBreak)) {
+        QVector<int> reached;
+        for (int matched = 1; matched < length; ++matched) {
+            if (!started[matched])
+                continue;
+            const int rest = length - matched;
+            if (run.size() >= rest) {
+                if (run.left(rest) == pattern.mid(matched))
+                    return true;
+            } else if (pattern.mid(matched, run.size()) == run) {
+                reached.append(matched + int(run.size()));
+            }
+        }
+        for (int matched = 1; matched < length && matched <= run.size(); ++matched)
+            if (run.right(matched) == pattern.left(matched))
+                started[matched] = true;
+        for (const int matched : reached)
+            started[matched] = true;
+    }
+    return false;
 }
 
 // The spine item of an engine position, counted from zero, or -1.
@@ -1942,15 +1994,7 @@ bool EngineDocument::mayContain(int item, const QString &query) const
     if (text.isEmpty() || text.contains(pattern))
         return true;
     // CSS can hide intervening text nodes, joining visible parts of a word.
-    // Rule out a chapter only when the letters cannot occur in order.
-    int after = 0;
-    for (const auto letter : pattern) {
-        const int at = text.indexOf(letter, after);
-        if (at < 0)
-            return false;
-        after = at + 1;
-    }
-    return true;
+    return searchKeyMayHold(text, pattern);
 }
 
 EngineDocument *EngineDocument::documentFor(int item, const std::function<bool()> &current)

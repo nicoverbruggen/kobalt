@@ -99,6 +99,42 @@ static QByteArray storedEpub(const QList<QPair<QByteArray, QByteArray>> &members
     return bytes;
 }
 
+// The codec keeps the parsed source of the last chapter. Pages read in
+// order and pages read in another order, by another document of the book,
+// give the same Nickel positions.
+static void checkCachedNativeSources()
+{
+    const auto codec = kobalt::nickel::positionCodec();
+    for (const auto *name : { "/cross-reader-progress-test.kepub.epub",
+                              "/trevelyans-type-tester.kepub.epub", "/figure-caption.epub" }) {
+        QFile file(QStringLiteral(KOBALT_TEST_FIXTURES) + name);
+        require(file.open(QIODevice::ReadOnly), "Cannot open a position fixture");
+        const auto bytes = file.readAll();
+        QString error;
+        kobalt::EngineDocument ordered(kobalt::test::readerFonts()),
+                shuffled(kobalt::test::readerFonts());
+        require(ordered.open(bytes, QSize(1072, 1448), {}, &error)
+                        && shuffled.open(bytes, QSize(1072, 1448), {}, &error),
+                qPrintable(error));
+        QStringList inOrder, positions, errors;
+        for (int page = 0; page < ordered.pages(); ++page) {
+            require(ordered.go(page), "Cannot go to a page in order");
+            inOrder.append(ordered.platformPosition(codec, &error) + '|' + error);
+        }
+        // Every other page from both ends: the file changes at almost every
+        // page.
+        for (int page = 0; page < shuffled.pages(); ++page) {
+            const int target = page % 2 ? shuffled.pages() - 1 - page / 2 : page / 2;
+            require(shuffled.go(target), "Cannot go to a page out of order");
+            const auto encoded = shuffled.platformPosition(codec, &error) + '|' + error;
+            require(encoded == inOrder[target],
+                    qPrintable(QString("A kept source changed page %1: %2 against %3")
+                                       .arg(target)
+                                       .arg(encoded, inOrder[target])));
+        }
+    }
+}
+
 static void checkNativeWhitespace()
 {
     const auto codec = kobalt::nickel::positionCodec();
@@ -1298,6 +1334,7 @@ int main(int argc, char **argv)
     QGuiApplication app(argc, argv);
     checkDeferredCjkFont();
     checkNativeWhitespace();
+    checkCachedNativeSources();
     checkChapterArtPositions();
     checkPageFormat();
     checkDeferredPublisherStyles();

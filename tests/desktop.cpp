@@ -1273,7 +1273,8 @@ bool capture(Fixture &fixture, const QString &name, QWidget *nativeScreen = null
     const auto destination = captureDirectory + '/' + name + ".png";
     QWidget *surface = nativeScreen ? nativeScreen : fixture.window.readerWindow();
     auto *start = fixture.window.findChild<standalone::StartScreen *>();
-    if (!nativeScreen && start && start->libraryShown())
+    // The start screen keeps its Library page current behind the reader.
+    if (!nativeScreen && start && start->isVisible() && start->libraryShown())
         surface = start->library();
     int preset = fixture.window.findChild<QComboBox *>("desktopScreenPicker")->currentIndex();
     if (fixture.window.findChild<QAction *>("desktopRotateDevice")->isChecked()) {

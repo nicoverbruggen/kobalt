@@ -3191,8 +3191,13 @@ void Reader::failExit(quint64 request, const QString &error, SaveErrorView::Caus
     setEnabled(true);
     if (closeSaveError)
         return;
-    auto *notice = new SaveErrorView(
-            this, error, closeSaveRetried && cause == SaveErrorView::Cause::Failed, cause);
+    // A close that only waits for the host's records can end without them:
+    // Kobalt has saved the place in the book.
+    const bool savedLocally = cause == SaveErrorView::Cause::TimedOut && !book->savesPending()
+            && !annotationSaving && !bookmarks->saving() && !highlights->saving();
+    auto *notice = new SaveErrorView(this, error,
+                                     closeSaveRetried && cause == SaveErrorView::Cause::Failed,
+                                     cause, savedLocally);
     closeSaveError = notice;
     notice->setObjectName("rrCloseSaveError");
     notice->setGeometry(rect());

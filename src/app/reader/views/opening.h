@@ -19,7 +19,10 @@ public:
     // A failed reading-time save can be retried while the reader stays open.
     explicit SaveErrorView(QWidget *parent);
     enum class Cause { Failed, TimedOut };
-    SaveErrorView(QWidget *parent, const QString &error, bool retried, Cause cause = Cause::Failed);
+    // `savedLocally`: a timed-out close whose own saves are done, so only the
+    // host's records wait. It offers to close without waiting for them.
+    SaveErrorView(QWidget *parent, const QString &error, bool retried, Cause cause = Cause::Failed,
+                  bool savedLocally = false);
 
     QPushButton *quitButton() const { return quit; }
 

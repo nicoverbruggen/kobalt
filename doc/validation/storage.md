@@ -37,7 +37,7 @@ The Kobo adapters reserve their own default-database transaction before they cal
 
 The profile ownership marker can be empty, because the OS-lock implementation also uses an empty marker normally. Symlink, directory and FIFO markers are refused. A failed recovery releases ownership so another process can retry. The marker stays after a normal release, so another process cannot lock a replacement inode while a contender holds the original one.
 
-`lifecycle.slowCloseSave` holds the native reading-time callback through the close deadline. After sleep and wake, Keep reading allows a page turn while the write is pending. The late reply leaves the book open. Retry while the writer is pending closes the book once the writer finishes. Both rows check the final native position write.
+`lifecycle.slowCloseSave` holds the native reading-time callback through the close deadline. After sleep and wake, Keep reading allows a page turn while the write is pending. The late reply leaves the book open. Retry while the writer is pending closes the book once the writer finishes. Both rows check the final native position write. When only the host's records still wait, the timeout notice also offers Close without waiting; `lifecycle.closeWithoutWaitingForHost` checks that it closes at once, keeps Kobalt's saved place and writes no native position.
 
 `lifecycle.sleepCancelsPendingExit` puts the reader to sleep while an ordinary close is waiting, both before and after the timeout notice appears. The first page turn on wake succeeds with the native save still pending. The test delivers the late reply, turns another page, then checks that a fresh Exit closes the book.
 

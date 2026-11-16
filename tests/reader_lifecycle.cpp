@@ -9490,7 +9490,11 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(host.window()->findChild<QPushButton *>("rrCloseSaveReturn"),
                                  9500);
         QCOMPARE(closed.count(), 0);
-        QVERIFY(!host.window()->findChild<QPushButton *>("rrCloseSaveQuit"));
+        // Kobalt's own save is done, so only the host's records wait: the
+        // notice offers to close without waiting for them.
+        auto *closeNow = host.window()->findChild<QPushButton *>("rrCloseSaveQuit");
+        QVERIFY(closeNow);
+        QCOMPARE(closeNow->text(), strings::get("closing.close_now"));
         const int page = host.session()->page();
         const int positionWrites = host.progress->writes;
         auto *choice = host.window()->findChild<QPushButton *>(keepReading ? "rrCloseSaveReturn"
@@ -9511,6 +9515,46 @@ private slots:
         }
         QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 10000);
         QCOMPARE(host.progress->writes, positionWrites + 1);
+    }
+
+    // A close that waits only for the host's reading time can end at once from
+    // the timeout notice. Kobalt keeps the place it saved; the host's position
+    // is not written.
+    void closeWithoutWaitingForHost()
+    {
+        const auto paths = testPaths();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.progress = std::make_shared<test::HostProgress>();
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+        host.positions = nickel::positionCodec();
+        QSignalSpy opened(&host, &ReaderFixture::opened), closed(&host, &ReaderFixture::closed);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(host.session()->turn(1));
+        QTRY_VERIFY(!host.session()->busy() && !host.book()->savesPending());
+        const auto position = host.session()->state().value("position");
+        const int writes = host.progress->writes;
+        host.progress->holdFinish = true;
+        const auto release = qScopeGuard([&] {
+            host.progress->holdFinish = false;
+            if (host.progress->finishDone)
+                host.progress->completeFinish(true);
+        });
+        host.window()->close();
+        QTRY_VERIFY(host.progress->finishDone);
+        QTRY_VERIFY_WITH_TIMEOUT(host.window()->findChild<QPushButton *>("rrCloseSaveQuit"), 9500);
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrCloseSaveQuit")));
+        QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 10000);
+        QCOMPARE(host.progress->writes, writes);
+        QCOMPARE(storage::readBookState(paths, identity).object.value("position"), position);
     }
 
     void sleepCancelsPendingExit_data()

@@ -55,6 +55,11 @@ public:
         const auto result = progress_->write(expected, location, percent, finished,
                                              available ? &estimates : nullptr, &activity, &extra);
         reading_.saved(extra.committed);
+        // A write that failed before it could end the session, such as on a
+        // busy database or a conflict, ends it now, so the time spent on the
+        // error or the choice is not counted. The next save adds the seconds.
+        if (!extra.committed)
+            reading_.endSession();
         return result;
     }
 

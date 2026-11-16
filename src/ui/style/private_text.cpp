@@ -1140,6 +1140,12 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
         const auto *info = hb_buffer_get_glyph_infos(buffer, &glyphCount);
         const auto *positions = hb_buffer_get_glyph_positions(buffer, &glyphCount);
         for (unsigned i = 0; i < glyphCount; ++i) {
+            // Control characters other than a tab, such as a line break or a
+            // carriage return, take no space and draw nothing. A font that
+            // lacks them would otherwise draw its missing-glyph box.
+            if (info[i].cluster < uint(count) && characters[int(info[i].cluster)] != '\t'
+                && QChar::category(characters[int(info[i].cluster)]) == QChar::Other_Control)
+                continue;
             if (previousCluster != uint(-1) && previousCluster != info[i].cluster
                 && runFont.letterSpacingType() == QFont::AbsoluteSpacing) {
                 pen += qRound64(runFont.letterSpacing() * 64);

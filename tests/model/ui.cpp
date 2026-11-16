@@ -399,6 +399,18 @@ int main(int argc, char **argv)
             if (event.value("event").toString() == "font-load-start")
                 ++loads;
         });
+        // A control character takes no space and draws nothing, also in a font
+        // that lacks it: Instrument Serif has no carriage return.
+        {
+            const auto brand = brandFont(32);
+            require(measurePrivateText(QStringLiteral("a\r"), brand)
+                                    == measurePrivateText(QStringLiteral("a"), brand)
+                            && measurePrivateText(QStringLiteral("a\n"), interfaceFont(24))
+                                    == measurePrivateText(QStringLiteral("a"), interfaceFont(24)),
+                    "A control character took space");
+            require(!renderPrivateText(QStringLiteral("a\rb"), brand).missingGlyphs,
+                    "A carriage return drew a missing glyph");
+        }
         const auto notice = [&](bool savedLocally) {
             require(initializePrivateInterfaceText(assets), "Cannot reset private interface text");
             loads = 0;

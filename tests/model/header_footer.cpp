@@ -468,26 +468,35 @@ int main()
                     && std::end(choosableFields)[-2] == Field::ChapterLoadTime
                     && std::end(choosableFields)[-1] == Field::BookStatus,
             "The debug fields are not together at the end of the list");
-    // Book status: Fast with the build's progress or its failure, Full with
-    // the time the whole book took when it is known.
+    // Book status: the last turn time, then fast with the layout's progress
+    // or failure, or full with the time the whole book took when it is known.
     Values status;
-    require(content(Field::BookStatus, status, false).text == QStringLiteral("Fast"),
-            "Book status without a build is not Fast");
+    require(content(Field::BookStatus, status, false).text == QStringLiteral("layout: fast"),
+            "Book status without a turn or progress is wrong");
     status.wholeBookPercent = 37;
-    require(content(Field::BookStatus, status, false).text == QStringLiteral("Fast · 37%"),
-            "Book status does not show the build's progress");
-    require(content(Field::BookStatus, status, true).text == QStringLiteral("FAST · 37%"),
+    require(content(Field::BookStatus, status, false).text == QStringLiteral("layout: fast (37%)"),
+            "Book status does not show the layout's progress");
+    status.pageTurnMilliseconds = 22;
+    require(content(Field::BookStatus, status, false).text
+                    == QStringLiteral("turn: 22ms | layout: fast (37%)"),
+            "Book status does not lead with the turn time");
+    require(content(Field::BookStatus, status, true).text
+                    == QStringLiteral("TURN: 22MS | LAYOUT: FAST (37%)"),
             "Book status does not follow the slot's capitals");
     status.wholeBookFailed = true;
-    require(content(Field::BookStatus, status, false).text == QStringLiteral("Fast · failed"),
+    require(content(Field::BookStatus, status, false).text
+                    == QStringLiteral("turn: 22ms | layout: fast (failed)"),
             "Book status does not show a failed build");
     status = {};
     status.wholeBook = true;
-    require(content(Field::BookStatus, status, false).text == QStringLiteral("Full"),
-            "Book status of a whole book is not Full");
-    status.wholeBookMilliseconds = 14249;
-    require(content(Field::BookStatus, status, false).text == QStringLiteral("Full · 14.2 s"),
-            "Book status does not show how long the whole book took");
+    require(content(Field::BookStatus, status, false).text == QStringLiteral("layout: full"),
+            "Book status of a whole book is not full");
+    status.wholeBookMilliseconds = 9249;
+    require(content(Field::BookStatus, status, false).text == QStringLiteral("layout: full (9.2s)"),
+            "Book status does not show a short whole-book time with a decimal");
+    status.wholeBookMilliseconds = 55400;
+    require(content(Field::BookStatus, status, false).text == QStringLiteral("layout: full (55s)"),
+            "Book status does not show a long whole-book time in whole seconds");
     require(!fieldDescription(Field::BookStatus).isEmpty()
                     && field("book_status") == Field::BookStatus,
             "Book status has no description or saved name");

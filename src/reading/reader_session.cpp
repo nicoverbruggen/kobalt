@@ -626,6 +626,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     newestLayout->fetch_add(1);
     layoutClock_.start();
     ++layoutStarts_;
+    resetLayoutProgress();
     newest->store(revision);
     cancelSearch();
     lease_ = request.lease;
@@ -2687,6 +2688,7 @@ void ReaderSession::request(bool appearanceChange, RenderReason reason)
         if (!switchingMode_) {
             layoutClock_.start();
             ++layoutStarts_;
+            resetLayoutProgress();
         }
         interruptSearch();
     } else {

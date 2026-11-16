@@ -109,20 +109,35 @@ QString milliseconds(qint64 value)
     return value >= 0 ? strings::get("header_footer.milliseconds").arg(value) : QString();
 }
 
-// Fast while the engine lays out a chapter at a time, Full once it has the
-// whole book: with the build's progress, its failure or how long it took.
+// The last turn time, then the layout: fast while the engine lays out a
+// chapter at a time, with the progress or failure of the whole book, and
+// full once it has the whole book, with how long that took.
 QString bookStatus(const Values &values)
 {
-    if (values.wholeBook)
-        return values.wholeBookMilliseconds >= 0
-                ? strings::get("header_footer.status.full_time")
-                          .arg(QString::number(values.wholeBookMilliseconds / 1000.0, 'f', 1))
-                : strings::get("header_footer.status.full");
-    if (values.wholeBookFailed)
-        return strings::get("header_footer.status.fast_failed");
-    if (values.wholeBookPercent >= 0)
-        return strings::get("header_footer.status.fast_progress").arg(values.wholeBookPercent);
-    return strings::get("header_footer.status.fast");
+    QString detail;
+    if (values.wholeBook) {
+        if (values.wholeBookMilliseconds >= 0) {
+            const double seconds = values.wholeBookMilliseconds / 1000.0;
+            detail = strings::get("header_footer.status.seconds")
+                             .arg(QString::number(seconds, 'f', seconds < 10 ? 1 : 0));
+        }
+    } else if (values.wholeBookFailed) {
+        detail = strings::get("header_footer.status.failed");
+    } else if (values.wholeBookPercent >= 0) {
+        detail = strings::get("common.percent").arg(values.wholeBookPercent);
+    }
+    const auto mode = strings::get(values.wholeBook ? "header_footer.status.full"
+                                                    : "header_footer.status.fast");
+    const auto layout =
+            strings::get("header_footer.status.layout")
+                    .arg(detail.isEmpty() ? mode
+                                          : strings::get("header_footer.status.with_detail")
+                                                    .arg(mode, detail));
+    if (values.pageTurnMilliseconds < 0)
+        return layout;
+    return strings::get("header_footer.status.parts")
+            .arg(strings::get("header_footer.status.turn").arg(values.pageTurnMilliseconds),
+                 layout);
 }
 
 QString joined(const QString &name, const QString &position)

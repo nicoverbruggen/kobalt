@@ -543,14 +543,20 @@
 /* Arguments: %1 */
 "header_footer.field_description.battery_warning" = "Shows the battery only below %1%.";
 "header_footer.field_description.time_left" = "Estimated from your reading pace.";
-"header_footer.field_description.book_status" = "Fast while one chapter is laid out, Full once the whole book is. Updates every 5 seconds.";
-"header_footer.status.fast" = "Fast";
+"header_footer.field_description.book_status" = "The last turn time and the layout: fast while one chapter is laid out, full once the whole book is. Updates every 5 seconds.";
+"header_footer.status.fast" = "fast";
+"header_footer.status.full" = "full";
+"header_footer.status.failed" = "failed";
 /* Arguments: %1 */
-"header_footer.status.fast_progress" = "Fast · %1%";
-"header_footer.status.fast_failed" = "Fast · failed";
-"header_footer.status.full" = "Full";
+"header_footer.status.seconds" = "%1s";
+/* Arguments: %1 the layout mode, %2 its progress, failure or time */
+"header_footer.status.with_detail" = "%1 (%2)";
 /* Arguments: %1 */
-"header_footer.status.full_time" = "Full · %1 s";
+"header_footer.status.layout" = "layout: %1";
+/* Arguments: %1 */
+"header_footer.status.turn" = "turn: %1ms";
+/* Arguments: %1 the turn time, %2 the layout */
+"header_footer.status.parts" = "%1 | %2";
 
 /* image */
 "image.unavailable" = "Image could not be loaded";

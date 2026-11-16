@@ -274,6 +274,8 @@ public:
 
     bool allMeasured() const { return measuredCount_ == items_.size(); }
 
+    int measuredItems() const { return measuredCount_; }
+
     // True when every item is measured or has the real pages of all its
     // parts. Only then is the total more than a guess from the bytes.
     bool complete() const;

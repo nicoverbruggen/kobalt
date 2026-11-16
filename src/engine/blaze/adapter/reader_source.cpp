@@ -1344,14 +1344,34 @@ std::unique_ptr<EngineDocument> EngineDocument::openSide(const QJsonObject &sett
 }
 
 namespace {
-// The Book status field reads the progress of the whole-book build from the
-// GUI thread while the build runs on its own.
-std::atomic_int buildPercent{ -1 };
+// The Book status field reads the progress of the background layout from the
+// GUI thread while the engine worker and the build thread write it.
+std::atomic_int layoutPercent{ 0 };
+constexpr int estimateShare = 80;
 } // namespace
 
-int wholeBookBuildPercent()
+int layoutProgressPercent()
 {
-    return buildPercent.load();
+    return layoutPercent.load();
+}
+
+void resetLayoutProgress()
+{
+    layoutPercent = 0;
+}
+
+void setEstimateProgress(int measured, int items)
+{
+    if (items > 0)
+        layoutPercent = estimateShare * qBound(0, measured, items) / items;
+}
+
+void setBuildProgress(int percent)
+{
+    // The build only goes forward; each slice of pages counts from zero.
+    const int done = estimateShare + (100 - estimateShare) * qBound(0, percent, 100) / 100;
+    int seen = layoutPercent.load();
+    while (done > seen && !layoutPercent.compare_exchange_weak(seen, done)) { }
 }
 
 #if __has_include(<koblaze.h>) && defined(KOBLAZE_CANCEL_CHECK)
@@ -1391,7 +1411,6 @@ struct EngineDocument::FullBuild
 
     ~FullBuild()
     {
-        buildPercent = -1;
         if (!thread)
             return;
         mainthread::blocking("whole-book-build-end");
@@ -1590,7 +1609,7 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
         build->key = key;
         // A new appearance tries again after a failed build.
         fullFailed_.clear();
-        buildPercent = 0;
+        setBuildProgress(0);
         build->size = size_;
         // What the build reads is copied here: this document goes on with
         // other work between the runs of the build.
@@ -1628,10 +1647,8 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
                         const int part = stage == OpeningStage::Styles ? 1
                                 : stage == OpeningStage::Pages         ? 2
                                                                        : 0;
-                        const int done = (part * 100 + qBound(0, percent, 100)) / 3;
-                        int seen = buildPercent.load();
-                        while (seen >= 0 && done > seen
-                               && !buildPercent.compare_exchange_weak(seen, done)) { }
+                        // 99 at most: 100 is the book that is ready.
+                        setBuildProgress(qMin(99, (part * 100 + qBound(0, percent, 100)) / 3));
                     };
                     opened = source->resources
                             ? document->openResources(source->resources->fresh(), source->sizes,
@@ -1701,6 +1718,8 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
     full_ = std::move(next);
     fullKey_ = key;
     fullSize_ = size_;
+    // Ready: the next turn shows it.
+    setBuildProgress(100);
     return FullDocument::Ready;
 #else
     Q_UNUSED(current);

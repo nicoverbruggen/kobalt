@@ -128,7 +128,10 @@ kobalt::headerfooter::Values Reader::chromeValues()
         values.chapterLoadMilliseconds = qint64(state.value("chapter_load_ms").toDouble());
     values.wholeBook = !state.contains("book_fraction");
     values.wholeBookFailed = !values.wholeBook && state.value("whole_book_failed").toBool();
-    values.wholeBookPercent = values.wholeBook ? -1 : kobalt::wholeBookBuildPercent();
+    // Fast lays out a chapter at a time and never the whole book.
+    values.wholeBookPercent = values.wholeBook || !renderingMode::countsInBackground()
+            ? -1
+            : kobalt::layoutProgressPercent();
     // The time of the whole book is taken when it first shows after the
     // opening or a new layout.
     if (session->layoutStarts() != statusLayout) {

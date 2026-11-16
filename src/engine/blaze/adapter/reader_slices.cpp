@@ -483,6 +483,8 @@ bool EngineDocument::refinePageEstimate(const std::function<bool()> &current)
         return false;
     auto &map = pageMap();
     auto &estimate = source_->pageEstimate;
+    // A book opened again can have every item measured already.
+    setEstimateProgress(map.measuredItems(), map.items());
     if (!estimate.measurer) {
         // The spine item on the screen goes first: its slices place the
         // observations.

@@ -10190,11 +10190,19 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     }
 
     // The Book status field shows Fast with the whole-book build's progress
-    // in Hybrid, then Full with how long the whole book took. Its 5-second
-    // refresh runs only while the field is in a shown header or footer.
+    // in Hybrid, then Full with how long the whole book took, each after the
+    // last turn time. It follows the build every 5 seconds while it is in a
+    // shown header or footer, and only then.
     void headerFooterBookStatus()
     {
         using namespace headerfooter;
+        QFile references(QStringLiteral(KOBALT_SCREENSHOT_REFERENCES));
+        QVERIFY(references.open(QIODevice::ReadOnly));
+        const auto reference =
+                QJsonDocument::fromJson(references.readAll()).object()["war-and-peace"].toObject();
+        const auto large =
+                QStringLiteral(KOBALT_SCREENSHOT_BOOKS) + '/' + reference["filename"].toString();
+        QVERIFY(QFileInfo::exists(large));
         Fixture fixture;
         QVERIFY(fixture.prepared);
         auto layout = presetLayout(Preset::Default);
@@ -10212,29 +10220,45 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             renderingMode::setBuildQuietMilliseconds(quiet);
         });
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
-        fixture.window.openBook(book);
+        fixture.window.openBook(large);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         auto *reader = fixture.window.readerWindow();
         auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
         QVERIFY(page);
         const auto status = [page] { return page->slotContents[1].text; };
-        QVERIFY2(status().startsWith(QStringLiteral("Fast")), qPrintable(status()));
         auto *timer = reader->findChild<QTimer *>("rrBookStatusTimer");
         QVERIFY(timer && timer->isActive());
         QCOMPARE(timer->interval(), 5000);
-        // The whole book shows from the next page turn after its build.
+        // Reading starts the build of the whole book.
         QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
-        QTRY_VERIFY_WITH_TIMEOUT(
-                [&] {
-                    QTest::keyClick(&fixture.window, Qt::Key_PageDown);
-                    return QTest::qWaitFor(
-                            [&] { return !fixture.state().contains("book_fraction"); }, 100);
-                }(),
-                30000);
-        QTRY_VERIFY2_WITH_TIMEOUT(QRegularExpression(QStringLiteral("^Full · \\d+\\.\\d s$"))
-                                          .match(status())
-                                          .hasMatch(),
-                                  qPrintable(status()), 10000);
+        QTest::keyClick(&fixture.window, Qt::Key_PageDown);
+        // Every value the strip showed, in order, until the whole book shows.
+        QStringList seen;
+        QElapsedTimer waited, sinceTurn;
+        waited.start();
+        sinceTurn.start();
+        while (waited.elapsed() < 120000) {
+            if (seen.isEmpty() || seen.last() != status())
+                seen.append(status());
+            if (status().contains(QStringLiteral("layout: full")))
+                break;
+            // The whole book shows from the next turn after its build.
+            if (sinceTurn.elapsed() > 3000 && !fixture.state().value("busy").toBool()) {
+                QTest::keyClick(&fixture.window, Qt::Key_PageDown);
+                sinceTurn.restart();
+            }
+            QTest::qWait(50);
+        }
+        qInfo() << "Book status:" << seen;
+        // The layout's progress shows on the way, and the whole book at the end.
+        const QRegularExpression progress(
+                QStringLiteral("^turn: \\d+ms \\| layout: fast \\(([1-9]|[1-9]\\d)%\\)$"));
+        QVERIFY2(!seen.filter(progress).isEmpty(), qPrintable(seen.join(" / ")));
+        QVERIFY2(QRegularExpression(
+                         QStringLiteral("^turn: \\d+ms \\| layout: full \\(\\d+(\\.\\d)?s\\)$"))
+                         .match(seen.last())
+                         .hasMatch(),
+                 qPrintable(seen.join(" / ")));
         // Without the field in a strip, nothing refreshes it.
         layout.slotFields[1] = Field::BookPage;
         preferences[customKey] = toJson(layout);

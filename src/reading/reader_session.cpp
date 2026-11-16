@@ -247,24 +247,30 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                 Qt::QueuedConnection);
     };
     BackgroundDiagnostic diagnostic("Page estimates", *engine, wanted);
-    bool more = false;
-    for (int step = 0; step < 32 && wanted(); ++step) {
-        engineActivity().checkpoint();
-        more = engine->refinePageEstimate(wanted);
-        if (!more)
-            break;
-    }
+    const auto measure = [&] {
+        bool left = false;
+        for (int step = 0; step < 32 && wanted(); ++step) {
+            engineActivity().checkpoint();
+            left = engine->refinePageEstimate(wanted);
+            if (!left)
+                break;
+        }
+        return left;
+    };
+    // Hybrid rendering: the whole book is built beside the chapter. A page
+    // turn stops the try, and the next quiet moment starts again. Before
+    // the user reads, only a book that is in the parsed-book cache is
+    // worth the work: it needs no parsing. It comes before the measuring:
+    // it has the real pages. Without a cache file the try ends at once.
+    const bool reading = count->load();
+    const bool cacheFirst = !reading && renderingMode::countsInBackground();
+    bool more = cacheFirst ? false : measure();
     if (!current())
         return;
     if (!wanted()) {
         resumeAfterWork();
         return;
     }
-    // Hybrid rendering: the whole book is built beside the chapter. A page
-    // turn stops the try, and the next quiet moment starts again. Before
-    // the user reads, only a book that is in the parsed-book cache is
-    // worth the work: it needs no parsing.
-    const bool reading = count->load();
     // The start of a build reads and parses the package of the book before
     // it reaches its first chapter. It waits for a quiet moment, so that it
     // does not meet a page turn. A build that has started goes on in every
@@ -296,6 +302,15 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                             guard->showFullDocument(job);
                     },
                     Qt::QueuedConnection);
+            return;
+        }
+    }
+    if (cacheFirst) {
+        more = measure();
+        if (!current())
+            return;
+        if (!wanted()) {
+            resumeAfterWork();
             return;
         }
     }

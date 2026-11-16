@@ -995,11 +995,8 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
     EngineDocument next(fonts_);
     next.openingFontSource_ =
             source_->parent ? source_->parent->fontIdentity : source_->fontIdentity;
-    next.slicePages_ = fast ? qMax(1,
-                                   qgetenv("KOBALT_CHAPTER_PAGES").isEmpty()
-                                           ? 25
-                                           : qgetenv("KOBALT_CHAPTER_PAGES").toInt())
-                            : 0;
+    // The same slices as an opening, so that the saved page estimate fits.
+    next.slicePages_ = fast ? qMax(1, chapterSlicePages()) : 0;
     next.userStyleSheet_ = userStyleSheet_;
     next.cacheDirectory_ = cacheDirectory_;
     next.bypassDocumentCache_ = true;

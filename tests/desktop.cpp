@@ -790,6 +790,18 @@ struct Fixture
 
     bool press(const char *name) { return click(widget(name)); }
 
+    // Settings is built when it first opens. Opening and closing it once
+    // makes its controls, such as Sync now, exist while the book is read.
+    bool buildSettings()
+    {
+        if (!press("rrPage") || !QTest::qWaitFor([&] { return visible("rrSettings"); })
+            || !press("rrSettings") || !QTest::qWaitFor([&] { return visible("rrSettingsClose"); })
+            || !press("rrSettingsClose"))
+            return false;
+        return QTest::qWaitFor(
+                [&] { return !visible("rrControlsTop") && !state().value("busy").toBool(); });
+    }
+
     // Every visible search result row has loaded its details. A row that has
     // not stays blank and disabled.
     bool searchResultsReady()
@@ -5908,7 +5920,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             const auto shown = find("reader-shown");
             for (const auto *field :
                  { "engine_ms", "window_ms", "wait_ms", "build_ms", "build_reading_page_ms",
-                   "build_settings_ms", "theme_ms", "show_ms", "total_ms" })
+                   "build_kosync_ms", "theme_ms", "show_ms", "total_ms" })
                 QVERIFY2(shown.value(QLatin1String(field)).isDouble(), field);
             const double parts = sum(shown, { "engine_ms", "window_ms", "wait_ms", "show_ms" });
             const double total = shown.value("total_ms").toDouble();
@@ -5918,7 +5930,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(sum(shown,
                         { "build_reading_page_ms", "build_toolbar_ms", "build_bottom_controls_ms",
                           "build_menu_ms", "build_overlays_ms", "build_appearance_ms",
-                          "build_settings_ms", "build_notices_ms", "build_annotations_ms" })
+                          "build_kosync_ms", "build_notices_ms", "build_annotations_ms" })
                             <= shown.value("build_ms").toDouble()
                     && shown.value("build_ms").toDouble() <= shown.value("window_ms").toDouble());
             QTest::keyClick(&fixture.window, Qt::Key_PageDown);
@@ -7259,6 +7271,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         const auto local = fixture.state();
         QVERIFY(local.value("position").toString() != remote);
+        QVERIFY(fixture.buildSettings());
         *body = QJsonDocument(QJsonObject{ { "progress", remote },
                                            { "percentage", 0.7 },
                                            { "device", "Other reader" },
@@ -16814,6 +16827,8 @@ private slots:
         const auto farther = fixture.state().value("position").toString();
         for (int i = 0; i < 5 + ui::metrics::syncChoice::pageJump; ++i)
             QVERIFY(fixture.turnPage(-1));
+        QCOMPARE(fixture.state().value("page").toInt(), earlierPage);
+        QVERIFY(fixture.buildSettings());
         QCOMPARE(fixture.state().value("page").toInt(), earlierPage);
 
         struct Case

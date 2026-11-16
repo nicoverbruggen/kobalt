@@ -61,7 +61,7 @@ void Reader::refresh()
     if (syncCoordinator && isVisible() && !services.suspended())
         syncCoordinator->resume();
     const bool darkReady = publishPendingDarkMode();
-    if (general->isVisible())
+    if (settingsVisible())
         static_cast<SettingsPanel *>(general)->updateButtonControls(
                 buttonControls(), preferences,
                 savingButtonControls || savingDarkMode >= 0 || savingDenseGraph);
@@ -70,9 +70,11 @@ void Reader::refresh()
                                           : session->state().value("dark_mode").toBool(false);
     const bool darkEnabled = savingDarkMode < 0 && pendingDarkMode < 0 && !session->busy()
             && !session->temporaryTypography();
-    if (!restoringDefaults)
-        darkOption->setChecked(dark);
-    darkOption->setEnabled(darkEnabled);
+    if (darkOption) {
+        if (!restoringDefaults)
+            darkOption->setChecked(dark);
+        darkOption->setEnabled(darkEnabled);
+    }
     lightPopup->setDarkModeShortcut(services.lightAvailable(), dark, darkEnabled);
     if (recordedOpening && !kosyncStarted)
         synchronizeKosync();
@@ -210,8 +212,11 @@ bool Reader::publishPendingDarkMode()
     if (session->state().value("dark_mode").toBool(false) != target
         || (appearanceEdit.preview()
             && appearanceEdit.preview()->state().value("dark_mode").toBool(false) != target)) {
-        settingsError->setText(strings::get("reader.could_not_change_dark_mode"));
-        settingsError->show();
+        // Settings shows the error; it clears the line when it opens.
+        if (settingsError) {
+            settingsError->setText(strings::get("reader.could_not_change_dark_mode"));
+            settingsError->show();
+        }
         return false;
     }
     return true;
@@ -286,7 +291,8 @@ void Reader::finishAppearanceApply()
             if (!switchingAppearance) {
                 choices->hide();
                 menu->hide();
-                general->hide();
+                if (general)
+                    general->hide();
                 if (returnToReading) {
                     topControls->hide();
                     bottomControls->hide();
@@ -303,7 +309,7 @@ bool Reader::syncFontPicker()
 {
     const bool pickingFont = choosingTypography && choices->isVisible() && choices->isFontPicker();
     if (choosingTypography && appearanceEdit.panelOpen() && panels->currentIndex() == 0)
-        menu->setVisible(!pickingFont && !general->isVisible());
+        menu->setVisible(!pickingFont && !settingsVisible());
     return pickingFont;
 }
 
@@ -440,7 +446,7 @@ void Reader::showPageImage(const QImage &nextImage)
         // Clear them without cancelling the gesture that edits the preview.
         page->mark({});
         page->animationDirection = isVisible() && !appearanceEdit.panelOpen()
-                        && !topControls->isVisible() && !general->isVisible()
+                        && !topControls->isVisible() && !settingsVisible()
                         && !linkReturn->isVisible() && !syncDialog && !kosyncDialog && !finishDialog
                         && !services.suspended()
                         && (services.softwarePageAnimations
@@ -698,13 +704,13 @@ void Reader::syncReadingControls()
     // Settings applies the newest draft, or waits for the preview to open.
     // Its click handler ignores taps while a panel's changes apply.
     toolbarButtons.settings->setEnabled(!session->busy() || appearanceEdit.applying());
-    toolbarButtons.typography->setChecked(!general->isVisible() && appearanceEdit.panelOpen()
+    toolbarButtons.typography->setChecked(!settingsVisible() && appearanceEdit.panelOpen()
                                           && panels->currentIndex() == 0);
-    toolbarButtons.layout->setChecked(!general->isVisible() && appearanceEdit.panelOpen()
+    toolbarButtons.layout->setChecked(!settingsVisible() && appearanceEdit.panelOpen()
                                       && panels->currentIndex()
                                               != int(kobalt::reader::AppearancePage::Typography));
-    toolbarButtons.settings->setChecked(general->isVisible());
-    const bool settingsOpen = general->isVisible();
+    toolbarButtons.settings->setChecked(settingsVisible());
+    const bool settingsOpen = settingsVisible();
     // Zen mode moves Search, Annotate and Bookmarks to the bottom tabs.
     const bool zen = zenMode();
     for (auto *action : std::initializer_list<QWidget *>{ toolbarComposition.exitAction,
@@ -789,7 +795,7 @@ void Reader::openPendingDestination()
 {
     if (appearanceEdit.panelDestination() && !session->busy() && !appearanceEdit.applying()) {
         if (appearanceEdit.externalDestination()) {
-            if (!appearanceEdit.panelOpen() && !general->isVisible()) {
+            if (!appearanceEdit.panelOpen() && !settingsVisible()) {
                 const auto destination = appearanceEdit.takeDestination();
                 if (!lifecycleHidden && !services.suspended() && !exitPending) {
                     if (destination == AppearanceDestination::Stats)

@@ -596,9 +596,9 @@ void Reader::openBookmarks()
         return;
     }
     session->cancelPendingTurn();
-    if (general->isVisible() || appearanceEdit.panelOpen()) {
+    if (settingsVisible() || appearanceEdit.panelOpen()) {
         appearanceEdit.request(AppearanceDestination::Bookmarks);
-        if (general->isVisible())
+        if (settingsVisible())
             applySettings();
         else
             finishPreview();
@@ -768,7 +768,7 @@ void Reader::syncPinnedBookmarks()
     const bool visible = features::enabled(preferences, features::Bookmarks) && !pins.isEmpty()
             && topControls->isVisible() && !session->busy() && !lifecycleHidden && !closing
             && !services.suspended() && !annotationMode && !seekOpen && !appearanceEdit.panelOpen()
-            && !general->isVisible() && !menu->isVisible() && !choices->isVisible()
+            && !settingsVisible() && !menu->isVisible() && !choices->isVisible()
             && !lightPopup->isVisible() && !bookmarkList->isVisible() && !acknowledgmentsVisible()
             && !searchPanel->isVisible() && !dictionaryPanel->isVisible() && !linksActive()
             && !lookupPending && !syncDialog && !kosyncDialog && !finishDialog
@@ -887,7 +887,8 @@ QString Reader::refreshLabel(kobalt::ScreenRefresh mode)
 // The row's caption shows the mode that Settings saves when it closes.
 void Reader::showScreenRefresh()
 {
-    refreshButton->setCaption(refreshLabel(screenRefreshMode).toUpper());
+    if (refreshButton)
+        refreshButton->setCaption(refreshLabel(screenRefreshMode).toUpper());
 }
 
 // Writes the preferences. A failed write keeps the old ones and shows the
@@ -895,13 +896,17 @@ void Reader::showScreenRefresh()
 bool Reader::savePreferences(const QJsonObject &next)
 {
     if (!writePreferences(next)) {
-        settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
-        settingsError->show();
+        if (settingsError) {
+            settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
+            settingsError->show();
+        }
         return false;
     }
     preferences = next;
-    settingsError->clear();
-    settingsError->hide();
+    if (settingsError) {
+        settingsError->clear();
+        settingsError->hide();
+    }
     return true;
 }
 
@@ -975,6 +980,8 @@ QString sessionTimeoutLabel(int minutes)
 
 void Reader::showSleepScreen()
 {
+    if (!general)
+        return;
     sessionTimeoutButton->setCaption(
             sessionTimeoutLabel(sessionTimeout::minutes(preferences)).toUpper());
     sleepScreenButton->setCaption(
@@ -1604,7 +1611,8 @@ QString navigationExplanation(pageNavigation::Mode mode)
 
 void Reader::showTapZones()
 {
-    tapZonesButton->setCaption(tapZoneLabel(pageNavigation::tapLayout(preferences)).toUpper());
+    if (tapZonesButton)
+        tapZonesButton->setCaption(tapZoneLabel(pageNavigation::tapLayout(preferences)).toUpper());
 }
 
 void Reader::openTapZones()
@@ -1667,6 +1675,8 @@ void Reader::openTapZones()
 
 void Reader::showPageNavigation()
 {
+    if (!pageNavigationButton)
+        return;
     pageNavigationButton->setCaption(
             navigationLabel(pageNavigation::mode(preferences, services.pageButtons())).toUpper());
 }
@@ -1761,6 +1771,8 @@ void Reader::openPageNavigation()
 
 void Reader::showChapterGroups()
 {
+    if (!chapterGroupsButton)
+        return;
     chapterGroupsButton->setCaption(
             strings::get(preferences.value("chapter_groups").toString() == "off"
                                  ? "settings.chapter_groups_off"
@@ -1798,7 +1810,8 @@ void Reader::openChapterGroups()
 void Reader::showNavigationBarButtons()
 {
     const auto mode = pageNavigation::barButtons(preferences);
-    navigationBarButton->setCaption(barButtonsLabel(mode).toUpper());
+    if (navigationBarButton)
+        navigationBarButton->setCaption(barButtonsLabel(mode).toUpper());
     pageScrubber->setChapterJumps(mode == pageNavigation::BarButtons::Chapters);
 }
 
@@ -1861,7 +1874,8 @@ QString tappableLinksDescription(const QString &mode)
 void Reader::showTappableLinks()
 {
     const auto mode = preferences.value("tappable_links").toString("footnotes");
-    tappableLinksButton->setCaption(tappableLinksLabel(mode).toUpper());
+    if (tappableLinksButton)
+        tappableLinksButton->setCaption(tappableLinksLabel(mode).toUpper());
 }
 
 void Reader::openTappableLinks()
@@ -1896,7 +1910,8 @@ QString annotationInteractionLabel(const QString &mode)
 void Reader::showAnnotationInteraction()
 {
     const auto mode = preferences.value("annotation_interaction").toString("toggle");
-    annotationInteractionButton->setCaption(annotationInteractionLabel(mode).toUpper());
+    if (annotationInteractionButton)
+        annotationInteractionButton->setCaption(annotationInteractionLabel(mode).toUpper());
 }
 
 void Reader::openAnnotationInteraction()
@@ -1930,7 +1945,8 @@ void Reader::openAnnotationInteraction()
 void Reader::showMenuView()
 {
     const auto mode = pageNavigation::menuView(preferences);
-    menuViewButton->setCaption(menuViewLabel(mode).toUpper());
+    if (menuViewButton)
+        menuViewButton->setCaption(menuViewLabel(mode).toUpper());
 }
 
 void Reader::openMenuView()

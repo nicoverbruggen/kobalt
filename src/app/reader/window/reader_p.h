@@ -347,8 +347,35 @@ private:
     kobalt::reader::AppearanceLayout buildMenu();
     void buildOverlays();
     void buildAppearance(const kobalt::reader::AppearanceLayout &layout);
-    void buildSettings();
+    // Settings is built when it first opens. Most readings never open it,
+    // and building it takes a large part of the window build on a Kobo.
+    // Until then general, kosyncPage and the Settings controls are null.
+    // Builds Settings into `parent`; ensureSettings moves it into the window.
+    void buildSettings(QWidget *parent);
+    void ensureSettings();
+    // What applyTheme gives each widget: the reader palette, its text and
+    // button icons. Also for widgets built after the theme.
+    void themeWidget(QWidget *widget, const QPalette &colors);
+    // The palette applyTheme gave the widgets. The window's own palette is
+    // already themed, so it is not a base for another one.
+    QPalette themePalette;
+    // The window's palette before its first theme.
+    QPalette unthemedPalette;
+    // Builds the hidden panels once the book's background work has settled
+    // and nobody has touched the screen for a moment, so that their first
+    // opening does not wait for them and the build meets neither the
+    // whole-book layout nor a tap. Opening a panel first builds it then.
+    void preparePanels();
+    // Since the last press or key. Invalid before the first one.
+    QElapsedTimer inputQuiet;
+    bool panelsWaiting = false;
+
+    bool settingsVisible() const { return general && general->isVisible(); }
+
+    // The KOSync client and coordinator. Its page in Settings is wired by
+    // buildKosyncPage() when Settings is built.
     void buildKosync();
+    void buildKosyncPage();
     void requestManualKosync();
     void updateKosyncToolbar();
     void synchronizeKosync(bool interactive = false);
@@ -503,8 +530,8 @@ private:
     kobalt::ui::Panel *general = nullptr;
     std::unique_ptr<kobalt::LightControls> light;
     kobalt::LightPanel *lightPopup = nullptr;
-    QCheckBox *darkOption, *animationOption, *edgeLightOption, *lightGestureFeedbackOption,
-            *denseGraphOption;
+    QCheckBox *darkOption = nullptr, *animationOption = nullptr, *edgeLightOption = nullptr,
+              *lightGestureFeedbackOption = nullptr, *denseGraphOption = nullptr;
     QCheckBox *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr,
               *hideTabLabelsOption = nullptr, *zenModeOption = nullptr, *saveWordsOption = nullptr;
     QCheckBox *wifiPowerSaverOption = nullptr;
@@ -520,7 +547,7 @@ private:
     void setDenseGraph(bool dense);
 
     QJsonObject preferences;
-    QLabel *settingsError;
+    QLabel *settingsError = nullptr;
     kobalt::ui::ModalOverlay *busyNotice = nullptr;
     QTimer renderNoticeTimer, resizeTimer;
     kobalt::ui::LightSwipeNotice *brightnessNotice = nullptr;
@@ -563,8 +590,8 @@ private:
     qint64 previewPageKey = 0, previewPageRequested = 0;
     bool previewPageForText = false;
     kobalt::ui::PageScrubber *pageScrubber = nullptr;
-    QPushButton *resetDefaults, *chapterButton;
-    QStackedWidget *settingsPages;
+    QPushButton *resetDefaults = nullptr, *chapterButton;
+    QStackedWidget *settingsPages = nullptr;
     QVector<QPushButton *> rotationButtons;
     bool restoringDefaults = false, themeReady = false, darkTheme = false;
     // Settings > Defaults > Restore default presets was confirmed. It applies

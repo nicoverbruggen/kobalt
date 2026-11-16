@@ -177,6 +177,11 @@ public:
     // queued for this session. Work that may wait, such as preview tiles,
     // starts here instead of on a timer.
     std::function<void()> idle;
+    // The book's background work is done for now: the whole book is shown
+    // and its parsed-book cache is written, or no whole-book layout will
+    // follow, as in Fast or after a build that gave up. Work that would
+    // compete with that work, such as building hidden panels, starts here.
+    std::function<void()> settled;
     bool style(int pixels, int spacing);
     bool style(int pixels, int spacing, const QString &face, int margin);
     bool style(int pixels, int spacing, const QString &face, int margin, const QString &alignment);
@@ -495,6 +500,9 @@ private:
                                    QPointer<ReaderSession> guard, quint64 job,
                                    const std::shared_ptr<SourceLease> &lease, quint64 requests,
                                    const std::shared_ptr<std::atomic_bool> &count);
+    // Calls `settled` on the GUI thread while the lease is current.
+    static void notifySettled(QPointer<ReaderSession> guard,
+                              const std::shared_ptr<SourceLease> &lease);
     storage::CustomPins customPins_;
     ReaderSession(std::shared_ptr<Engine> retainedEngine, QString placeholderFamily);
     EngineFontInputs fonts_;

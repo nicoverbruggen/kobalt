@@ -53,6 +53,9 @@ enum class SettingsPage {
 
 struct SettingsPanelInputs
 {
+    // The window that holds the panel's dialogs and sheets. The panel can be
+    // built in a holder before it moves there.
+    QWidget *window = nullptr;
     KeyboardFactory keyboard;
     PageAnimationSupport animationSupport = PageAnimationSupport::Unavailable;
     bool lightSupported = false, warmthSupported = false;
@@ -255,8 +258,6 @@ private:
     static void styleListAction(ui::CaptionButton *button);
     QPointer<ui::ChoiceModal> standbyDialog;
     QPointer<ui::ChoiceModal> automaticOpeningDialog;
-    // The window that holds the confirmation dialogs.
-    QWidget *dialogParent = nullptr;
     ui::ChoiceModal *restoreConfirmation();
     ui::ChoiceModal *restorePresetsConfirmation();
     ui::ChoiceModal *standbyConfirmation();

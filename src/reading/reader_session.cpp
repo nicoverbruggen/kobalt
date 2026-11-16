@@ -212,6 +212,18 @@ ReaderMarkupFrame captureFrameMarkup(Engine &engine, const ReaderMarkupRequest &
 
 } // namespace
 
+void ReaderSession::notifySettled(QPointer<ReaderSession> guard,
+                                  const std::shared_ptr<SourceLease> &lease)
+{
+    kobalt::qt::invoke(
+            qApp,
+            [guard, lease] {
+                if (guard && guard->lease_ == lease && lease && !lease->revoked() && guard->settled)
+                    guard->settled();
+            },
+            Qt::QueuedConnection);
+}
+
 // Publish background estimates without drawing the page again.
 void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                                        const std::function<bool()> &current,
@@ -251,8 +263,10 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
         static constexpr int cacheStepMilliseconds = 20;
         while (wanted()) {
             engineActivity().checkpoint();
-            if (engine->saveDocumentCacheStep(cacheStepMilliseconds))
+            if (engine->saveDocumentCacheStep(cacheStepMilliseconds)) {
+                notifySettled(guard, lease);
                 return;
+            }
         }
         if (current())
             resumeAfterWork();
@@ -404,6 +418,8 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                 },
                 Qt::QueuedConnection);
     }
+    if (!more && !wait)
+        notifySettled(guard, lease);
     if (more) {
         const quint64 queued = engineWorkRequests();
         kobalt::qt::invoke(

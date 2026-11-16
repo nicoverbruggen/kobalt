@@ -57,6 +57,7 @@ struct NavigationState
     int active;
     QString returnLabel;
     QVector<QWidget *> topActions;
+    // The Settings panel, or null before Settings first opens.
     QWidget *settings, *light;
     QString returnNote;
     bool scrubberVisible = true;

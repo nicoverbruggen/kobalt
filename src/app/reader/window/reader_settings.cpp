@@ -318,16 +318,19 @@ void Reader::refreshHostPresentation()
             for (auto *card : presetCards)
                 if (card->preset() == headerfooter::Preset::Phone)
                     card->setVisible(phone);
-            hideTabLabelsOption->setVisible(!phone);
+            if (hideTabLabelsOption)
+                hideTabLabelsOption->setVisible(!phone);
             loadChrome();
             if (choices->isVisible() && choosingTypography)
                 showFontPicker();
         }
     }
-    auto *settings = static_cast<reader::SettingsPanel *>(general);
-    const bool devicePreview = services.devicePreview && services.devicePreview();
-    settings->showDictionaries(services.downloadableDictionaries && !devicePreview);
-    settings->showPowerManagement(wifiPowerSaverVisible());
+    if (general) {
+        auto *settings = static_cast<reader::SettingsPanel *>(general);
+        const bool devicePreview = services.devicePreview && services.devicePreview();
+        settings->showDictionaries(services.downloadableDictionaries && !devicePreview);
+        settings->showPowerManagement(wifiPowerSaverVisible());
+    }
     updateKosyncFeatures();
     updateMenuStatus();
     resizeEvent(nullptr);
@@ -344,6 +347,7 @@ void Reader::openSettings()
     if (session->temporaryTypography())
         return;
     kobalt::ui::PanelTiming timing("settings");
+    ensureSettings();
     kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(),
                            kosyncClient->signedIn(), kosyncClient->automatic());
     kosyncPage->setLastSync(kosyncClient->lastSync());
@@ -468,6 +472,10 @@ void Reader::openSettings()
     fitSettings();
     general->show();
     general->raise();
+    // A panel that was never shown measures its word-wrapped rows too tall,
+    // so fit it again now that it shows. The first fit chose the list or a
+    // section; nothing paints before the event loop runs.
+    fitSettings();
     refresh();
     timing.finish(general);
 }
@@ -539,7 +547,7 @@ int Reader::stylingChoice(int feature) const
 void Reader::renderStylingSamples(int requested)
 {
     auto *panel = static_cast<SettingsPanel *>(general);
-    if (!general->isVisible() || panel->settingsPages->currentIndex() != int(SettingsPage::Styling)
+    if (!settingsVisible() || panel->settingsPages->currentIndex() != int(SettingsPage::Styling)
         || page->image.isNull())
         return;
     using Feature = SettingsPanel::AdvancedText;
@@ -685,6 +693,8 @@ void Reader::renderStylingSamples(int requested)
 
 void Reader::fitSettings()
 {
+    if (!general)
+        return;
     const int top = navigation ? navigation->statusHeight()
                                : int(metrics::panel::toolbarHeight - metrics::chrome::actionHeight);
     const int panelHeight =
@@ -777,7 +787,8 @@ bool Reader::writePreferences(const QJsonObject &next)
 
 void Reader::applySettings()
 {
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph
+    // Settings applies the choices in its own controls.
+    if (!general || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph
         || session->temporaryTypography())
         return;
     // Leaving an unanswered confirmation must not select or save defaults.
@@ -986,7 +997,8 @@ void Reader::setDenseGraph(bool dense)
                                            saves::settled();
                                            if (saved) {
                                                guard->preferences["dense_stats_chart"] = dense;
-                                               guard->denseGraphOption->setChecked(dense);
+                                               if (guard->denseGraphOption)
+                                                   guard->denseGraphOption->setChecked(dense);
                                            } else {
                                                guard->chapterGraph->setDense(
                                                        guard->preferences.value("dense_stats_chart")
@@ -1072,8 +1084,10 @@ void Reader::applyDarkMode(bool enabled)
                                 return;
                             }
                             reader->preferences["dark_mode"] = enabled;
-                            reader->settingsError->clear();
-                            reader->settingsError->hide();
+                            if (reader->settingsError) {
+                                reader->settingsError->clear();
+                                reader->settingsError->hide();
+                            }
                             reader->pendingDarkMode = enabled;
                             reader->session->setDarkMode(enabled);
                             if (reader->appearanceEdit.preview())
@@ -1127,6 +1141,18 @@ void Reader::applyAutomaticOpening(bool enabled)
     settingsError->hide();
 }
 
+void Reader::themeWidget(QWidget *widget, const QPalette &colors)
+{
+    // Native controls manage their own source colors and cached icons.
+    for (auto *ancestor = widget; ancestor && ancestor != this; ancestor = ancestor->parentWidget())
+        if (ancestor->property("reader_native_colors").toBool())
+            return;
+    ui::applyReaderPalette(widget, colors);
+    textRefresh(widget);
+    if (auto *button = qobject_cast<QPushButton *>(widget))
+        kobalt::ui::refreshButtonIcon(button);
+}
+
 void Reader::applyTheme(bool dark)
 {
     if (themeReady && darkTheme == dark)
@@ -1138,27 +1164,15 @@ void Reader::applyTheme(bool dark)
     themeReady = true;
     darkTheme = dark;
     // Theme this window only. Nickel keeps its own palette when we close.
+    if (first)
+        unthemedPalette = palette();
     const auto colors = ui::readerPalette(palette(), dark);
-    const auto applyColors = [&colors](QWidget *widget) { ui::applyReaderPalette(widget, colors); };
+    themePalette = colors;
     setProperty("reader_dark", dark);
-    applyColors(this);
+    ui::applyReaderPalette(this, colors);
     textRefresh(this);
-    for (auto *widget : findChildren<QWidget *>()) {
-        // Native controls manage their own source colors and cached icons.
-        bool nativeColors = false;
-        for (auto *ancestor = widget; ancestor && ancestor != this;
-             ancestor = ancestor->parentWidget())
-            if (ancestor->property("reader_native_colors").toBool()) {
-                nativeColors = true;
-                break;
-            }
-        if (nativeColors)
-            continue;
-        applyColors(widget);
-        textRefresh(widget);
-        if (auto *button = qobject_cast<QPushButton *>(widget))
-            kobalt::ui::refreshButtonIcon(button);
-    }
+    for (auto *widget : findChildren<QWidget *>())
+        themeWidget(widget, colors);
     update();
     if (first)
         openingStages["theme_ms"] = theming.nsecsElapsed() / 1e6;
@@ -1264,7 +1278,7 @@ void Reader::selectPanel(int index)
     session->cancelPendingTurn();
     lightPopup->hide();
     chapterGraph->hide();
-    if (general->isVisible()) {
+    if (settingsVisible()) {
         appearanceEdit.request(index == 0 ? AppearanceDestination::Text
                                           : AppearanceDestination::Layout);
         applySettings();
@@ -1298,7 +1312,8 @@ void Reader::openPanel(int index)
     appearanceEdit.setPanelOpen(true);
     appearanceViewport = bodySize();
     appearanceEdit.cancelNavigation();
-    general->hide();
+    if (general)
+        general->hide();
     choices->hide();
     bottomControls->hide();
     topControls->show();
@@ -1318,7 +1333,7 @@ void Reader::openPanel(int index)
 
 void Reader::schedulePreviewWarm()
 {
-    if (!appearanceEdit.panelOpen() || !menu->isVisible() || general->isVisible()
+    if (!appearanceEdit.panelOpen() || !menu->isVisible() || settingsVisible()
         || appearanceEdit.preview() || session->busy() || lifecycleHidden || exitPending)
         return;
     const quint64 panelGeneration = appearanceEdit.panelGeneration();
@@ -1329,7 +1344,7 @@ void Reader::schedulePreviewWarm()
         if (warmScheduledGeneration == panelGeneration)
             warmScheduledGeneration = 0;
         if (appearanceEdit.panelGeneration() != panelGeneration || !appearanceEdit.panelOpen()
-            || !menu->isVisible() || general->isVisible() || appearanceEdit.preview()
+            || !menu->isVisible() || settingsVisible() || appearanceEdit.preview()
             || session->busy() || lifecycleHidden || exitPending)
             return;
         warmAttemptGeneration = panelGeneration;
@@ -1435,7 +1450,7 @@ void Reader::finishPreview()
 // Continues a Settings or panel apply that waited for the preview to open.
 void Reader::resumeAppearanceApply()
 {
-    if (general->isVisible())
+    if (settingsVisible())
         applySettings();
     else
         finishPreview();
@@ -1563,7 +1578,7 @@ void Reader::openSettingsFont(const QString &key)
         if (key == appearance::fallbackFontKeys[family])
             index = family;
     if ((!isDefault && !isUi && !isMono && !isHeaderFooter && !isDictionary && index < 0)
-        || !general->isVisible())
+        || !settingsVisible())
         return;
     auto *panel = static_cast<SettingsPanel *>(general);
     const QStringList titles{ strings::get("settings.serif_font"),

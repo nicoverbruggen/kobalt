@@ -455,7 +455,6 @@ void SettingsTitle::paintEvent(QPaintEvent *event)
 SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     : ui::Panel(parent, Qt::BottomEdge)
 {
-    dialogParent = parent;
     setObjectName("rrGeneralSettings");
     setSoftEdges(true);
     auto *generalRows = new QVBoxLayout(this);
@@ -1059,7 +1058,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     }
     dictionaries = new DictionariesPage(settingsPages);
     settingsPages->insertWidget(int(SettingsPage::Dictionaries), dictionaries);
-    kosync = new KosyncPage(settingsPages, parent, inputs.keyboard);
+    kosync = new KosyncPage(settingsPages, inputs.window ? inputs.window : parent, inputs.keyboard);
     settingsPages->addWidget(kosync);
     zenPage = new QWidget(settingsPages);
     zenPage->setObjectName("rrZenSettings");
@@ -2461,7 +2460,7 @@ ui::ChoiceModal *SettingsPanel::restoreConfirmation()
     if (restoreDialog)
         return restoreDialog;
     restoreDialog = new ui::ChoiceModal(
-            dialogParent,
+            parentWidget(),
             { strings::get(
                       "reader.your_reading_position_stays_the_same_the_defaults_apply_when_you_c"),
               strings::get("reader.restore_appearance_defaults_prompt"),
@@ -2488,7 +2487,7 @@ ui::ChoiceModal *SettingsPanel::restorePresetsConfirmation()
     if (restorePresetsDialog)
         return restorePresetsDialog;
     restorePresetsDialog = new ui::ChoiceModal(
-            dialogParent,
+            parentWidget(),
             { strings::get("text_presets.restore_detail"),
               strings::get("text_presets.restore_prompt"),
               {} },
@@ -2514,7 +2513,7 @@ ui::ChoiceModal *SettingsPanel::automaticOpeningConfirmation()
     // Turning automatic opening off sends every later book to Kobo's
     // reader, so ask first.
     automaticOpeningDialog =
-            new ui::ChoiceModal(dialogParent,
+            new ui::ChoiceModal(parentWidget(),
                                 { strings::get("settings.automatic_book_opening_off_description"),
                                   strings::get("settings.automatic_book_opening_off_title"),
                                   {} },
@@ -2539,7 +2538,7 @@ ui::ChoiceModal *SettingsPanel::standbyConfirmation()
     if (standbyDialog)
         return standbyDialog;
     standbyDialog = new ui::ChoiceModal(
-            dialogParent,
+            parentWidget(),
             { strings::get("settings.disable_reader_standby_warning"),
               strings::get("settings.disable_reader_standby_title"),
               {} },

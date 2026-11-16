@@ -23,10 +23,12 @@ double Reader::kosyncPercentage() const
 void Reader::kosyncStatus(const QString &message)
 {
     kosyncMessage = message;
-    kosyncPage->setLastSync(kosyncClient->lastSync());
-    kosyncPage->setStatus(message, syncCoordinator->busy());
+    if (kosyncPage) {
+        kosyncPage->setLastSync(kosyncClient->lastSync());
+        kosyncPage->setStatus(message, syncCoordinator->busy());
+    }
     updateKosyncToolbar();
-    if (general->isVisible() && !lifecycleHidden && !closing && !exportRunning) {
+    if (settingsVisible() && !lifecycleHidden && !closing && !exportRunning) {
         fitSettings();
         refresh();
     }
@@ -93,8 +95,8 @@ void Reader::buildKosync()
                 case Coordinator::EventKind::Completed: {
                     const QPointer<Reader> guard(this);
                     finishKosync(event.message, event.finalUpload);
-                    if (guard && event.interactiveConnectionFailed && !general->isVisible()
-                        && !closing && !lifecycleHidden) {
+                    if (guard && event.interactiveConnectionFailed && !settingsVisible() && !closing
+                        && !lifecycleHidden) {
                         page->notice = event.message;
                         page->update();
                     }
@@ -108,6 +110,21 @@ void Reader::buildKosync()
     kosyncClient->setDefaultDeviceName(services.deviceName.isEmpty()
                                                ? QStringLiteral("Kobalt")
                                                : services.deviceName + QStringLiteral(" (Kobalt)"));
+    const auto status = book->usesNativeCloudSync()
+            ? strings::get("kosync.native_sync")
+            : strings::get(kosyncClient->signedIn() ? "kosync.signed_in" : "kosync.signed_out");
+    kosyncStatus(kosyncClient->storageError().isEmpty() ? status : kosyncClient->storageError());
+    kosyncOpeningGrace.setObjectName("rrKosyncOpeningGrace");
+    kosyncOpeningGrace.setSingleShot(true);
+    connect(&kosyncOpeningGrace, &QTimer::timeout, this, [this] {
+        if (kosyncOpening)
+            showKosyncOpening();
+        finishKosyncPresentation();
+    });
+}
+
+void Reader::buildKosyncPage()
+{
     kosyncPage->setNativeCloudSync(book->nativeSyncPolicy());
     const auto account = [this] {
         kosyncPage->setFilenameMatching(kosyncClient->filenameMatching());
@@ -198,17 +215,9 @@ void Reader::buildKosync()
     };
     kosyncPage->syncRequested = [this] { synchronizeKosync(true); };
     updateKosyncFeatures();
-    const auto status = book->usesNativeCloudSync()
-            ? strings::get("kosync.native_sync")
-            : strings::get(kosyncClient->signedIn() ? "kosync.signed_in" : "kosync.signed_out");
-    kosyncStatus(kosyncClient->storageError().isEmpty() ? status : kosyncClient->storageError());
-    kosyncOpeningGrace.setObjectName("rrKosyncOpeningGrace");
-    kosyncOpeningGrace.setSingleShot(true);
-    connect(&kosyncOpeningGrace, &QTimer::timeout, this, [this] {
-        if (kosyncOpening)
-            showKosyncOpening();
-        finishKosyncPresentation();
-    });
+    // The status that arrived before Settings was built.
+    kosyncPage->setLastSync(kosyncClient->lastSync());
+    kosyncPage->setStatus(kosyncMessage, syncCoordinator->busy());
 }
 
 // While you read, a changed position syncs once the chosen interval has passed
@@ -241,6 +250,8 @@ qint64 Reader::kosyncClock() const
 
 void Reader::updateKosyncFeatures()
 {
+    if (!kosyncPage)
+        return;
     // A desktop e-reader preview shows what a Kobo offers. A desktop window
     // or a phone layout offers only what its host supports.
     const bool ereaderPreview =
@@ -512,7 +523,8 @@ void Reader::restartKosync()
 
 void Reader::finishKosync(const QString &message, bool finishing)
 {
-    kosyncPage->setLastSync(kosyncClient->lastSync());
+    if (kosyncPage)
+        kosyncPage->setLastSync(kosyncClient->lastSync());
     const bool opening = kosyncOpening;
     auto *notice = dynamic_cast<KosyncNotice *>(kosyncDialog.data());
     const bool showSuccess = !finishing && !closing && !lifecycleHidden && !exportRunning && notice
@@ -522,11 +534,12 @@ void Reader::finishKosync(const QString &message, bool finishing)
     else
         hideKosyncOpening();
     kosyncMessage = message;
-    kosyncPage->setStatus(message, false);
+    if (kosyncPage)
+        kosyncPage->setStatus(message, false);
     updateKosyncToolbar();
     if (!finishing && !closing && !lifecycleHidden && !exportRunning) {
         // A failure can need more lines than the preceding Syncing message.
-        if (general->isVisible())
+        if (settingsVisible())
             fitSettings();
         if (opening && message != strings::get("kosync.up_to_date")
             && message != strings::get("kosync.pending"))
@@ -555,7 +568,7 @@ void Reader::showKosyncChoice()
     if (!syncCoordinator->pendingProgress() || kosyncPositionFailed || kosyncPromptDeferred
         || positionPromptOpen() || closing || lifecycleHidden || !isVisible() || session->busy()
         || services.suspended() || book->deviceTransition() || book->pendingProgress()
-        || topControls->isVisible() || general->isVisible() || annotationMode
+        || topControls->isVisible() || settingsVisible() || annotationMode
         || searchPanel->isVisible() || dictionaryPanel->isVisible()
         || (imageViewer && imageViewer->isVisible()) || linksActive() || lookupPending
         || appearanceEdit.panelOpen())
@@ -612,8 +625,9 @@ void Reader::showKosyncChoice()
                     kosyncPositionFailed = true;
                     kosyncClient->setAutomatic(false);
                     updateKosyncToolbar();
-                    kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(), true,
-                                           kosyncClient->automatic());
+                    if (kosyncPage)
+                        kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(),
+                                               true, kosyncClient->automatic());
                 }
                 page->notice = error.isEmpty() ? strings::get("kosync.resumed") : error;
                 kosyncStatus(page->notice);

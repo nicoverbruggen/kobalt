@@ -1188,9 +1188,11 @@ void Navigation::placeToolbar(QSize size, const QVector<QWidget *> &actions, boo
 
 void Navigation::update(QSize size, const NavigationState &state)
 {
+    // Settings is built on first use, so the panel can still be missing.
+    const bool settingsOpen = state.settings && state.settings->isVisible();
     // Zen mode's top group belongs to the reading menu alone. Chapters,
     // Bookmarks, Search and Settings keep the regular top bar.
-    zenTop = state.zen && !state.chaptersOpen && !state.settings->isVisible() && !state.searchOpen;
+    zenTop = state.zen && !state.chaptersOpen && !settingsOpen && !state.searchOpen;
     zenStatsShown = zenTop && state.zenStats;
     state.footer->hide();
     toolbar->setGeometry(0, 0, size.width(), toolbarHeight());
@@ -1212,14 +1214,14 @@ void Navigation::update(QSize size, const NavigationState &state)
                 || scrubber->hasActions())
             && state.visible
             && (state.active < 0 || state.active == int(NavigationDestination::Seek))
-            && !state.chaptersOpen && !state.settings->isVisible() && !state.appearance->isVisible()
+            && !state.chaptersOpen && !settingsOpen && !state.appearance->isVisible()
             && !state.stats->isVisible() && !state.light->isVisible();
     bar->setReturnLabel(scrubber ? QString() : state.returnLabel, state.returnNote);
     bar->setZen(state.zen, state.annotationsEnabled, state.bookmarksEnabled, state.annotating,
                 state.bookmarksOpen, annotate && annotate->isEnabled(),
                 bookmarks && bookmarks->isEnabled(), state.annotationsOnly);
     // Under Chapters and Bookmarks the Zen tabs attach to the view.
-    const bool zenView = state.zen && state.chaptersOpen && !state.settings->isVisible();
+    const bool zenView = state.zen && state.chaptersOpen && !settingsOpen;
     bar->setZenAttached(zenView);
     const int height = bar->navigationHeight();
     if (state.zen) {
@@ -1240,7 +1242,7 @@ void Navigation::update(QSize size, const NavigationState &state)
         if (!bar->mask().isEmpty())
             bar->clearMask();
     }
-    bar->setVisible(state.visible && !state.settings->isVisible());
+    bar->setVisible(state.visible && !settingsOpen);
     if (scrubber) {
         scrubber->setBarVisible(state.scrubberVisible);
         scrubber->setGeometry(0, toolbarHeight(), size.width(),
@@ -1270,7 +1272,7 @@ void Navigation::update(QSize size, const NavigationState &state)
     }
     bar->select(state.active, state.enabled, state.lightAvailable);
     int top = toolbarHeight(), bottom = bar->y();
-    if (state.settings->isVisible())
+    if (settingsOpen)
         top = state.settings->geometry().bottom() + 1;
     for (auto *panel : { state.appearance, state.stats, state.light })
         if (panel->isVisible())
@@ -1305,7 +1307,7 @@ void Navigation::update(QSize size, const NavigationState &state)
     if (state.chaptersOpen) {
         state.chapters->stackUnder(upperEdge);
     }
-    if (state.settings->isVisible()) {
+    if (settingsOpen) {
         upperEdge->hide();
         lowerEdge->hide();
     }

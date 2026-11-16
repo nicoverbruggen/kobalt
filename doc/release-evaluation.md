@@ -102,7 +102,7 @@ The `panel.styling.widows` and `panel.styling.page-spacing` scenarios separate e
 `reader-shown` times a book opening from the open request until the first reader page has painted. `total_ms` is the sum of four stages:
 
 - `engine_ms`: until the reading engine has laid out the book. On Kobo, `prepare_ms` gives the part before the engine started.
-- `window_ms`: creating and sizing the reader window. `build_ms` is the window's own construction, with one `build_<part>_ms` per part, such as `build_settings_ms`.
+- `window_ms`: creating and sizing the reader window. `build_ms` is the window's own construction, with one `build_<part>_ms` per part, such as `build_appearance_ms`. Settings is built when it first opens, so its cost is in that panel's opening time, not in `build_ms`.
 - `wait_ms`: waiting until the window may be shown, for example for a pending sync.
 - `show_ms`: from handing the window over until its page has painted. `theme_ms` is the first theme pass inside it.
 

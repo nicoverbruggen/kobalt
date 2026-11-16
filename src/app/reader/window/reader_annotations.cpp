@@ -220,7 +220,7 @@ void Reader::enterAnnotations(bool notice)
     if (!features::enabled(preferences, features::Annotations))
         return;
     if (session->busy() || !highlights->writable() || appearanceEdit.panelOpen()
-        || general->isVisible()) {
+        || settingsVisible()) {
         return;
     }
     const bool changed = !annotationMode;
@@ -1111,7 +1111,7 @@ void Reader::updateAnnotationRects(bool showActions)
 bool Reader::annotationMenuSelectionEnabled() const
 {
     return annotationMode && topControls->isVisible() && (navigation || bottomControls->isVisible())
-            && !general->isVisible() && !appearanceEdit.panelOpen() && !choices->isVisible()
+            && !settingsVisible() && !appearanceEdit.panelOpen() && !choices->isVisible()
             && !chapterGraph->isVisible() && !bookmarkList->isVisible() && !searchPanel->isVisible()
             && !dictionaryPanel->isVisible() && !lightPopup->isVisible();
 }
@@ -1122,7 +1122,7 @@ void Reader::syncAnnotationControls()
         return;
     toolbarComposition.annotate->setChecked(annotationMode);
     const bool menuOpen = topControls->isVisible();
-    const bool readingOnly = !menuOpen && !general->isVisible() && !appearanceEdit.panelOpen()
+    const bool readingOnly = !menuOpen && !settingsVisible() && !appearanceEdit.panelOpen()
             && !choices->isVisible() && !chapterGraph->isVisible() && !bookmarkList->isVisible()
             && !searchPanel->isVisible() && !dictionaryPanel->isVisible()
             && !lightPopup->isVisible();

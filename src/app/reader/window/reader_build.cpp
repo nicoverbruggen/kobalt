@@ -386,8 +386,13 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     built("overlays");
     buildAppearance(appearanceLayout);
     built("appearance");
-    buildSettings();
-    built("settings");
+    // Settings is built when it first opens; see ensureSettings(). KOSync
+    // runs without it, and lookups use the book's language.
+    buildKosync();
+    if (services.downloadableDictionaries)
+        static_cast<kobalt::DictionaryManager *>(dictionary.get())
+                ->setLanguage(session->state().value("language").toString());
+    built("kosync");
     buildNotices();
     built("notices");
     buildAnnotations();
@@ -436,6 +441,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     };
     this->session->turnBoundary = [this](int direction) { turnPage(direction, 0, false); };
     this->session->idle = [this] { resumeTextPresetPrerender(); };
+    this->session->settled = [this] { preparePanels(); };
     connect(QGuiApplication::primaryScreen(), &QScreen::geometryChanged, this,
             [this](const QRect &geometry) {
                 if (isVisible() && !closing)
@@ -603,7 +609,7 @@ void Reader::buildReadingPage()
     page->imageHeld = [this](QPoint point) {
         if (session->busy() || lifecycleHidden || closing || exitPending || exportRunning
             || annotationSaving || services.suspended() || book->deviceTransition()
-            || appearanceEdit.panelOpen() || general->isVisible() || searchPanel->isVisible()
+            || appearanceEdit.panelOpen() || settingsVisible() || searchPanel->isVisible()
             || linksActive() || !pageImageAtPoint(page->image, point))
             return false;
         // Small image-only note references keep their link/selection behavior.
@@ -648,7 +654,7 @@ void Reader::startClockTimer()
         if (chapterGraph->isVisible()) {
             updateReadingStats();
         }
-        if (!chromeTicks() || topControls->isVisible() || general->isVisible()
+        if (!chromeTicks() || topControls->isVisible() || settingsVisible()
             || dictionaryPanel->isVisible() || searchPanel->isVisible() || linksActive()) {
             return;
         }
@@ -688,7 +694,7 @@ void Reader::startClockTimer()
             updateMenuStatus();
             return;
         }
-        if (!chromeTicks() || general->isVisible() || dictionaryPanel->isVisible()
+        if (!chromeTicks() || settingsVisible() || dictionaryPanel->isVisible()
             || searchPanel->isVisible() || linksActive())
             return;
         const auto before = page->slotContents;
@@ -851,7 +857,7 @@ void Reader::buildToolbar()
                            // visible top bar does not repaint twice. Ignore taps then.
                            if (appearanceEdit.applying())
                                return;
-                           if (general->isVisible())
+                           if (settingsVisible())
                                applySettings();
                            else
                                openSettings();
@@ -1472,9 +1478,74 @@ kobalt::reader::FieldChooser *Reader::ensureFieldChooser()
     return fieldChooser;
 }
 
-void Reader::buildSettings()
+void Reader::preparePanels()
+{
+    // Long enough that a reader who just turned a page is reading it.
+    static constexpr qint64 quietMilliseconds = 2000;
+    if (general || panelsWaiting || closing || exitPending || lifecycleHidden
+        || services.suspended())
+        return;
+    const qint64 quiet = inputQuiet.isValid() ? inputQuiet.elapsed() : quietMilliseconds;
+    if (quiet < quietMilliseconds || session->busy()) {
+        // One timer at a time, and only while a book is being read: a hidden
+        // reader builds the panels when they first open.
+        panelsWaiting = true;
+        const qint64 wait =
+                quiet < quietMilliseconds ? quietMilliseconds - quiet : quietMilliseconds;
+        qt::later(int(wait), this, [this] {
+            panelsWaiting = false;
+            preparePanels();
+        });
+        return;
+    }
+    DiagnosticOperation prepare("reader-panels-prepare");
+    ensureSettings();
+}
+
+void Reader::ensureSettings()
+{
+    if (general)
+        return;
+    // The panel is built as the window built it before it was themed: in a
+    // hidden holder with the window's style sheet and font, its palette from
+    // before the theme and no dark flag. Then it moves into the window and
+    // gets the theme, as applyTheme gave it to every widget. Built straight
+    // into the themed window, some colours resolve differently.
+    QWidget holder(this);
+    holder.hide();
+    holder.setGeometry(rect());
+    if (themeReady) {
+        holder.setPalette(unthemedPalette);
+        holder.setProperty("reader_dark", false);
+    }
+    buildSettings(&holder);
+    // The first fit picks the list or the rail for this screen and restyles
+    // the panel for it, which polishes its widgets again. Do it before the
+    // theme, as the window build did.
+    fitSettings();
+    general->setParent(this);
+    general->setGeometry(holder.geometry());
+    general->hide();
+    // Polishing applies the style sheets, which replace the gray roles. The
+    // theme restores them, so it comes after, as for the window's widgets.
+    general->ensurePolished();
+    for (auto *widget : general->findChildren<QWidget *>())
+        widget->ensurePolished();
+    if (themeReady) {
+        themeWidget(general, themePalette);
+        for (auto *widget : general->findChildren<QWidget *>())
+            themeWidget(widget, themePalette);
+    } else {
+        textRefresh(general);
+        for (auto *widget : general->findChildren<QWidget *>())
+            textRefresh(widget);
+    }
+}
+
+void Reader::buildSettings(QWidget *parent)
 {
     kobalt::reader::SettingsPanelInputs settingsInputs;
+    settingsInputs.window = this;
     settingsInputs.keyboard = services.keyboard;
     settingsInputs.downloadableDictionaries = services.downloadableDictionaries;
     settingsInputs.animationSupport = services.animationSupport();
@@ -1488,10 +1559,10 @@ void Reader::buildSettings()
     settingsInputs.wifiPowerSaverSupported = bool(services.turnOffWifi);
     settingsInputs.readerStandbySupported = services.readerStandbySupported;
     settingsInputs.debugProgressAvailable = bool(services.development.simulateProgress);
-    auto *settings = new kobalt::reader::SettingsPanel(this, settingsInputs);
+    auto *settings = new kobalt::reader::SettingsPanel(parent, settingsInputs);
     general = settings;
     kosyncPage = settings->kosync;
-    buildKosync();
+    buildKosyncPage();
     settings->refitRequested = [this] {
         fitSettings();
         refresh();
@@ -1509,7 +1580,6 @@ void Reader::buildSettings()
         auto *manager = static_cast<kobalt::DictionaryManager *>(dictionary.get());
         auto *dictionarySettings = settings->dictionaries;
         dictionarySettings->setLanguage(session->state().value("language").toString());
-        manager->setLanguage(session->state().value("language").toString());
         const auto catalog = kobalt::DictionaryManager::catalog();
         dictionarySettings->setCatalog(catalog);
         auto updateDictionaries = [this, manager, dictionarySettings, catalog,
@@ -1882,7 +1952,7 @@ void Reader::connectLightGestures()
     });
     page->lightStarted = [this](bool warmth) {
         if (annotationMode || !isVisible() || services.suspended() || book->deviceTransition()
-            || this->session->busy() || appearanceEdit.preview() || general->isVisible()
+            || this->session->busy() || appearanceEdit.preview() || settingsVisible()
             || topControls->isVisible() || choices->isVisible() || dictionaryPanel->isVisible()
             || searchPanel->isVisible() || linksActive() || lookupPending || syncDialog
             || kosyncDialog || finishDialog || applyingText || lightPopup->isVisible()
@@ -2001,7 +2071,7 @@ void Reader::connectPageInput()
             || quickAnnotations() || !isEnabled() || !isVisible() || lifecycleHidden || closing
             || exitPending || exportRunning || services.suspended() || book->deviceTransition()
             || session->busy() || appearanceEdit.panelOpen() || appearanceEdit.applying()
-            || general->isVisible() || choices->isVisible() || topControls->isVisible()
+            || settingsVisible() || choices->isVisible() || topControls->isVisible()
             || revealingLinks || dictionaryPanel->isVisible() || searchPanel->isVisible()
             || linksActive() || lookupPending || acknowledgmentsVisible()
             || bookmarkList->isVisible() || lightPopup->isVisible() || chapterGraph->isVisible()
@@ -2030,7 +2100,7 @@ void Reader::connectPageInput()
             clearAnnotationDraft();
         }
         if (revealingLinks || searchPanel->isVisible() || linksActive() || lookupPending
-            || appearanceEdit.preview() || general->isVisible() || choices->isVisible()
+            || appearanceEdit.preview() || settingsVisible() || choices->isVisible()
             || topControls->isVisible())
             return;
         const bool reverse = session->state().value("page_progression_rtl").toBool()

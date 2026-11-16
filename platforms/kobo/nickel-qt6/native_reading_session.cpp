@@ -158,7 +158,16 @@ NativeReadingSession::NativeReadingSession(QString identity) : book(std::move(id
 
 NativeReadingSession::~NativeReadingSession()
 {
-    if (running || ending || pendingSeconds >= 0)
+    // A reader disposed without a final save, such as after authorization is
+    // lost or with Quit without saving, still ends Nickel's session so it does
+    // not stay open. Its time is not written: no save is allowed here.
+    if (running) {
+        running = false;
+        ending = true;
+    }
+    if (ending && api().open())
+        endSession();
+    if (pendingSeconds > 0)
         diagnostic("reading-session-disposed-unsaved", {}, DiagnosticSeverity::Error);
 }
 

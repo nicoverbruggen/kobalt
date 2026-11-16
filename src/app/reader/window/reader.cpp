@@ -133,8 +133,14 @@ void Reader::checkpoint()
     }
     // Hosts can checkpoint before our application-state callback. Freeze the
     // clock before any save can block, so background I/O is not reading time.
-    if (services.suspended())
+    if (services.suspended()) {
         book->sleepReading(preferences);
+        // A sleep that only checkpoints, such as while Nickel's browser covers
+        // the hidden reader, must still end the host's reading session, so the
+        // sleep is not counted as reading time. After a full sleep save this
+        // finds nothing left to end.
+        book->drainReadingSave([](NativeActivityResult) { });
+    }
     const bool saved = save(true);
     if (saved && services.deferKosync && services.suspended()) {
         if (!book->usesNativeCloudSync() && kosyncAutomatic() && kosyncClient->signedIn()

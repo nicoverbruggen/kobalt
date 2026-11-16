@@ -2,6 +2,7 @@
 #include "publication/page_estimate.h"
 #include "publication/resource_cache.h"
 #include <QHash>
+#include <QJsonObject>
 #include <atomic>
 #include <lvstream.h>
 
@@ -75,9 +76,11 @@ struct ReaderSource
         // The estimateKey() of the settings that gave the observed pages.
         QString key;
         // A layout of the whole book: the first page of each spine item,
-        // for the settings with the estimateKey() `wholeKey`.
+        // for the settings with the estimateKey() `wholeKey`, and its
+        // record without the place, which does not change with the page.
         QString wholeKey;
         QVector<int> wholeStarts;
+        QJsonObject wholeRecord;
     } pageEstimate;
 };
 

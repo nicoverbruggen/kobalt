@@ -248,6 +248,8 @@ struct PageEstimateRecord
     bool wholeBook = false;
 
     QJsonObject toJson() const;
+    // Writes the place and the page numbers shown there, when they are set.
+    void writePlace(QJsonObject &object) const;
     // False for a missing record or one that is not valid. Invalid parts of
     // the place or of the read spine items are left out.
     static bool fromJson(const QJsonValue &value, PageEstimateRecord *record);

@@ -1569,8 +1569,12 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
                             ? document->openResources(source->resources->fresh(), source->sizes,
                                                       size, saved, &error)
                             : document->open(source->bytes, size, saved, &error);
-                    if (opened && document->pages() > 0)
+                    if (opened && document->pages() > 0) {
                         document->wordCounts(wanted);
+                        // The record for the next opening needs them. The
+                        // page turn that shows this document must not.
+                        document->findWholeBookStarts(wanted);
+                    }
                 } catch (const KoblazeRenderCancelled &) {
                     koblazeSetSpineWindow(-1, -1);
                     opened = false;

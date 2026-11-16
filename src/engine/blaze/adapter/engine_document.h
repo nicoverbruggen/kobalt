@@ -585,8 +585,14 @@ private:
     QJsonObject pageEstimateRecord(const QJsonObject &settings) const;
     QJsonObject wholeBookEstimateRecord(const QJsonObject &settings) const;
     // The first page of each spine item from `first` to `last`. A spine
-    // item without pages starts where the next one starts.
-    QVector<int> spineItemStarts(int first, int last) const;
+    // item without pages starts where the next one starts. Empty when
+    // `current` stops it, which it asks between groups of spine items.
+    QVector<int> spineItemStarts(int first, int last,
+                                 const std::function<bool()> &current = {}) const;
+    // Finds where each spine item starts in this layout of the whole book,
+    // for wholeBookEstimateRecord(), so that a page turn does not wait for
+    // it later.
+    void findWholeBookStarts(const std::function<bool()> &current) const;
     // Continues from a saved page estimate when the book opens.
     void restorePageEstimate(const QJsonValue &saved);
     // Lays out the slice that starts at `first` characters.

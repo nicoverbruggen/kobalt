@@ -1094,16 +1094,7 @@ QJsonObject PageEstimateRecord::toJson() const
     object["weights"] = weights;
     object["layout"] = layout;
     object["spine_items"] = spineItems;
-    if (item >= 0 && shown > 0 && itemShown > 0) {
-        QJsonArray place;
-        place.append(item);
-        place.append(first);
-        place.append(page);
-        place.append(partPages);
-        object["place"] = place;
-        object["page"] = shown;
-        object["item_page"] = itemShown;
-    }
+    writePlace(object);
     if (!runs.isEmpty())
         object["read"] = runs;
     if (!parts.isEmpty()) {
@@ -1137,6 +1128,20 @@ QJsonObject PageEstimateRecord::toJson() const
     if (wholeBook)
         object["whole_book"] = true;
     return object;
+}
+
+void PageEstimateRecord::writePlace(QJsonObject &object) const
+{
+    if (item < 0 || shown <= 0 || itemShown <= 0)
+        return;
+    QJsonArray place;
+    place.append(item);
+    place.append(first);
+    place.append(page);
+    place.append(partPages);
+    object["place"] = place;
+    object["page"] = shown;
+    object["item_page"] = itemShown;
 }
 
 bool PageEstimateRecord::fromJson(const QJsonValue &value, PageEstimateRecord *record)

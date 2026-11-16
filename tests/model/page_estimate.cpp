@@ -154,6 +154,12 @@ struct ReaderLocationProbe
 
     static void forgetRefusedFullDocument(EngineDocument &model) { model.fullFailed_.clear(); }
 
+    // True when the prepared whole book knows where its spine items start.
+    static bool wholeBookStartsFound(const EngineDocument &model)
+    {
+        return model.full_ && !model.full_->source_->pageEstimate.wholeKey.isEmpty();
+    }
+
     static void abandonFullBuild(EngineDocument &model) { model.dropSideDocuments(); }
 
     static bool measurePlace(EngineDocument &model, const std::function<bool()> &current)
@@ -2081,11 +2087,13 @@ void parkedFullDocument(const std::function<void(EngineDocument &)> &openWhole, 
                                 .toHex());
     };
     QStringList reference;
+    QJsonValue referenceRead;
     {
         EngineDocument whole(test::readerFonts());
         openWhole(whole);
         for (int page = 0; page < whole.pages(); ++page)
             reference.append(record(whole, page));
+        referenceRead = whole.state().value("page_estimate").toObject().value("read");
     }
     EngineDocument model(test::readerFonts());
     QString error;
@@ -2121,9 +2129,15 @@ void parkedFullDocument(const std::function<void(EngineDocument &)> &openWhole, 
         if (between)
             between();
     }
+    require(Probe::wholeBookStartsFound(model),
+            "The build must find where the spine items start before the switch");
     require(model.setChapterMode(false, appearance::Patch(QJsonObject{}), {}, {}, {}),
             "The prepared document must be shown");
     require(model.pages() == reference.size(), "A parked build changed the page count");
+    require(!referenceRead.isUndefined()
+                    && model.state().value("page_estimate").toObject().value("read")
+                            == referenceRead,
+            "A parked build changed the pages of a spine item");
     int different = 0;
     for (int page = 0; page < model.pages(); ++page)
         different += record(model, page) != reference[page];

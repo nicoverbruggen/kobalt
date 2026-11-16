@@ -794,6 +794,9 @@ public:
 
     /// if a cache file is in use
     bool hasCacheFile() { return _cacheFile != NULL; }
+    /// Blaze: true once the document saves into its cache file. A save with
+    /// a time limit then goes on with updateMap().
+    bool koblazeCacheMapped() { return _mapped; }
     /// set cache file as dirty, so it's not re-used on next load
     void invalidateCacheFile() { _cacheFileLeaveAsDirty = true; }
     /// get cache file full path

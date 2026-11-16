@@ -577,6 +577,45 @@ bool EngineDocument::saveDocumentCache()
     return true;
 }
 
+bool EngineDocument::saveDocumentCacheStep(int milliseconds)
+{
+    // The same book and key as saveDocumentCache(); a step that cannot write
+    // leaves the rest to it.
+    if (!engine_ || cacheDirectory_.isEmpty() || cacheFingerprint_.isEmpty()
+        || !resourceError().isEmpty() || !pages())
+        return true;
+    const auto name = engine_->getDocProps()->getStringDef(DOC_PROP_FILE_NAME, "");
+    if (QString::fromUtf8(UnicodeToUtf8(name).c_str()) != documentCacheName(cacheFingerprint_))
+        return true;
+    auto *document = engine_->getDocument();
+    if (document->koblazeCacheMapped() && !document->isCacheFileStale())
+        return true;
+    DocumentCacheScope cache(cacheDirectory_);
+    if (!cache.enabled())
+        return true;
+    // The engine saves in stages and goes on where the last step ended. The
+    // first step only creates and maps the file; the next ones write it.
+    CRTimerUtil limit(milliseconds);
+    if (!document->koblazeCacheMapped()) {
+        const auto mapped = engine_->swapToCache(limit);
+        if (mapped != CR_TIMEOUT)
+            return true;
+        document->setCacheFileStale(true);
+        return false;
+    }
+    const auto result = engine_->updateCache(limit);
+    if (result == CR_TIMEOUT)
+        return false;
+    if (result != CR_DONE)
+        return true;
+    if (document->hasCacheFile()) {
+        if (!document->updateCacheFileName())
+            return true;
+        ldomDocCache::removeObsolete(name, document->getCacheFilePath());
+    }
+    return true;
+}
+
 FontWeightAxis EngineDocument::weightAxis() const
 {
     return fontWeightAxis(readingFonts, face_);

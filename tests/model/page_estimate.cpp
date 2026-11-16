@@ -2476,6 +2476,49 @@ void wordCountsInCache(const QByteArray &bytes)
             "A cached opening must read the word count, not count the book again");
 }
 
+// The parsed-book cache can be written in short steps while the reader
+// reads. A book saved that way opens from the cache with the same pages.
+void documentCacheInSteps(const QByteArray &bytes)
+{
+    const Page page;
+    QTemporaryDir cacheRoot;
+    require(cacheRoot.isValid(), "Cannot create a document cache directory");
+    const auto directory = cacheRoot.path() + "/.cache";
+    const QByteArray fingerprint(64, 'e'), policy("step-test");
+    QString error;
+    QStringList starts;
+    QImage shown;
+    int steps = 0;
+    {
+        EngineDocument whole(test::readerFonts());
+        whole.setDocumentCache(directory, fingerprint, policy, 1024 * 1024);
+        require(whole.open(bytes, page.viewport, page.settings(), &error), qPrintable(error));
+        for (int page = 0; page < whole.pages(); ++page)
+            starts.append(whole.pageStart(page));
+        // Pages are turned between the steps, as the reader does.
+        while (!whole.saveDocumentCacheStep(1)) {
+            require(++steps < 100000, "The steps must end");
+            whole.go(steps % whole.pages());
+            whole.image(whole.page());
+        }
+        require(whole.go(whole.pages() / 2), "Cannot go to the middle");
+        shown = whole.image(whole.page());
+        // Nothing is left for the close.
+        require(whole.saveDocumentCacheStep(1), "A saved cache must need no more steps");
+    }
+    require(steps > 1, "The fixture must take more than one step");
+    EngineDocument cached(test::readerFonts());
+    cached.setDocumentCache(directory, fingerprint, policy, 1024 * 1024);
+    require(cached.open(bytes, page.viewport, page.settings(), &error) && cached.openedFromCache(),
+            "A book saved in steps must open from its cache");
+    QStringList cachedStarts;
+    for (int page = 0; page < cached.pages(); ++page)
+        cachedStarts.append(cached.pageStart(page));
+    require(cachedStarts == starts && cached.go(cached.pages() / 2)
+                    && cached.image(cached.page()) == shown,
+            "A book saved in steps must open with the same pages");
+}
+
 // Abandonment can happen after a cached document opened, at its word count.
 // Its destructor must leave that unfinished cache dirty, not save the reflow.
 void abandonedOpenedDocument(const QByteArray &bytes)
@@ -3343,6 +3386,7 @@ int main(int argc, char **argv)
     fullDocumentPixels();
     fullDocumentFromCache(bytes);
     wordCountsInCache(bytes);
+    documentCacheInSteps(bytes);
     abandonedOpenedDocument(bytes);
     // KOBALT_PARKED_BOOK names another EPUB for the same check, for a book
     // that is not a fixture.

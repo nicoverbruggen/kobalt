@@ -91,6 +91,7 @@ public:
 
     // Writes the parsed book and its pages to the cache, for the next opening.
     bool saveDocumentCache() override;
+    bool saveDocumentCacheStep(int milliseconds) override;
     // Shared count, on the owning engine thread. Populates the Stats graph
     // from source anchors. Counts visible source text once, including
     // non-linear spine fragments; excludes SVG and ruby annotation text.

@@ -64,6 +64,14 @@ public:
     virtual bool openedFromCache() const = 0;
     // Writes the parsed book and its pages to the cache, for the next opening.
     virtual bool saveDocumentCache() = 0;
+
+    // Writes part of the parsed-book cache, for at most `milliseconds`. True
+    // when nothing is left to write, also when there is no cache to write.
+    virtual bool saveDocumentCacheStep(int milliseconds)
+    {
+        Q_UNUSED(milliseconds);
+        return true;
+    }
     // Shared count, on the owning engine thread. Populates the Stats graph
     // from source anchors. Counts visible source text once, including
     // non-linear spine fragments; excludes SVG and ruby annotation text.

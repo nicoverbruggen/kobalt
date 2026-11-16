@@ -219,8 +219,6 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                                        const std::shared_ptr<SourceLease> &lease, quint64 requests,
                                        const std::shared_ptr<std::atomic_bool> &count)
 {
-    if (engine->bookFraction() < 0)
-        return;
     const std::function<bool()> wanted = [current, requests] {
         return current() && engineWorkRequests() == requests;
     };
@@ -246,6 +244,20 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                 },
                 Qt::QueuedConnection);
     };
+    if (engine->bookFraction() < 0) {
+        // The whole book is shown. Its parsed-book cache is written in short
+        // steps while nothing else needs the engine, so that closing the book
+        // has little left to write and a crash keeps the parse.
+        static constexpr int cacheStepMilliseconds = 20;
+        while (wanted()) {
+            engineActivity().checkpoint();
+            if (engine->saveDocumentCacheStep(cacheStepMilliseconds))
+                return;
+        }
+        if (current())
+            resumeAfterWork();
+        return;
+    }
     BackgroundDiagnostic diagnostic("Page estimates", *engine, wanted);
     const auto measure = [&] {
         bool left = false;

@@ -2437,6 +2437,45 @@ void fullDocumentFromCache(const QByteArray &bytes)
             "The whole build must still work");
 }
 
+// The word count of a whole book goes into its parsed-book cache, also when
+// the cache file was written before the count. A cached opening then reads it
+// instead of counting the book again.
+void wordCountsInCache(const QByteArray &bytes)
+{
+    const Page page;
+    QTemporaryDir cacheRoot;
+    require(cacheRoot.isValid(), "Cannot create a document cache directory");
+    const auto directory = cacheRoot.path() + "/.cache";
+    const QByteArray fingerprint(64, 'd'), policy("word-count-test");
+    QString error;
+    const auto open = [&](EngineDocument &model) {
+        model.setDocumentCache(directory, fingerprint, policy, 1024 * 1024);
+        require(model.open(bytes, page.viewport, page.settings(), &error), qPrintable(error));
+    };
+    // A cache file without the count, as an opening that was left before
+    // its count leaves it.
+    {
+        EngineDocument first(test::readerFonts());
+        open(first);
+        require(first.saveDocumentCache(), "Cannot save the parsed book");
+    }
+    qint64 total = -1;
+    {
+        EngineDocument second(test::readerFonts());
+        open(second);
+        require(second.openedFromCache(), "The book must open from its cache");
+        const auto counts = second.wordCounts({});
+        require(counts.total > 0 && !counts.cached, "The cache must not have the count yet");
+        total = counts.total;
+        require(second.saveDocumentCache(), "Cannot save the count");
+    }
+    EngineDocument third(test::readerFonts());
+    open(third);
+    const auto counts = third.wordCounts({});
+    require(third.openedFromCache() && counts.cached && counts.total == total,
+            "A cached opening must read the word count, not count the book again");
+}
+
 // Abandonment can happen after a cached document opened, at its word count.
 // Its destructor must leave that unfinished cache dirty, not save the reflow.
 void abandonedOpenedDocument(const QByteArray &bytes)
@@ -3303,6 +3342,7 @@ int main(int argc, char **argv)
     parkedQuoteLevels();
     fullDocumentPixels();
     fullDocumentFromCache(bytes);
+    wordCountsInCache(bytes);
     abandonedOpenedDocument(bytes);
     // KOBALT_PARKED_BOOK names another EPUB for the same check, for a book
     // that is not a fixture.

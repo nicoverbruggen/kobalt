@@ -199,6 +199,11 @@ public:
     virtual bool loadNextImage() = 0;
     // The idle book keeps its active layout, not images or an alternate layout.
     virtual void releaseImages() = 0;
+
+    // Destroys the documents that a page turn or a change of appearance
+    // replaced. Their teardown can write the parsed-book cache, so it waits
+    // for idle time instead of holding up the turn.
+    virtual void releaseRetired() { }
     // Compares the cached images of two pages ahead of a turn between them.
     // Cache key of a page's cached image, or 0. Never draws.
     virtual qint64 cachedImageKey(int page) const = 0;

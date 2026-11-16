@@ -500,6 +500,7 @@ std::unique_ptr<ReaderSession> ReaderSession::retained()
             engineWorker(),
             [engine] {
                 EngineJob activity;
+                engine->releaseRetired();
                 engine->releaseImages();
                 diagnostic("retained-images-released",
                            { { "cached_pages", engine->cachedPages() },
@@ -2557,6 +2558,9 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                             if (!current())
                                 return;
                             EngineJob activity;
+                            // After the neighbour pages: the documents that
+                            // the last turn replaced.
+                            engine->releaseRetired();
                             refinePageEstimate(engine, current, guard, job, lease, queued, count);
                         },
                         Qt::QueuedConnection);

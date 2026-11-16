@@ -945,10 +945,29 @@ bool EngineDocument::adoptLayout(EngineDocument &next, const std::function<bool(
     if ((current && !current()) || !next.hasPageAt(place)
         || (next.position() != place && !next.goTo(place)) || (current && !current()))
         return false;
-    EngineDocument old(fonts_);
-    old = std::move(*this);
+    auto old = std::make_unique<EngineDocument>(fonts_);
+    *old = std::move(*this);
     *this = std::move(next);
+    retire(std::move(old));
     return true;
+}
+
+void EngineDocument::retire(std::unique_ptr<EngineDocument> old)
+{
+    if (!old)
+        return;
+    // A parked build holds engine state of its own. It ends now, as it did
+    // with its document.
+    old->building_.reset();
+    for (auto &document : old->retired_)
+        retired_.push_back(std::move(document));
+    old->retired_.clear();
+    retired_.push_back(std::move(old));
+}
+
+void EngineDocument::releaseRetired()
+{
+    retired_.clear();
 }
 
 bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, QSize size,
@@ -990,6 +1009,8 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
             return true;
         if (!current || current())
             fullFailed_ = fullKey_;
+        // A whole book can write its cache file as it goes: not in this turn.
+        retire(std::move(full));
         return false;
     }
     EngineDocument next(fonts_);

@@ -168,6 +168,8 @@ struct ReaderLocationProbe
         model.source_->pageEstimate.wholeRecord = {};
     }
 
+    static int retired(const EngineDocument &model) { return int(model.retired_.size()); }
+
     // True when the prepared whole book knows where its spine items start.
     static bool wholeBookStartsFound(const EngineDocument &model)
     {
@@ -2562,6 +2564,27 @@ void stoppedNextSliceKeepsImages()
     }
 }
 
+// The documents that a switch replaces wait for idle time: their teardown
+// can write the parsed-book cache.
+void retiredUntilIdle()
+{
+    EngineDocument model(test::readerFonts());
+    openFiles(model, pagesBook());
+    require(model.prepareFullDocument({}) == Engine::FullDocument::Ready
+                    && model.setChapterMode(false, appearance::Patch(QJsonObject{}), {}, {}, {}),
+            "The whole book must be shown");
+    require(Probe::retired(model) == 1, "The chapter must wait for idle time");
+    model.releaseRetired();
+    require(Probe::retired(model) == 0, "Idle time must release the chapter");
+    require(model.setChapterMode(true, appearance::Patch(qt::object({ { "font_pixels", 30 } })), {},
+                                 {}, {})
+                    && Probe::retired(model) == 1,
+            "The whole book must wait for idle time");
+    model.releaseRetired();
+    require(Probe::retired(model) == 0 && model.turnInWindow(1),
+            "The chapter must read on after the release");
+}
+
 // A parked build goes on only with room for the documents of the package
 // files: a document made without room would share the nodes of another one.
 void fullBuildWaitsForRoom()
@@ -3116,6 +3139,7 @@ int main(int argc, char **argv)
     reopenWholeBook();
     chapterStartsNeedNoRead();
     fullBuildWaitsForRoom();
+    retiredUntilIdle();
     stoppedNextSliceKeepsImages();
     manyItemJumps();
     fullDocument();

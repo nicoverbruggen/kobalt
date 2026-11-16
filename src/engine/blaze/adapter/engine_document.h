@@ -269,6 +269,7 @@ public:
     bool loadNextImage() override;
     // The idle book keeps its active layout, not images or an alternate layout.
     void releaseImages() override;
+    void releaseRetired() override;
 
     // Compares the cached images of two pages ahead of a turn between them.
     // Cache key of a page's cached image, or 0. Never draws.
@@ -467,6 +468,10 @@ private:
     // the page it was built for. `fullFailed_` holds the page for which the
     // whole book did not open, so that it is not tried again.
     std::unique_ptr<EngineDocument> full_;
+    // Documents that this one replaced, until releaseRetired().
+    std::vector<std::unique_ptr<EngineDocument>> retired_;
+    // Keeps `old`, which this document replaced, for releaseRetired().
+    void retire(std::unique_ptr<EngineDocument> old);
     QString fullKey_, fullFailed_;
     // The page for which the parsed-book cache had no usable document.
     QString fullUncached_;

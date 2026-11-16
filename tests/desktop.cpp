@@ -6733,7 +6733,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                     && fixture.widget("rrAnnotation0")->isEnabled());
         auto *annotationRow = static_cast<ui::ListRow *>(fixture.widget("rrAnnotation0"));
         QCOMPARE(annotationRow->titleLabel()->text(), highlight.value("chapter").toString());
-        QVERIFY(annotationRow->trailingLabel()->text().toInt() > 0);
+        // Rows resolve their pages on demand, after the row itself shows.
+        QTRY_VERIFY(annotationRow->trailingLabel()->text().toInt() > 0);
         QVERIFY(saveCapture("fast-highlights"));
         const auto returnPosition = fixture.state().value("position");
         const int returnPage = fixture.state().contains("book_fraction")

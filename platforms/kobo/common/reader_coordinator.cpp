@@ -1258,13 +1258,25 @@ void ReaderCoordinator::showReader()
                                      { "engine_ms", timings.value("load_and_layout_ms") },
                                      { "window_ms", created },
                                      { "wait_ms", waiting.nsecsElapsed() / 1e6 } }));
-        reader->showFullScreen();
-        // Finish deferred widget paints before removing the opening view.
-        for (auto *widget : reader->findChildren<QWidget *>()) {
-            QCoreApplication::sendPostedEvents(widget, QEvent::UpdateLater);
+        {
+            // The first show polishes every widget of the window with its
+            // style sheet, then lays it out. Measured apart from the show.
+            DiagnosticOperation polishing("reader-polish");
+            reader->ensurePolished();
         }
-        QCoreApplication::sendPostedEvents(reader, QEvent::UpdateLater);
-        QCoreApplication::sendPostedEvents(reader, QEvent::UpdateRequest);
+        {
+            DiagnosticOperation showing("reader-show");
+            reader->showFullScreen();
+        }
+        {
+            // Finish deferred widget paints before removing the opening view.
+            DiagnosticOperation painting("reader-first-paints");
+            for (auto *widget : reader->findChildren<QWidget *>()) {
+                QCoreApplication::sendPostedEvents(widget, QEvent::UpdateLater);
+            }
+            QCoreApplication::sendPostedEvents(reader, QEvent::UpdateLater);
+            QCoreApplication::sendPostedEvents(reader, QEvent::UpdateRequest);
+        }
         guard->hideLoading();
         guard->run.openingTimings["total_ms"] = guard->run.openingTimer.elapsed();
         guard->status("reading");

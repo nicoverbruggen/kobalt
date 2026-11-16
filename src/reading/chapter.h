@@ -20,11 +20,27 @@ struct ChapterLink
     QString title, position;
     int page = -1, depth = 0;
     qint64 words = 0;
+
+    bool operator==(const ChapterLink &other) const
+    {
+        return title == other.title && position == other.position && page == other.page
+                && depth == other.depth && words == other.words;
+    }
+
+    bool operator!=(const ChapterLink &other) const { return !(*this == other); }
 };
 
 struct ChapterSelection
 {
     int current = -1, next = -1, page = 0, pages = 0;
+
+    bool operator==(const ChapterSelection &other) const
+    {
+        return current == other.current && next == other.next && page == other.page
+                && pages == other.pages;
+    }
+
+    bool operator!=(const ChapterSelection &other) const { return !(*this == other); }
 };
 
 // Chapter lengths in pages when the shared count is unavailable. A chapter

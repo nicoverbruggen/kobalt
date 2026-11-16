@@ -327,14 +327,27 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                 if (!guard || guard->running || guard->revision != job || guard->lease_ != lease
                     || !lease || lease->revoked())
                     return;
-                guard->frame.chapters = estimate.chapters;
-                guard->frame.chapterGraph = estimate.chapterGraph;
-                guard->frame.totalWords = estimate.totalWords;
-                guard->frame.contentsSelection = estimate.contentsSelection;
-                guard->frame.graphSelection = estimate.graphSelection;
-                for (auto it = estimate.state.begin(); it != estimate.state.end(); ++it)
-                    guard->frame.state[it.key()] = it.value();
-                if (guard->updated)
+                auto &frame = guard->frame;
+                // Most rounds of a long measurement change nothing that the
+                // reader shows. Those do not refresh it. The record of the
+                // estimate goes with the next save.
+                bool changed = frame.chapters != estimate.chapters
+                        || frame.chapterGraph != estimate.chapterGraph
+                        || frame.totalWords != estimate.totalWords
+                        || frame.contentsSelection != estimate.contentsSelection
+                        || frame.graphSelection != estimate.graphSelection;
+                for (auto it = estimate.state.begin(); it != estimate.state.end(); ++it) {
+                    changed = changed
+                            || (it.key() != QLatin1String("page_estimate")
+                                && frame.state.value(it.key()) != it.value());
+                    frame.state[it.key()] = it.value();
+                }
+                frame.chapters = estimate.chapters;
+                frame.chapterGraph = estimate.chapterGraph;
+                frame.totalWords = estimate.totalWords;
+                frame.contentsSelection = estimate.contentsSelection;
+                frame.graphSelection = estimate.graphSelection;
+                if (changed && guard->updated)
                     guard->updated();
             },
             Qt::QueuedConnection);

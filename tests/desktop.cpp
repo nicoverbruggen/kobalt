@@ -792,6 +792,18 @@ struct Fixture
 
     // Settings is built when it first opens. Opening and closing it once
     // makes its controls, such as Sync now, exist while the book is read.
+    // The Text and Layout controls are built when Layout first opens.
+    // Opening and closing it makes them exist while the book is read.
+    bool buildAppearance()
+    {
+        if (!press("rrPage") || !QTest::qWaitFor([&] { return visible("rrNavLayout"); })
+            || !press("rrNavLayout") || !QTest::qWaitFor([&] { return visible("rrHeaderFooter"); })
+            || !press("rrNavLayout") || !press("rrPage"))
+            return false;
+        return QTest::qWaitFor(
+                [&] { return !visible("rrControlsTop") && !state().value("busy").toBool(); });
+    }
+
     bool buildSettings()
     {
         if (!press("rrPage") || !QTest::qWaitFor([&] { return visible("rrSettings"); })
@@ -14929,6 +14941,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         toolbar->trigger();
         QTRY_VERIFY(fixture.window.findChild<QWidget *>("desktopPreviewToolbar")->isVisible());
         auto *screen = fixture.window.findChild<QComboBox *>("desktopScreenPicker");
+        QVERIFY(fixture.buildAppearance());
         for (int preset : { 3, 1 }) {
             screen->setCurrentIndex(preset);
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
@@ -17049,7 +17062,6 @@ private slots:
             return capture(fixture, name + '-' + suffix);
         };
         QVERIFY(scene("rrPage", "rrSettings", "menu"));
-        QCOMPARE(!fixture.widget("rrHeaderFooterPreset_phone")->isHidden(), phonePreset(preset));
         if (phonePreset(preset)) {
             QCOMPARE(fixture.state().value("header_footer_preset").toString(), QString("phone"));
             QVERIFY(!page->chrome.header());
@@ -17076,6 +17088,8 @@ private slots:
         QVERIFY(scene("rrFont", "rrChoices", "fonts"));
         QVERIFY(fixture.press("rrFontClose"));
         QVERIFY(scene("rrNavLayout", "rrHeaderFooter", "layout"));
+        // The Layout controls exist once Layout has opened.
+        QCOMPARE(!fixture.widget("rrHeaderFooterPreset_phone")->isHidden(), phonePreset(preset));
         // The customization sheet and its size sliders fit on one page on a Clara BW.
         if (QByteArray(QTest::currentDataTag()) == "1-light") {
             QVERIFY(fixture.press("rrHeaderFooter"));

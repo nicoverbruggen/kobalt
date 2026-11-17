@@ -1448,6 +1448,8 @@ void Reader::showEvent(QShowEvent *event)
     // The first show ends the opening once the page has painted.
     if (!shownOnce) {
         shownOnce = true;
+        // Clear the opening cover with the first page flush.
+        requestFlash("book-open");
         if (!showing.isValid())
             showing.start();
         kobalt::ui::afterNextPaint(page, [this] {

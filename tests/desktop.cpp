@@ -15401,6 +15401,14 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(progress.last(), 100);
         QCOMPARE(progress.count(100), 1);
         QVERIFY(std::is_sorted(progress.cbegin(), progress.cend()));
+        auto *reader = controller.window();
+        QVERIFY(reader);
+        reader->show();
+        QVERIFY(reader->property("reader_full_flash").toBool());
+        reader->setProperty("reader_full_flash", false);
+        reader->hide();
+        reader->show();
+        QVERIFY(!reader->property("reader_full_flash").toBool());
     }
 
     // Checks that a controller recovers an interrupted earlier session and records each opened book under its source key.

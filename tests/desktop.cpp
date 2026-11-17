@@ -10270,6 +10270,32 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!timer || !timer->isActive());
     }
 
+    // Hiding Layout also hides the Header and footer sheet, also before any
+    // slot was opened, when the field chooser does not exist yet.
+    void headerFooterSheetHidesWithLayout()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavLayout"));
+        QVERIFY(fixture.press("rrHeaderFooter"));
+        QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+        auto *reader = fixture.window.readerWindow();
+        QVERIFY(!reader->findChild<QWidget *>("rrHeaderFooterChooser"));
+        // The Layout sheet is the reader's child that holds the Header and
+        // footer row.
+        auto *layout = fixture.widget("rrHeaderFooter");
+        while (layout && layout->parentWidget() != reader)
+            layout = layout->parentWidget();
+        QVERIFY(layout);
+        layout->hide();
+        QTRY_VERIFY(!fixture.visible("rrHeaderFooterView"));
+    }
+
     void headerFooterDismissal_data() { bookmarks_data(); }
 
     void headerFooterDismissal()
@@ -16177,6 +16203,7 @@ class ScreenshotTests final : public QObject
 {
     Q_OBJECT
 private slots:
+
     void androidBrightness_data() { screenshotVariants(); }
 
     void androidBrightness()
@@ -16185,7 +16212,6 @@ private slots:
         QFETCH(bool, dark);
         checkAndroidBrightness(preset, dark, true);
     }
-
 
     void resourceFolders_data() { screenshotVariants(); }
 

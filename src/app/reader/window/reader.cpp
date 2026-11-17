@@ -1162,9 +1162,13 @@ bool Reader::eventFilter(QObject *watched, QEvent *event)
             startClock();
         book->minuteTick();
     }
-    if (watched == menu && type == QEvent::Hide && fieldChooser) {
-        fieldChooser->hide();
-        headerFooterView->hide();
+    // The sheet and the chooser are built separately, on first use. Either
+    // can exist without the other.
+    if (watched == menu && type == QEvent::Hide) {
+        if (fieldChooser)
+            fieldChooser->hide();
+        if (headerFooterView)
+            headerFooterView->hide();
     }
     if ((watched == brightnessNotice || watched == annotationModeNotice || watched == wordNotice)
         && type == QEvent::Hide && isVisible() && !lifecycleHidden && !closing && !exportRunning

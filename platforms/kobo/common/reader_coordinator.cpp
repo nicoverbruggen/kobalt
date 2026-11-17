@@ -567,7 +567,14 @@ void ReaderCoordinator::prepareOpeningControls()
             return;
         }
     }
+    // Each step until the book work starts, to find time spent outside Kobalt.
+    const auto step = [this](const char *name) {
+        diagnostic("opening-step", { { "step", QString::fromLatin1(name) },
+                                     { "elapsed_ms", double(run.openingTimer.elapsed()) } });
+    };
+    step("fonts");
     const bool armed = writeJson(activePath, kobalt::qt::object({ { "book", run.identity } }));
+    step("armed");
     if (!armed || !authorization->begin(run.identity)) {
         if (!armed)
             diagnostic("session-arm-failed", {}, DiagnosticSeverity::Error);
@@ -578,10 +585,12 @@ void ReaderCoordinator::prepareOpeningControls()
             fallback->openStock();
         return;
     }
+    step("authorized");
     const auto preferences = storage::readPreferences(environment_.paths.preferences()).object;
     openingDark = preferences.value("dark_mode").toBool(false);
     run.interface->setDensity(currentScreenDensity());
     run.interface->setLargeText(nativeFontScale());
+    step("screen");
     // A book with its hidden window opens in well under a second. Keep the
     // logo and start at once; the loading controls and cover follow only
     // when the opening takes longer than that.
@@ -623,10 +632,14 @@ void ReaderCoordinator::prepareOpeningControls()
     run.progressPainted = -1000;
     updateOpening(OpeningStage::Content, 0);
     const auto epoch = generation;
+    step("controls");
     run.loading->afterFirstPaint([this, epoch, route, discardRetained] {
         if (epoch != generation || !busy || !run.opening || !run.loading)
             return;
         run.openingTimings["loading_frame_ms"] = double(run.openingTimer.elapsed());
+        diagnostic("opening-step",
+                   { { "step", QStringLiteral("after-paint") },
+                     { "elapsed_ms", run.openingTimings.value("loading_frame_ms").toDouble() } });
         if (discardRetained) {
             if (run.sourceLease)
                 run.sourceLease->cancel();

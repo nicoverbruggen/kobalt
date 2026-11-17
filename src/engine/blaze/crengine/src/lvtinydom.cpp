@@ -18836,7 +18836,7 @@ ContinuousOperationResult ldomDocument::saveChanges( CRTimerUtil & maxTime, LVDo
     }
 
     CRLog::trace("ldomDocument::saveChanges(timeout=%d stage=%d)", maxTime.interval(), _mapSavingStage);
-    setCacheFileStale(true);
+    _cacheFileStale = true;
 
     switch (_mapSavingStage) {
     default:
@@ -18922,6 +18922,7 @@ ContinuousOperationResult ldomDocument::saveChanges( CRTimerUtil & maxTime, LVDo
         }
         if (!maxTime.infinite())
             _cacheFile->flush(false, maxTime); // intermediate flush
+        _mapSavingStage = 6;
         CHECK_EXPIRATION("saving props data")
         if (progressCallback) progressCallback->OnSaveCacheFileProgress(45);
         // fall through
@@ -18938,6 +18939,7 @@ ContinuousOperationResult ldomDocument::saveChanges( CRTimerUtil & maxTime, LVDo
         }
         if (!maxTime.infinite())
             _cacheFile->flush(false, maxTime); // intermediate flush
+        _mapSavingStage = 7;
         CHECK_EXPIRATION("saving ID data")
         if (progressCallback) progressCallback->OnSaveCacheFileProgress(50);
         // fall through
@@ -18954,6 +18956,7 @@ ContinuousOperationResult ldomDocument::saveChanges( CRTimerUtil & maxTime, LVDo
         }
         if (!maxTime.infinite())
             _cacheFile->flush(false, maxTime); // intermediate flush
+        _mapSavingStage = 8;
         CHECK_EXPIRATION("saving page data")
         if (progressCallback) progressCallback->OnSaveCacheFileProgress(60);
         // fall through
@@ -18967,6 +18970,7 @@ ContinuousOperationResult ldomDocument::saveChanges( CRTimerUtil & maxTime, LVDo
         }
         if (!maxTime.infinite())
             _cacheFile->flush(false, maxTime); // intermediate flush
+        _mapSavingStage = 9;
         CHECK_EXPIRATION("saving node data")
         if (progressCallback) progressCallback->OnSaveCacheFileProgress(70);
         // fall through
@@ -19013,6 +19017,7 @@ ContinuousOperationResult ldomDocument::saveChanges( CRTimerUtil & maxTime, LVDo
         }
         if (!maxTime.infinite())
             _cacheFile->flush(false, maxTime); // intermediate flush
+        _mapSavingStage = 10;
         CHECK_EXPIRATION("saving TOC data")
         if (progressCallback) progressCallback->OnSaveCacheFileProgress(80);
         // fall through
@@ -19035,6 +19040,7 @@ ContinuousOperationResult ldomDocument::saveChanges( CRTimerUtil & maxTime, LVDo
                 CRLog::error("Error while saving embedded font data");
                 return CR_ERROR;
             }
+            _mapSavingStage = 12;
             CHECK_EXPIRATION("saving embedded fonts")
         }
         if (progressCallback) progressCallback->OnSaveCacheFileProgress(95);
@@ -19048,6 +19054,7 @@ ContinuousOperationResult ldomDocument::saveChanges( CRTimerUtil & maxTime, LVDo
                 CRLog::error("Error while updating index of cache file");
                 return CR_ERROR;
             }
+            _mapSavingStage = 13;
             CHECK_EXPIRATION("flushing")
         }
         if (progressCallback) progressCallback->OnSaveCacheFileProgress(100);
@@ -19499,15 +19506,6 @@ public:
     bool writeIndex(bool force = false)
     {
         lString32 filename = _cacheDir + "cr3cache.inx";
-        if (_oldStreamSize == 0)
-        {
-            LVStreamRef oldStream = LVOpenFileStream(filename.c_str(), LVOM_READ);
-            if (!oldStream.isNull()) {
-                _oldStreamSize = (lUInt32)oldStream->GetSize();
-                _oldStreamCRC = (lUInt32)oldStream->getcrc32();
-            }
-        }
-
         // fill buffer
         SerialBuf buf( 16384, true );
         buf.putMagic( doccache_magic );
@@ -19520,10 +19518,10 @@ public:
             buf << item->size;
             CRLog::trace("cache item: %s %d", LCSTR(item->filename), (int)item->size);
         }
+        const lUInt32 newCRC = buf.getCRC();
         buf.putCRC( buf.pos() - start );
         if ( buf.error() )
             return false;
-        lUInt32 newCRC = buf.getCRC();
         lUInt32 newSize = buf.pos();
 
         // check to avoid rewritting of identical file
@@ -19576,6 +19574,8 @@ public:
             if ( buf.error() )
                 return false;
 
+            _oldStreamCRC = lStr_crc32(0, sb->getReadOnly(), buf.pos() - sizeof(lUInt32));
+            _oldStreamSize = buf.pos();
             CRLog::info( "Document cache index file read ok, %d files in cache, %d bytes", _files.length(), totalSize );
             return true;
         } else {

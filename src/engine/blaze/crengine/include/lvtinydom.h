@@ -696,7 +696,7 @@ public:
     }
 
     /// add named BLOB data to document
-    bool addBlob(lString32 name, const lUInt8 * data, int size) { _cacheFileStale = true ; return _blobCache.addBlob(data, size, name); }
+    bool addBlob(lString32 name, const lUInt8 * data, int size) { setCacheFileStale(true); return _blobCache.addBlob(data, size, name); }
     /// get BLOB by name
     LVStreamRef getBlob(lString32 name) { return _blobCache.getBlob(name); }
 
@@ -778,7 +778,11 @@ public:
     /// is cache file stale
     bool isCacheFileStale() { return _cacheFileStale; }
     /// set cache file stale flag
-    void setCacheFileStale( bool stale ) { _cacheFileStale = stale; }
+    void setCacheFileStale( bool stale ) {
+        _cacheFileStale = stale;
+        if (stale)
+            _mapSavingStage = 0;
+    }
 
     /// is built (and cached) DOM possibly invalid (can happen when some nodes have changed display style)
     bool isBuiltDomStale() {

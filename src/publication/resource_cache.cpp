@@ -154,8 +154,8 @@ ResourceCache::Entry *ResourceCache::ensure(const QString &name, qint64 limit)
             failure_ = Failure::Limit;
             return nullptr;
         }
-        recent_.remove(name);
-        recent_.push_front(name);
+        if (found->second.recent != recent_.begin())
+            recent_.splice(recent_.begin(), recent_, found->second.recent);
         return &found->second;
     }
     if (!contains(name))
@@ -241,6 +241,7 @@ ResourceCache::Entry *ResourceCache::ensure(const QString &name, qint64 limit)
     loadNs_ += transfer.nsecsElapsed();
     fingerprints_[name] = digest;
     recent_.push_front(name);
+    pending.recent = recent_.begin();
     return &entries_.emplace(name, std::move(pending)).first->second;
 }
 

@@ -70,6 +70,7 @@ public:
 private:
     struct Entry
     {
+        std::list<QString>::iterator recent;
         qint64 size = 0;
         qint64 capacity = 0;
         std::vector<std::unique_ptr<char[]>> blocks;

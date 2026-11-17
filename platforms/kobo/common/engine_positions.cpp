@@ -463,6 +463,7 @@ struct ChapterIds
     bool parseError = false;
     QHash<QString, int> index;
     QVector<IdText> texts;
+    int mappedId = -1;
     // The text inside elements with an id, once. Whitespace on opposite sides
     // of inline markup can survive separately, so `textEnds` keeps where each
     // text token ends.
@@ -577,6 +578,13 @@ bool nativeText(IdsCache &cache, quint64 identity, ldomDocument *doc, const QStr
         return fail(strings::get(
                 "error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
     }
+    if (ids->mappedId >= 0 && ids->mappedId != found.value()) {
+        auto &previous = ids->texts[ids->mappedId];
+        previous.engineText.clear();
+        previous.engineUnits = QVector<int>();
+        previous.mapping = IdText::Mapping::Unknown;
+    }
+    ids->mappedId = found.value();
     sourceText = ids->textOf(*entry);
     const auto engineText = qstring(element->getText());
     if (entry->mapping == IdText::Mapping::Unknown || entry->engineText != engineText) {

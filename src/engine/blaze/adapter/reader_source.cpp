@@ -1723,6 +1723,16 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
     full_ = std::move(next);
     fullKey_ = key;
     fullSize_ = size_;
+    // The whole book has the real pages of every spine item. Chapter mode
+    // counts with them now, so the page fields show the exact count before
+    // the next turn shows the whole book.
+    {
+        const auto settings = settingsState();
+        PageEstimateRecord whole;
+        if (PageEstimateRecord::fromJson(full_->wholeBookEstimateRecord(settings), &whole)
+            && whole.spineItems == spineItemCount_ && whole.layout == estimateKey(settings))
+            pageMap().restore(whole.read);
+    }
     // Ready: the next turn shows it.
     setBuildProgress(100);
     return FullDocument::Ready;

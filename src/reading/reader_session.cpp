@@ -257,6 +257,86 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                 },
                 Qt::QueuedConnection);
     };
+    // Publishes the page estimate and the chapter pages without drawing the
+    // page again.
+    enum class Publish { Done, Gone, Interrupted };
+    const auto publish = [&]() -> Publish {
+        {
+            DiagnosticOperation words("page-estimate-words", [&wanted] { return !wanted(); });
+            engine->wordCounts(wanted);
+        }
+        if (!current())
+            return Publish::Gone;
+        if (!wanted())
+            return Publish::Interrupted;
+        ReaderFrame estimate;
+        {
+            DiagnosticOperation chapters("page-estimate-chapters", [&wanted] { return !wanted(); });
+            captureChapters(estimate, *engine, wanted);
+        }
+        if (!current())
+            return Publish::Gone;
+        if (!wanted())
+            return Publish::Interrupted;
+        estimate.state["page_estimate"] = engine->state().value("page_estimate");
+        if (engine->bookFraction() >= 0)
+            estimate.state["whole_book_failed"] = engine->fullDocumentFailed();
+        kobalt::qt::invoke(
+                qApp,
+                [guard, job, lease, estimate] {
+                    if (!guard || guard->running || guard->revision != job || guard->lease_ != lease
+                        || !lease || lease->revoked())
+                        return;
+                    auto &frame = guard->frame;
+                    const int shownCounts = [&frame] {
+                        if (frame.state.value("rough_pages").toInt() <= 0
+                            || frame.state.value("rough_item_pages").toInt() <= 0)
+                            return 0;
+                        return frame.state.value("rough_pages_estimated").toBool()
+                                        || frame.state.value("rough_item_pages_estimated").toBool()
+                                ? 1
+                                : 2;
+                    }();
+                    // Most rounds of a long measurement change nothing that the
+                    // reader shows. Those do not refresh it. The record of the
+                    // estimate goes with the next save.
+                    bool changed = frame.chapters != estimate.chapters
+                            || frame.chapterGraph != estimate.chapterGraph
+                            || frame.totalWords != estimate.totalWords
+                            || frame.contentsSelection != estimate.contentsSelection
+                            || frame.graphSelection != estimate.graphSelection;
+                    for (auto it = estimate.state.begin(); it != estimate.state.end(); ++it) {
+                        changed = changed
+                                || (it.key() != QLatin1String("page_estimate")
+                                    && frame.state.value(it.key()) != it.value());
+                        frame.state[it.key()] = it.value();
+                    }
+                    frame.chapters = estimate.chapters;
+                    frame.chapterGraph = estimate.chapterGraph;
+                    frame.totalWords = estimate.totalWords;
+                    frame.contentsSelection = estimate.contentsSelection;
+                    frame.graphSelection = estimate.graphSelection;
+                    // Once the page fields show numbers, the shown page refreshes
+                    // for two steps only: the first count, then the exact count.
+                    // Other rounds wait for the next page turn, so the screen does
+                    // not refresh for every round of a long count.
+                    const auto counts = [](const QJsonObject &state) {
+                        if (state.value("rough_pages").toInt() <= 0
+                            || state.value("rough_item_pages").toInt() <= 0)
+                            return 0;
+                        return state.value("rough_pages_estimated").toBool()
+                                        || state.value("rough_item_pages_estimated").toBool()
+                                ? 1
+                                : 2;
+                    };
+                    const int after = counts(frame.state);
+                    const bool step = after > shownCounts;
+                    if (changed && (shownCounts == 0 || step) && guard->updated)
+                        guard->updated();
+                },
+                Qt::QueuedConnection);
+        return Publish::Done;
+    };
     if (engine->bookFraction() < 0) {
         // The whole book is shown. Its parsed-book cache is written in short
         // steps while nothing else needs the engine, so that closing the book
@@ -290,7 +370,10 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     // worth the work: it needs no parsing. It comes before the measuring:
     // it has the real pages. Without a cache file the try ends at once.
     const bool reading = count->load();
-    const bool cacheFirst = !reading && renderingMode::countsInBackground();
+    // The page estimate does not wait for the whole book: a build from the
+    // cache goes first only once the estimate has every spine item.
+    const bool cacheFirst = !reading && renderingMode::countsInBackground()
+            && kobalt::layoutProgressPercent() >= 80;
     bool more = cacheFirst ? false : measure();
     if (!current())
         return;
@@ -304,6 +387,23 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     // idle moment: it pauses within milliseconds.
     const qint64 quiet = renderingMode::buildQuietMilliseconds() - engineWorkQuietMilliseconds();
     const bool wait = reading && quiet > 0 && !engine->fullDocumentStarted();
+    // The round that finishes the count is shown before the build starts.
+    // So are the counts that an earlier session saved, before a build from
+    // the parsed-book cache. A started build returns before the publication
+    // below, and can take minutes.
+    bool published = false;
+    if (!more && !engine->fullDocumentStarted()) {
+        switch (publish()) {
+        case Publish::Gone:
+            return;
+        case Publish::Interrupted:
+            resumeAfterWork();
+            return;
+        case Publish::Done:
+            published = true;
+            break;
+        }
+    }
     if (!more && !wait && (reading || renderingMode::countsInBackground())) {
         BackgroundDiagnostic diagnostic("Full document", *engine, current);
         // The build can run for minutes. It parks as soon as anyone queues
@@ -322,6 +422,10 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
             return;
         }
         if (full == Engine::FullDocument::Ready) {
+            // The whole book has its pages: the page fields can show the
+            // exact count before the next turn adopts the whole book.
+            if (publish() == Publish::Gone)
+                return;
             kobalt::qt::invoke(
                     qApp,
                     [guard, lease, job] {
@@ -334,6 +438,8 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     }
     if (cacheFirst) {
         more = measure();
+        // The counts may have changed since the publication before the build.
+        published = false;
         if (!current())
             return;
         if (!wanted()) {
@@ -341,60 +447,17 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
             return;
         }
     }
-    {
-        DiagnosticOperation words("page-estimate-words", [&wanted] { return !wanted(); });
-        engine->wordCounts(wanted);
+    if (!published) {
+        switch (publish()) {
+        case Publish::Gone:
+            return;
+        case Publish::Interrupted:
+            resumeAfterWork();
+            return;
+        case Publish::Done:
+            break;
+        }
     }
-    if (!current())
-        return;
-    if (!wanted()) {
-        resumeAfterWork();
-        return;
-    }
-    ReaderFrame estimate;
-    {
-        DiagnosticOperation chapters("page-estimate-chapters", [&wanted] { return !wanted(); });
-        captureChapters(estimate, *engine, wanted);
-    }
-    if (!current())
-        return;
-    if (!wanted()) {
-        resumeAfterWork();
-        return;
-    }
-    estimate.state["page_estimate"] = engine->state().value("page_estimate");
-    if (engine->bookFraction() >= 0)
-        estimate.state["whole_book_failed"] = engine->fullDocumentFailed();
-    kobalt::qt::invoke(
-            qApp,
-            [guard, job, lease, estimate] {
-                if (!guard || guard->running || guard->revision != job || guard->lease_ != lease
-                    || !lease || lease->revoked())
-                    return;
-                auto &frame = guard->frame;
-                // Most rounds of a long measurement change nothing that the
-                // reader shows. Those do not refresh it. The record of the
-                // estimate goes with the next save.
-                bool changed = frame.chapters != estimate.chapters
-                        || frame.chapterGraph != estimate.chapterGraph
-                        || frame.totalWords != estimate.totalWords
-                        || frame.contentsSelection != estimate.contentsSelection
-                        || frame.graphSelection != estimate.graphSelection;
-                for (auto it = estimate.state.begin(); it != estimate.state.end(); ++it) {
-                    changed = changed
-                            || (it.key() != QLatin1String("page_estimate")
-                                && frame.state.value(it.key()) != it.value());
-                    frame.state[it.key()] = it.value();
-                }
-                frame.chapters = estimate.chapters;
-                frame.chapterGraph = estimate.chapterGraph;
-                frame.totalWords = estimate.totalWords;
-                frame.contentsSelection = estimate.contentsSelection;
-                frame.graphSelection = estimate.graphSelection;
-                if (changed && guard->updated)
-                    guard->updated();
-            },
-            Qt::QueuedConnection);
     if (!more && wait) {
         kobalt::qt::invoke(
                 qApp,

@@ -797,6 +797,11 @@ void PageMap::restore(const QMap<int, int> &pages)
     for (auto it = pages.cbegin(); it != pages.cend(); ++it) {
         if (it.key() < 0 || it.key() >= items_.size() || it.value() < 0)
             continue;
+        // These pages replace what parts of the item showed so far.
+        const qint64 first = qint64(it.key()) << 32;
+        for (auto part = observed_.lowerBound(first);
+             part != observed_.end() && part.key() >> 32 == it.key();)
+            part = observed_.erase(part);
         Observed observed;
         observed.last = observed.characters = 1;
         observed.pages = it.value();

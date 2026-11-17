@@ -10270,6 +10270,86 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!timer || !timer->isActive());
     }
 
+    // In Hybrid, a book reopened without its whole-book layout shows its
+    // estimated pages without a page turn. Once the whole book is laid out,
+    // the exact count shows without a turn too.
+    void headerFooterCountsWithoutTurn()
+    {
+        using namespace headerfooter;
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        // Fewer spine items than a whole-book record holds, so that the
+        // whole book gives every item its exact pages.
+        QVERIFY(test::writeBook(fixture.directory.path(), "songs.epub", test::songbook(300)));
+        const auto path = fixture.directory.filePath("songs.epub");
+        auto layout = presetLayout(Preset::Default);
+        layout.slotFields[3] = Field::BookPage;
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences[presetKey] = presetValue(Preset::Custom);
+        preferences[customKey] = toJson(layout);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        renderingMode::setOverride(2);
+        const auto restore = qScopeGuard([] { renderingMode::setOverride(-1); });
+        const QRegularExpression pageForm(QStringLiteral("^\\d+ / ~?\\d+$"));
+        const auto settled = [&fixture] { return !fixture.state().value("busy").toBool(); };
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(path);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 300000);
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page);
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 300000);
+        QTest::keyClick(&fixture.window, Qt::Key_PageDown);
+        QTRY_VERIFY2_WITH_TIMEOUT(pageForm.match(page->slotContents[3].text).hasMatch(),
+                                  qPrintable(page->slotContents[3].text), 300000);
+        QVERIFY2(fixture.state().contains("book_fraction"), "The whole book was laid out already");
+        // Close before the whole book is laid out, then open the book again.
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.window.idle(), 300000);
+        fixture.window.openBook(path);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 300000);
+        page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page);
+        const auto shown = [page] { return page->slotContents[3].text; };
+        QStringList seen{ shown() };
+        QElapsedTimer waited;
+        waited.start();
+        while (waited.elapsed() < 120000 && !pageForm.match(shown()).hasMatch()) {
+            if (seen.last() != shown())
+                seen.append(shown());
+            QTest::qWait(50);
+        }
+        seen.append(shown());
+        QVERIFY2(pageForm.match(shown()).hasMatch(), qPrintable(seen.join(" / ")));
+        // Reading starts the build of the whole book. Once it is laid out,
+        // the page field shows the exact count without another turn.
+        // Turns keep the count going, as in Book status, until the build is
+        // ready. The turn after that would show the whole book.
+        QElapsedTimer sinceTurn;
+        sinceTurn.start();
+        waited.restart();
+        QTest::keyClick(&fixture.window, Qt::Key_PageDown);
+        while (waited.elapsed() < 120000 && kobalt::layoutProgressPercent() < 100) {
+            if (sinceTurn.elapsed() > 3000 && settled()) {
+                QTest::keyClick(&fixture.window, Qt::Key_PageDown);
+                sinceTurn.restart();
+            }
+            QTest::qWait(50);
+        }
+        QCOMPARE(kobalt::layoutProgressPercent(), 100);
+        const QRegularExpression exact(QStringLiteral("^\\d+ / \\d+$"));
+        waited.restart();
+        while (waited.elapsed() < 30000 && !exact.match(shown()).hasMatch()) {
+            if (seen.last() != shown())
+                seen.append(shown());
+            QTest::qWait(50);
+        }
+        seen.append(shown());
+        qInfo() << "Page field after reopening:" << seen;
+        QVERIFY2(exact.match(shown()).hasMatch(), qPrintable(seen.join(" / ")));
+        // The count came before a turn showed the whole book.
+        QVERIFY(fixture.state().contains("book_fraction"));
+    }
+
     // Hiding Layout also hides the Header and footer sheet, also before any
     // slot was opened, when the field chooser does not exist yet.
     void headerFooterSheetHidesWithLayout()

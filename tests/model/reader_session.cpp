@@ -201,11 +201,13 @@ static void hybridFontEdits(const QString &path, quint16 port)
     const auto exact = labels(whole), estimated = labels(hybrid);
     require(exact.size() == positions.size() && estimated.size() == exact.size(),
             "Cannot compare saved-word page numbers before the handoff");
+    // A ready whole book gives chapter mode its exact pages, so the labels
+    // already agree. A lookup during the handoff must still get the exact one.
     int word = 0;
-    while (word < positions.size() && (exact[word] < 0 || estimated[word] == exact[word]))
+    while (word < positions.size() && exact[word] < 0)
         ++word;
-    require(word < positions.size(),
-            "The fixture needs a saved position with a different estimate");
+    require(word < positions.size(), "The fixture needs a saved position with a page");
+    require(estimated == exact, "Chapter mode did not take the pages of the ready whole book");
     // The worker receives this lookup before the adopting turn. Its reply
     // cannot reach the UI until the turn has been requested.
     bool wordLookupFinished = false;

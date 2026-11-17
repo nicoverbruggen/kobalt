@@ -12,6 +12,15 @@
 namespace kobalt {
 void setDiagnosticsSync(bool) { }
 
+static bool fileWrites = true;
+bool setDiagnosticFileWrites(bool enabled)
+{
+    const bool previous = fileWrites;
+    fileWrites = enabled;
+    return previous;
+}
+bool diagnosticWriterIdle() { return true; }
+
 static std::function<void(const QJsonObject &)> observer;
 
 void setDiagnosticObserver(std::function<void(const QJsonObject &)> value)
@@ -397,6 +406,7 @@ int main(int argc, char **argv)
     };
     kobalt::scenario::Host writer;
     writer.sleepPersistence = [](const QJsonObject &) {
+        require(!kobalt::fileWrites, "Resource samples must keep diagnostic events in memory");
         kobalt::observer(QJsonObject{ { "event", "operation-start" },
                                       { "operation", "profile-transaction" } });
         kobalt::observer(QJsonObject{ { "event", "operation-end" },
@@ -418,6 +428,7 @@ int main(int argc, char **argv)
     for (const auto *stage : { "cpu_ms", "main_cpu_ms", "background_cpu_ms", "rss_end_kib",
                                "peak_kib", "block_writes" })
         require(measured.value(stage).toArray().size() == 2, stage);
+    require(kobalt::fileWrites, "Finishing a resource scenario must restore file logging");
     require(results[0].value("resources").toBool()
                     && results[0].value("counts").toArray() == QJsonArray({ "ends", "writes" })
                     && results[0].value("expect").toObject() == QJsonObject{ { "writes", 0 } },

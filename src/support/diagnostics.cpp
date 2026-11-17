@@ -41,6 +41,7 @@ QString logPath, markerPath;
 bool paused = false, detailed = true;
 bool syncing = true;
 std::function<void(const QJsonObject &)> observer;
+bool fileWrites = true;
 DiagnosticSystem diagnosticSystem;
 
 DiagnosticSystem systemProvider()
@@ -338,7 +339,7 @@ bool drain(int milliseconds)
 {
     // A queued boundary also syncs bytes from earlier unsynced batches when
     // the queue is empty. All file access remains on the writer thread.
-    if (!logPath.isEmpty()) {
+    if (fileWrites && !logPath.isEmpty()) {
         Entry boundary{ logPath,
                         {},
                         {},
@@ -442,6 +443,24 @@ void setDiagnosticsSync(bool enabled)
 {
     QMutexLocker lock(&mutex);
     syncing = enabled;
+}
+
+bool setDiagnosticFileWrites(bool enabled)
+{
+    QMutexLocker lock(&mutex);
+    const bool previous = fileWrites;
+    fileWrites = enabled;
+    if (!enabled && !queue.empty()) {
+        forceFlush = true;
+        wake.wakeAll();
+    }
+    return previous;
+}
+
+bool diagnosticWriterIdle()
+{
+    QMutexLocker lock(&mutex);
+    return queue.empty() && !writing;
 }
 
 void setDiagnosticObserver(std::function<void(const QJsonObject &)> value)
@@ -751,9 +770,11 @@ void diagnostic(const char *event, QJsonObject fields, DiagnosticSeverity severi
             entry.keepContext = detailed;
             entry.history = detailed ? verboseHistory : 1;
             notify = observer;
-            enqueue(entry);
-            startWriter();
-            wake.wakeAll();
+            if (fileWrites) {
+                enqueue(entry);
+                startWriter();
+                wake.wakeAll();
+            }
         }
     }
     // Evaluation observes the original fields regardless of disk policy.

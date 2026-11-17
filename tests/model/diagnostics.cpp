@@ -142,6 +142,22 @@ int main(int argc, char **argv)
     kobalt::flushDiagnostics();
     if (read(path) != resumed)
         qFatal("Oversized entry accepted");
+    bool resourceObserved = false;
+    kobalt::setDiagnosticObserver([&](const QJsonObject &entry) {
+        if (entry.value("event").toString() == "resource-sample")
+            resourceObserved = true;
+    });
+    const bool previous = kobalt::setDiagnosticFileWrites(false);
+    kobalt::diagnostic("resource-sample");
+    kobalt::flushDiagnostics();
+    if (!resourceObserved || read(path) != resumed)
+        qFatal("Resource diagnostics must reach the observer without changing the log");
+    kobalt::setDiagnosticFileWrites(previous);
+    kobalt::setDiagnosticObserver({});
+    kobalt::diagnostic("after-resource-sample");
+    kobalt::flushDiagnostics();
+    if (!read(path).contains("after-resource-sample"))
+        qFatal("Diagnostics did not resume after the resource sample");
     QFile::remove(path);
     const auto target = (directory.path() + "/" + "untouched");
     QFile sentinel(target);

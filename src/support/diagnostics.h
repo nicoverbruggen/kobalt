@@ -96,7 +96,10 @@ bool flushDiagnostics(int milliseconds = -1);
 // Whether warning, error and lifecycle batches sync storage. Normal
 // evaluation uses the same policy as reading. Legacy baselines may opt out.
 void setDiagnosticsSync(bool enabled);
-// Receives every event that is written, on the thread that wrote it. An empty
+// Resource measurements observe events in memory. Returns the previous file policy.
+bool setDiagnosticFileWrites(bool enabled);
+bool diagnosticWriterIdle();
+// Receives emitted events on the originating thread, including when file writes are off. An empty
 // function removes the observer.
 void setDiagnosticObserver(std::function<void(const QJsonObject &)> observer);
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)

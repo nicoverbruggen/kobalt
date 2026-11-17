@@ -337,7 +337,7 @@ private:
             scenario.unit = result.value("unit").toString();
             for (const auto &sample : result.value("samples").toArray())
                 scenario.samples.append(sample.toDouble());
-            for (const auto *key : { "resources", "counts", "expect" })
+            for (const auto *key : { "resources", "counts", "expect", "diagnostic_file_writes" })
                 if (result.contains(key))
                     scenario.resources[key] = result.value(key);
             const auto stages = result.value("stages").toObject();

@@ -690,7 +690,25 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
         // A resource scenario tells the comparison which stages are system
         // counters and event counts, and which counts must stay at a limit.
         const auto sampleSpec = scenario.value("sample").toObject();
-        if (sampleSpec.value("resources").toBool()) {
+        const bool resources = sampleSpec.value("resources").toBool();
+        struct RestoreLogging
+        {
+            bool active;
+            bool previous;
+            ~RestoreLogging()
+            {
+                if (active)
+                    setDiagnosticFileWrites(previous);
+            }
+        } logging{ resources, resources && setDiagnosticFileWrites(false) };
+        if (resources) {
+            if (!waitUntil(diagnosticWriterIdle, 30000)) {
+                result["status"] = QStringLiteral("failed");
+                result["reason"] = QStringLiteral("Diagnostic writer did not drain before sampling");
+                results.append(result);
+                continue;
+            }
+            result["diagnostic_file_writes"] = false;
             result["resources"] = true;
             result["counts"] =
                     QJsonArray::fromStringList(sampleSpec.value("count").toObject().keys());

@@ -4,6 +4,7 @@
 #include "engine/blaze/adapter/engine_document.h"
 #include "reading/reading_progress.h"
 #include "storage/reading_history.h"
+#include "storage/record_writer.h"
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -70,6 +71,11 @@ public:
     bool begin(const RetainOpening &retainOpening);
     bool handleHomeKey(QKeyEvent *event);
     void forgetSleepScreen();
+    // Opens the book that Kobalt showed last in the background, when it is
+    // still a plain EPUB on the device, and keeps it as a closed book is kept.
+    // Tapping it then takes the fast reopening path. Any opening, USB or
+    // other transition cancels a preload that is still running.
+    void preloadLastBook();
 
 private:
 #ifdef KOBALT_SCENARIO_PLAYER
@@ -153,6 +159,24 @@ private:
 
     void showReader();
     std::unique_ptr<HomeSleepScreen> homeSleep;
+
+    // The book being preloaded; see preloadLastBook(). When it is ready it
+    // moves into run.session.
+    struct Preload
+    {
+        std::unique_ptr<kobalt::ReaderSession> session;
+        std::shared_ptr<kobalt::SourceLease> lease;
+        QElapsedTimer started;
+    } preload;
+
+    // Writes the last-book record and reads it back for a preload, off the
+    // GUI thread.
+    std::unique_ptr<kobalt::storage::RecordWriter> lastBook;
+    QString lastBookPath() const;
+    void rememberLastBook();
+    void startPreload(const QString &identity, const QString &path, QJsonObject saved,
+                      const QJsonObject &preferences);
+    void cancelPreload();
 };
 
 } // namespace nickel

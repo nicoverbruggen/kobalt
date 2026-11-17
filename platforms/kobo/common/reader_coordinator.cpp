@@ -27,6 +27,7 @@
 #include "native_reading_session.h"
 #include "native_dictionary.h"
 #include "publication/native_resources.h"
+#include "publication/local_resources.h"
 #include "reading_bridge.h"
 #include "engine_positions.h"
 #include "native_ui.h"
@@ -497,6 +498,9 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
         return false;
     if (!readerBookFormatSupported(request->volume()))
         return false;
+    // A preload that is still running gives way to the book that was tapped.
+    // One that finished is the kept book in run.session.
+    cancelPreload();
     run.opening = std::move(request);
     busy = true;
     watch();
@@ -775,6 +779,7 @@ void ReaderCoordinator::drainReadingJobs(std::function<void()> finished)
 
 void ReaderCoordinator::disposeForTransition(std::function<void()> finished, bool nativeAllowed)
 {
+    cancelPreload();
     authorization->end();
     if (run.fallbackAlert)
         run.fallbackAlert->reject();
@@ -846,6 +851,7 @@ void ReaderCoordinator::finishDisposal(const QString &finalStatus, bool nativeAl
 
 void ReaderCoordinator::release(bool endAuthorization)
 {
+    cancelPreload();
     if (endAuthorization)
         authorization->end();
     ++generation;
@@ -1279,12 +1285,150 @@ void ReaderCoordinator::showReader()
         guard->hideLoading();
         guard->run.openingTimings["total_ms"] = guard->run.openingTimer.elapsed();
         guard->status("reading");
+        guard->rememberLastBook();
         // A sync can finish while the book opens.
         guard->checkProgressSoon();
 #ifdef KOBALT_SCENARIO_PLAYER
         guard->startScenarios();
 #endif
     });
+}
+
+QString ReaderCoordinator::lastBookPath() const
+{
+    return environment_.paths.directory + "/cache/last-book.json";
+}
+
+void ReaderCoordinator::rememberLastBook()
+{
+    if (run.identity.isEmpty() || run.filePath.isEmpty())
+        return;
+    if (!lastBook)
+        lastBook = std::make_unique<storage::RecordWriter>();
+    const auto record = qt::object({ { "book", run.identity }, { "path", run.filePath } });
+    lastBook->post(
+            [path = lastBookPath(), record] {
+                QDir().mkpath(QFileInfo(path).absolutePath());
+                return storage::readJson(path) == record || storage::writeJson(path, record);
+            },
+            {});
+}
+
+void ReaderCoordinator::preloadLastBook()
+{
+    if (!bindings_.enabled() || busy || run.reader || run.session || preload.session
+        || lifecycle->blocked() || lifecycle->draining || NativeLifecycle::suspended()
+        || !environment_.assets.available())
+        return;
+    if (!lastBook)
+        lastBook = std::make_unique<storage::RecordWriter>();
+    QPointer<ReaderCoordinator> guard(this);
+    const auto paths = environment_.paths;
+    // The record, the book's saved state and the preferences are read on the
+    // writer thread. The archive check reads the book's ZIP directory.
+    lastBook->post(
+            [guard, paths, recordPath = lastBookPath()] {
+                const auto record = storage::readJson(recordPath);
+                const auto identity = record.value("book").toString();
+                const auto path = record.value("path").toString();
+                // A plain EPUB that is still on the device. Protected books
+                // open in Nickel's reader and are never preloaded.
+                if (identity.isEmpty() || !QFileInfo(path).isFile()
+                    || !native::openLocalPublication(path))
+                    return true;
+                const auto stored =
+                        storage::readBookState(paths, identity, paths.bookState(identity));
+                if (stored.status != storage::ReadStatus::Ok
+                    && stored.status != storage::ReadStatus::Missing)
+                    return true;
+                const auto preferences = storage::readPreferences(paths.preferences()).object;
+                kobalt::qt::invoke(
+                        qApp,
+                        [guard, identity, path, saved = stored.object, preferences] {
+                            if (guard)
+                                guard->startPreload(identity, path, saved, preferences);
+                        },
+                        Qt::QueuedConnection);
+                return true;
+            },
+            {});
+}
+
+void ReaderCoordinator::startPreload(const QString &identity, const QString &path,
+                                     QJsonObject saved, const QJsonObject &stored)
+{
+    if (!bindings_.enabled() || busy || run.reader || run.session || preload.session
+        || lifecycle->blocked() || lifecycle->draining || NativeLifecycle::suspended())
+        return;
+    if (saved.value("book").toString() != identity)
+        saved = {};
+    // As load() prepares an opening. The tap opens the kept book again with
+    // Nickel's progress and the current preferences.
+    const auto originalAppearance = saved;
+    const auto preferences = appearance::readerPreferences(stored, saved);
+    renderingMode::apply(preferences);
+    saved["dark_mode"] = preferences.value("dark_mode").toBool(false);
+    saved["bold_reading"] = preferences.value("bold_reading").toString("off");
+    saved["avoid_wasteful_styling"] = preferences.value("avoid_wasteful_styling").toBool(true);
+    const auto size = kobalt::readerInterface().readingViewport(
+            QGuiApplication::primaryScreen()->size(), preferences);
+    preload.session =
+            std::make_unique<ReaderSession>(environment_.fonts(), environment_.placeholderFamily());
+    preload.lease = std::make_shared<SourceLease>();
+    preload.started.start();
+    diagnostic("book-preload-start");
+    QPointer<ReaderCoordinator> guard(this);
+    auto *session = preload.session.get();
+    session->open({ identity,
+                    path,
+                    size,
+                    saved,
+                    QString(),
+                    environment_.paths.layoutCache(),
+                    preload.lease,
+                    localResourceFactory(path, preload.lease),
+                    positionCodec(),
+                    environment_.paths.documentCache(),
+                    {},
+                    originalAppearance,
+                    environment_.paths.directory + "/userstyle.css",
+                    appearance::bookDefaults(preferences),
+                    {},
+                    false,
+                    QString(),
+                    environment_.paths.customPins(),
+                    QStringLiteral(KOBALT_CONFIG_DIR "/dictionaries") },
+                  [guard, session, identity, path](const OpeningResult &outcome) {
+                      if (!guard || guard->preload.session.get() != session)
+                          return;
+                      auto &self = *guard;
+                      const double elapsed = double(self.preload.started.elapsed());
+                      // An opening, USB or another transition took over meanwhile.
+                      const bool usable = outcome.ready() && !self.busy && !self.run.reader
+                              && !self.run.session && !self.lifecycle->blocked()
+                              && !self.lifecycle->draining && !NativeLifecycle::suspended();
+                      auto kept = usable ? self.preload.session->retained() : nullptr;
+                      self.preload.session.reset();
+                      self.preload.lease.reset();
+                      diagnostic("book-preload-end",
+                                 { { "ready", bool(kept) }, { "elapsed_ms", elapsed } });
+                      if (!kept)
+                          return;
+                      self.run.session = std::move(kept);
+                      self.run.identity = identity;
+                      self.run.filePath = path;
+                  });
+}
+
+void ReaderCoordinator::cancelPreload()
+{
+    if (!preload.session)
+        return;
+    if (preload.lease)
+        preload.lease->cancel();
+    preload.session.reset();
+    preload.lease.reset();
+    diagnostic("book-preload-cancelled");
 }
 
 #ifdef KOBALT_SCENARIO_PLAYER

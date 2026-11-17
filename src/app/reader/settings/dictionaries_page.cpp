@@ -12,6 +12,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QHideEvent>
+#include <QShowEvent>
 #include <QResizeEvent>
 #include <QPixmap>
 #include <QTimer>
@@ -296,8 +297,21 @@ void DictionariesPage::askConfirmation(const DownloadDictionary &entry, bool rem
     dialog->setFocus();
 }
 
+void DictionariesPage::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    if (stale)
+        redraw();
+}
+
 void DictionariesPage::redraw()
 {
+    // Settings builds this page with the panel, long before it is shown. Lay
+    // out the rows only when the page is visible, so opening Settings does not
+    // pay for a page the user may never open.
+    stale = !isVisible();
+    if (stale)
+        return;
     const auto previous = list->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly);
     QSet<QWidget *> retained;
     bool matching = false;

@@ -31,6 +31,7 @@ public:
 
 protected:
     void hideEvent(QHideEvent *event) override;
+    void showEvent(QShowEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
 
 private:
@@ -43,7 +44,7 @@ private:
     QHash<QString, qint64> installedSizes;
     QString language, transferId, endedId, failedId, requestedId;
     qint64 freeBytes = -1, receivedBytes = 0, totalBytes = 0;
-    bool working = false, unpacking = false;
+    bool working = false, unpacking = false, stale = false;
     int page = 0;
     QWidget *list;
     QLabel *storage;

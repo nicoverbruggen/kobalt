@@ -336,7 +336,11 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
                 },
                 std::move(ready));
     };
-    lifecycle->storageReleased = [this] { environment_.invalidateAssets(); };
+    lifecycle->storageReleased = [this] {
+        environment_.invalidateAssets();
+        // The files can change while the computer has the storage.
+        interfaceFontsLoaded = false;
+    };
     lifecycle->storageRestored = [this] {
         environment_.verifyAssets(this, "usb", [this](bool valid) {
             if (valid)
@@ -699,8 +703,11 @@ void ReaderCoordinator::prepareOpening(kobalt::ReaderBookRoute candidate)
     status("loading");
     const bool assetsReady = environment_.assets.available();
     bool fontsChanged = false;
-    interfaceFontsLoaded =
-            assetsReady && kobalt::ui::initializeInterfaceFonts(environment_.assets, &fontsChanged);
+    // Loaded faces stay valid until USB releases the assets. Loading them again
+    // would read and hash the same files and reset the private text caches.
+    if (!interfaceFontsLoaded || !assetsReady)
+        interfaceFontsLoaded = assetsReady
+                && kobalt::ui::initializeInterfaceFonts(environment_.assets, &fontsChanged);
     if (!interfaceFontsLoaded) {
         missingAssets(assetsReady);
         return;
@@ -1563,7 +1570,8 @@ bool ReaderCoordinator::buildQuietReader(std::unique_ptr<ReaderSession> &session
             return skip("profile");
     }
     const bool assetsReady = environment_.assets.available();
-    interfaceFontsLoaded = assetsReady && ui::initializeInterfaceFonts(environment_.assets);
+    if (!interfaceFontsLoaded)
+        interfaceFontsLoaded = assetsReady && ui::initializeInterfaceFonts(environment_.assets);
     if (!interfaceFontsLoaded)
         return skip("fonts");
     auto &interface = readerInterface();

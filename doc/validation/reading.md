@@ -18,6 +18,8 @@ The finish prompt on exit uses whole-book progress even when later slices remain
 
 A revoked source also discards queued illustration frames and neighbour-cache updates.
 
+`lifecycle.quietWindowWaitsForActivation` builds a reader window ahead of its opening, as Kobo does for the last book after a restart. Until it is activated, the window registers no host observers and does not run its clock. Activation registers them once. A window dropped before activation returns its book for reuse and writes no saved state.
+
 A session discards an unfinished frame when the host revokes the source or the reader cancels it. Font and viewport changes must keep the last displayed image and finish their progress indication.
 
 Label `reading`. Build `mac-tests`, then run `ctest --preset mac -L reading` from `platforms/desktop/`. `ctest --preset mac -N -L reading` lists its tests.

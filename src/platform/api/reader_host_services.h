@@ -92,6 +92,9 @@ struct ReaderHostServices
     bool systemRotation = false;
     bool showNativeReaderOptions = true;
     bool downloadableDictionaries = true;
+    // Build the window ahead of its opening. It stays quiet until
+    // ReaderWindow::activate(); see that function.
+    bool quiet = false;
     // Optional host-resolved high-resolution cover. The reader decodes it on
     // its worker and falls back to the publication cover if it is unusable.
     QString coverImagePath;

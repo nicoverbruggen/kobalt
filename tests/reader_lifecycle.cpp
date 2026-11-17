@@ -1096,6 +1096,55 @@ private slots:
     }
 
     // Checks that hiding the reader stops its clock and that showing it restarts the clock without changing the page.
+    // A window built ahead of its opening observes nothing, starts no clock
+    // and saves nothing until it is activated. Dropped instead, it returns
+    // its book for the next opening and leaves the saved state alone.
+    void quietWindowWaitsForActivation_data()
+    {
+        QTest::addColumn<bool>("activated");
+        QTest::newRow("activated") << true;
+        QTest::newRow("dropped") << false;
+    }
+
+    void quietWindowWaitsForActivation()
+    {
+        QFETCH(bool, activated);
+        const auto paths = testPaths();
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(fixture()).absoluteFilePath()).toString();
+        const auto statePath = paths.bookState(identity);
+        QFile::remove(statePath);
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        int observers = 0;
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.quiet = true;
+            services.observeBattery = [&](QObject *, std::function<void()>) { ++observers; };
+            services.holdWifiOff = [&](QObject *, std::function<bool()>) { ++observers; };
+        };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        auto *clock = host.window()->findChild<QTimer *>("rrClockTimer");
+        QVERIFY(clock);
+        QVERIFY(!clock->isActive());
+        QCOMPARE(observers, 0);
+        if (!activated) {
+            auto kept = host.window()->releaseQuiet();
+            QVERIFY(kept);
+            host.shutdown();
+            QTRY_VERIFY_WITH_TIMEOUT(host.idle(), 10000);
+            QVERIFY(!QFileInfo::exists(statePath));
+            return;
+        }
+        host.window()->activate({}, {});
+        QCOMPARE(observers, 2);
+        // An active window is not quiet any more.
+        host.window()->activate({}, {});
+        QCOMPARE(observers, 2);
+        QVERIFY(!host.window()->releaseQuiet());
+    }
+
     void clockStopsWhileReaderIsHidden_data()
     {
         QTest::addColumn<bool>("browser");

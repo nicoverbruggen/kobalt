@@ -248,8 +248,6 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
         QString error;
         dictionary->select(book->identity(), book->dictionaryChoice(), &error);
     }
-    kobalt::platform::setReaderRefreshWindow(this);
-    qApp->installEventFilter(this);
     setWindowModality(Qt::ApplicationModal);
     // A damaged settings file still falls back to the defaults, as a
     // missing one does, but the diagnostics say which it was.
@@ -260,24 +258,12 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
                            { { "status", kobalt::storage::readStatusName(savedSettings.status) } },
                            false);
     preferences = appearance::readerPreferences(savedSettings.object, book->layoutPreferences());
-    // Remember this book's layout as the last layout in the shared profile.
-    // A damaged settings file is left for the next explicit settings save to
-    // replace.
-    const bool settingsReadable = savedSettings.status == kobalt::storage::ReadStatus::Ok
-            || savedSettings.status == kobalt::storage::ReadStatus::Missing;
-    if (settingsReadable && !session->temporaryTypography()) {
-        auto global = appearance::globalPreferences(preferences);
-        appearance::rememberTextLayout(global, session->state());
-        appearance::rememberPageMargins(global, session->state());
-        if (global != savedSettings.object) {
-            // The shared settings must be on disk before the reader uses them.
-            // The window is still being built, so no input can arrive.
-            mainthread::AllowBlocking allow("remembered layout before reader input");
-            if (!kobalt::storage::updatePreferences(book->paths().preferences(),
-                                                    savedSettings.object, global))
-                kobalt::diagnostic("last-appearance-unsaved", {},
-                                   kobalt::DiagnosticSeverity::Error);
-        }
+    // activate() remembers this book's layout. A damaged settings file is left
+    // for the next explicit settings save to replace.
+    if (savedSettings.status == kobalt::storage::ReadStatus::Ok
+        || savedSettings.status == kobalt::storage::ReadStatus::Missing) {
+        storedSettings = savedSettings.object;
+        storedSettingsReadable = true;
     }
     if (kobalt::annotationDatabaseEnabled())
         savedWords = std::make_unique<kobalt::SavedWords>(book->paths().directory);
@@ -405,24 +391,6 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     menu->hide();
     topControls->hide();
     bottomControls->hide();
-    if (services.observeBluetooth)
-        services.observeBluetooth(this, [this](bool enabled) {
-            if (menuBluetooth->active() == enabled)
-                return;
-            menuBluetooth->setActive(enabled);
-            if (topControls->isVisible() && !lifecycleHidden)
-                syncNavigation();
-        });
-    // With the Wi-Fi power saver, the host's own background requests must not
-    // turn Wi-Fi back on while this book is open, for example after a wake.
-    if (services.holdWifiOff)
-        services.holdWifiOff(this, [this] { return !closing && wifiPowerSaverApplies(); });
-    if (services.observeWifi)
-        services.observeWifi(this, [this](WifiStatus state) {
-            if (menuWifi->setStatus(state.enabled, state.connected, state.strength)
-                && topControls->isVisible() && !lifecycleHidden)
-                syncNavigation();
-        });
     connect(header, &QPushButton::clicked, this, [this] {
         if (topControls->isVisible()) {
             flashAfterMenu = true;
@@ -447,22 +415,10 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
                     setGeometry(geometry);
             });
     resize(QGuiApplication::primaryScreen()->size());
-    prepareSleepCover();
-    loadTodayReading();
-    if (sleep::uses(preferences, sleep::Mode::Overlay))
-        prepareSleepOverlay();
-    prepareSleepWallpapers();
-    const auto battery = services.battery();
-    lowBattery = !battery.charging && !battery.fullyCharged && battery.percent >= 0
-            && battery.percent <= 5;
-    if (services.observeBattery) {
-        services.observeBattery(this, [this] {
-            const auto battery = services.battery();
-            lowBattery = !battery.charging && !battery.fullyCharged && battery.percent >= 0
-                    && battery.percent <= 5;
-            updateSleepBattery();
-        });
-    }
+    // A quiet window decodes its sleep images when it is activated; they are
+    // large and not needed before the book shows.
+    if (!services.quiet)
+        prepareSleepImages();
     book->onPositionSaved([this](const QString &position, quint64 epoch) {
         if (sleepSave == SleepSave::Idle || epoch != wakePositionEpoch || lifecycleHidden || closing
             || exitPending || position.isEmpty() || position == sleepSavePosition)
@@ -475,13 +431,101 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     });
     book->onCheckpointFailed([this] { localSaveDue = true; });
     connectPageInput();
+    openingStages["build_ms"] = building.nsecsElapsed() / 1e6;
+    if (!services.quiet)
+        start();
+}
+
+void Reader::prepareSleepImages()
+{
+    prepareSleepCover();
+    loadTodayReading();
+    if (sleep::uses(preferences, sleep::Mode::Overlay))
+        prepareSleepOverlay();
+    prepareSleepWallpapers();
+}
+
+// Everything that acts outside the window: input, the clock, the shared
+// settings and the host's observers. A quiet window waits for activate().
+void Reader::start()
+{
+    started = true;
+    kobalt::platform::setReaderRefreshWindow(this);
+    qApp->installEventFilter(this);
+    // Remember this book's layout as the last layout in the shared profile.
+    if (storedSettingsReadable && !session->temporaryTypography()) {
+        auto global = appearance::globalPreferences(preferences);
+        appearance::rememberTextLayout(global, session->state());
+        appearance::rememberPageMargins(global, session->state());
+        if (global != storedSettings) {
+            // The shared settings must be on disk before the reader uses them.
+            // The window is not shown yet, so no input can arrive.
+            mainthread::AllowBlocking allow("remembered layout before reader input");
+            if (!kobalt::storage::updatePreferences(book->paths().preferences(), storedSettings,
+                                                    global))
+                kobalt::diagnostic("last-appearance-unsaved", {},
+                                   kobalt::DiagnosticSeverity::Error);
+        }
+    }
+    storedSettings = {};
+    storedSettingsReadable = false;
+    startClock();
+    if (services.observeBluetooth)
+        services.observeBluetooth(this, [this](bool enabled) {
+            if (menuBluetooth->active() == enabled)
+                return;
+            menuBluetooth->setActive(enabled);
+            if (topControls->isVisible() && !lifecycleHidden)
+                syncNavigation();
+        });
+    // With the Wi-Fi power saver, the host's own background requests must not
+    // turn Wi-Fi back on while this book is open, for example after a wake.
+    if (services.holdWifiOff)
+        services.holdWifiOff(this, [this] { return !closing && wifiPowerSaverApplies(); });
+    if (services.observeWifi)
+        services.observeWifi(this, [this](WifiStatus state) {
+            if (menuWifi->setStatus(state.enabled, state.connected, state.strength)
+                && topControls->isVisible() && !lifecycleHidden)
+                syncNavigation();
+        });
+    const auto battery = services.battery();
+    lowBattery = !battery.charging && !battery.fullyCharged && battery.percent >= 0
+            && battery.percent <= 5;
+    if (services.observeBattery) {
+        services.observeBattery(this, [this] {
+            const auto battery = services.battery();
+            lowBattery = !battery.charging && !battery.fullyCharged && battery.percent >= 0
+                    && battery.percent <= 5;
+            updateSleepBattery();
+        });
+    }
     // Android can suspend the app without hiding the embedded reader widget.
     connect(qApp, &QGuiApplication::applicationStateChanged, this, [this] {
         observeReading();
         if (services.suspended())
             book->checkpointReadingHistory();
     });
-    openingStages["build_ms"] = building.nsecsElapsed() / 1e6;
+}
+
+void Reader::activate(const kobalt::ReaderNotice &notice, const QString &coverImagePath)
+{
+    if (started)
+        return;
+    services.startupNotice = notice;
+    services.coverImagePath = coverImagePath;
+    prepareSleepImages();
+    // The KOSync interval counts from the opening, not from the build.
+    kosyncIntervalClock.start();
+    start();
+}
+
+std::unique_ptr<kobalt::ReaderSession> Reader::releaseQuiet()
+{
+    if (started)
+        return {};
+    // Nothing of this window reached storage, Nickel or the screen.
+    closeWithoutSaving = true;
+    return session->retained();
 }
 
 void Reader::buildReadingPage()
@@ -704,7 +748,6 @@ void Reader::startClockTimer()
         // out of the page-turn image and colour refresh policy.
         page->refreshContent();
     });
-    startClock();
 }
 
 void Reader::buildToolbar()

@@ -538,8 +538,9 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
 // How long a book with its hidden window shows only the logo before the
 // loading controls and cover appear.
 static constexpr int preparedLoadingDelay = 600;
-// How long Home stays quiet after a close before the book is prepared again.
-static constexpr int reopenPreparationDelay = 3000;
+// How long after a close the book is prepared again: just long enough for
+// Nickel to show Home first.
+static constexpr int reopenPreparationDelay = 300;
 
 void ReaderCoordinator::prepareOpeningControls()
 {
@@ -633,7 +634,7 @@ void ReaderCoordinator::prepareOpeningControls()
     updateOpening(OpeningStage::Content, 0);
     const auto epoch = generation;
     step("controls");
-    run.loading->afterFirstPaint([this, epoch, route, discardRetained] {
+    const auto continueOpening = [this, epoch, route, discardRetained] {
         if (epoch != generation || !busy || !run.opening || !run.loading)
             return;
         run.openingTimings["loading_frame_ms"] = double(run.openingTimer.elapsed());
@@ -649,7 +650,14 @@ void ReaderCoordinator::prepareOpeningControls()
         if (quiet.window && quiet.identity != run.identity)
             dropQuietReader(false);
         prepareOpening(route);
-    });
+    };
+    // The wait lets the loading controls paint before the work starts. A
+    // prepared book shows only the logo, which has painted already, and on a
+    // Kobo the wait for the next event pass took about 0.4 s.
+    if (prepared)
+        continueOpening();
+    else
+        run.loading->afterFirstPaint(continueOpening);
 }
 
 void ReaderCoordinator::missingAssets(bool assetsReady)

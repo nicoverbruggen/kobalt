@@ -48,7 +48,8 @@ set(kobo_hooks "${kobo_directory}/toolchains/nickelhook-qt6")
 set(kobo_hook_sources "${kobo_hooks}/nh.c" "${kobo_hooks}/resources.c")
 # An evaluation package (KOBALT_EVAL_PACKAGE) adds the scenario player and
 # this definition.
-set(kobo_eval_sources "${kobo_source}/scenario/player.cpp")
+set(kobo_eval_sources "${kobo_source}/scenario/player.cpp"
+    "${kobo_source}/scenario/resources.cpp")
 set(kobo_eval_definitions KOBALT_SCENARIO_PLAYER)
 
 # Options of the application objects and the mod library, on top of the

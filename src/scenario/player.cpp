@@ -1,5 +1,7 @@
 #include "player.h"
+#include "resources.h"
 #include "app/reader_window.h"
+#include "reading/rendering_mode.h"
 #include "sync/kosync.h"
 #include "support/diagnostics.h"
 #include "support/qt_compat.h"
@@ -49,9 +51,18 @@ class Events
 public:
     Events()
     {
-        setDiagnosticObserver([this](const QJsonObject &event) {
-            QMutexLocker lock(&mutex);
-            queue.push_back(event);
+        // The diagnostics module calls a copy of the observer outside its
+        // lock, so a worker's event can arrive after the player has removed
+        // it. The observer keeps the state alive until such a call ends.
+        setDiagnosticObserver([state = state](const QJsonObject &event) {
+            QMutexLocker lock(&state->mutex);
+            state->queue.push_back(event);
+            // Counted by name, and operations also by their own name, so a
+            // sample can count events that its steps never wait for.
+            const auto name = event.value("event").toString();
+            ++state->counted[name];
+            if (name == QLatin1String("operation-start"))
+                ++state->counted[name + '/' + event.value("operation").toString()];
         });
     }
 
@@ -61,18 +72,25 @@ public:
     // so the next event step matches only what that action caused.
     void skip()
     {
-        QMutexLocker lock(&mutex);
-        passed.insert(passed.end(), queue.begin(), queue.end());
-        queue.clear();
+        QMutexLocker lock(&state->mutex);
+        state->passed.insert(state->passed.end(), state->queue.begin(), state->queue.end());
+        state->queue.clear();
     }
 
     // Forgets the events that earlier steps passed over or left queued.
     // Called as each sample starts, so `earlier` sees this sample's only.
     void begin()
     {
-        QMutexLocker lock(&mutex);
-        passed.clear();
-        queue.clear();
+        QMutexLocker lock(&state->mutex);
+        state->passed.clear();
+        state->queue.clear();
+    }
+
+    // How many events of each kind arrived since the player started.
+    QMap<QString, int> counts()
+    {
+        QMutexLocker lock(&state->mutex);
+        return state->counted;
     }
 
     // Consumes events until one matches, and returns it. `where` lists
@@ -91,7 +109,8 @@ public:
         };
         QJsonObject found;
         if (earlier) {
-            QMutexLocker lock(&mutex);
+            QMutexLocker lock(&state->mutex);
+            auto &passed = state->passed;
             for (auto it = passed.begin(); it != passed.end(); ++it) {
                 if (matches(*it)) {
                     found = *it;
@@ -102,7 +121,8 @@ public:
         }
         waitUntil(
                 [&] {
-                    QMutexLocker lock(&mutex);
+                    QMutexLocker lock(&state->mutex);
+                    auto &queue = state->queue;
                     while (!queue.empty()) {
                         const auto event = queue.front();
                         queue.pop_front();
@@ -110,7 +130,7 @@ public:
                             found = event;
                             return true;
                         }
-                        passed.push_back(event);
+                        state->passed.push_back(event);
                     }
                     return false;
                 },
@@ -119,10 +139,16 @@ public:
     }
 
 private:
-    QMutex mutex;
-    std::deque<QJsonObject> queue;
-    // Events that left the queue without a match since the sample started.
-    std::deque<QJsonObject> passed;
+    struct State
+    {
+        QMutex mutex;
+        std::deque<QJsonObject> queue;
+        // Events that left the queue without a match since the sample started.
+        std::deque<QJsonObject> passed;
+        QMap<QString, int> counted;
+    };
+
+    const std::shared_ptr<State> state = std::make_shared<State>();
 };
 
 // A closed sheet keeps its names until its deferred deletion. Qt 5 runs that
@@ -239,6 +265,15 @@ public:
             return hold(step.value("hold").toObject(), step.value("ms").toInt(650), repetition);
         if (step.contains("open"))
             return open(step.value("open").toString(), step.value("fresh").toBool());
+        // Removes the disposable caches of a book, so a later open parses it.
+        if (step.contains("forget")) {
+            if (!host.forget) {
+                unsupported = true;
+                return "the host cannot remove caches";
+            }
+            host.forget(step.value("forget").toString());
+            return {};
+        }
         if (step.contains("close")) {
             // A book that cannot be opened again stays open for later scenarios.
             if (!host.open) {
@@ -299,6 +334,9 @@ public:
                     ? QString()
                     : "the reader stayed busy";
         if (step.contains("mark")) {
+            // Counted first, so the time and the CPU time do not include it.
+            markCounts = events.counts();
+            markResources = sampleResources();
             mark.start();
             markEnd = -1;
             return {};
@@ -308,6 +346,8 @@ public:
             if (!mark.isValid())
                 return "no mark";
             markEnd = mark.nsecsElapsed();
+            endResources = sampleResources();
+            endCounts = events.counts();
             return {};
         }
         // Lets time pass, for example a sync interval, with events running.
@@ -500,7 +540,25 @@ public:
         if (spec.contains("timer")) {
             if (!mark.isValid())
                 return false;
-            value = (markEnd >= 0 ? markEnd : mark.nsecsElapsed()) / 1e6;
+            const bool ended = markEnd >= 0;
+            value = (ended ? markEnd : mark.nsecsElapsed()) / 1e6;
+            // What the system counted from `mark` to `mark_end`, or to now,
+            // and the events named in `count`.
+            if (spec.value("resources").toBool()) {
+                const auto end = ended ? endResources : sampleResources();
+                const auto counts = ended ? endCounts : events.counts();
+                const auto measured = resourceStages(markResources, end);
+                for (auto it = measured.begin(); it != measured.end(); ++it)
+                    stages[it.key()] = it.value();
+                const auto threads = threadStages(markResources, end);
+                for (auto it = threads.begin(); it != threads.end(); ++it)
+                    stages["thread_cpu_ms." + it.key()] = it.value();
+                const auto counted = spec.value("count").toObject();
+                for (auto it = counted.begin(); it != counted.end(); ++it) {
+                    const auto key = it.value().toString();
+                    stages[it.key()] = counts.value(key) - markCounts.value(key);
+                }
+            }
             const auto parts = spec.value("stages").toObject();
             for (auto it = parts.begin(); it != parts.end(); ++it) {
                 const auto source = it.value().toObject();
@@ -545,6 +603,9 @@ private:
     QElapsedTimer mark;
     // Nanoseconds from `mark` to `mark_end`, or -1.
     qint64 markEnd = -1;
+    // The system's counters and the event counts at `mark` and `mark_end`.
+    Resources markResources, endResources;
+    QMap<QString, int> markCounts, endCounts;
     // The key of the open book, if the player knows it.
     QString current;
 };
@@ -626,6 +687,16 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
                                    { "paths", scenario.value("paths") },
                                    { "unit", scenario.value("unit").toString("ms") },
                                    { "fixture", scenario.value("fixture").toObject() } });
+        // A resource scenario tells the comparison which stages are system
+        // counters and event counts, and which counts must stay at a limit.
+        const auto sampleSpec = scenario.value("sample").toObject();
+        if (sampleSpec.value("resources").toBool()) {
+            result["resources"] = true;
+            result["counts"] =
+                    QJsonArray::fromStringList(sampleSpec.value("count").toObject().keys());
+            if (scenario.contains("expect"))
+                result["expect"] = scenario.value("expect").toObject();
+        }
         QJsonArray samples;
         QJsonArray details;
         QJsonObject stages;
@@ -685,6 +756,25 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
             result["stages"] = stages;
             results.append(result);
             continue;
+        }
+
+        // A scenario that names a rendering mode opens its books in it,
+        // whatever the preference or the environment says. The override ends
+        // with the scenario, also after a failure.
+        struct Rendering
+        {
+            bool set;
+
+            ~Rendering()
+            {
+                if (set)
+                    renderingMode::setOverride(-1);
+            }
+        } rendering{ scenario.contains("rendering") };
+
+        if (rendering.set) {
+            const auto mode = scenario.value("rendering").toString();
+            renderingMode::setOverride(mode == "hybrid" ? 2 : mode == "fast" ? 1 : 0);
         }
         runner.unsupported = false;
         QString failure = runner.book(scenario.value("book").toString());

@@ -323,11 +323,87 @@ QJsonObject compareScreens(const Run &base, const Run &target, const QJsonObject
 struct Metric
 {
     QString kind, source, unit = "ms";
+    // True for a stage of a resource scenario. Its values can be zero or
+    // negative, so the verdict uses the difference, not the ratio.
+    bool resource = false;
     QStringList paths;
     QVector<double> processMedians, samples;
     // Device runs also record the time observed from input to result.
     QVector<double> observedMedians, observed;
 };
+
+// How a resource stage is summed up per process, and its unit and kind.
+// State at the end of a phase is the last sample; amounts are the mean per
+// sample, so one write in ten turns still shows; times are the median.
+struct ResourceStage
+{
+    enum class Summary { Median, Mean, Last } summary;
+    QString unit, kind;
+};
+
+ResourceStage resourceStage(const QString &stage, const QStringList &counts)
+{
+    using Summary = ResourceStage::Summary;
+    if (counts.contains(stage))
+        return { Summary::Mean, "count", "resource-count" };
+    if (stage == "rss_end_kib" || stage == "heap_end_kib" || stage == "peak_kib")
+        return { Summary::Last, "KiB", "resource-memory" };
+    if (stage.endsWith("_kib"))
+        return { Summary::Mean, "KiB", "resource-memory" };
+    if (stage.endsWith("_bytes"))
+        return { Summary::Mean, "B", "resource-io" };
+    if (stage == "block_writes" || stage == "write_calls")
+        return { Summary::Mean, "count", "resource-io" };
+    if (stage.endsWith("_ms"))
+        return { Summary::Median, "ms", "resource" };
+    // Another field of an event, such as the pages of the whole book.
+    return { Summary::Mean, "count", "resource-count" };
+}
+
+double summarize(const QVector<double> &values, ResourceStage::Summary summary)
+{
+    if (values.isEmpty())
+        return 0;
+    if (summary == ResourceStage::Summary::Last)
+        return values.last();
+    if (summary == ResourceStage::Summary::Mean) {
+        double total = 0;
+        for (const double value : values)
+            total += value;
+        return total / values.size();
+    }
+    return median(values);
+}
+
+// Adds a metric for each stage of a resource scenario, as `<id>:<stage>`.
+// The CPU time of single threads stays in the raw results only: thread
+// names are not stable enough to compare.
+void addResourceMetrics(QMap<QString, Metric> &result, const QString &id,
+                        const QJsonObject &scenario, const QStringList &paths)
+{
+    QStringList counts;
+    for (const auto &value : scenario["counts"].toArray())
+        counts << value.toString();
+    const auto stages = scenario["stages"].toObject();
+    for (auto it = stages.begin(); it != stages.end(); ++it) {
+        if (it.key().startsWith("thread_cpu_ms."))
+            continue;
+        QVector<double> values;
+        for (const auto &value : it.value().toArray())
+            values.append(value.toDouble());
+        if (values.isEmpty())
+            continue;
+        const auto stage = resourceStage(it.key(), counts);
+        auto &metric = result[id + ':' + it.key()];
+        metric.kind = stage.kind;
+        metric.unit = stage.unit;
+        metric.resource = true;
+        metric.paths = paths;
+        metric.source = "resources";
+        metric.processMedians.append(summarize(values, stage.summary));
+        metric.samples += values;
+    }
+}
 
 // Samples by scenario id. Each process contributes its median, so a slow
 // process counts once rather than once per sample.
@@ -363,6 +439,9 @@ QMap<QString, Metric> metrics(const Run &run, bool device)
             metric.processMedians.append(median(samples));
             metric.samples += samples;
             metric.source = scenario["metric_source"].toString("event");
+            if (scenario["resources"].toBool())
+                addResourceMetrics(result, prefix + scenario["id"].toString(), scenario,
+                                   metric.paths);
             QVector<double> observed;
             for (const auto &sample : scenario["stages"].toObject()["observed_ms"].toArray())
                 observed.append(sample.toDouble());
@@ -373,6 +452,105 @@ QMap<QString, Metric> metrics(const Run &run, bool device)
         }
     }
     return result;
+}
+
+// The resource scenarios of a run, by id, with their limits and stages.
+QMap<QString, QJsonObject> resourceScenarios(const Run &run)
+{
+    QMap<QString, QJsonObject> result;
+    for (const auto &name : QDir(run.directory).entryList({ "perf-*.json" }, QDir::Files))
+        for (const auto &value : readObject(run.directory + "/" + name)["scenarios"].toArray()) {
+            const auto scenario = value.toObject();
+            if (!scenario["resources"].toBool())
+                continue;
+            // Several processes: keep every sample of every process.
+            auto &entry = result[scenario["id"].toString()];
+            if (entry.isEmpty()) {
+                entry = scenario;
+                continue;
+            }
+            auto stages = entry["stages"].toObject();
+            const auto more = scenario["stages"].toObject();
+            for (auto it = more.begin(); it != more.end(); ++it) {
+                auto list = stages[it.key()].toArray();
+                for (const auto &sample : it.value().toArray())
+                    list.append(sample);
+                stages[it.key()] = list;
+            }
+            entry["stages"] = stages;
+        }
+    return result;
+}
+
+// The pass or fail of the resource gate. It fails when a sample of the
+// target exceeds a limit in its scenario's `expect`, such as one profile
+// write during a plain page turn; when a resource scenario of the base is
+// missing from the target; and when a resource metric got slower or higher
+// beyond its band. Limits are exact: noise never excuses a write.
+QJsonObject resourceGate(const Run &base, const Run &target, const QJsonObject &perf,
+                         QStringList &lines)
+{
+    const auto before = resourceScenarios(base), after = resourceScenarios(target);
+    QStringList failures;
+    int checked = 0;
+    for (auto it = before.begin(); it != before.end(); ++it)
+        if (!after.contains(it.key()))
+            failures << QString("`%1` was not measured in the target").arg(it.key());
+    for (auto it = after.begin(); it != after.end(); ++it) {
+        const auto expect = it.value()["expect"].toObject();
+        const auto stages = it.value()["stages"].toObject();
+        for (auto limit = expect.begin(); limit != expect.end(); ++limit) {
+            ++checked;
+            const auto samples = stages[limit.key()].toArray();
+            if (samples.isEmpty()) {
+                failures << QString("`%1:%2` has no samples").arg(it.key(), limit.key());
+                continue;
+            }
+            int over = 0;
+            double highest = 0;
+            for (const auto &sample : samples) {
+                if (sample.toDouble() > limit.value().toDouble())
+                    ++over;
+                highest = std::max(highest, sample.toDouble());
+            }
+            if (over)
+                failures << QString("`%1:%2` is above %3 in %4 of %5 samples, at most %6")
+                                    .arg(it.key(), limit.key(),
+                                         QString::number(limit.value().toDouble()))
+                                    .arg(over)
+                                    .arg(samples.size())
+                                    .arg(QString::number(highest));
+        }
+    }
+    for (const auto &value : perf["metrics"].toArray()) {
+        const auto row = value.toObject();
+        const auto verdict = row["verdict"].toString();
+        if (row["resource"].toBool() && (verdict == "slower" || verdict == "higher"))
+            failures << QString("`%1` is %2: %3 against %4 %5")
+                                .arg(row["id"].toString(), verdict,
+                                     number(row["target_ms"].toDouble()),
+                                     number(row["base_ms"].toDouble()), row["unit"].toString());
+    }
+    const bool measured = !after.isEmpty() || !before.isEmpty();
+    const auto verdict = !measured ? QStringLiteral("not measured")
+            : failures.isEmpty()   ? QStringLiteral("pass")
+                                   : QStringLiteral("fail");
+    lines << "## Resource gate" << "";
+    if (!measured) {
+        lines << "Not checked: neither run has resource scenarios." << "";
+    } else {
+        lines << QString("%1. %2 exact limits checked in the target.")
+                         .arg(verdict == "pass" ? "Pass" : "Fail")
+                         .arg(checked)
+              << "";
+        for (const auto &failure : failures)
+            lines << "- " + failure;
+        if (!failures.isEmpty())
+            lines << "";
+    }
+    return { { "verdict", verdict },
+             { "checked", checked },
+             { "failures", QJsonArray::fromStringList(failures) } };
 }
 
 QJsonObject compareMetrics(const Run &base, const Run &target, bool device,
@@ -417,10 +595,11 @@ QJsonObject compareMetrics(const Run &base, const Run &target, bool device,
             const double c = median(m.processMedians);
             const double d = m.processMedians.size() > 1 ? deviation(m.processMedians)
                                                          : deviation(m.samples);
-            return c > 0 ? d / c : 0;
+            return c != 0 ? d / std::abs(c) : 0;
         };
         const double baseMs = centre(a), targetMs = centre(b);
-        const double ratio = baseMs > 0 ? targetMs / baseMs : 0;
+        // Negative amounts of the same sign compare by size.
+        const double ratio = baseMs != 0 && targetMs / baseMs > 0 ? targetMs / baseMs : 0;
         // A few A/A pairs are not enough to trust a band below the default.
         const QJsonValue calibrated = calibration["pairs"].toInt() >= 3
                 ? calibration["bands"].toObject().value(it.key())
@@ -428,17 +607,34 @@ QJsonObject compareMetrics(const Run &base, const Run &target, bool device,
         const double band = calibrated.isDouble()
                 ? calibrated.toDouble()
                 : config["bands"].toObject()[b.kind].toDouble(0.2);
-        // Memory is sampled in KiB, so its floor is too.
+        // Each unit has its own floor: memory in KiB, bytes, counts and times.
         const double floor = b.unit == "KiB"
                 ? config["floors_kib"].toObject()[b.kind].toDouble(1024)
-                : config["floors_ms"].toObject()[b.kind].toDouble(1);
+                : b.unit == "B"     ? config["floors_bytes"].toObject()[b.kind].toDouble(4096)
+                : b.unit == "count" ? config["floors_count"].toObject()[b.kind].toDouble(1)
+                                    : config["floors_ms"].toObject()[b.kind].toDouble(1);
         const double noise = std::max(spread(a), spread(b));
         const double change = std::abs(std::log(ratio > 0 ? ratio : 1));
         QString verdict = "same";
-        if (std::abs(targetMs - baseMs) >= floor && change > std::log(1 + band))
-            verdict = ratio > 1 ? "slower" : "faster";
+        // A resource amount can be zero or negative, such as writes during a
+        // page turn or memory freed by a close. Two amounts of the same sign
+        // compare by the ratio of their sizes. A change from or to zero, or
+        // across zero, has no ratio; the floor alone decides it. Counted
+        // events, such as profile transactions, are exact: any change beyond
+        // the floor counts, whatever the ratio.
+        const bool sameSign = (baseMs > 0 && targetMs > 0) || (baseMs < 0 && targetMs < 0);
+        const bool signedAmount = b.resource && (!sameSign || b.kind == "resource-count");
+        const auto more = b.unit == "ms" ? QStringLiteral("slower") : QStringLiteral("higher");
+        const auto less = b.unit == "ms" ? QStringLiteral("faster") : QStringLiteral("lower");
+        if (std::abs(targetMs - baseMs) >= floor && (signedAmount || change > std::log(1 + band)))
+            verdict = targetMs > baseMs ? more : less;
+        // From a negative amount to a small positive one, such as memory
+        // that the system reclaimed during one base sample, is not growth:
+        // the target must itself reach the floor.
+        if (b.resource && !sameSign && verdict == more && targetMs < floor)
+            verdict = "same";
         // A noisy metric keeps only changes far larger than its own spread.
-        if (verdict != "same" && noise > band && change < 3 * std::log(1 + noise))
+        if (!signedAmount && verdict != "same" && noise > band && change < 3 * std::log(1 + noise))
             verdict = "noisy";
         QStringList touched;
         for (const auto &file : changes)
@@ -455,21 +651,24 @@ QJsonObject compareMetrics(const Run &base, const Run &target, bool device,
                          { "band", band },
                          { "spread", noise },
                          { "verdict", verdict },
+                         { "resource", b.resource },
                          { "processes",
                            QJsonArray{ a.processMedians.size(), b.processMedians.size() } },
                          { "touched_by", QJsonArray::fromStringList(touched) } };
         rows.append(row);
-        if (verdict == "slower" || verdict == "faster") {
+        const auto shownRatio =
+                baseMs > 0 && targetMs > 0 ? QString::number(ratio, 'f', 2) : QStringLiteral("n/a");
+        if (verdict != "same" && verdict != "noisy") {
             const bool unexpected = touched.isEmpty();
             flags.append(QString("%1 %2 %3× (%4 → %5 %6)%7")
-                                 .arg(it.key(), verdict, QString::number(ratio, 'f', 2),
-                                      number(baseMs), number(targetMs), b.unit,
+                                 .arg(it.key(), verdict, shownRatio, number(baseMs),
+                                      number(targetMs), b.unit,
                                       unexpected ? ", unexpected: no changed file touches it"
                                                  : QString()));
         }
         lines << QString("| `%1`%8 | %2 | %3 | %4 | %5 | %6 | %7 |")
                          .arg(it.key(), number(baseMs) + " " + b.unit,
-                              number(targetMs) + " " + b.unit, QString::number(ratio, 'f', 2),
+                              number(targetMs) + " " + b.unit, shownRatio,
                               QString::number(noise * 100, 'f', 0) + "%", verdict,
                               touched.isEmpty() ? QString()
                                                 : QString::number(touched.size()) + " files",
@@ -577,6 +776,7 @@ int main(int argc, char **argv)
             compareMetrics(base, target, false, config, calibration, changes, lines, flags);
     report["device"] =
             compareMetrics(base, target, true, config, calibration, changes, lines, flags);
+    report["gate"] = resourceGate(base, target, report["perf"].toObject(), lines);
     lines << "## Changes" << ""
           << QString("%1 commits and %2 changed files between base and target.")
                      .arg(commits.size())
@@ -591,6 +791,9 @@ int main(int argc, char **argv)
         summary << "- " + flag.toString();
     const bool timed = report["perf"].toObject()["compared"].toBool()
             || report["device"].toObject()["compared"].toBool();
+    const auto gate = report["gate"].toObject()["verdict"].toString();
+    if (gate != "not measured")
+        lines.insert(5, QString("Resource gate: %1.\n").arg(gate));
     lines.insert(5,
                  !failed.isEmpty() ? "Evaluation contains failed or missing results.\n"
                          : !timed  ? "Timings were not compared: a run has no timing results.\n"
@@ -606,6 +809,9 @@ int main(int argc, char **argv)
         for (const auto *section : { "perf", "device" })
             for (const auto &value : report[section].toObject()["metrics"].toArray()) {
                 const auto row = value.toObject();
+                // A resource amount at zero has no ratio to learn from.
+                if (row["ratio"].toDouble() <= 0)
+                    continue;
                 auto history = observed[row["id"].toString()].toArray();
                 history.append(std::abs(std::log(row["ratio"].toDouble(1))));
                 while (history.size() > 20)

@@ -25,6 +25,9 @@ struct Scenario
     QJsonObject fixture;
     QVector<double> samples;
     QMap<QString, QVector<double>> stages;
+    // For a resource scenario: `resources`, `counts` and `expect` from the
+    // player, for the comparison.
+    QJsonObject resources;
 };
 
 QJsonArray numbers(const QVector<double> &values)
@@ -334,6 +337,9 @@ private:
             scenario.unit = result.value("unit").toString();
             for (const auto &sample : result.value("samples").toArray())
                 scenario.samples.append(sample.toDouble());
+            for (const auto *key : { "resources", "counts", "expect" })
+                if (result.contains(key))
+                    scenario.resources[key] = result.value(key);
             const auto stages = result.value("stages").toObject();
             for (auto it = stages.begin(); it != stages.end(); ++it)
                 for (const auto &sample : it.value().toArray())
@@ -394,13 +400,16 @@ int run(const QString &output)
         QJsonObject stages;
         for (auto it = scenario.stages.begin(); it != scenario.stages.end(); ++it)
             stages[it.key()] = numbers(it.value());
-        scenarios.append(QJsonObject{ { "id", scenario.id },
-                                      { "kind", scenario.kind },
-                                      { "unit", scenario.unit },
-                                      { "paths", QJsonArray::fromStringList(scenario.paths) },
-                                      { "fixture", scenario.fixture },
-                                      { "samples_ms", numbers(scenario.samples) },
-                                      { "stages", stages } });
+        QJsonObject entry{ { "id", scenario.id },
+                           { "kind", scenario.kind },
+                           { "unit", scenario.unit },
+                           { "paths", QJsonArray::fromStringList(scenario.paths) },
+                           { "fixture", scenario.fixture },
+                           { "samples_ms", numbers(scenario.samples) },
+                           { "stages", stages } };
+        for (auto it = scenario.resources.begin(); it != scenario.resources.end(); ++it)
+            entry[it.key()] = it.value();
+        scenarios.append(entry);
     }
     const QJsonObject result{ { "schema", 1 },
                               { "kind", "kobalt-perf" },

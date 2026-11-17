@@ -274,7 +274,8 @@ if(BUILD_TESTING)
         message(FATAL_ERROR "Variable-font fixture does not match its pinned source")
     endif()
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${test_variable_font}")
-    add_executable(kobalt-desktop-tests "${KOBALT_ROOT}/tests/desktop.cpp" "${source}/scenario/player.cpp")
+    add_executable(kobalt-desktop-tests "${KOBALT_ROOT}/tests/desktop.cpp" "${source}/scenario/player.cpp"
+        "${source}/scenario/resources.cpp")
     qt_add_resources(kobalt-desktop-tests "screenshot-gallery" PREFIX "/"
         BASE "${CMAKE_CURRENT_SOURCE_DIR}" FILES "${CMAKE_CURRENT_SOURCE_DIR}/screenshot-gallery.html")
     target_link_libraries(kobalt-desktop-tests PRIVATE kobalt-desktop kobalt-core Qt6::Test Qt6::GuiPrivate)
@@ -395,6 +396,13 @@ if(BUILD_TESTING)
         -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake")
     set_tests_properties(build.eval-device-outcomes PROPERTIES ENVIRONMENT "${headless_environment}"
         LABELS "build;fast" TIMEOUT 35)
+    add_test(NAME build.eval-resource-gate COMMAND "${CMAKE_COMMAND}"
+        "-DTEST_EXECUTABLE=${CMAKE_COMMAND}"
+        "-DTEST_ARGUMENTS=-DCOMPARE=$<TARGET_FILE:kobalt-eval-compare>;-DCONFIG=${KOBALT_ROOT}/platforms/eval/eval.json;-P;${KOBALT_ROOT}/tests/eval_resource_gate.cmake"
+        "-DTEST_TIMEOUT=30" "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake")
+    set_tests_properties(build.eval-resource-gate PROPERTIES ENVIRONMENT "${headless_environment}"
+        LABELS "build;fast" TIMEOUT 35)
     add_custom_target(kobalt-fast-tests DEPENDS kobalt-desktop-tests kobalt-eval-compare)
     add_executable(kobalt-reader-lifecycle-tests "${KOBALT_ROOT}/tests/reader_lifecycle.cpp"
         "${KOBALT_ROOT}/platforms/kobo/common/sync_exclusion.cpp"
@@ -489,7 +497,7 @@ if(BUILD_TESTING)
     set_tests_properties(platform.sleep-persistence PROPERTIES ENVIRONMENT "${headless_environment}"
         LABELS "platform;integration" TIMEOUT 35)
     add_executable(kobalt-scenario-sleep-tests "${KOBALT_ROOT}/tests/scenario_sleep.cpp"
-        "${source}/scenario/player.cpp")
+        "${source}/scenario/player.cpp" "${source}/scenario/resources.cpp")
     target_include_directories(kobalt-scenario-sleep-tests PRIVATE "${source}")
     target_link_libraries(kobalt-scenario-sleep-tests PRIVATE Qt6::Widgets Qt6::GuiPrivate Qt6::Network)
     target_compile_options(kobalt-scenario-sleep-tests PRIVATE -Wall -Wextra -Werror)

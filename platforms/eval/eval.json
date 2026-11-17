@@ -1,9 +1,11 @@
 {
   "schema": 1,
   "kind": "kobalt-eval-config",
-  "bands": {"micro": 0.15, "e2e": 0.2, "device": 0.25, "memory": 0.1},
-  "floors_ms": {"micro": 0.05, "e2e": 1, "device": 30},
-  "floors_kib": {"memory": 4096, "device": 4096},
+  "bands": {"micro": 0.15, "e2e": 0.2, "device": 0.25, "memory": 0.1, "resource": 0.3, "resource-memory": 0.15, "resource-io": 0.5},
+  "floors_ms": {"micro": 0.05, "e2e": 1, "device": 30, "resource": 2},
+  "floors_kib": {"memory": 4096, "device": 4096, "resource-memory": 1024},
+  "floors_bytes": {"resource-io": 65536},
+  "floors_count": {"resource-io": 4, "resource-count": 0.5},
   "volatile_screens": [
     {"prefix": "about", "reason": "shows the source commit and whether the tree is modified"},
     {"prefix": "annotation-export", "reason": "shows the export time and the temporary profile path"}

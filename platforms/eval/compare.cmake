@@ -5,6 +5,7 @@
 #
 # BASE defaults to the recorded baseline and TARGET to the newest run.
 # CALIBRATE adds an A/A pair to build/eval/calibration.json.
+# GATE makes the command fail when the resource gate in the report fails.
 cmake_minimum_required(VERSION 3.22)
 get_filename_component(root "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
@@ -130,3 +131,9 @@ execute_process(COMMAND "${root}/build/desktop-${desktop_platform}/kobalt-eval-c
     --changes "${output}/changes.txt" --commits "${output}/commits.txt"
     COMMAND_ERROR_IS_FATAL ANY)
 message(STATUS "Report: ${output}/report.md")
+file(READ "${output}/report.json" report)
+string(JSON gate GET "${report}" gate verdict)
+message(STATUS "Resource gate: ${gate}")
+if(GATE AND NOT gate STREQUAL "pass")
+    message(FATAL_ERROR "The resource gate did not pass. See ${output}/report.md")
+endif()

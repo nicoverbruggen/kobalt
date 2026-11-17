@@ -1362,8 +1362,13 @@ void resetLayoutProgress()
 
 void setEstimateProgress(int measured, int items)
 {
-    if (items > 0)
-        layoutPercent = estimateShare * qBound(0, measured, items) / items;
+    // Estimate work can resume after the build has passed it: the progress
+    // only goes forward until resetLayoutProgress().
+    if (items <= 0)
+        return;
+    const int done = estimateShare * qBound(0, measured, items) / items;
+    int seen = layoutPercent.load();
+    while (done > seen && !layoutPercent.compare_exchange_weak(seen, done)) { }
 }
 
 void setBuildProgress(int percent)

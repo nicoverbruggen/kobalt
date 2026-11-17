@@ -218,6 +218,8 @@ public:
     // shows how long the whole book took from there.
     qint64 layoutMilliseconds() const
     {
+        if (layoutReadyMilliseconds_ >= 0)
+            return layoutReadyMilliseconds_;
         return layoutClock_.isValid() ? layoutClock_.elapsed() : -1;
     }
 
@@ -569,6 +571,9 @@ private:
     RenderProgress renderProgress_;
     QElapsedTimer renderTimer;
     QElapsedTimer layoutClock_;
+    // When a background build of the whole book was ready, or -1. Hybrid
+    // shows that layout from the next turn; its time ends at the build.
+    qint64 layoutReadyMilliseconds_ = -1;
     quint64 layoutStarts_ = 0;
     bool switchingMode_ = false;
     void beginRenderProgress(RenderReason reason);

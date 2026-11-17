@@ -625,8 +625,11 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     layoutReady_ = false;
     newestLayout->fetch_add(1);
     layoutClock_.start();
+    layoutReadyMilliseconds_ = -1;
     ++layoutStarts_;
-    resetLayoutProgress();
+    // A preview session shares the engine's progress with the reader.
+    if (!preview_)
+        resetLayoutProgress();
     newest->store(revision);
     cancelSearch();
     lease_ = request.lease;
@@ -932,8 +935,12 @@ void ReaderSession::editAppearance(const appearance::Patch &patch, QSize size)
 
 void ReaderSession::showFullDocument(quint64 job)
 {
-    if (currentSourceFrame(job))
-        fullDocumentPending_ = true;
+    if (!currentSourceFrame(job))
+        return;
+    fullDocumentPending_ = true;
+    // The layout took this long. The next turn shows it, maybe much later.
+    if (layoutReadyMilliseconds_ < 0 && layoutClock_.isValid())
+        layoutReadyMilliseconds_ = layoutClock_.elapsed();
 }
 
 void ReaderSession::requestAppearance(const appearance::Requested &settings, QSize size,
@@ -2687,8 +2694,10 @@ void ReaderSession::request(bool appearanceChange, RenderReason reason)
         // Hybrid's switch to the whole book keeps the layout it has timed.
         if (!switchingMode_) {
             layoutClock_.start();
+            layoutReadyMilliseconds_ = -1;
             ++layoutStarts_;
-            resetLayoutProgress();
+            if (!preview_)
+                resetLayoutProgress();
         }
         interruptSearch();
     } else {

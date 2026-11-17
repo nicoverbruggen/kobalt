@@ -9792,6 +9792,54 @@ private slots:
                  latest);
     }
 
+    // Checks that a whole-book build that is ready stops the layout clock.
+    // Hybrid shows that layout from the next turn, which can come much
+    // later; Book status shows how long the build took.
+    void layoutTimeEndsWhenWholeBookIsReady()
+    {
+        renderingMode::setOverride(2);
+        const int quiet = renderingMode::buildQuietMilliseconds();
+        renderingMode::setBuildQuietMilliseconds(0);
+        const auto restore = qScopeGuard([quiet] {
+            renderingMode::setOverride(-1);
+            renderingMode::setBuildQuietMilliseconds(quiet);
+        });
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QVERIFY(test::writeBook(directory.path(), "songs.epub", test::songbook(200)));
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(directory.filePath("songs.epub"), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY_WITH_TIMEOUT(!host.session()->busy(), 30000);
+        // Reading starts the build of the whole book. Turns keep the count
+        // going, as in Book status.
+        QElapsedTimer waited, sinceTurn;
+        waited.start();
+        sinceTurn.start();
+        host.window()->pageButton(1);
+        while (waited.elapsed() < 120000 && kobalt::layoutProgressPercent() < 100) {
+            if (sinceTurn.elapsed() > 3000 && !host.session()->busy()) {
+                host.window()->pageButton(1);
+                sinceTurn.restart();
+            }
+            QTest::qWait(50);
+        }
+        QCOMPARE(kobalt::layoutProgressPercent(), 100);
+        // Without a turn, the time no longer grows.
+        const auto frozen = [&host] {
+            const auto before = host.session()->layoutMilliseconds();
+            QTest::qWait(20);
+            return before >= 0 && host.session()->layoutMilliseconds() == before;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(frozen(), 10000);
+    }
+
     // Checks that at close the native position is written before the native reading-time finish, and that the close waits for that finish.
     void closeWritesPositionBeforeNativeTime()
     {

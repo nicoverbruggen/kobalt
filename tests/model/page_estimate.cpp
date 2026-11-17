@@ -3298,9 +3298,28 @@ void chapterSurvey(const QString &path)
 #endif
 } // namespace
 
+// The layout progress only goes forward within one layout: estimate work
+// that resumes after the build has passed it does not pull it back.
+void layoutProgressForward()
+{
+    using namespace kobalt;
+    resetLayoutProgress();
+    setEstimateProgress(5, 10);
+    require(layoutProgressPercent() == 40, "Estimate progress was not recorded");
+    setBuildProgress(75);
+    require(layoutProgressPercent() == 95, "Build progress was not recorded");
+    setEstimateProgress(10, 10);
+    require(layoutProgressPercent() == 95, "Resumed estimate work moved the progress back");
+    setBuildProgress(50);
+    require(layoutProgressPercent() == 95, "An earlier build slice moved the progress back");
+    resetLayoutProgress();
+    require(layoutProgressPercent() == 0, "A new layout kept the old progress");
+}
+
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    layoutProgressForward();
 #if __has_include(<koblaze.h>)
     if (argc > 2 && QByteArray(argv[1]) == "--chapter") {
         chapterSurvey(QString::fromLocal8Bit(argv[2]));

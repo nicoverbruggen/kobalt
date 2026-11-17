@@ -412,6 +412,7 @@ void Reader::openSettings()
         return;
     kobalt::ui::PanelTiming timing("settings");
     ensureSettings();
+    timing.stage("build");
     kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(),
                            kosyncClient->signedIn(), kosyncClient->automatic());
     kosyncPage->setLastSync(kosyncClient->lastSync());
@@ -463,7 +464,9 @@ void Reader::openSettings()
         if (!session->fontFaces().contains(*face))
             face->clear();
     showDebugSettings();
+    timing.stage("prepare");
     showSettingsFonts();
+    timing.stage("fonts");
     settingsPages->setCurrentIndex(int(SettingsPage::Display));
     resetDefaults->setText(strings::get("reader.restore_appearance_defaults"));
     resetDefaults->setEnabled(true);
@@ -534,6 +537,7 @@ void Reader::openSettings()
     screenRefreshMode = kobalt::screenRefresh(preferences.value("screen_refresh").toString());
     showScreenRefresh();
     static_cast<SettingsPanel *>(general)->setZenLayout(zenMode());
+    timing.stage("controls");
     fitSettings();
     general->show();
     general->raise();
@@ -541,6 +545,8 @@ void Reader::openSettings()
     // so fit it again now that it shows. The first fit chose the list or a
     // section; nothing paints before the event loop runs.
     fitSettings();
+    timing.stage("fit");
+    // open_ms, below, is the reader's refresh.
     refresh();
     timing.finish(general);
 }

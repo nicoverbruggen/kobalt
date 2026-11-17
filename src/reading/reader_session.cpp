@@ -13,6 +13,9 @@
 #include <QElapsedTimer>
 #include "publication/publication.h"
 #include "storage/sleep_snapshot.h"
+#include "storage/preview_store.h"
+#include "support/main_thread.h"
+#include <QDir>
 #include <QFile>
 #include "reading/rendering_mode.h"
 #include <QFileInfo>
@@ -637,6 +640,35 @@ std::unique_ptr<ReaderSession> ReaderSession::retained()
             },
             Qt::QueuedConnection);
     return retained;
+}
+
+void ReaderSession::evictDocumentCache(bool allBooks, const QString &documentCache,
+                                       const QString &previews)
+{
+    retiring = true;
+    ++revision;
+    newest->store(revision);
+    cancelSearch();
+    cancelSource();
+    const auto engine = engine_;
+    kobalt::qt::invoke(
+            engineWorker(),
+            [engine, allBooks, documentCache, previews] {
+                EngineJob activity;
+                mainthread::blocking("document-cache-evict");
+                bool removed = engine->removeDocumentCache(allBooks);
+                // A book that opened without the cache has no folder of its own.
+                if (allBooks && !removed && !documentCache.isEmpty())
+                    removed = QDir(documentCache).removeRecursively();
+                const bool tiles =
+                        !allBooks || previews.isEmpty() || storage::removePreviewFiles(previews);
+                diagnostic("document-cache-evicted",
+                           { { "all_books", allBooks },
+                             { "removed", removed },
+                             { "previews_removed", tiles } },
+                           DiagnosticSeverity::Warning);
+            },
+            Qt::QueuedConnection);
 }
 
 void ReaderSession::cancelSource()

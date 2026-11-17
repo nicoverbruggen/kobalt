@@ -9,6 +9,15 @@ inline constexpr const char *keys[] = { "disable_navigate",       "disable_stats
 
 enum Feature { Navigate, Stats, Annotations, Bookmarks, Kosync, Words, HighlightLinks };
 
+// Settings > System > Developer. Debug mode shows the Debug tab, the debug
+// fields of the header and footer picker and the Fast rendering engine.
+inline constexpr auto debugModeKey = "debug_mode";
+
+inline bool debugMode(const QJsonObject &preferences)
+{
+    return preferences.value(debugModeKey).toBool(false);
+}
+
 inline bool enabled(const QJsonObject &preferences, Feature feature)
 {
     return !preferences.value(keys[feature]).toBool(false);

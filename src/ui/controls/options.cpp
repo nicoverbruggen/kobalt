@@ -469,6 +469,8 @@ void RadioList::setUniformRows(bool uniform)
 
 int RadioList::rowHeight(int index, int width) const
 {
+    if (index >= 0 && index < leftOut.size() && leftOut[index])
+        return 0;
     if (uniformRows || index < 0 || index >= rows.size())
         return rowHeight(width);
     return qMax(minimum, rows[index]->heightForWidth(width));
@@ -504,6 +506,18 @@ void RadioList::showRows(int from, int number)
     updateGeometry();
 }
 
+void RadioList::setLeftOut(int index, bool value)
+{
+    if (index < 0 || index >= rows.size())
+        return;
+    leftOut.resize(rows.size());
+    if (leftOut[index] == value)
+        return;
+    leftOut[index] = value;
+    arrange();
+    updateGeometry();
+}
+
 void RadioList::resizeEvent(QResizeEvent *)
 {
     arrange();
@@ -515,7 +529,8 @@ void RadioList::arrange()
     int top = 0;
     for (int index = 0; index < rows.size(); ++index) {
         auto *row = rows[index];
-        const bool shown = index >= first && index < last;
+        const bool shown =
+                index >= first && index < last && !(index < leftOut.size() && leftOut[index]);
         auto look = row->presentation();
         look.dividers = Edges(Qt::BottomEdge)
                 | (topDivider && index == first ? Edges(Qt::TopEdge) : Edges{});

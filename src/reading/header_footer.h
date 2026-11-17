@@ -54,6 +54,14 @@ inline constexpr Field choosableFields[] = {
     Field::BatteryWarning, Field::ChapterTimeLeft,    Field::BookTimeLeft,
     Field::PageTurnTime,   Field::ChapterLoadTime,    Field::BookStatus,
 };
+
+// The performance fields. The picker offers them only in debug mode; a
+// layout that has one keeps it.
+inline constexpr bool debugField(Field field)
+{
+    return field == Field::PageTurnTime || field == Field::ChapterLoadTime
+            || field == Field::BookStatus;
+}
 // What the field list shows for the page turn time before the first turn.
 inline constexpr qint64 samplePageTurnMilliseconds = 12;
 // Battery warning shows the battery only below this percentage.

@@ -1,5 +1,6 @@
 #include "rendering_mode.h"
 #include "engine/engine.h"
+#include "features.h"
 #include <atomic>
 
 namespace kobalt::renderingMode {
@@ -21,10 +22,13 @@ void select()
 
 Mode fromPreferences(const QJsonObject &preferences)
 {
-    // Settings does not offer Fast for now: Hybrid opens as fast and ends
-    // with exact pages. A saved "fast" stays in the preferences and opens
-    // as Hybrid. Fast itself remains for the override and the environment.
+    // Settings offers Fast only in debug mode: Hybrid opens as fast and ends
+    // with exact pages. Without debug mode, a saved "fast" stays in the
+    // preferences and opens as Hybrid. Fast also remains for the override
+    // and the environment.
     const auto value = preferences.value(preferenceKey).toString();
+    if (value == QLatin1String("fast") && features::debugMode(preferences))
+        return Mode::Fast;
     return value == QLatin1String("accurate") ? Mode::Accurate : Mode::Hybrid;
 }
 

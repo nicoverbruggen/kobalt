@@ -660,6 +660,7 @@ void FieldChooser::open(int slot, Field current, const headerfooter::Values &val
     const auto &rows = list->options();
     for (int index = 0; index < rows.size(); ++index) {
         const auto field = headerfooter::choosableFields[index];
+        list->setLeftOut(index, headerfooter::debugField(field) && !debug && field != current);
         auto shown = headerfooter::content(field, values, uppercase);
         // Before the first turn the page turn time shows a typical value.
         if (field == Field::PageTurnTime && values.pageTurnMilliseconds < 0) {

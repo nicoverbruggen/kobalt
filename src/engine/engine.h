@@ -72,6 +72,15 @@ public:
         Q_UNUSED(milliseconds);
         return true;
     }
+
+    // Debug mode: destroys every document of this book, then removes the
+    // book's entries from the parsed-book cache, or the whole cache with
+    // `allBooks`. The engine shows nothing afterwards; the reader closes.
+    virtual bool removeDocumentCache(bool allBooks)
+    {
+        Q_UNUSED(allBooks);
+        return false;
+    }
     // Shared count, on the owning engine thread. Populates the Stats graph
     // from source anchors. Counts visible source text once, including
     // non-linear spine fragments; excludes SVG and ruby annotation text.

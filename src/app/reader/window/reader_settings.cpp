@@ -307,11 +307,13 @@ void Reader::syncChromeControls()
                          starred ? strings::get("header_footer.preset.modified_name")
                                            .arg(presetLabel(chromePreset))
                                  : presetLabel(chromePreset)));
-    if (fieldChooser && fieldChooser->isVisible())
+    if (fieldChooser && fieldChooser->isVisible()) {
+        fieldChooser->debug = features::debugMode(preferences);
         fieldChooser->open(fieldChooser->slot(), current.slotFields[fieldChooser->slot()], values,
                            current.uppercase[fieldChooser->slot()],
                            fieldChooser->slot() < 3 ? page->headerTextPixels()
                                                     : page->footerTextPixels());
+    }
 }
 
 QWidget *Reader::chromeView() const
@@ -351,6 +353,7 @@ void Reader::openFieldChooser(int slot)
         return;
     const auto &current = page->chrome;
     auto *chooser = ensureFieldChooser();
+    chooser->debug = features::debugMode(preferences);
     chooser->open(slot, current.slotFields[slot], chromeValues(), current.uppercase[slot],
                   slot < 3 ? page->headerTextPixels() : page->footerTextPixels());
     headerFooterView->hide();
@@ -459,6 +462,7 @@ void Reader::openSettings()
                         &settingsDictionaryFontFace })
         if (!session->fontFaces().contains(*face))
             face->clear();
+    showDebugSettings();
     showSettingsFonts();
     settingsPages->setCurrentIndex(int(SettingsPage::Display));
     resetDefaults->setText(strings::get("reader.restore_appearance_defaults"));
@@ -871,6 +875,8 @@ void Reader::applySettings()
     next["dictionary_font_size"] = settingsDictionaryFontSize;
     next["header_footer_added_weight"] = settingsHeaderFooterWeight;
     next["hide_tab_labels"] = hideTabLabelsOption->isChecked();
+    next[features::debugModeKey] =
+            static_cast<SettingsPanel *>(general)->debugModeOption->isChecked();
     next["save_looked_up_words"] = saveWordsOption->isChecked();
     next["zen_mode"] = zenModeOption->isChecked();
     if (wifiPowerSaverOption)

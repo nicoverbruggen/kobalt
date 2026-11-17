@@ -479,6 +479,7 @@ int initialize()
     kobalt::setDiagnosticSystem(kobalt::nickel::diagnosticSystem());
     kobalt::initializeDiagnostics(QString::fromLatin1(configDir) + "/diagnostics",
                                   kobalt::diagnosticsRequested(QString::fromLatin1(configDir)));
+    kobalt::setDiagnosticsMarker(QString::fromLatin1(configDir));
     kobalt::initializeStandbyDiagnostics();
     kobalt::diagnostic(
             "startup-hooks",

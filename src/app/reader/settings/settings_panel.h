@@ -47,6 +47,8 @@ enum class SettingsPage {
     System,
     About,
     Kosync,
+    // Shown only in debug mode, after About.
+    Debug,
     // Zen mode's own page. It has no tab: the rail is hidden in Zen mode.
     Zen
 };
@@ -155,6 +157,18 @@ public:
     // the page, such as returning to the section list.
     std::function<void()> refitRequested;
     void showDictionaries(bool visible);
+    // Shows or hides the Debug tab. Hiding it leaves the Debug page.
+    void showDebug(bool visible);
+    // System > Developer.
+    ui::DescribedOption *debugModeOption = nullptr;
+    // The Debug page. The reader wires the actions and fills the captions.
+    ui::CaptionButton *evictBookCacheButton = nullptr, *clearCachesButton = nullptr,
+                      *clearDiagnosticLogButton = nullptr;
+    ui::DescribedOption *detailedDiagnosticsOption = nullptr;
+    // Device facts. Tapping one reads them again.
+    ui::CaptionButton *debugVersionButton = nullptr, *debugQtButton = nullptr,
+                      *debugFirmwareButton = nullptr, *debugCoresButton = nullptr,
+                      *debugStorageButton = nullptr;
     void showPowerManagement(bool visible);
     int fitContent(QSize availableSize);
     ui::DescribedOption *hideTabLabelsOption = nullptr, *saveWordsOption = nullptr;

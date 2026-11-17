@@ -3526,6 +3526,9 @@ public:
     static bool renameExisting( lString32 filename, lUInt32 crc, lUInt32 docFlags, lString32 &cachePath );
     /// remove older cache files for a document after a successful save
     static bool removeObsolete( lString32 filename, lString32 cachePath );
+    /// Blaze: remove every cache file of a document, for Kobalt's debug
+    /// eviction. Its documents must be closed first.
+    static bool koblazeRemove( lString32 filename );
     /// delete all cache files
     static bool clear();
     /// returns true if cache is enabled (successfully initialized)

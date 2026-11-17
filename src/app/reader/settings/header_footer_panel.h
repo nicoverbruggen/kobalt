@@ -118,6 +118,10 @@ public:
 
     int slot() const { return currentSlot; }
 
+    // Debug mode: the list also offers the performance fields. Without it
+    // the list shows one only when the slot has it. Applies at open().
+    bool debug = false;
+
     std::function<void(headerfooter::Field)> selected;
     // The slot's case: true for uppercase.
     std::function<void(bool)> uppercaseChanged;

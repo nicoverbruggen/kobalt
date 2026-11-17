@@ -5,6 +5,7 @@
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "engine_document.h"
+#include <QDir>
 #include "engine/engine_worker.h"
 #include "reader_source.h"
 #include "publication/image_policy.h"
@@ -614,6 +615,35 @@ bool EngineDocument::saveDocumentCacheStep(int milliseconds)
         ldomDocCache::removeObsolete(name, document->getCacheFilePath());
     }
     return true;
+}
+
+bool EngineDocument::removeDocumentCache(bool allBooks)
+{
+    const auto directory = cacheDirectory_;
+    const auto name = documentCacheName(cacheFingerprint_);
+    if (directory.isEmpty() || (!allBooks && name.isEmpty()))
+        return false;
+    // A mapped document keeps its cache file open and writes to it. Every
+    // document of the book goes first, the parked whole-book build too.
+    building_.reset();
+    dropSideDocuments();
+    full_.reset();
+    retired_.clear();
+    cache_.clear();
+    searchText_.reset();
+    sourceIndex_.reset();
+    engine_.reset();
+    if (allBooks)
+        return QDir(directory).removeRecursively();
+    // Not DocumentCacheScope: eviction also works when free space is low.
+    const auto path = directory.toUtf8();
+    if (!ldomDocCache::init(Utf8ToUnicode(lString8(path.constData())),
+                            DocumentCacheScope::maxBytes))
+        return false;
+    const bool removed =
+            ldomDocCache::koblazeRemove(Utf8ToUnicode(lString8(name.toUtf8().constData())));
+    ldomDocCache::close();
+    return removed;
 }
 
 FontWeightAxis EngineDocument::weightAxis() const

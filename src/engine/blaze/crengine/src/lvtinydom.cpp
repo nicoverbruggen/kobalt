@@ -19883,6 +19883,28 @@ public:
         return writeIndex(true) && result;
     }
 
+    // Blaze: removeObsolete() without a file to keep.
+    bool koblazeRemove( lString32 filename )
+    {
+        lString32 suffix(".00000000.0.cr3");
+        lString32 prefix = makeFileName(filename, 0, 0);
+        prefix = prefix.substr(0, prefix.length() - suffix.length()) + ".";
+        bool result = true;
+        for ( int i=0; i<_files.length(); ) {
+            lString32 path = _cacheDir + _files[i]->filename;
+            if ( _files[i]->filename.startsWith(prefix) ) {
+                if ( !LVFileExists(path) || LVDeleteFile(path) ) {
+                    _files.erase(i, 1);
+                    continue;
+                }
+                CRLog::error("Cannot delete cache file %s", UnicodeToUtf8(path).c_str());
+                result = false;
+            }
+            i++;
+        }
+        return writeIndex(true) && result;
+    }
+
     virtual ~ldomDocCacheImpl()
     {
     }
@@ -19947,6 +19969,11 @@ bool ldomDocCache::renameExisting( lString32 filename, lUInt32 crc, lUInt32 docF
 bool ldomDocCache::removeObsolete( lString32 filename, lString32 cachePath )
 {
     return _cacheInstance && !koblaze_doc_cache_suspended && _cacheInstance->removeObsolete(filename, cachePath);
+}
+
+bool ldomDocCache::koblazeRemove( lString32 filename )
+{
+    return _cacheInstance && !koblaze_doc_cache_suspended && _cacheInstance->koblazeRemove(filename);
 }
 
 /// delete all cache files

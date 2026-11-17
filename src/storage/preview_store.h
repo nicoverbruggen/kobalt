@@ -15,6 +15,10 @@ namespace kobalt::storage {
 // Run before library scanning, or on a worker thread. False means a directory
 // was unsafe or a file could not be removed.
 bool migratePreviews(const QString &directory, bool requireScan = false);
+// Removes the private .preview files in `directory` and in its direct
+// subfolders, such as the Activity covers. Writes storage: run it on a worker
+// thread. False when a file could not be removed.
+bool removePreviewFiles(const QString &directory);
 // A pending scan survives interruption between file removal and Nickel's scan.
 bool previewMigrationNeedsScan(const QString &directory);
 // Called after Nickel reports scan completion. Writes the marker on the worker.

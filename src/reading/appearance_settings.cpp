@@ -137,6 +137,7 @@ QJsonObject cleanPreferences(QJsonObject preferences)
                              "header_text_size", "footer_text_size" })
         preferences.remove(key);
     for (const auto *key : { "dark_mode",
+                             features::debugModeKey,
                              "hide_tab_labels",
                              "save_looked_up_words",
                              "disable_reader_standby",

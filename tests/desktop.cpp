@@ -10061,6 +10061,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         auto preferences = storage::readJson(fixture.paths.preferences());
         preferences[presetKey] = presetValue(Preset::Custom);
         preferences[customKey] = toJson(layout);
+        // Debug mode: the field list offers both performance times.
+        preferences["debug_mode"] = true;
         QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
         selectPreview(fixture, preset);
         renderingMode::setOverride(1);
@@ -10169,8 +10171,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
         QCOMPARE(current.chapter, 1);
         QVERIFY(save("next-chapter"));
-        // The field list offers both times at its end. The list pages by
-        // height, so the two rows can fall on two pages.
+        // In debug mode the field list offers both times at its end. The list
+        // pages by height, so the two rows can fall on two pages.
         QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrNavLayout"));
         QVERIFY(fixture.press("rrNavLayout"));
@@ -12781,6 +12783,144 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     }
 
     // Checks feature visibility, dependent defaults, persistence and re-enabling through System.
+    void settingsDebugMode()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QVERIFY(writeBook(fixture.directory.path(), "links.epub", test::linkBook()));
+        const auto path = fixture.directory.path() + "/links.epub";
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(path);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto openSettings = [&] {
+            return fixture.press("rrPage") && fixture.press("rrSettings")
+                    && QTest::qWaitFor([&] { return fixture.visible("rrSettingsClose"); });
+        };
+        const auto closeSettings = [&] {
+            return fixture.press("rrSettingsClose") && QTest::qWaitFor([&] {
+                       return !fixture.visible("rrSettingsClose")
+                               && !fixture.state().value("busy").toBool();
+                   });
+        };
+        const auto setDebugMode = [&](bool on) {
+            if (!fixture.press("rrSettingsSystem") || !revealSettingsOption(fixture, "rrDebugMode"))
+                return false;
+            auto *option = qobject_cast<QCheckBox *>(fixture.widget("rrDebugMode"));
+            if (!option || (option->isChecked() != on && !fixture.click(option)))
+                return false;
+            return QTest::qWaitFor(
+                    [&] { return fixture.widget("rrSettingsDebug")->isHidden() != on; });
+        };
+        // The fields that the picker for the header's left slot offers, on all its pages.
+        const auto pickerFields = [&] {
+            QStringList shown;
+            if (!fixture.press("rrPage") || !fixture.press("rrNavLayout")
+                || !QTest::qWaitFor([&] { return fixture.visible("rrHeaderFooter"); })
+                || !fixture.press("rrHeaderFooter")
+                || !QTest::qWaitFor([&] { return fixture.visible("rrHeaderFooterView"); })
+                || !fixture.press("rrHeaderFooterSlot0")
+                || !QTest::qWaitFor([&] { return fixture.visible("rrHeaderFooterChooser"); }))
+                return QStringList{ "failed" };
+            for (int page = 0; page < 12; ++page) {
+                for (const auto *row : fixture.window.readerWindow()->findChildren<QWidget *>(
+                             QRegularExpression("^rrHeaderFooterField_")))
+                    if (row->isVisible() && !shown.contains(row->objectName()))
+                        shown.append(row->objectName());
+                auto *next = fixture.widget("rrHeaderFooterFieldsNext");
+                if (!next || !next->isVisible() || !next->isEnabled() || !fixture.click(next))
+                    break;
+                QCoreApplication::processEvents();
+            }
+            fixture.press("rrHeaderFooterFieldsClose");
+            fixture.press("rrHeaderFooterClose");
+            fixture.press("rrPage");
+            if (!QTest::qWaitFor([&] { return !fixture.visible("rrMenu"); }))
+                shown.append("menu stayed open");
+            return shown;
+        };
+        const auto debugFields = [](const QStringList &fields) {
+            return fields.contains("rrHeaderFooterField_book_status")
+                    || fields.contains("rrHeaderFooterField_page_turn_time")
+                    || fields.contains("rrHeaderFooterField_chapter_load_time");
+        };
+        auto fields = pickerFields();
+        QVERIFY2(fields.contains("rrHeaderFooterField_time"), qPrintable(fields.join(", ")));
+        QVERIFY2(!debugFields(fields), qPrintable(fields.join(", ")));
+
+        // Debug mode is off: no Debug tab, and Faster is not an engine choice.
+        QVERIFY(openSettings());
+        QVERIFY(fixture.widget("rrSettingsDebug")->isHidden());
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrRendering"));
+        QVERIFY(fixture.press("rrRendering"));
+        QTRY_VERIFY(fixture.visible("rrRendering_hybrid"));
+        QVERIFY(!fixture.widget("rrRendering_fast"));
+        QVERIFY(fixture.press("rrRendering_hybrid"));
+        QTRY_VERIFY(!fixture.visible("rrRendering_hybrid"));
+
+        // The checkbox shows the tab at once, and Faster becomes a choice.
+        QVERIFY(setDebugMode(true));
+        QVERIFY(revealSettingsOption(fixture, "rrRendering"));
+        QVERIFY(fixture.press("rrRendering"));
+        QTRY_VERIFY(fixture.visible("rrRendering_fast"));
+        QVERIFY(fixture.press("rrRendering_fast"));
+        QTRY_VERIFY(!fixture.visible("rrRendering_fast"));
+        auto *rendering = static_cast<ui::CaptionButton *>(fixture.widget("rrRendering"));
+        QCOMPARE(rendering->caption(), strings::get("settings.rendering_fast").toUpper());
+        // Leaving debug mode takes Faster back to Hybrid.
+        QVERIFY(setDebugMode(false));
+        QCOMPARE(rendering->caption(), strings::get("settings.rendering_hybrid").toUpper());
+        QVERIFY(setDebugMode(true));
+        QVERIFY(fixture.press("rrSettingsDebug"));
+        QTRY_VERIFY(fixture.visible("rrDebugEvictCache"));
+        // The rows with a caption and a description fit both in their cell.
+        for (const auto *name : { "rrDebugEvictCache", "rrDebugClearCaches" }) {
+            auto *row = fixture.widget(name);
+            QVERIFY(row);
+            QVERIFY2(row->height() >= row->heightForWidth(row->width()),
+                     qPrintable(QString("%1: %2 < %3")
+                                        .arg(name)
+                                        .arg(row->height())
+                                        .arg(row->heightForWidth(row->width()))));
+        }
+        QCOMPARE(static_cast<ui::CaptionButton *>(fixture.widget("rrDebugQt"))->caption(),
+                 QString::fromLatin1(qVersion()));
+        QVERIFY(!static_cast<ui::CaptionButton *>(fixture.widget("rrDebugCores"))
+                         ->caption()
+                         .isEmpty());
+        QTRY_VERIFY(!static_cast<ui::CaptionButton *>(fixture.widget("rrDebugStorage"))
+                             ->caption()
+                             .isEmpty());
+        QVERIFY(closeSettings());
+        QTRY_VERIFY(
+                storage::readJson(fixture.paths.preferences()).value("debug_mode").toBool(false));
+        QCOMPARE(storage::readJson(fixture.paths.preferences())
+                         .value(renderingMode::preferenceKey)
+                         .toString(),
+                 QString("hybrid"));
+
+        // In debug mode the picker offers the performance fields.
+        fields = pickerFields();
+        QVERIFY2(fields.contains("rrHeaderFooterField_book_status")
+                         && fields.contains("rrHeaderFooterField_page_turn_time"),
+                 qPrintable(fields.join(", ")));
+
+        // Evicting the book cache asks first, then closes the book.
+        QVERIFY(openSettings());
+        QVERIFY(fixture.press("rrSettingsDebug"));
+        QTRY_VERIFY(fixture.visible("rrDebugEvictCache"));
+        QVERIFY(fixture.press("rrDebugEvictCache"));
+        QTRY_VERIFY(fixture.visible("rrCacheEviction"));
+        QVERIFY(fixture.press("rrCacheEvictionCancel"));
+        QTRY_VERIFY(!fixture.widget("rrCacheEviction"));
+        QVERIFY(fixture.window.readerWindow());
+        QVERIFY(fixture.press("rrDebugEvictCache"));
+        QTRY_VERIFY(fixture.visible("rrCacheEviction"));
+        QVERIFY(fixture.press("rrCacheEvictionConfirm"));
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.window.readerWindow(), 30000);
+    }
+
     void settingsFeatures()
     {
         Fixture fixture;
@@ -16509,6 +16649,25 @@ private slots:
         QVERIFY(capture(fixture, name + "-settings-standby-confirmation"));
         QVERIFY(fixture.press("rrKeepReaderStandby"));
         QTRY_VERIFY(!fixture.visible("rrStandbyConfirmation"));
+
+        // System > Developer > Debug mode shows the Debug tab.
+        QVERIFY(revealSettingsOption(fixture, "rrDebugMode"));
+        QVERIFY(fixture.press("rrDebugMode"));
+        // A phone lists the sections: the tab shows once the list is back.
+        QTRY_VERIFY(!fixture.widget("rrSettingsDebug")->isHidden());
+        QVERIFY(fixture.press("rrSettingsDebug"));
+        QTRY_VERIFY(fixture.visible("rrDebugEvictCache"));
+        // The storage facts arrive from the logging worker.
+        QTRY_VERIFY(!static_cast<ui::CaptionButton *>(fixture.widget("rrDebugStorage"))
+                             ->caption()
+                             .isEmpty());
+        capturePages(fixture, name + "-settings-debug", "rrSettingsOptions");
+        QVERIFY(revealSettingsOption(fixture, "rrDebugEvictCache"));
+        QVERIFY(fixture.press("rrDebugEvictCache"));
+        QTRY_VERIFY(fixture.visible("rrCacheEviction"));
+        QVERIFY(capture(fixture, name + "-settings-debug-eviction"));
+        QVERIFY(fixture.press("rrCacheEvictionCancel"));
+        QTRY_VERIFY(!fixture.widget("rrCacheEviction"));
     }
 
     void automaticOpeningConfirmation_data() { screenshotVariants(); }

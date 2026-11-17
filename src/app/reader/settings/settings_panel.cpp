@@ -604,15 +604,17 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     auto *tabGroup = new QButtonGroup(this);
     const char *tabNames[] = { "rrSettingsDisplay", "rrSettingsControls",     "rrSettingsDefaults",
                                "rrSettingsStyling", "rrSettingsDictionaries", "rrSettingsSystem",
-                               "rrSettingsAbout",   "rrSettingsKosync" };
+                               "rrSettingsAbout",   "rrSettingsKosync",       "rrSettingsDebug" };
     const ui::ControlIcon tabIcons[] = { ui::ControlIcon::Display,      ui::ControlIcon::Swipe,
                                          ui::ControlIcon::Undo,         ui::ControlIcon::Styling,
                                          ui::ControlIcon::Dictionaries, ui::ControlIcon::System,
-                                         ui::ControlIcon::About,        ui::ControlIcon::Sync };
+                                         ui::ControlIcon::About,        ui::ControlIcon::Sync,
+                                         ui::ControlIcon::Debug };
     const QStringList tabs = { strings::get("settings.display"),  strings::get("settings.controls"),
                                strings::get("settings.defaults"), strings::get("settings.styling"),
                                strings::get("settings.lookup"),   strings::get("settings.system"),
-                               strings::get("settings.about"),    strings::get("kosync.title") };
+                               strings::get("settings.about"),    strings::get("kosync.title"),
+                               strings::get("settings.debug") };
     for (int index = 0; index < tabs.size(); ++index) {
         auto *button = makeButton(this, settingsTabs, tabNames[index], tabs[index], [this, index] {
             const bool same = settingsPages->currentIndex() == index;
@@ -641,6 +643,11 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             button->setEnabled(false);
             button->hide();
             settingsTabs->setStretch(index, 0);
+        }
+        // Debug mode shows it; see showDebug().
+        if (index == int(SettingsPage::Debug)) {
+            button->setEnabled(false);
+            button->hide();
         }
     }
     settingsTabs->removeWidget(settingsTabButtons[int(SettingsPage::Kosync)]);
@@ -1036,6 +1043,12 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     renderingButton = ui::makeCaptionButton(systemPage, systemRows, "rrRendering",
                                             strings::get("settings.rendering"), [] { });
     renderingButton->setDescription(strings::get("settings.rendering_summary"));
+    section(systemPage, systemRows, "rrSystemDeveloperSection",
+            strings::get("settings.section_developer"));
+    debugModeOption = check(systemPage, "rrDebugMode", strings::get("settings.debug_mode"),
+                            strings::get("settings.debug_mode_description"));
+    systemRows->addWidget(debugModeOption);
+    connect(debugModeOption, &QCheckBox::toggled, this, [this](bool on) { showDebug(on); });
     systemRows->addStretch(1);
     aboutPage = new AboutPage(settingsPages);
     settingsPages->addWidget(aboutPage);
@@ -1060,6 +1073,46 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     settingsPages->insertWidget(int(SettingsPage::Dictionaries), dictionaries);
     kosync = new KosyncPage(settingsPages, inputs.window ? inputs.window : parent, inputs.keyboard);
     settingsPages->addWidget(kosync);
+    auto *debugPage = new QWidget(settingsPages);
+    debugPage->setObjectName("rrDebugOptions");
+    settingsPages->addWidget(debugPage);
+    auto *debugRows = new QVBoxLayout(debugPage);
+    debugRows->setContentsMargins(0, 0, 0, 0);
+    debugRows->setSpacing(0);
+    section(debugPage, debugRows, "rrDebugCacheSection", strings::get("debug.section_caches"));
+    evictBookCacheButton = ui::makeCaptionButton(debugPage, debugRows, "rrDebugEvictCache",
+                                                 strings::get("debug.evict_cache"), [] { });
+    evictBookCacheButton->setDescription(strings::get("debug.evict_cache_description"));
+    clearCachesButton = ui::makeCaptionButton(debugPage, debugRows, "rrDebugClearCaches",
+                                              strings::get("debug.clear_caches"), [] { });
+    clearCachesButton->setDescription(strings::get("debug.clear_caches_description"));
+    section(debugPage, debugRows, "rrDebugDiagnosticsSection",
+            strings::get("debug.section_diagnostics"));
+    detailedDiagnosticsOption = check(debugPage, "rrDebugDetailedDiagnostics",
+                                      strings::get("debug.detailed_diagnostics"),
+                                      strings::get("debug.detailed_diagnostics_description"));
+    debugRows->addWidget(detailedDiagnosticsOption);
+    clearDiagnosticLogButton = ui::makeCaptionButton(debugPage, debugRows, "rrDebugClearLog",
+                                                     strings::get("debug.clear_log"), [] { });
+    section(debugPage, debugRows, "rrDebugDeviceSection", strings::get("debug.section_device"));
+    debugVersionButton = ui::makeCaptionButton(debugPage, debugRows, "rrDebugVersion",
+                                               strings::get("debug.version"), [] { });
+    debugQtButton = ui::makeCaptionButton(debugPage, debugRows, "rrDebugQt",
+                                          strings::get("debug.qt"), [] { });
+    debugFirmwareButton = ui::makeCaptionButton(debugPage, debugRows, "rrDebugFirmware",
+                                                strings::get("debug.firmware"), [] { });
+    debugCoresButton = ui::makeCaptionButton(debugPage, debugRows, "rrDebugCores",
+                                             strings::get("debug.cores"), [] { });
+    debugStorageButton = ui::makeCaptionButton(debugPage, debugRows, "rrDebugStorage",
+                                               strings::get("debug.storage"), [] { });
+    // The facts open nothing: a tap reads them again.
+    for (auto *fact : { debugVersionButton, debugQtButton, debugFirmwareButton, debugCoresButton,
+                        debugStorageButton })
+        fact->setChevron(false);
+    // As Restore defaults: the action asks before it closes the book.
+    evictBookCacheButton->setCaption(strings::get("settings.asks_first"));
+    clearCachesButton->setCaption(strings::get("settings.asks_first"));
+    debugRows->addStretch(1);
     zenPage = new QWidget(settingsPages);
     zenPage->setObjectName("rrZenSettings");
     settingsPages->addWidget(zenPage);
@@ -1117,14 +1170,24 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
         optionPage = 0;
     });
     settingsTabButtons.first()->setChecked(true);
-    QVector<ui::DescribedOption *> options = {
-        hideNonlinearOption,    inpageFootnotesOption,      darkOption,
-        bionicOption,           landscapeColumnsOption,     animationOption,
-        edgeLightOption,        lightGestureFeedbackOption, denseGraphOption,
-        hideTabLabelsOption,    wifiPowerSaverOption,       disableStandbyOption,
-        automaticOpeningOption, minimalAnnotationOption,    hideBookOnSleepOption,
-        saveWordsOption
-    };
+    QVector<ui::DescribedOption *> options = { hideNonlinearOption,
+                                               inpageFootnotesOption,
+                                               darkOption,
+                                               bionicOption,
+                                               landscapeColumnsOption,
+                                               animationOption,
+                                               edgeLightOption,
+                                               lightGestureFeedbackOption,
+                                               denseGraphOption,
+                                               hideTabLabelsOption,
+                                               wifiPowerSaverOption,
+                                               disableStandbyOption,
+                                               automaticOpeningOption,
+                                               minimalAnnotationOption,
+                                               hideBookOnSleepOption,
+                                               saveWordsOption,
+                                               debugModeOption,
+                                               detailedDiagnosticsOption };
     options.append(openingCoverOption);
     options.prepend(zenModeOption);
     options.append(zenDarkOption);
@@ -1188,7 +1251,15 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                           zenSyncButton,
                           zenAutomaticButton,
                           zenAboutButton,
-                          textForNewBooksButton }) {
+                          textForNewBooksButton,
+                          evictBookCacheButton,
+                          clearCachesButton,
+                          clearDiagnosticLogButton,
+                          debugVersionButton,
+                          debugQtButton,
+                          debugFirmwareButton,
+                          debugCoresButton,
+                          debugStorageButton }) {
         styleListAction(button);
         // The refresh row's caption shows its current choice, set when Settings opens.
         if (button == resetDefaults || button == resetPresets)
@@ -1197,7 +1268,8 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             || button == paragraphSpacingButton || button == trackingButton
             || button == hangingPunctuationButton || button == widowsOrphansButton
             || button == verticalSpacingButton || button == zenSyncButton
-            || button == zenAboutButton || button == renderingButton) {
+            || button == zenAboutButton || button == renderingButton
+            || button == evictBookCacheButton || button == clearCachesButton) {
             button->setMaximumHeight(QWIDGETSIZE_MAX);
             readerStyle(
                     button,
@@ -1893,8 +1965,10 @@ void SettingsPanel::showRenderingModes(const QString &current,
         return;
     auto *choices = openChoiceSheet("rrRendering", strings::get("settings.rendering"),
                                     strings::get("settings.rendering_description"));
-    // "fast" is not offered for now: Hybrid replaces it.
-    const QStringList modes{ "hybrid", /* "fast", */ "accurate" };
+    // Hybrid replaces Fast. Debug mode still offers it.
+    QStringList modes{ "hybrid", "accurate" };
+    if (debugModeOption && debugModeOption->isChecked())
+        modes.insert(1, "fast");
     for (const auto &mode : modes) {
         choices->add(QString("rrRendering_%1").arg(mode), renderingModeLabel(mode),
                      strings::get(mode == "accurate" ? "settings.rendering_accurate_description"
@@ -2613,6 +2687,22 @@ void SettingsPanel::showDictionaries(bool visible)
     if (!visible && settingsPages->currentIndex() == int(SettingsPage::Dictionaries))
         settingsPages->setCurrentIndex(int(SettingsPage::Display));
     fitRail();
+}
+
+void SettingsPanel::showDebug(bool visible)
+{
+    auto *button = settingsTabButtons[int(SettingsPage::Debug)];
+    if (button->isVisibleTo(this) == visible && button->isEnabled() == visible)
+        return;
+    button->setVisible(visible);
+    button->setEnabled(visible);
+    if (!visible && settingsPages->currentIndex() == int(SettingsPage::Debug))
+        settingsPages->setCurrentIndex(int(SettingsPage::System));
+    fitRail();
+    // The checkbox changes the tabs while Settings is open: fit the rail to
+    // the panel again, as Hidden features does.
+    if (isVisible() && refitRequested)
+        refitRequested();
 }
 
 void SettingsPanel::updateFeatureOptions()

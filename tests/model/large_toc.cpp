@@ -1,3 +1,5 @@
+#include <QDir>
+#include <QFileInfo>
 #include "engine/blaze/adapter/engine_document.h"
 #include "platform/api/position_codec.h"
 #include "book_fixtures.h"
@@ -137,6 +139,22 @@ int main(int argc, char **argv)
                         && reopened.chapterTitle(links.last().position) == links.last().title,
                 "Cached reopening lost the last indexed title");
         require(reopened.wordCounts().cached, "Cached reopening recounted the songbook");
+        // Debug mode evicts the book: its entries go, and it parses again.
+        const auto cacheFiles = [&directory] {
+            return QDir(directory.filePath("cache")).entryList({ "*.cr3" }, QDir::Files);
+        };
+        require(!cacheFiles().isEmpty(), "The songbook left no cache file");
+        require(reopened.removeDocumentCache(false), "Cannot evict the songbook");
+        require(cacheFiles().isEmpty(), "Eviction left a songbook cache file");
+        EngineDocument evicted(test::readerFonts());
+        evicted.setDocumentCache(directory.filePath("cache"), key, "large-toc", 128 * 1024 * 1024);
+        require(evicted.open(bytes, QSize(700, 900), model.state(), &error), qPrintable(error));
+        require(!evicted.openedFromCache(), "An evicted songbook opened from the cache");
+        require(evicted.saveDocumentCache() && !cacheFiles().isEmpty(),
+                "Cannot cache the songbook again");
+        require(evicted.removeDocumentCache(true)
+                        && !QFileInfo::exists(directory.filePath("cache")),
+                "Clearing all caches left the cache folder");
         qInfo("PASS: %d song destinations, %d indexed entries", count, expected);
     }
 }

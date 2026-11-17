@@ -19,6 +19,32 @@ void pauseDiagnostics(bool paused);
 bool diagnosticsActive();
 void initializeDiagnostics(const QString &directory, bool detailed = true);
 bool diagnosticsRequested(const QString &profile);
+// Makes detailed logging switchable at runtime: `profile` is the folder whose
+// diagnostics-enabled file diagnosticsRequested() reads at startup. Builds
+// with verbose diagnostics compiled in ignore it and stay detailed.
+void setDiagnosticsMarker(const QString &profile);
+// The marker file, or empty when detailed logging cannot be switched.
+QString diagnosticsMarker();
+bool detailedDiagnostics();
+// Takes effect for the events logged from now on. With a marker, the logging
+// worker also writes or removes it, so that the next start agrees.
+void setDetailedDiagnostics(bool detailed);
+// Removes the log and the older generations that rotation keeps, on the
+// logging worker.
+void clearDiagnosticLog();
+// The bytes of the log and its older generations. Reads storage: call it
+// from diagnosticTask().
+qint64 diagnosticLogBytes();
+// The host's device fields, such as the firmware, as the startup event has
+// them. Reads storage on Kobo: call it from diagnosticTask().
+QJsonObject diagnosticStartupFields();
+// The log file, or empty before initializeDiagnostics().
+QString diagnosticLogPath();
+// Runs `task` on the logging worker, in the order of the queue, also
+// while detailed logging is off. For small storage work that belongs to the
+// log, such as its marker or its size, and for the Debug page's storage
+// facts. Works without a log file. False when the queue is full.
+bool diagnosticTask(std::function<void()> task);
 
 // Start/end records survive an unfinished operation. They enqueue only small
 // fields; JSON formatting and file writes stay on the diagnostic worker.

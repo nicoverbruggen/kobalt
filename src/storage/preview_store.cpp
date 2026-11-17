@@ -315,6 +315,22 @@ bool migratePreviews(const QString &directory, bool requireScan)
     return ok && cache.save(scan ? QByteArray("scan\n") : QByteArray("complete\n"));
 }
 
+bool removePreviewFiles(const QString &directory)
+{
+    mainthread::BlockingOperation blockingOperation("preview-remove");
+    QStringList folders{ directory };
+    for (const auto &info :
+         QDir(directory).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks))
+        folders.append(info.absoluteFilePath());
+    bool ok = true;
+    for (const auto &folder : folders)
+        for (const auto &info : QDir(folder).entryInfoList({ QStringLiteral("*.preview") },
+                                                           QDir::Files | QDir::NoSymLinks))
+            if (generatedName(info.fileName(), QStringLiteral(".preview")))
+                ok = QFile::remove(info.absoluteFilePath()) && ok;
+    return ok;
+}
+
 bool previewMigrationNeedsScan(const QString &directory)
 {
     const MigrationDirectory cache(directory, false);

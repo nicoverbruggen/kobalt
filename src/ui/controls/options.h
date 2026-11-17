@@ -121,6 +121,9 @@ public:
     int rowHeight(int index, int width) const;
     // Shows `count` rows from `first`, one under the other.
     void showRows(int first, int count);
+    // A left-out row stays in options() but is never shown and takes no
+    // height, also inside the range of showRows().
+    void setLeftOut(int index, bool leftOut);
 
     bool hasHeightForWidth() const override { return true; }
 
@@ -133,6 +136,7 @@ protected:
 
 private:
     QVector<DescribedOption *> rows;
+    QVector<bool> leftOut;
     int minimum = 0, first = 0, count = -1;
     bool topDivider = false, uniformRows = true;
     void arrange();

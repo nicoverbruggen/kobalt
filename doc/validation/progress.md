@@ -22,7 +22,7 @@ The `component.ui` assertions cover linear chapter lengths above the visible min
 
 These checks do not establish physical Kobo or Android behavior.
 
-`engine.large-toc` generates songbooks at 1,023, 1,024, 1,025, 9,999, 10,000 and 10,001 destinations. It checks the total bound, hierarchy, source-based titles, navigation, native-list fallback, graph lengths, word-count reuse, reflow and cached reopening. `desktop.largeToc` (label `input`) opens the real reader's last chapter-list page, selects Song 10,000 and checks that row widgets stay bounded by the visible page. Unindexed content beyond the cap retains the existing last-title fallback. These fixtures do not reproduce the original reported songbook.
+`engine.large-toc` generates songbooks at 1,023, 1,024, 1,025, 9,999, 10,000 and 10,001 destinations. It checks the total bound, hierarchy, source-based titles, navigation, native-list fallback, graph lengths, word-count reuse, reflow and cached reopening. It then evicts the songbook from the parsed-book cache, as Settings > Debug does, checks that the next opening parses again, and clears the whole cache. `desktop.largeToc` (label `input`) opens the real reader's last chapter-list page, selects Song 10,000 and checks that row widgets stay bounded by the visible page. Unindexed content beyond the cap retains the existing last-title fallback. These fixtures do not reproduce the original reported songbook.
 
 ## Clara BW reading time
 

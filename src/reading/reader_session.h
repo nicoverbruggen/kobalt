@@ -140,6 +140,12 @@ public:
               std::function<void()> reusing = {});
     // A fresh facade prevents callbacks from the closed reader reaching a reopen.
     std::unique_ptr<ReaderSession> retained();
+    // Debug mode, in place of retained() when the reader closes: drops the
+    // book and removes its parsed-book cache. With `allBooks` it removes the
+    // whole cache, also `documentCache` when the book opened without it, and
+    // the preview tiles in `previews`. Runs on the engine worker, which the
+    // close barrier drains.
+    void evictDocumentCache(bool allBooks, const QString &documentCache, const QString &previews);
     void cancelSource();
     void revokeSource();
 

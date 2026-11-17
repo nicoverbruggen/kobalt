@@ -359,6 +359,15 @@ private:
     // Builds Settings into `parent`; ensureSettings moves it into the window.
     void buildSettings(QWidget *parent);
     void ensureSettings();
+    // Debug mode: the Developer checkbox and the Debug page (reader_debug.cpp).
+    void buildDebugSettings();
+    void showDebugSettings();
+    void refreshDebugFacts();
+    void askCacheEviction(bool allBooks);
+    // Set when the reader closes to evict the parsed-book cache: 1 for this
+    // book, 2 for every book.
+    int cacheEviction = 0;
+    QPointer<kobalt::ui::ModalOverlay> evictionDialog;
     // What applyTheme gives each widget: the reader palette, its text and
     // button icons. Also for widgets built after the theme.
     void themeWidget(QWidget *widget, const QPalette &colors);

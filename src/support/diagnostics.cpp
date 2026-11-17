@@ -37,7 +37,7 @@ namespace kobalt {
 namespace {
 QMutex mutex;
 std::atomic<int> retainedFontBytes{ 0 }, nativeFontBytes{ 0 }, previewBytes{ 0 };
-QString logPath;
+QString logPath, markerPath;
 bool paused = false, detailed = true;
 bool syncing = true;
 std::function<void(const QJsonObject &)> observer;
@@ -550,6 +550,120 @@ void sampleDiagnosticMemory(std::function<void(QJsonObject)> done)
                        std::move(done) });
     startWriter();
     wake.wakeAll();
+}
+
+bool diagnosticTask(std::function<void()> task)
+{
+    QMutexLocker lock(&mutex);
+    if (!task || queue.size() >= queueLimit)
+        return false;
+    enqueue({ {},
+              {},
+              {},
+              DiagnosticSeverity::Activity,
+              0,
+              0,
+              -1,
+              0,
+              false,
+              normalLimit,
+              false,
+              1,
+              {},
+              std::move(task) });
+    startWriter();
+    wake.wakeAll();
+    return true;
+}
+
+void setDiagnosticsMarker(const QString &profile)
+{
+#ifdef KOBALT_VERBOSE_DIAGNOSTICS
+    Q_UNUSED(profile);
+#else
+    QMutexLocker lock(&mutex);
+    markerPath = profile.isEmpty() ? QString() : profile + "/diagnostics-enabled";
+#endif
+}
+
+QString diagnosticsMarker()
+{
+    QMutexLocker lock(&mutex);
+    return markerPath;
+}
+
+bool detailedDiagnostics()
+{
+    QMutexLocker lock(&mutex);
+    return detailed;
+}
+
+void setDetailedDiagnostics(bool value)
+{
+    QString marker;
+    {
+        QMutexLocker lock(&mutex);
+        detailed = value;
+        marker = markerPath;
+    }
+    if (marker.isEmpty())
+        return;
+    diagnosticTask([marker, value] {
+        if (!value) {
+            QFile::remove(marker);
+            return;
+        }
+        QFile file(marker);
+        if (file.open(QIODevice::WriteOnly))
+            file.close();
+    });
+}
+
+namespace {
+QStringList logGenerations(const QString &log)
+{
+    const QFileInfo info(log);
+    QStringList found;
+    for (const auto &name :
+         QDir(info.absolutePath())
+                 .entryList({ info.fileName(), info.fileName() + ".previous*" }, QDir::Files))
+        found.append(info.absoluteDir().filePath(name));
+    return found;
+}
+} // namespace
+
+void clearDiagnosticLog()
+{
+    const auto log = diagnosticLogPath();
+    if (log.isEmpty())
+        return;
+    diagnosticTask([log] {
+        for (const auto &file : logGenerations(log))
+            QFile::remove(file);
+    });
+}
+
+qint64 diagnosticLogBytes()
+{
+    const auto log = diagnosticLogPath();
+    if (log.isEmpty())
+        return -1;
+    qint64 total = 0;
+    for (const auto &file : logGenerations(log))
+        total += QFileInfo(file).size();
+    return total;
+}
+
+QJsonObject diagnosticStartupFields()
+{
+    const auto system = systemProvider();
+    return system.startup ? system.startup() : QJsonObject();
+}
+
+QString diagnosticLogPath()
+{
+    QMutexLocker lock(&mutex);
+    return logPath;
 }
 
 bool sampleDiagnostics(std::function<void()> sample)

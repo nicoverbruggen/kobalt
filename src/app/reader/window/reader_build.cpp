@@ -1793,6 +1793,7 @@ void Reader::buildSettings(QWidget *parent)
                                                showSettingsFonts();
                                            });
     });
+    buildDebugSettings();
     connect(settings->renderingButton, &QPushButton::clicked, this, [this, settings] {
         settings->showRenderingModes(settingsRenderingMode, [this](const QString &mode) {
             settingsRenderingMode = mode;

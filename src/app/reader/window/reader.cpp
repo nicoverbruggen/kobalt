@@ -1721,8 +1721,16 @@ void Reader::closeEvent(QCloseEvent *event)
     session->idle = {};
     renderNoticeTimer.stop();
     busyNotice->setDelayedProgress(false, 0, 0);
-    if (finished)
+    if (cacheEviction) {
+        // Debug mode: nothing is kept for a quick return, and the engine
+        // worker removes the cache before the host releases the book.
+        session->evictDocumentCache(cacheEviction == 2, book->paths().documentCache(),
+                                    book->paths().previews());
+        if (finished)
+            finished(nullptr);
+    } else if (finished) {
         finished(session->retained());
+    }
     QWidget::closeEvent(event);
 }
 
@@ -3306,6 +3314,8 @@ void Reader::recoverSleepSave()
 
 void Reader::clearPendingExit()
 {
+    // An abandoned close keeps the cache. The next Return asks nothing.
+    cacheEviction = 0;
     if (finishDialog && finishChoiceForExit) {
         finishDialog->hide();
         finishDialog->deleteLater();

@@ -242,7 +242,8 @@ public:
     void setCover(QImage image)
     {
         // An early cache miss is not proof that the publication has no cover.
-        if (!showCover || image.isNull())
+        // Before prepareControls() only the logo shows.
+        if (!showCover || image.isNull() || !cover)
             return;
         // Compare the source pixels per painted pixel after fitting the cover.
         // A late thumbnail must not replace a sharper image delivered earlier.
@@ -299,6 +300,8 @@ public:
     void setProgress(int percent)
     {
         auto *bar = progress;
+        if (!bar)
+            return;
         const int value = qMax(bar->value(), percent);
         if (bar->value() == value)
             return;
@@ -314,6 +317,9 @@ public:
 
     void showFallback(OpeningFallback state)
     {
+        if (!progress)
+            prepareControls(qt::object({ { "dark_mode", property("reader_dark").toBool() },
+                                         { "show_opening_cover", showCover } }));
         fallback = true;
         automatic = state == OpeningFallback::Protected || state == OpeningFallback::Remembered;
         storageFailure = state == OpeningFallback::Storage;
@@ -356,7 +362,7 @@ public:
 
     void setReopening()
     {
-        if (!fallback && !delayed)
+        if (hint && !fallback && !delayed)
             hint->setText(QLocale().toUpper(strings::get("opening.reopening")));
     }
 

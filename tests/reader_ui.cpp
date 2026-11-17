@@ -4572,6 +4572,20 @@ private slots:
         splash->window()->reject();
         QCoreApplication::processEvents();
         QVERIFY(!prepared);
+
+        // A prepared book keeps the logo: progress, cover and status calls
+        // before the controls exist change nothing, and a fallback still
+        // gets its controls.
+        auto logoOnly = createOpeningSurface(&owner, false, test::makeHostPresentation);
+        logoOnly->window()->show();
+        logoOnly->setProgress(60);
+        logoOnly->setReopening();
+        QImage cover(120, 180, QImage::Format_RGB32);
+        cover.fill(Qt::gray);
+        logoOnly->setCover(cover);
+        QVERIFY(!logoOnly->window()->findChild<QProgressBar *>("rrOpeningProgress"));
+        logoOnly->showFallback(OpeningFallback::Protected);
+        QVERIFY(logoOnly->window()->findChild<QProgressBar *>("rrOpeningProgress"));
     }
 
     void openingFirstPaintCallback()

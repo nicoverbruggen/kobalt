@@ -531,6 +531,10 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
     return true;
 }
 
+// How long a book with its hidden window shows only the logo before the
+// loading controls and cover appear.
+static constexpr int preparedLoadingDelay = 600;
+
 void ReaderCoordinator::prepareOpeningControls()
 {
     QString nextIdentity, nextPath;
@@ -572,12 +576,31 @@ void ReaderCoordinator::prepareOpeningControls()
     openingDark = preferences.value("dark_mode").toBool(false);
     run.interface->setDensity(currentScreenDensity());
     run.interface->setLargeText(nativeFontScale());
-    {
+    // A book with its hidden window opens in well under a second. Keep the
+    // logo and start at once; the loading controls and cover follow only
+    // when the opening takes longer than that.
+    const bool prepared = quiet.window && quiet.identity == run.identity;
+    if (prepared) {
+        const auto epoch = generation;
+        const auto coverPath = nativeReaderCoverPath(run.opening->volume());
+        kobalt::qt::later(preparedLoadingDelay, this, [this, epoch, preferences, coverPath] {
+            if (epoch != generation || !busy || !run.loading || run.reader)
+                return;
+            diagnostic("opening-controls-late");
+            {
+                NativeFontScaleScope building;
+                run.loading->prepareControls(preferences);
+            }
+            run.loading->loadCover(coverPath);
+            run.loading->setProgress(run.openingPercent);
+        });
+        ui::setInterfaceWeight(ui::heavierTextSteps);
+    } else {
         NativeFontScaleScope building;
         ui::setInterfaceWeight(ui::heavierTextSteps);
         run.loading->prepareControls(preferences);
     }
-    if (nativeTileCoverProbeEnabled()) {
+    if (!prepared && nativeTileCoverProbeEnabled()) {
         const auto image = nativeTileCoverProbeImage(run.opening->volume());
         run.loading->window()->setProperty("kobalt_tile_cover_probe", true);
         run.loading->setCover(image);
@@ -587,7 +610,8 @@ void ReaderCoordinator::prepareOpeningControls()
                                 { "height", image.height() },
                                 { "image_key", QString::number(image.cacheKey()) } }));
     }
-    run.loading->loadCover(nativeReaderCoverPath(run.opening->volume()));
+    if (!prepared)
+        run.loading->loadCover(nativeReaderCoverPath(run.opening->volume()));
     run.openingStage = OpeningStage::Content;
     run.openingPercent = -1;
     run.progressPainted = -1000;

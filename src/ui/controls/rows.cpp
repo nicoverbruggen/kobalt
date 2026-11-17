@@ -398,12 +398,16 @@ void ListRow::syncLabelStyles()
     const auto colors = parentWidget() ? parentWidget()->palette() : palette();
     const bool current = isChecked();
     const QColor ink = colors.color(current ? QPalette::Window : QPalette::WindowText);
+    // In light, secondary text uses plain ink, because a lighter grey is
+    // dithered on e-ink, as readerStyle() does for captions. Dark uses the
+    // secondary ink.
+    const QColor secondary = darkTheme(this) ? noteColor(this) : ink;
     int index = 0;
     bool changed = false;
     for (auto *label : { title, detail, caption, leading, trailing, note }) {
         const QColor color = !isEnabled()   ? themeColors(this).disabledInk
                 : current || label == title ? ink
-                                            : noteColor(this);
+                                            : secondary;
         const QString style = labelStyles[index++] + "color:" + color.name() + ';';
         if (label->property("reader_style").toString() != style) {
             readerStyle(label, style);
@@ -537,8 +541,8 @@ void ListRow::paintEvent(QPaintEvent *)
     }
     if (note && note->isVisible()) {
         const int side = int(metrics::control::iconSize) / 2;
-        const QColor noteInk =
-                isEnabled() ? (current ? ink : noteColor(this)) : themeColors(this).disabledInk;
+        const QColor noteInk = isEnabled() ? (current || !darkTheme(this) ? ink : noteColor(this))
+                                           : themeColors(this).disabledInk;
         const auto lineHeight = QFontMetrics(note->font()).height();
         controlIcon(ControlIcon::Note, noteInk)
                 .paint(&painter,

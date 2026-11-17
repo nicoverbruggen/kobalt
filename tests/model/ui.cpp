@@ -865,7 +865,9 @@ int main(int argc, char **argv)
                 labelInk(row.titleLabel(), QColor("#999999"));
                 row.setEnabled(true);
                 row.setChecked(false);
-                labelInk(row.detailLabel(), noteColor(&row));
+                // In light, secondary lines use plain ink, as the title does.
+                labelInk(row.detailLabel(),
+                         dark ? noteColor(&row) : first.palette().color(QPalette::WindowText));
                 row.setTitlePixels(px(34));
                 require(row.titleLabel()->font().pixelSize() == px(34),
                         "Owned title pixels do not reach the row label");
@@ -911,7 +913,9 @@ int main(int argc, char **argv)
                 labelInk(row.titleLabel(), QColor("#123456"));
                 row.setParent(&second);
                 labelInk(row.titleLabel(), second.palette().color(QPalette::WindowText));
-                labelInk(row.detailLabel(), noteColor(&row));
+                labelInk(row.detailLabel(),
+                         darkTheme(&row) ? noteColor(&row)
+                                         : second.palette().color(QPalette::WindowText));
                 changed.setColor(QPalette::WindowText, QColor("#654321"));
                 first.setPalette(changed);
                 labelInk(row.titleLabel(), second.palette().color(QPalette::WindowText));

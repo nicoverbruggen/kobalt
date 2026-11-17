@@ -339,6 +339,32 @@ bool validAlignment(const QString &value)
     return value == "publisher" || value == "left" || value == "justify" || value == "center"
             || value == "right";
 }
+
+// Loads hyphenation patterns as the engine does, except files that failed the
+// asset check. A pattern that does not load leaves its language without
+// hyphenation.
+class CheckedHyphenationLoader final : public HyphDataLoader
+{
+public:
+    explicit CheckedHyphenationLoader(QStringList excluded) : excluded(std::move(excluded)) { }
+
+    LVStreamRef loadData(lString32 id) override
+    {
+        auto *dictionary = HyphMan::getDictList() ? HyphMan::getDictList()->find(id) : nullptr;
+        if (!dictionary
+            || (dictionary->getType() != HDT_DICT_ALAN && dictionary->getType() != HDT_DICT_TEX))
+            return LVStreamRef();
+        const auto filename = dictionary->getFilename();
+        if (excluded.contains(
+                    QFileInfo(QString::fromUtf8(UnicodeToUtf8(filename).c_str())).fileName()))
+            return LVStreamRef();
+        return LVOpenFileStream(filename.c_str(), LVOM_READ);
+    }
+
+private:
+    QStringList excluded;
+};
+
 } // namespace
 
 // The publication checks embedded fonts against the limit that CREngine enforces.
@@ -426,6 +452,7 @@ bool EngineDocument::initializeFonts()
     // Bundled dictionaries hyphenate by language. A language whose dictionary
     // is not bundled keeps the engine's algorithmic hyphenation.
     HyphMan::initDictionaries(cre(fonts_.hyphenationDirectory + '/'));
+    HyphMan::setDataLoader(new CheckedHyphenationLoader(fonts_.excludedHyphenation));
     for (const auto *name : engineHyphenationPatterns) {
         if (QFileInfo::exists(fonts_.hyphenationDirectory + '/' + name))
             continue;

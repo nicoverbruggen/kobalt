@@ -98,6 +98,7 @@ bool EngineFontInputs::operator==(const EngineFontInputs &other) const
 {
     return sources == other.sources && fallbackFiles == other.fallbackFiles
             && hyphenationDirectory == other.hyphenationDirectory
+            && excludedHyphenation == other.excludedHyphenation
             && verifiedFontDigests == other.verifiedFontDigests;
 }
 

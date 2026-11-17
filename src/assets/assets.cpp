@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QRegularExpression>
+#include <QSaveFile>
+#include <QSet>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -86,6 +88,59 @@ bool restoreRecoveredAsset(const QString &root, const QString &path, qint64 size
     return false;
 }
 
+// Kobalt cannot draw its own screens, or most books, without these. Any other
+// asset that fails its check is set aside on its own.
+bool requiredAsset(const QString &name)
+{
+    static const QSet<QString> required{
+        "fonts/IBMPlexSans-Regular.ttf",    "fonts/IBMPlexSans-Bold.ttf",
+        "fonts/IBMPlexSans-Italic.ttf",     "fonts/IBMPlexMono-Regular.ttf",
+        "fonts/IBMPlexMono-Bold.ttf",       "fonts/InstrumentSerif-Regular.ttf",
+        "fonts/InstrumentSerif-Italic.ttf", "fonts/NotoSerif-Regular.ttf",
+        "fonts/NotoSerif-Bold.ttf",         "fonts/NotoSerif-Italic.ttf",
+        "fonts/NotoSerif-BoldItalic.ttf",
+    };
+    return required.contains(name);
+}
+
+// The files a full check found intact, with the size and modification time
+// they had then. A later check trusts a file whose size and time still match
+// and computes SHA-256 again only for the others.
+QString verifiedRecordPath(const QString &root)
+{
+    return root + "/.verified.json";
+}
+
+QJsonObject readVerifiedRecord(const QString &root, const QString &version)
+{
+    QFile file(verifiedRecordPath(root));
+    if (!regular(QFileInfo(file)) || file.size() > 65536 || !file.open(QIODevice::ReadOnly))
+        return {};
+    const auto record = QJsonDocument::fromJson(file.readAll()).object();
+    return record.value("version").toString() == version ? record.value("files").toObject()
+                                                         : QJsonObject();
+}
+
+void writeVerifiedRecord(const QString &root, const QString &version, const QJsonObject &files)
+{
+    QJsonObject record;
+    record["version"] = version;
+    record["files"] = files;
+    QSaveFile file(verifiedRecordPath(root));
+    if (!file.open(QIODevice::WriteOnly)
+        || file.write(QJsonDocument(record).toJson(QJsonDocument::Compact)) < 0 || !file.commit())
+        diagnostic("asset-record-unsaved", {}, DiagnosticSeverity::Warning);
+}
+
+QJsonObject fileRecord(qint64 size, const QDateTime &modified, const QByteArray &hash)
+{
+    QJsonObject entry;
+    entry["size"] = double(size);
+    entry["modified_ms"] = double(modified.toMSecsSinceEpoch());
+    entry["sha256"] = QString::fromLatin1(hash);
+    return entry;
+}
+
 } // namespace
 
 struct AssetBundle::Data
@@ -93,6 +148,8 @@ struct AssetBundle::Data
     QString root, version;
     QMutex mutex;
     QList<Entry> checked;
+    // Optional assets that failed their check, by manifest name.
+    QSet<QString> setAside;
     Verification verification = Verification::OnDemand;
     std::atomic_bool verified{ false };
 };
@@ -117,7 +174,14 @@ void AssetBundle::invalidate()
     data->verified.store(false);
     QMutexLocker lock(&data->mutex);
     data->checked.clear();
+    data->setAside.clear();
     data->verified.store(false);
+}
+
+bool AssetBundle::setAside(const QString &name) const
+{
+    QMutexLocker lock(&data->mutex);
+    return data->setAside.contains(name);
 }
 
 QString AssetBundle::file(const QString &name) const
@@ -188,6 +252,7 @@ bool AssetBundle::verifyFiles() const
     if (unchanged)
         return true;
     checked.clear();
+    data->setAside.clear();
     QFile manifest(data->root + "/manifest.json");
     if (!regular(QFileInfo(manifest)) || !manifest.open(QIODevice::ReadOnly)
         || manifest.size() > 65536)
@@ -200,7 +265,11 @@ bool AssetBundle::verifyFiles() const
     const auto entries = document.value("files").toArray();
     if (entries.isEmpty() || entries.size() > 256)
         return false;
+    const auto previous = readVerifiedRecord(data->root, data->version);
+    QJsonObject record;
     QList<Entry> verified;
+    QStringList setAside;
+    int hashed = 0;
     for (const auto &value : entries) {
         const auto entry = value.toObject();
         const auto name = entry.value("path").toString();
@@ -210,19 +279,51 @@ bool AssetBundle::verifyFiles() const
         if ((!name.startsWith("fonts/") && !name.startsWith("hyph/")) || path.isEmpty() || size < 0
             || size > 32 * 1024 * 1024 || hash.size() != 64)
             return false;
+        // A required asset fails the whole bundle. Another one is set aside.
+        const auto failed = [&] {
+            if (requiredAsset(name))
+                return false;
+            setAside.append(name);
+            return true;
+        };
         restoreRecoveredAsset(data->root, path, size, hash);
+        if (!regularMember(data->root, path)) {
+            if (!failed())
+                return false;
+            continue;
+        }
+        const QFileInfo info(path);
+        const auto known = previous.value(name).toObject();
+        if (info.size() == size && known.value("sha256").toString().toLatin1() == hash
+            && qint64(known.value("size").toDouble(-1)) == size
+            && qint64(known.value("modified_ms").toDouble(-1))
+                    == info.lastModified().toMSecsSinceEpoch()) {
+            verified.append({ path, size, info.lastModified(), hash });
+            record[name] = known;
+            continue;
+        }
         QFile file(path);
-        const QFileInfo info(file);
-        if (!regularMember(data->root, path))
-            return false;
         if (!file.open(QIODevice::ReadOnly)) {
             reportDescriptorExhaustion("asset-open");
             return false;
         }
-        if (file.size() != size || digest(file) != hash)
-            return false;
+        ++hashed;
+        if (file.size() != size || digest(file) != hash) {
+            if (!failed())
+                return false;
+            continue;
+        }
         verified.append({ path, size, info.lastModified(), hash });
+        record[name] = fileRecord(size, info.lastModified(), hash);
     }
+    if (record != previous)
+        writeVerifiedRecord(data->root, data->version, record);
+    if (!setAside.isEmpty())
+        diagnostic("assets-set-aside", { { "files", QJsonArray::fromStringList(setAside) } },
+                   DiagnosticSeverity::Warning);
+    diagnostic("assets-hashed", { { "hashed", hashed }, { "files", entries.size() } });
+    for (const auto &name : setAside)
+        data->setAside.insert(name);
     verified.append(
             { manifest.fileName(), manifestBytes.size(), QFileInfo(manifest).lastModified(), {} });
     checked = verified;
@@ -293,6 +394,9 @@ AssetBundle::deferredFontData(const QStringList &names) const
     QMutexLocker lock(&data->mutex);
     QMap<QString, std::function<QByteArray()>> readers;
     for (const auto &name : names) {
+        // An optional font that failed its check is simply left out.
+        if (data->setAside.contains("fonts/" + name))
+            continue;
         const auto path = file("fonts/" + name);
         const auto found =
                 std::find_if(data->checked.cbegin(), data->checked.cend(), [&](const Entry &entry) {

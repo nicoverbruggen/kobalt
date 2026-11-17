@@ -272,12 +272,15 @@ bool initializeInterfaceFonts(const AssetBundle &assets, bool *changed)
         return false;
     // Some sleep screens use bundled book faces: Jost for figures and Libron
     // for the letter. Registration records the files; bytes load when drawn.
+    const auto bookFace = [&assets](const char *face, const QString &family) {
+        const auto name = QStringLiteral("fonts/ebook-core/") + QLatin1String(face);
+        if (!assets.setAside(name))
+            registerPrivateInterfaceFont(assets.file(name), family);
+    };
     for (const auto *face : { "NV_Jost-Regular.ttf", "NV_Jost-Bold.ttf" })
-        registerPrivateInterfaceFont(assets.file(QStringLiteral("fonts/ebook-core/") + face),
-                                     QStringLiteral("NV Jost"));
+        bookFace(face, QStringLiteral("NV Jost"));
     for (const auto *face : { "Libron-Regular.ttf", "Libron-Italic.ttf" })
-        registerPrivateInterfaceFont(assets.file(QStringLiteral("fonts/ebook-core/") + face),
-                                     QStringLiteral("Libron"));
+        bookFace(face, QStringLiteral("Libron"));
     if (changed) {
         *changed = facesChanged;
     }

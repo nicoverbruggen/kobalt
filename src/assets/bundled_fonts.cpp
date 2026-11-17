@@ -10,6 +10,8 @@
 #include <QFontDatabase>
 
 namespace {
+// `file` maps a manifest name to its path, or to an empty string for an
+// asset that is set aside.
 template <class File>
 QStringList fontFiles(File file)
 {
@@ -17,21 +19,30 @@ QStringList fontFiles(File file)
     if (!manifest.open(QIODevice::ReadOnly))
         return {};
     QStringList result;
+    const auto add = [&result](const QString &path) {
+        if (!path.isEmpty())
+            result.append(path);
+    };
     for (const auto &entry :
          QJsonDocument::fromJson(manifest.readAll()).object().value("files").toArray())
-        result.append(file("fonts/ebook-core/" + entry.toObject().value("file").toString()));
+        add(file("fonts/ebook-core/" + entry.toObject().value("file").toString()));
     for (const auto *face : { "Regular", "Italic", "Bold" })
-        result.append(file(QString("fonts/IBMPlexSans-%1.ttf").arg(face)));
+        add(file(QString("fonts/IBMPlexSans-%1.ttf").arg(face)));
     for (const auto *name : kobalt::scriptFallbackFontFiles)
-        result.append(file(QString("fonts/") + QLatin1String(name)));
+        add(file(QString("fonts/") + QLatin1String(name)));
     return result;
+}
+
+QString usableFile(const kobalt::AssetBundle &assets, const QString &name)
+{
+    return assets.setAside(name) ? QString() : assets.file(name);
 }
 } // namespace
 
 QStringList kobalt::bundledFontFiles(const AssetBundle &assets)
 {
     return assets.available()
-            ? fontFiles([&assets](const QString &name) { return assets.file(name); })
+            ? fontFiles([&assets](const QString &name) { return usableFile(assets, name); })
             : QStringList();
 }
 
@@ -49,9 +60,16 @@ kobalt::EngineFontInputs kobalt::engineFontInputs(const AssetBundle &assets,
         inputs.fallbackFiles.append(assets.file(QString("fonts/") + name));
     }
     for (const auto *name : { "IBMPlexMono-Regular.ttf", "IBMPlexMono-Bold.ttf",
-                              "NotoSansMath-Regular.ttf", "NotoSerifCJK-Regular.ttc" })
-        inputs.fallbackFiles.append(assets.file(QString("fonts/") + name));
+                              "NotoSansMath-Regular.ttf", "NotoSerifCJK-Regular.ttc" }) {
+        const auto path = usableFile(assets, QString("fonts/") + name);
+        if (!path.isEmpty())
+            inputs.fallbackFiles.append(path);
+    }
     inputs.hyphenationDirectory = assets.file("hyph");
+    QDir hyphenation(inputs.hyphenationDirectory);
+    for (const auto &name : hyphenation.entryList(QDir::Files))
+        if (assets.setAside("hyph/" + name))
+            inputs.excludedHyphenation.append(name);
     return inputs;
 }
 

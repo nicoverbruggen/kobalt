@@ -47,6 +47,9 @@ struct EngineFontInputs
     FontSources sources;
     QStringList fallbackFiles;
     QString hyphenationDirectory;
+    // Pattern files in that directory that failed their check; the engine
+    // does not load them.
+    QStringList excludedHyphenation = {};
     QMap<QString, QByteArray> verifiedFontDigests = {};
     bool operator==(const EngineFontInputs &other) const;
 };

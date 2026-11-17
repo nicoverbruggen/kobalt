@@ -263,6 +263,10 @@ public:
                 if (valid)
                     kobalt::ui::prepareOpeningFonts(environment().assets);
                 attempt(false);
+                // The preload at ready skips while the assets are unchecked,
+                // which on a device often outlasts Nickel's startup.
+                if (valid && controller)
+                    controller->preloadLastBook();
             });
             attempt(false);
         });

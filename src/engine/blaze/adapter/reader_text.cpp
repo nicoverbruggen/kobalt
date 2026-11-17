@@ -1899,18 +1899,29 @@ QString searchKey(const QString &text)
 const QChar searchSegmentBreak(0x1);
 
 // The searchable text of a chapter: the runs of text between tags, each
-// folded, joined by searchSegmentBreak.
+// folded, joined by searchSegmentBreak. An empty key cannot rule out a
+// match.
 QString chapterSearchKey(const QByteArray &xhtml)
 {
     QXmlStreamReader xml(xhtml);
     QString key, run;
+    bool marksJoinRuns = false;
     const auto finish = [&] {
         const auto folded = searchKey(run);
         run.clear();
         if (folded.isEmpty())
             return;
-        if (!key.isEmpty())
+        if (!key.isEmpty()) {
+            // The search puts combining marks in canonical order across text
+            // nodes, so a run that starts with one can change the folded text
+            // of the run before it. Runs folded apart cannot show that.
+            const uint first = folded.at(0).isHighSurrogate() && folded.size() > 1
+                    ? uint(QChar::surrogateToUcs4(folded.at(0), folded.at(1)))
+                    : uint(folded.at(0).unicode());
+            if (QChar::combiningClass(first) != 0)
+                marksJoinRuns = true;
             key += searchSegmentBreak;
+        }
         key += folded;
     };
     while (!xml.atEnd()) {
@@ -1923,7 +1934,7 @@ QString chapterSearchKey(const QByteArray &xhtml)
     finish();
     // The renderer accepts some markup and named entities beyond strict XML.
     // Only a complete parse can rule out a match in this chapter.
-    return xml.hasError() ? QStringLiteral("") : key;
+    return xml.hasError() || marksJoinRuns ? QStringLiteral("") : key;
 }
 
 // Whether `pattern` can be visible text made of the runs of `key`. It can

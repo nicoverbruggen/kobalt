@@ -1175,7 +1175,8 @@ void searchLongItem()
 
 // Chapter mode rules out the spine items that cannot hold a query before it
 // loads them. A word that markup or hidden text splits stays findable, as in
-// the whole book.
+// the whole book. So does a letter whose combining marks markup splits: the
+// search puts the marks in canonical order across the inline element.
 void searchSplitWords()
 {
     // Each spine item is long enough to be a unit of its own, so that the
@@ -1195,11 +1196,12 @@ void searchSplitWords()
                                  "<p>A ze<span class=\"gone\">qq</span>bra hides.</p>");
     files["apart.xhtml"] = page({}, "<p>Zest and bravery, all apart.</p>");
     files["across.xhtml"] = page({}, "<p>The <b>z</b><i>e</i>bra<span>s</span> run.</p>");
+    files["marks.xhtml"] = page({}, "<p>a&#x301;<span>&#x323;</span>b</p>");
     files = test::publisherPackage(
             "en", "Split", files,
             "<itemref idref=\"start.xhtml\"/><itemref idref=\"markup.xhtml\"/>"
             "<itemref idref=\"hidden.xhtml\"/><itemref idref=\"apart.xhtml\"/>"
-            "<itemref idref=\"across.xhtml\"/>");
+            "<itemref idref=\"across.xhtml\"/><itemref idref=\"marks.xhtml\"/>");
     const auto hits = [](EngineDocument &model, const QString &query) {
         QStringList starts;
         SearchCursor cursor;
@@ -1218,13 +1220,19 @@ void searchSplitWords()
     openResources(whole, files, { { "font_pixels", 28 }, { "line_spacing_version", 1 } });
     EngineDocument model(test::readerFonts());
     openFiles(model, files);
-    for (const auto *query : { "zebra", "zebras", "bravery", "zest", "nothing" }) {
-        const auto expected = hits(whole, QString::fromLatin1(query));
-        require(hits(model, QString::fromLatin1(query)) == expected,
+    // A with a dot below and an acute accent, then b.
+    const auto marked = QString::fromUtf8("\u1ea1\u0301b");
+    for (const auto &query :
+         { QStringLiteral("zebra"), QStringLiteral("zebras"), QStringLiteral("bravery"),
+           QStringLiteral("zest"), QStringLiteral("nothing"), marked }) {
+        const auto expected = hits(whole, query);
+        require(hits(model, query) == expected,
                 qPrintable(QString("Chapter mode must find \"%1\" as the whole book does")
-                                   .arg(QString::fromLatin1(query))));
-        if (QByteArray(query) == "zebra")
+                                   .arg(query)));
+        if (query == QLatin1String("zebra"))
             require(expected.size() >= 3, "The fixture splits the word three times");
+        if (query == marked)
+            require(expected.size() == 1, "The fixture holds the marked letter once");
     }
 }
 

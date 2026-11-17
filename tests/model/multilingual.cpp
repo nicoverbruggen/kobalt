@@ -197,6 +197,56 @@ void checkBook(const QJsonObject &entry, const QString &directory)
     std::printf("PASS: %s literary excerpts, native TOC, search, selection, reflow and reopen\n",
                 qPrintable(language));
 }
+
+void pageExcerptsStopAtTheVisibleBoundary(const QString &directory)
+{
+    using namespace kobalt;
+    const auto book =
+            QJsonDocument::fromJson(read(QStringLiteral(KOBALT_TEST_CORPUS) + "/ar.json")).object();
+    test::BookFiles chapters;
+    QByteArray spine;
+    int index = 0;
+    for (const auto &entry : book["chapters"].toArray()) {
+        const auto chapter = entry.toObject();
+        const auto name = QString("chapter%1.xhtml").arg(++index);
+        QByteArray body = "<h1>" + chapter["title"].toString().toHtmlEscaped().toUtf8() + "</h1>";
+        for (const auto &paragraph : chapter["paragraphs"].toArray()) {
+            body += paragraph.toString().toUtf8();
+            if (body.size() > 12000)
+                break;
+        }
+        auto html = test::publisherHtml(body);
+        html.replace("<body>", "<body dir='rtl'>");
+        chapters[name] = html;
+        spine += "<itemref idref='" + name.toUtf8() + "'/>";
+    }
+    auto files = test::publisherPackage("ar", "Excerpt boundaries", chapters, spine);
+    files["book.opf"].replace("<spine>", "<spine page-progression-direction='rtl'>");
+    require(test::writeBook(directory, "excerpt-boundary.epub", files),
+            "Cannot write excerpt-boundary fixture");
+    const auto bytes = read(directory + "/excerpt-boundary.epub");
+    const QJsonObject settings{ { "font_pixels", 28 },
+                                { "line_spacing_version", 1 },
+                                { "columns", 1 } };
+    EngineDocument whole(test::readerFonts()), sliced(test::readerFonts());
+    QString error;
+    setChapterModeOverride(0);
+    require(whole.open(bytes, { 600, 800 }, settings, &error), qPrintable(error));
+    setChapterModeOverride(1);
+    require(sliced.open(bytes, { 600, 800 }, settings, &error), qPrintable(error));
+    setChapterModeOverride(-1);
+    int seen = 0;
+    do {
+        require(seen < whole.pages() && whole.go(seen), "Excerpt traversal exceeded the book");
+        require(sliced.pageStart(sliced.page()) == whole.pageStart(whole.page())
+                        && sliced.image(sliced.page()) == whole.image(whole.page()),
+                "Excerpt reference does not show the same page");
+        require(sliced.pageExcerpt(sliced.page()) == whole.pageExcerpt(whole.page()),
+                "A bookmark excerpt included text outside the displayed page");
+        ++seen;
+    } while (sliced.turnInWindow(1));
+    require(seen == whole.pages(), "Excerpt comparison omitted pages");
+}
 } // namespace
 
 // Checks Arabic, Hebrew, Hindi and Japanese excerpts: chapter titles, script glyphs, direction, search, selection and reflow.
@@ -209,6 +259,7 @@ int main(int argc, char **argv)
     require(entries.size() == 4, "Representative literary inventory must contain four languages");
     QTemporaryDir directory;
     require(directory.isValid(), "Cannot create literary fixture directory");
+    pageExcerptsStopAtTheVisibleBoundary(directory.path());
     QSet<QString> found;
     for (const auto &entry : entries) {
         const auto language = entry.toObject()["language"].toString();

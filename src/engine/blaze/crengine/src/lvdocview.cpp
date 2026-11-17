@@ -3097,7 +3097,7 @@ void LVDocView::setHeaderIcons(LVRefVec<LVImageSource> icons) {
 }
 
 /// get page document range, -1 for current page
-LVRef<ldomXRange> LVDocView::getPageDocumentRange(int pageIndex) {
+LVRef<ldomXRange> LVDocView::getPageDocumentRange(int pageIndex, bool visibleTextOnly) {
     LVLock lock(getMutex());
     CHECK_RENDER("getPageDocRange()")
     // On some pages (eg: that ends with some padding between an
@@ -3127,7 +3127,7 @@ LVRef<ldomXRange> LVDocView::getPageDocumentRange(int pageIndex) {
             if (page->flags & RN_PAGE_TYPE_COVER)
                 return res;
             start_y = page->start;
-            end_y = page->start + page->height;
+            end_y = page->start + page->height - (visibleTextOnly ? 1 : 0);
         }
         else {
             return res;
@@ -3229,7 +3229,7 @@ lString32 LVDocView::getPageText(bool, int pageIndex) {
 	LVLock lock(getMutex());
     CHECK_RENDER("getPageText()")
 	lString32 txt;
-	LVRef < ldomXRange > range = getPageDocumentRange(pageIndex);
+	LVRef < ldomXRange > range = getPageDocumentRange(pageIndex, true);
 	if (!range.isNull())
 		txt = range->getRangeText();
 	return txt;

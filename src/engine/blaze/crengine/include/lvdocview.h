@@ -606,7 +606,7 @@ public:
     void updateSelections();
     void updateBookMarksRanges();
     /// get page document range, -1 for current page
-    LVRef<ldomXRange> getPageDocumentRange( int pageIndex=-1 );
+    LVRef<ldomXRange> getPageDocumentRange( int pageIndex=-1, bool visibleTextOnly=false );
     /// get page text, -1 for current page
     lString32 getPageText( bool wrapWords, int pageIndex=-1 );
     /// returns number of non-space characters on current page

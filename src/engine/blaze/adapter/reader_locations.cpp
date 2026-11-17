@@ -172,6 +172,8 @@ QVector<ldomNode *> textNodes(ldomNode *element)
 
 QStringList EngineDocument::spineItems() const
 {
+    if (engine_ && !spineNames_.isEmpty())
+        return spineNames_;
     QStringList items;
     auto *root = engine_ ? engine_->getDocument()->nodeFromXPath(U"/body") : nullptr;
     for (int i = 0; root && i < root->getChildCount(); ++i) {
@@ -179,6 +181,7 @@ QStringList EngineDocument::spineItems() const
         if (node->isElement() && node->isNodeName("DocFragment"))
             items.append(qstring(node->getAttributeValue("Source")));
     }
+    spineNames_ = items;
     return items;
 }
 

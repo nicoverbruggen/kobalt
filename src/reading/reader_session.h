@@ -69,6 +69,8 @@ struct ReaderFrame
     qint64 damageFrom = 0;
     QJsonObject state, resources;
     QString title, author, error;
+    // Source identity of the painted page, independent of later slice preparation.
+    QString pageStart;
     qint64 totalWords = -1;
     QString nativePosition, nativePositionError;
     QImage cover;
@@ -201,7 +203,7 @@ public:
     bool canTurn() const;
     void cancelPendingTurn();
     bool go(int page);
-    bool goTo(const QString &anchor);
+    bool goTo(const QString &anchor, bool keepLayout = false);
     // Goes to the entry `index` of chapters(). See Engine::goToChapter().
     bool goToChapter(int index);
     // Goes to about `fraction` of the whole book, from 0 to 1. With only a
@@ -217,6 +219,7 @@ public:
                                std::function<void(PositionComparison)> finished);
 
     // Source and pagination generation. Navigation within the same layout keeps it.
+    int layoutProgressPercent() const { return engine_->progress->percent(); }
     quint64 layoutRevision() const { return newestLayout->load(); }
 
     // Milliseconds since the opening or the last new layout, which is a new
@@ -554,6 +557,7 @@ private:
     appearance::SavedInput originalAppearance;
     QSize desiredSize;
     QString destination;
+    bool keepDestinationLayout = false;
     // Page turns since the book opened or the appearance changed. Hybrid
     // rendering counts the pages of the book after a few of them.
     int quietTurns_ = 0;

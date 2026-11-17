@@ -20,10 +20,25 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include <atomic>
 #include <functional>
 #include <memory>
 
 namespace kobalt {
+class LayoutProgress
+{
+public:
+    int percent() const { return percent_.load(); }
+
+    void reset() { percent_ = 0; }
+
+    void setEstimateProgress(int measured, int items);
+    void setBuildProgress(int percent);
+
+private:
+    std::atomic_int percent_{ 0 };
+};
+
 // One open book in one rendering engine. The application reaches an engine
 // only through this interface. All calls stay on the engine worker thread.
 // A position is a string that only the engine that made it can read; a
@@ -31,6 +46,10 @@ namespace kobalt {
 class Engine
 {
 public:
+    // A reader keeps its progress when a prepared layout replaces its document.
+    const std::shared_ptr<LayoutProgress> progress = std::make_shared<LayoutProgress>();
+
+    Engine &operator=(Engine &&) { return *this; }
     virtual ~Engine() = default;
     // The name of the engine, for cache identity and for code that still
     // needs one specific engine.
@@ -374,17 +393,6 @@ public:
 
 // Creates the Blaze adapter used by the reader.
 std::unique_ptr<Engine> createEngine(EngineFontInputs fonts);
-
-// How far the background layout of Hybrid rendering is, in percent: the page
-// estimate measures the spine items up to 80, the whole-book build goes on
-// to 100, and 100 is a whole book that waits for the next turn to show. Any
-// thread may read it: the Book status field shows it. A new book or layout
-// starts it again at 0.
-int layoutProgressPercent();
-void resetLayoutProgress();
-// For the engine: the estimate's share, and the share of the build.
-void setEstimateProgress(int measured, int items);
-void setBuildProgress(int percent);
 
 // 1 opens the books that follow in chapter mode and 0 opens them as a whole.
 // The application sets it through renderingMode in reading/rendering_mode.h.

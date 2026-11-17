@@ -375,7 +375,7 @@ private:
     EngineDocument *documentFor(int item, const std::function<bool()> &current = {});
     // False when the plain text of spine item `item` cannot contain `query`.
     // It can say true where the engine finds nothing.
-    bool mayContain(int item, const QString &query) const;
+    bool mayContain(int item, const QString &pattern) const;
     void labelChapterHit(SearchHit &hit) const;
     // The estimated page of the book that shows `position`, counted from
     // zero, from the page map. -1 until the map covers every spine item, or
@@ -409,7 +409,12 @@ private:
     std::function<bool()> interrupt_;
     bool layoutInterrupted_ = false;
     // The spine items that have their text, or -1 for the whole book.
+    mutable QStringList spineNames_;
     int windowFirst_ = -1, windowLast_ = -1, spineItemCount_ = 0;
+    // Keep traversed group boundaries after their rendered documents are evicted.
+    mutable QMap<int, int> visitedUnits_;
+    mutable quint64 visitedSource_ = 0;
+    mutable qint64 visitedBudget_ = -1;
     // The pages of text in one slice, and the characters of the spine item
     // before the slice that has a layout.
     int slicePages_ = 0, sliceFirst_ = 0;

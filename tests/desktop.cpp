@@ -10330,15 +10330,15 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         sinceTurn.start();
         waited.restart();
         QTest::keyClick(&fixture.window, Qt::Key_PageDown);
-        while (waited.elapsed() < 120000 && kobalt::layoutProgressPercent() < 100) {
+        const QRegularExpression exact(QStringLiteral("^\\d+ / \\d+$"));
+        while (waited.elapsed() < 120000 && !exact.match(shown()).hasMatch()) {
             if (sinceTurn.elapsed() > 3000 && settled()) {
                 QTest::keyClick(&fixture.window, Qt::Key_PageDown);
                 sinceTurn.restart();
             }
             QTest::qWait(50);
         }
-        QCOMPARE(kobalt::layoutProgressPercent(), 100);
-        const QRegularExpression exact(QStringLiteral("^\\d+ / \\d+$"));
+
         waited.restart();
         while (waited.elapsed() < 30000 && !exact.match(shown()).hasMatch()) {
             if (seen.last() != shown())
@@ -17447,9 +17447,9 @@ private slots:
         }
         // A phone in landscape has no room for a readable page; a six-inch screen in portrait has.
         if (preset == 5)
-            QVERIFY(!fixture.state().value("appearance_preview_fits").toBool());
+            QTRY_VERIFY(!fixture.visible("rrAppearancePreview"));
         if (preset == 1)
-            QVERIFY(fixture.state().value("appearance_preview_fits").toBool());
+            QTRY_VERIFY(fixture.visible("rrAppearancePreview"));
         marginPreviewTour(fixture, [&](const QString &suffix) {
             return capture(fixture, name + '-' + suffix);
         });

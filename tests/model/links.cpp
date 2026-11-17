@@ -1,3 +1,4 @@
+#include "engine_fixtures.h"
 #include "reader_inputs.h"
 #include "engine/blaze/adapter/column_view.h"
 #include "book_fixtures.h"
@@ -611,6 +612,49 @@ void linksOutsideCurrentLayout()
     }
 }
 
+void remoteNoteSemantics()
+{
+    using namespace kobalt;
+    const auto files = test::publisherPackage(
+            "en", "Remote notes",
+            { { "text.xhtml",
+                test::publisherHtml(
+                        "<p><a href='notes.xhtml#note'>remote</a> "
+                        "<a role='doc-link' href='notes.xhtml#note'>passage override</a> "
+                        "<a href='notes.xhtml#plain'>plain passage</a></p>") },
+              { "notes.xhtml",
+                test::publisherHtml(
+                        "<aside role='doc-footnote'><div><p id='note'>Publisher note.</p></div></aside>"
+                        "<p id='plain'>Ordinary passage.</p>") } },
+            "<itemref idref='text.xhtml'/><itemref idref='notes.xhtml'/>");
+    QTemporaryDir directory;
+    require(directory.isValid() && test::writeBook(directory.path(), "notes.epub", files),
+            "Cannot write the remote note fixture");
+    QFile file(directory.filePath("notes.epub"));
+    require(file.open(QIODevice::ReadOnly), "Cannot read the remote note fixture");
+    const auto bytes = file.readAll();
+    for (bool chapter : { false, true }) {
+        EngineDocument model(test::readerFonts());
+        QString error;
+        require(model.open(bytes, { 900, 900 }, {}, &error), qPrintable(error));
+        if (chapter)
+            require(model.showSpineItems(0, 0), "Cannot isolate the link chapter");
+        // The second lookup exercises cached target semantics.
+        for (int lookup = 0; lookup < 2; ++lookup) {
+            const auto links = model.pageLinks();
+            require(links.size() == 3, "Remote-note fixture lost a link");
+            for (const auto &link : links) {
+                const auto details = model.linkDetails(link.source);
+                const bool note = details.label == "remote";
+                require(link.tappable("footnotes") == note,
+                        "An unloaded target lost its footnote semantics or overrode an explicit passage");
+                require((details.kind == LinkKind::Footnote) == note,
+                        "Link classification disagrees with its preview");
+            }
+        }
+    }
+}
+
 void noteMatching()
 {
     using kobalt::LinkKind;
@@ -816,6 +860,7 @@ int main(int argc, char **argv)
     chapterPageNotes();
     interruptPageNoteCheck();
     noteMatching();
+    remoteNoteSemantics();
     linksOutsideCurrentLayout();
     const auto origin = model.position();
     for (const bool dark : { false, true }) {

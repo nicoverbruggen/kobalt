@@ -1004,6 +1004,32 @@ void openFiles(EngineDocument &model, const test::BookFiles &files)
     require(model.go(0), "Cannot go to the first page");
 }
 
+void selectionAcrossSliceAfterReflow()
+{
+    const auto files = test::engineBook(false, 1, 220);
+    EngineDocument whole(test::readerFonts()), chapters(test::readerFonts());
+    const QJsonObject large{ { "font_pixels", 32 }, { "line_spacing_version", 1 } };
+    openResources(whole, files, large);
+    chapters.setChapterSlices(25);
+    openResources(chapters, files,
+                  { { "font_pixels", 28 },
+                    { "line_spacing_version", 1 },
+                    { "koblaze_first_spine_item", 0 },
+                    { "koblaze_last_spine_item", 0 } });
+    require(chapters.applyAppearance(appearance::Patch(large), { 600, 800 }),
+            "Cannot reflow selection fixture");
+    while (chapters.page() + 1 < chapters.pages())
+        require(chapters.turnInWindow(1), "Cannot reach the selection slice boundary");
+    require(chapters.continuesAfter(), "Selection fixture has no following slice");
+    require(whole.goTo(chapters.pageStart(chapters.page())), "Cannot locate the reference page");
+    const auto expected = whole.annotationPageEdges();
+    const auto actual = chapters.annotationPageEdges();
+    require(expected.continuesAfter && actual.continuesAfter
+                    && actual.first.text == expected.first.text
+                    && actual.last.text == expected.last.text,
+            "Reflow disabled selection across a slice boundary");
+}
+
 // An exclusive highlight end at the next page start belongs to the preceding page,
 // including when that chapter's layout has left the window.
 void offscreenRangeEnd()
@@ -1037,6 +1063,17 @@ void offscreenRangeEnd()
         const auto actual = chapters.bookPages(range, {}, true);
         require(actual.size() == 2 && actual.at(1) == p,
                 "An offscreen highlight end included the next page");
+    }
+    for (int turn = 0; turn < 12; ++turn)
+        require(chapters.turnInWindow(1), "Cannot reach a later chapter slice");
+    require(chapters.prepareFullDocument({}) == Engine::FullDocument::Ready,
+            "Cannot prepare the reference page count");
+    const QStringList ends{ whole.pageStart(1), "/body/DocFragment[2].0",
+                            "/body/DocFragment[2]/body/p[1]/text().0" };
+    for (const auto &end : ends) {
+        const QStringList range{ whole.pageStart(0), end };
+        require(chapters.bookPages(range, {}, true) == whole.bookPages(range, {}, true),
+                "An exclusive chapter-start end included that chapter from a later slice");
     }
 }
 
@@ -1110,6 +1147,29 @@ void emptyItem()
                 "The empty spine item is complete with no pages");
         require(!rough.pagesEstimated, "The total of a book read as a whole is not estimated");
     }
+}
+
+void normalizedSearchRanges()
+{
+    const auto files = test::publisherPackage(
+            "en", "Search", { { "one.xhtml", test::publisherHtml("<p>ﬀ q&#x315;&#x300;</p>") } },
+            "<itemref idref='one.xhtml'/>");
+    EngineDocument model(test::readerFonts());
+    openResources(model, files, {});
+    const auto match = [&](const QString &query, const QString &source) {
+        SearchBatch batch;
+        QVector<SearchHit> hits;
+        for (int i = 0; !batch.done && i < 100; ++i) {
+            batch = model.searchText(query, batch.cursor, 1);
+            hits += batch.hits;
+        }
+        require(batch.done && hits.size() == 1 && hits.first().text == source
+                        && hits.first().start != hits.first().end,
+                "A normalized match must return its original source text once across batches");
+    };
+    match("f", "ﬀ");
+    match(QStringLiteral("q\u0300\u0315"), QStringLiteral("q\u0315\u0300"));
+    match(QStringLiteral("\u0300\u0315"), QStringLiteral("\u0315\u0300"));
 }
 
 // A long spine item has a layout for one part at a time. A search of the
@@ -3303,17 +3363,20 @@ void chapterSurvey(const QString &path)
 void layoutProgressForward()
 {
     using namespace kobalt;
-    resetLayoutProgress();
-    setEstimateProgress(5, 10);
-    require(layoutProgressPercent() == 40, "Estimate progress was not recorded");
-    setBuildProgress(75);
-    require(layoutProgressPercent() == 95, "Build progress was not recorded");
-    setEstimateProgress(10, 10);
-    require(layoutProgressPercent() == 95, "Resumed estimate work moved the progress back");
-    setBuildProgress(50);
-    require(layoutProgressPercent() == 95, "An earlier build slice moved the progress back");
-    resetLayoutProgress();
-    require(layoutProgressPercent() == 0, "A new layout kept the old progress");
+    LayoutProgress progress;
+    progress.setEstimateProgress(5, 10);
+    require(progress.percent() == 40, "Estimate progress was not recorded");
+    progress.setBuildProgress(75);
+    require(progress.percent() == 95, "Build progress was not recorded");
+    progress.setEstimateProgress(10, 10);
+    require(progress.percent() == 95, "Resumed estimate work moved the progress back");
+    progress.setBuildProgress(50);
+    require(progress.percent() == 95, "An earlier build slice moved the progress back");
+    LayoutProgress other;
+    other.reset();
+    require(progress.percent() == 95, "Opening a second reader reset the first");
+    progress.reset();
+    require(progress.percent() == 0, "A new layout kept the old progress");
 }
 
 int main(int argc, char **argv)
@@ -3371,6 +3434,7 @@ int main(int argc, char **argv)
         require(layout() != before, "Replacing a font under the same family kept the layout key");
     }
     offscreenRangeEnd();
+    selectionAcrossSliceAfterReflow();
     savedPlaceOutsideOpeningWindow();
     returnToEvictedBookmark();
     reopenAfterWholeBookPreparation();
@@ -3478,6 +3542,7 @@ int main(int argc, char **argv)
     observations();
     emptyItem();
     laterSlice();
+    normalizedSearchRanges();
     searchLongItem();
     searchSplitWords();
     keptObservations();

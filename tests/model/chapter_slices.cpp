@@ -12,7 +12,8 @@ using namespace kobalt;
 namespace {
 const QJsonObject settings{ { "font_pixels", 28 }, { "line_spacing_version", 1 } };
 
-void open(EngineDocument &model, const test::BookFiles &files)
+void open(EngineDocument &model, const test::BookFiles &files, QSize viewport = { 600, 800 },
+          int columns = 1)
 {
     QMap<QString, qint64> sizes;
     for (auto it = files.cbegin(); it != files.cend(); ++it)
@@ -25,7 +26,9 @@ void open(EngineDocument &model, const test::BookFiles &files)
             },
             std::make_shared<std::atomic_bool>(false));
     QString error;
-    require(model.openResources(source, sizes, { 600, 800 }, settings, &error), qPrintable(error));
+    auto options = settings;
+    options["columns"] = columns;
+    require(model.openResources(source, sizes, viewport, options, &error), qPrintable(error));
 }
 
 // Each page as its start and a checksum of its image.
@@ -42,10 +45,11 @@ QString pageRecord(EngineDocument &model)
 }
 
 // Chapter mode must give the pages of the whole book, pixel for pixel.
-void requireWholeBookPages(const test::BookFiles &files, int slicePages, const char *what)
+void requireWholeBookPages(const test::BookFiles &files, int slicePages, const char *what,
+                           QSize viewport = { 600, 800 }, int columns = 1)
 {
     EngineDocument model(test::readerFonts());
-    open(model, files);
+    open(model, files, viewport, columns);
     QStringList whole;
     for (int page = 0; page < model.pages(); ++page) {
         require(model.go(page), "Cannot go to a page of the whole book");
@@ -327,6 +331,21 @@ int main(int argc, char **argv)
         QString compareError;
         require(model.comparePosition(model.pageStart(model.page()), &compareError) <= 0,
                 "The page of a position starts after the position");
+    }
+
+    {
+        QByteArray body;
+        const auto words = QByteArray("The evening air was clear and cool. ").repeated(8);
+        for (int section = 0; section < 120; ++section) {
+            body += "<h2>Section " + QByteArray::number(section)
+                    + "</h2>"
+                      "<table style='width:95%'><tr><td rowspan='2'>Side</td><td>"
+                    + words + "</td></tr><tr><td>Caption</td></tr></table>";
+        }
+        for (int columns : { 1, 2 })
+            requireWholeBookPages(styledBook({}, body), 25,
+                                  "A resumed slice repeated the heading's leading space",
+                                  { 900, 650 }, columns);
     }
 
     // A font change keeps the position and stays in slices.

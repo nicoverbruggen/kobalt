@@ -1,4 +1,8 @@
 #include "reader_inputs.h"
+#include "engine_fixtures.h"
+#include "book_fixtures.h"
+#include "reading/rendering_mode.h"
+#include "publication/local_resources.h"
 #include "annotation_session_checks.h"
 #include "storage/profile_database.h"
 #include "check.h"
@@ -55,6 +59,114 @@ QByteArray read(const QString &path)
     require(file.open(QIODevice::ReadOnly), "Cannot read bookmark fixture");
     return file.readAll();
 }
+
+void bookmarkAfterPreparation()
+{
+    QTemporaryDir directory;
+    require(directory.isValid(), "Cannot create prepared bookmark fixture");
+    QByteArray body;
+    for (int i = 0; i < 230; ++i) {
+        body += "<p style='page-break-before:always'>Bookmark page " + QByteArray::number(i) + ". "
+                + QByteArray("The evening air was clear and cool. ").repeated(i < 30 ? 6 : 1)
+                + "</p>";
+    }
+    const auto files = test::publisherPackage("en", "Bookmarks",
+                                              { { "one.xhtml", test::publisherHtml(body) } },
+                                              "<itemref idref='one.xhtml'/>");
+    require(test::writeBook(directory.path(), "long.epub", files),
+            "Cannot write prepared bookmark fixture");
+    const QString path = directory.path() + "/long.epub";
+    const QString identity = QUrl::fromLocalFile(path).toString();
+    const auto open = [&](ReaderSession &reader) {
+        auto lease = std::make_shared<SourceLease>();
+        bool ready = false;
+        reader.open({ identity,
+                      path,
+                      { 600, 800 },
+                      {},
+                      {},
+                      {},
+                      lease,
+                      localResourceFactory(path, lease) },
+                    [&](OpeningResult result) {
+                        require(result.ready(), "Cannot open prepared bookmark fixture");
+                        ready = true;
+                    });
+        waitUntil([&] { return ready && !reader.busy() && !reader.preparingNeighbours(); });
+    };
+    QString shown, later;
+    {
+        renderingMode::setOverride(0);
+        ReaderSession whole(test::readerFonts(), test::readerPlaceholder());
+        open(whole);
+        const auto start = [&](int page) {
+            QString position;
+            bool done = false;
+            whole.pageSummary(page, [&](QString value, QString) {
+                position = value;
+                done = true;
+            });
+            waitUntil([&] { return done; });
+            require(!position.isEmpty(), "Missing reference bookmark position");
+            return position;
+        };
+        shown = start(56);
+        later = start(112);
+    }
+    const int quietMilliseconds = renderingMode::buildQuietMilliseconds();
+    renderingMode::setBuildQuietMilliseconds(60000);
+    for (int mode : { 1, 2 }) {
+        renderingMode::setOverride(mode);
+        ReaderSession reader(test::readerFonts(), test::readerPlaceholder());
+        open(reader);
+        for (int turn = 0; turn < 56; ++turn) {
+            require(reader.turn(1), "Cannot reach prepared bookmark page");
+            waitUntil([&] { return !reader.busy() && !reader.preparingNeighbours(); });
+        }
+        require(reader.state().value("position").toString() == shown,
+                "Prepared bookmark test reached the wrong passage");
+        QTemporaryDir annotations;
+        const auto fingerprint = reader.sourceHash();
+        {
+            BookmarkStore seed(annotations.path(), identity, fingerprint, reader.title());
+            require(seed.load(), "Cannot load bookmark seed");
+            seed.setBookmarks(
+                    { { later, "Later", "Keep this mark", QDateTime::currentDateTimeUtc() } });
+            require(seed.save(), "Cannot save bookmark seed");
+        }
+        const auto layout = [&] {
+            return bookmarkLayoutKey(reader.pages(), reader.state(), { 600, 800 });
+        };
+        BookmarkSession bookmarks(reader, layout, annotations.path(), identity, fingerprint,
+                                  reader.title());
+        waitUntil([&] { return bookmarks.sync(); });
+        require(!bookmarks.marked(reader.page()), "Later bookmark marked the displayed page");
+        require(bookmarks.toggle(reader.page()) == BookmarkSession::Toggle::Adding,
+                "Adding a bookmark removed an existing bookmark");
+        waitUntil([&] { return bookmarks.bookmarks().size() == 2; });
+        bookmarks.flush();
+        {
+            BookmarkStore reopened(annotations.path(), identity, fingerprint, reader.title());
+            require(reopened.load(), "Cannot reopen prepared bookmarks");
+            QSet<QString> positions;
+            for (const auto &mark : reopened.bookmarks())
+                positions.insert(mark.position);
+            const QSet<QString> expected{ shown, later };
+            require(positions == expected,
+                    "Prepared bookmark saved the wrong passage or lost the later mark");
+        }
+        waitUntil([&] { return bookmarks.sync(); });
+        require(bookmarks.toggle(reader.page()) == BookmarkSession::Toggle::Removed,
+                "Cannot remove the displayed bookmark");
+        bookmarks.flush();
+        BookmarkStore reopened(annotations.path(), identity, fingerprint, reader.title());
+        require(reopened.load() && reopened.bookmarks().size() == 1
+                        && reopened.bookmarks().first().position == later,
+                "Removing the displayed bookmark removed the later mark");
+    }
+    renderingMode::setBuildQuietMilliseconds(quietMilliseconds);
+    renderingMode::setOverride(0);
+}
 } // namespace
 
 // Checks bookmark editing, merging, reflow and reopening on the JSON and SQLite backends, including failed writes.
@@ -73,6 +185,7 @@ int main(int argc, char **argv)
     // Run inside the event loop, so quitting stops the engine worker as the
     // application does.
     qt::later(0, &app, [&] {
+        bookmarkAfterPreparation();
         auto owned =
                 std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
         auto &model = *owned;

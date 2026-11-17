@@ -628,7 +628,7 @@ void Reader::buildReadingPage()
     searchPanel->selected = [this](kobalt::SearchHit hit) {
         closeSearch();
         pendingSearchHit = hit;
-        this->session->goTo(hit.start);
+        this->session->goTo(hit.start, true);
     };
     page->held = [this](QPoint point) {
         if (beginAnnotationDrag(point, -1))

@@ -1159,6 +1159,34 @@ int EngineDocument::adjacentSpineItem(int direction) const
 
 QPair<int, int> EngineDocument::neighbouringUnit(int item, int direction) const
 {
+    const quint64 identity = source_ ? source_->identity : 0;
+    const qint64 budget = unitBudget();
+    if (visitedSource_ != identity || visitedBudget_ != budget) {
+        visitedUnits_.clear();
+        visitedSource_ = identity;
+        visitedBudget_ = budget;
+    }
+    if (windowFirst_ >= 0 && visitedUnits_.value(windowFirst_, -1) != windowLast_) {
+        // An explicit jump can start a different group. Its actual range
+        // supersedes overlapping ranges from the previous traversal.
+        auto it = visitedUnits_.lowerBound(windowFirst_);
+        if (it != visitedUnits_.begin() && std::prev(it).value() >= windowFirst_)
+            --it;
+        while (it != visitedUnits_.end() && it.key() <= windowLast_)
+            it = visitedUnits_.erase(it);
+        visitedUnits_.insert(windowFirst_, windowLast_);
+    }
+    if (direction > 0) {
+        const auto found = visitedUnits_.constFind(item);
+        if (found != visitedUnits_.cend())
+            return { item, found.value() };
+    } else {
+        const auto &units = visitedUnits_;
+        auto it = units.upperBound(item);
+        if (it != units.cbegin() && (--it).value() == item)
+            return { it.key(), item };
+    }
+
     // Forward and backward grouping can choose different ranges of short
     // items. Keep the actual adjacent range when it is already available.
     if (ahead_ && (direction > 0 ? ahead_->windowFirst_ == item : ahead_->windowLast_ == item)) {
@@ -1344,39 +1372,26 @@ std::unique_ptr<EngineDocument> EngineDocument::openSide(const QJsonObject &sett
 }
 
 namespace {
-// The Book status field reads the progress of the background layout from the
-// GUI thread while the engine worker and the build thread write it.
-std::atomic_int layoutPercent{ 0 };
 constexpr int estimateShare = 80;
 } // namespace
 
-int layoutProgressPercent()
-{
-    return layoutPercent.load();
-}
-
-void resetLayoutProgress()
-{
-    layoutPercent = 0;
-}
-
-void setEstimateProgress(int measured, int items)
+void LayoutProgress::setEstimateProgress(int measured, int items)
 {
     // Estimate work can resume after the build has passed it: the progress
     // only goes forward until resetLayoutProgress().
     if (items <= 0)
         return;
     const int done = estimateShare * qBound(0, measured, items) / items;
-    int seen = layoutPercent.load();
-    while (done > seen && !layoutPercent.compare_exchange_weak(seen, done)) { }
+    int seen = percent_.load();
+    while (done > seen && !percent_.compare_exchange_weak(seen, done)) { }
 }
 
-void setBuildProgress(int percent)
+void LayoutProgress::setBuildProgress(int percent)
 {
     // The build only goes forward; each slice of pages counts from zero.
     const int done = estimateShare + (100 - estimateShare) * qBound(0, percent, 100) / 100;
-    int seen = layoutPercent.load();
-    while (done > seen && !layoutPercent.compare_exchange_weak(seen, done)) { }
+    int seen = percent_.load();
+    while (done > seen && !percent_.compare_exchange_weak(seen, done)) { }
 }
 
 #if __has_include(<koblaze.h>) && defined(KOBLAZE_CANCEL_CHECK)
@@ -1583,15 +1598,16 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
     if (current && !current())
         return FullDocument::Stopped;
     if (cachedOnly) {
-        // CREngine names a cache file after the start of the document
-        // name, which is the fingerprint of the publication, in two halves
-        // of 12 characters. A file that turns out to be stale is parsed
-        // again, as a book without one is once the user reads.
+        // A parsed cache for another policy cannot supply this layout.
+        const QString name = documentCacheName(cacheFingerprint_);
+        const auto stem = name.size() > 25 ? name.left(12) + '-' + name.right(12) : name;
+        const auto checksum = documentCacheChecksum(
+                documentCachePolicy() + ":bionic-v3:" + bionic_.toUtf8(), domVersion_);
+        const QString pattern = stem + '.' + QStringLiteral("%1").arg(checksum, 8, 16, QChar('0'))
+                + QStringLiteral(".*.cr3");
         const auto files = cacheDirectory_.isEmpty() || cacheFingerprint_.isEmpty()
                 ? QStringList()
-                : QDir(cacheDirectory_)
-                          .entryList({ documentCacheName(cacheFingerprint_).left(12) + "*.cr3" },
-                                     QDir::Files);
+                : QDir(cacheDirectory_).entryList({ pattern, pattern + ".keep" }, QDir::Files);
         if (files.isEmpty()) {
             fullUncached_ = key;
             return FullDocument::None;
@@ -1614,7 +1630,7 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
         build->key = key;
         // A new appearance tries again after a failed build.
         fullFailed_.clear();
-        setBuildProgress(0);
+        progress->setBuildProgress(0);
         build->size = size_;
         // What the build reads is copied here: this document goes on with
         // other work between the runs of the build.
@@ -1629,7 +1645,8 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
         const auto source = source_;
         const auto size = size_;
         auto *state = build.get();
-        build->thread = new BuildThread([state, next, source, saved, size] {
+        const auto bookProgress = progress;
+        build->thread = new BuildThread([state, next, source, saved, size, bookProgress] {
             {
                 // The first run of the build starts it.
                 QMutexLocker lock(&state->mutex);
@@ -1648,12 +1665,14 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
                     const StopCheck check(wanted);
                     // The text, its styles and its pages each count for a
                     // third. Each slice of pages counts from zero again.
-                    const OpeningProgress progress = [](OpeningStage stage, int percent) {
+                    const OpeningProgress progress = [bookProgress](OpeningStage stage,
+                                                                    int percent) {
                         const int part = stage == OpeningStage::Styles ? 1
                                 : stage == OpeningStage::Pages         ? 2
                                                                        : 0;
                         // 99 at most: 100 is the book that is ready.
-                        setBuildProgress(qMin(99, (part * 100 + qBound(0, percent, 100)) / 3));
+                        bookProgress->setBuildProgress(
+                                qMin(99, (part * 100 + qBound(0, percent, 100)) / 3));
                     };
                     opened = source->resources
                             ? document->openResources(source->resources->fresh(), source->sizes,
@@ -1734,7 +1753,7 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
             pageMap().restore(whole.read);
     }
     // Ready: the next turn shows it.
-    setBuildProgress(100);
+    progress->setBuildProgress(100);
     return FullDocument::Ready;
 #else
     Q_UNUSED(current);
@@ -1768,6 +1787,9 @@ void EngineDocument::keepUnit(std::unique_ptr<EngineDocument> document, const QJ
     unit.size = size;
     for (int item = first; item <= last && item < bytes.size(); ++item)
         unit.bytes += bytes[item];
+    document->cache_.clear();
+    document->spareImage_ = {};
+    document->damage_.clear();
     unit.document = std::move(document);
     for (auto it = kept_.begin(); it != kept_.end();) {
         if (it->first == first)
@@ -1849,6 +1871,9 @@ bool EngineDocument::adoptAhead(int first, int last)
     fullUncached_ = std::move(old->fullUncached_);
     fullSize_ = old->fullSize_;
     kept_ = std::move(old->kept_);
+    visitedUnits_ = std::move(old->visitedUnits_);
+    visitedSource_ = old->visitedSource_;
+    visitedBudget_ = old->visitedBudget_;
     ahead_ = std::move(old);
     aheadItem_ = oldItem;
     aheadSettings_ = std::move(oldSettings);

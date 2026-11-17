@@ -131,7 +131,7 @@ kobalt::headerfooter::Values Reader::chromeValues()
     // Fast lays out a chapter at a time and never the whole book.
     values.wholeBookPercent = values.wholeBook || !renderingMode::countsInBackground()
             ? -1
-            : kobalt::layoutProgressPercent();
+            : session->layoutProgressPercent();
     // The time of the whole book is taken when it first shows after the
     // opening or a new layout.
     if (session->layoutStarts() != statusLayout) {

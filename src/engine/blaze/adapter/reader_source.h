@@ -48,7 +48,8 @@ struct ReaderSource
     QHash<QString, qint64> textWordPrefixes;
     // Whether a linked target exists, checked on demand without loading its
     // chapter. Unknown or interrupted checks are not retained.
-    QHash<QString, bool> linkTargets;
+    enum class LinkTarget { Unknown, Missing, Passage, Footnote };
+    QHash<QString, LinkTarget> linkTargets;
 
     // The estimated pages of the book, for rough page numbers. They are for
     // the open book only and are not saved. A document prepared ahead

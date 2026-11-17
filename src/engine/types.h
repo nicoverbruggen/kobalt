@@ -74,13 +74,16 @@ struct SearchCursor
     // In chapter mode, the spine item that the search is in. The block and
     // offset count in the document that has its text.
     int item = 0;
-    // The first spine item of the document whose blocks the cursor counts.
+    // The range of spine items in the document whose blocks the cursor counts.
     // Background preparation can replace that document with an overlapping unit.
-    int firstItem = -1;
+    int firstItem = -1, lastItem = -1;
     // In chapter mode a long spine item is laid out in parts, and only the
     // part with a layout has text to search. Where the part that the search
     // is in starts, as a count of the text before it.
     int slice = 0;
+    // Normalization can map adjacent matches to the same source range.
+    QString previousStart, previousEnd;
+    bool prepareWholeBook = false;
 };
 
 struct SearchBatch

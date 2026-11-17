@@ -484,7 +484,7 @@ bool EngineDocument::refinePageEstimate(const std::function<bool()> &current)
     auto &map = pageMap();
     auto &estimate = source_->pageEstimate;
     // A book opened again can have every item measured already.
-    setEstimateProgress(map.measuredItems(), map.items());
+    progress->setEstimateProgress(map.measuredItems(), map.items());
     if (!estimate.measurer) {
         // The spine item on the screen goes first: its slices place the
         // observations.
@@ -678,6 +678,15 @@ Engine::RoughPages EngineDocument::roughPages() const
         // guess from the bytes, and the reader shows percentages. The first
         // page number after that comes from the map.
         estimate.book.reset();
+    }
+    if (full_) {
+        const auto anchor = engine_->getPageBookmark(page()).toString();
+        auto exact = full_->engine_->getDocument()->createXPointer(anchor);
+        if (!exact.isNull()) {
+            rough.page = full_->engine_->getBookmarkPage(exact) + 1;
+            rough.pages = full_->pages();
+            rough.pagesEstimated = false;
+        }
     }
     estimate.lastWhole = false;
     estimate.lastItem = place.item;
@@ -908,6 +917,15 @@ bool EngineDocument::earlierContentOnPage(ldomNode *block, int page) const
         auto previousBlock = previous;
         if (previousBlock.ensureFinal() && hasFloatFootprint(previousBlock.getNode()))
             return true;
+        // A table can consume the following block's margin on the preceding
+        // page. Starting a new layout here would add that margin a second time.
+        if (first.top <= top) {
+            for (auto *node = previous.getNode(); node && !node->isNodeName("DocFragment");
+                 node = node->getParentNode()) {
+                if (node->getRendMethod() == erm_table)
+                    return true;
+            }
+        }
         previous.setOffset(qMax(0, int(previous.getNode()->getText().length()) - 1));
         lvRect rect;
         if (previous.getRect(rect) && rect.bottom > top)
@@ -1271,7 +1289,9 @@ QVector<int> EngineDocument::bookPages(const QStringList &positions,
             if (slices()) {
                 const int before = textBefore(position);
                 const int characters = qMax(1, spineItemText());
-                if (page >= 0 && before >= sliceFirst_ && before < sliceEnd_)
+                if (exclusive && before == 0 && item > 0)
+                    pages = qRound(map.pagesBefore(item)) - 1;
+                else if (page >= 0 && before >= sliceFirst_ && before < sliceEnd_)
                     pages = qRound(map.pagesBefore(item)
                                    + map.pagesBefore(item, sliceFirst_, characters))
                             + page;

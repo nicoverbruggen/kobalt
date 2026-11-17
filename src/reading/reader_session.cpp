@@ -166,6 +166,17 @@ void prepareNeighbours(Engine &engine, int direction, const std::function<bool()
     pages();
 }
 
+void capturePageCoordinates(QJsonObject &state, Engine &engine)
+{
+    state["page"] = engine.page();
+    state["pages"] = engine.pages();
+    state["next_page"] = engine.turnTarget(engine.page(), 1);
+    state["continues_before"] = engine.continuesBefore();
+    state["continues_after"] = engine.continuesAfter();
+    if (engine.bookFraction() >= 0)
+        state["slice_start"] = engine.pageStart(0);
+}
+
 ReaderMarkupFrame captureFrameMarkup(Engine &engine, const ReaderMarkupRequest &request,
                                      quint64 generation, qint64 imageKey)
 {
@@ -375,8 +386,8 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     const bool reading = count->load();
     // The page estimate does not wait for the whole book: a build from the
     // cache goes first only once the estimate has every spine item.
-    const bool cacheFirst = !reading && renderingMode::countsInBackground()
-            && kobalt::layoutProgressPercent() >= 80;
+    const bool cacheFirst =
+            !reading && renderingMode::countsInBackground() && engine->progress->percent() >= 80;
     bool more = cacheFirst ? false : measure();
     if (!current())
         return;
@@ -427,7 +438,10 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
         if (full == Engine::FullDocument::Ready) {
             // The whole book has its pages: the page fields can show the
             // exact count before the next turn adopts the whole book.
-            if (publish() == Publish::Gone)
+            const auto publication = publish();
+            if (publication == Publish::Interrupted)
+                resumeAfterWork();
+            if (publication != Publish::Done)
                 return;
             kobalt::qt::invoke(
                     qApp,
@@ -530,14 +544,11 @@ ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbo
     took("position_ms");
     captureChapters(result, engine);
     took("chapters_ms");
-    result.state["page"] = engine.page();
+    result.pageStart = engine.pageStart(engine.page());
+    capturePageCoordinates(result.state, engine);
     if (result.formattingWarning)
         diagnostic("page-formatting-warning",
                    { { "page", engine.page() }, { "position", result.state.value("position") } });
-    result.state["pages"] = engine.pages();
-    result.state["next_page"] = engine.turnTarget(engine.page(), 1);
-    result.state["continues_before"] = engine.continuesBefore();
-    result.state["continues_after"] = engine.continuesAfter();
 
     // The header can show it. The engine measured it while it loaded.
     if (const qint64 loadMs = engine.chapterLoadMilliseconds(); loadMs >= 0)
@@ -550,6 +561,7 @@ ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbo
     engineActivity().checkpoint();
     if (neighbours) {
         prepareNeighbours(engine, 1, {});
+        capturePageCoordinates(result.state, engine);
         engineActivity().checkpoint();
     }
     result.state["cached_pages"] = engine.cachedPages();
@@ -724,7 +736,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     ++layoutStarts_;
     // A preview session shares the engine's progress with the reader.
     if (!preview_)
-        resetLayoutProgress();
+        engine_->progress->reset();
     newest->store(revision);
     cancelSearch();
     lease_ = request.lease;
@@ -1267,10 +1279,11 @@ bool ReaderSession::goToFraction(double fraction)
     return true;
 }
 
-bool ReaderSession::goTo(const QString &anchor)
+bool ReaderSession::goTo(const QString &anchor, bool keepLayout)
 {
     if (anchor.isEmpty())
         return false;
+    keepDestinationLayout = keepLayout;
     destination = anchor;
     chapterTarget = -1;
     pageDelta = 0;
@@ -1285,6 +1298,7 @@ bool ReaderSession::goToChapter(int index)
     const auto list = chapters();
     if (index < 0 || index >= list.size() || list[index].position.isEmpty())
         return false;
+    keepDestinationLayout = false;
     destination = list[index].position;
     chapterTarget = index;
     pageDelta = 0;
@@ -1653,6 +1667,7 @@ void ReaderSession::displayedText(int page, std::function<void(QString)> finishe
 
 void ReaderSession::pageSummary(int page, std::function<void(QString, QString)> finished)
 {
+    const auto shown = page == this->page() ? frame.pageStart : QString();
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto latest = newestLayout;
@@ -1661,12 +1676,16 @@ void ReaderSession::pageSummary(int page, std::function<void(QString, QString)> 
     const bool ready = layoutReady_;
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, page, finished, job, latest, lease, ready] {
+            [engine, guard, page, finished, job, latest, lease, ready, shown] {
                 EngineJob activity;
                 QString start, excerpt;
                 if (ready && latest->load() == job && lease && !lease->revoked()) {
-                    start = engine->pageStart(page);
-                    excerpt = engine->pageExcerpt(page);
+                    const int local =
+                            shown.isEmpty() ? page : engine->pagesOf({ shown }).value(0, -1);
+                    if (local >= 0) {
+                        start = shown.isEmpty() ? engine->pageStart(local) : shown;
+                        excerpt = engine->pageExcerpt(local);
+                    }
                 }
                 kobalt::qt::invoke(
                         qApp,
@@ -2173,7 +2192,9 @@ void ReaderSession::startPendingSearch()
         return;
     }
     searchCancelled = std::make_shared<std::atomic_bool>(false);
-    searchNext(searchQuery, {}, 0, revision, searchCancelled, searchFinished, true);
+    SearchCursor cursor;
+    cursor.prepareWholeBook = renderingMode::countsInBackground();
+    searchNext(searchQuery, cursor, 0, revision, searchCancelled, searchFinished, true);
 }
 
 void ReaderSession::searchDetails(QVector<SearchHit> hits, SearchScope scope, const QString &origin,
@@ -2711,12 +2732,17 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                 // so they load before that page is requested.
                 const auto resources = engine->resourceStats();
                 const auto cachedPages = engine->cachedPages();
+                // Keep the job active until the GUI receives the new slice coordinates.
+                QJsonObject coordinates;
+                capturePageCoordinates(coordinates, *engine);
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, resources, cachedPages, job, lease] {
+                        [guard, resources, cachedPages, coordinates, job, lease, neighbours] {
                             if (!guard || guard->lease_ != lease || guard->running
                                 || !guard->currentSourceFrame(job))
                                 return;
+                            for (auto it = coordinates.begin(); it != coordinates.end(); ++it)
+                                guard->frame.state[it.key()] = it.value();
                             guard->frame.resources = resources;
                             guard->frame.state["cached_pages"] = cachedPages;
                             guard->loadImages();
@@ -2792,7 +2818,7 @@ void ReaderSession::request(bool appearanceChange, RenderReason reason)
             layoutReadyMilliseconds_ = -1;
             ++layoutStarts_;
             if (!preview_)
-                resetLayoutProgress();
+                engine_->progress->reset();
         }
         interruptSearch();
     } else {
@@ -2818,7 +2844,9 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
     const auto markupGeneration = markupGeneration_;
     const auto requested = desired;
     // The prepared document of the whole book is shown with this render.
-    const bool swapToFull = std::exchange(fullDocumentPending_, false) && desiredChapterMode < 0;
+    const bool keepLayout = std::exchange(keepDestinationLayout, false) && !destination.isEmpty();
+    const bool swapToFull =
+            !keepLayout && std::exchange(fullDocumentPending_, false) && desiredChapterMode < 0;
     // Queries queued before this turn used chapter pagination. Later queries
     // run behind the swap and see the whole book, or the chapter if it refused.
     if (swapToFull)

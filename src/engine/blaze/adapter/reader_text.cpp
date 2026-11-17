@@ -885,7 +885,7 @@ AnnotationPageEdges EngineDocument::annotationPageEdges()
         return result;
     auto *doc = engine_->getDocument();
     const ldomXPointerEx first(engine_->getPageBookmark(page()));
-    const ldomXPointerEx last = page() + 1 < pages()
+    const ldomXPointerEx last = page() + 1 < engine_->getPageCount()
             ? ldomXPointerEx(engine_->getPageBookmark(page() + 1))
             : ldomXRange(doc->getRootNode(), true).getEnd();
     if (first.isNull() || last.isNull())
@@ -964,10 +964,12 @@ AnnotationPageEdges EngineDocument::annotationPageEdges()
         const auto continuation = [&](bool forward) {
             // A prior slice has source text even though its pages are absent.
             const bool beforeSlice = !forward && page() == 0 && slices() && sliceFirst_ > 0;
-            if (forward ? page() + 1 >= pages() : page() == 0 && !beforeSlice)
+            const bool afterSlice =
+                    forward && page() + 1 >= pages() && slices() && sliceEnd_ < spineItemText();
+            if (forward ? page() + 1 >= pages() && !afterSlice : page() == 0 && !beforeSlice)
                 return false;
 #ifdef KOBLAZE_SOURCE_TEXT
-            const KoblazeSourceText sourceText(beforeSlice ? doc : nullptr);
+            const KoblazeSourceText sourceText(beforeSlice || afterSlice ? doc : nullptr);
 #endif
             ldomXPointerEx edge(doc->createXPointer(cre(forward ? lastPosition : firstPosition)));
             auto adjacent = forward ? last : edge;
@@ -980,7 +982,7 @@ AnnotationPageEdges EngineDocument::annotationPageEdges()
                     const auto text = adjacent.getNode()->getText();
                     const int offset = adjacent.getOffset();
                     if (offset >= 0 && offset < text.length() && !QChar::isSpace(text[offset])) {
-                        if (!beforeSlice
+                        if (!beforeSlice && !afterSlice
                             && engine_->getBookmarkPage(adjacent) != page() + (forward ? 1 : -1))
                             return false;
                         return forward ? sameSection(edge, adjacent) : sameSection(adjacent, edge);
@@ -1736,8 +1738,8 @@ EngineDocument::SearchBounds EngineDocument::searchBounds(SearchScope scope, con
     } else {
         const int page = view->getBookmarkPage(position);
         QString boundary;
-        if (page + 1 < document->pages())
-            boundary = document->pageStart(page + 1);
+        if (page + 1 < view->getPageCount())
+            boundary = qstring(view->getPageBookmark(page + 1).toString());
         else if (document->windowLast_ >= 0 && document->windowLast_ + 1 < spineItemCount_)
             boundary = QString("/body[1]/DocFragment[%1].0").arg(document->windowLast_ + 2);
         else if (scope == SearchScope::After)
@@ -1871,11 +1873,24 @@ SearchBatch EngineDocument::searchLoaded(const QString &query, SearchCursor curs
         // CREngine's literal search includes overlapping matches.
         cursor.offset = found + 1;
         auto start = block.at(found), end = block.at(found + cache.pattern.size() - 1);
+        // Canonical normalization reorders combining marks. The folded
+        // endpoints can therefore occur in the opposite order in the source.
+        for (int index = 0; index < cache.pattern.size(); ++index) {
+            const auto origin = block.at(found + index);
+            if (origin.compare(start) < 0)
+                start = origin;
+            if (origin.compare(end) > 0)
+                end = origin;
+        }
         end.setOffset(end.getOffset() + 1);
         if (scope != SearchScope::Book
             && (start.compare(cache.lower) < 0 || end.compare(cache.upper) > 0))
             continue;
         SearchHit hit{ qstring(start.toString()), qstring(end.toString()), {}, {}, {}, -1 };
+        if (hit.start == cursor.previousStart && hit.end == cursor.previousEnd)
+            continue;
+        cursor.previousStart = hit.start;
+        cursor.previousEnd = hit.end;
         if (details)
             hit = searchDetailsLoaded({ hit }, scope).first();
         result.hits.append(std::move(hit));
@@ -1891,7 +1906,9 @@ namespace {
 // or lose a space when the engine lays them out.
 QString searchKey(const QString &text)
 {
-    return qstring(ldomFoldSearchPattern(cre(text), searchFlags)).remove(QLatin1Char(' '));
+    return qstring(ldomFoldSearchPattern(cre(text), searchFlags))
+            .simplified()
+            .remove(QLatin1Char(' '));
 }
 
 // Separates the runs of text between tags in a chapter search key. XML
@@ -1948,24 +1965,34 @@ bool searchKeyMayHold(const QString &key, const QString &pattern)
     const int length = pattern.size();
     // The lengths of the starts of `pattern` that end a run.
     QVector<bool> started(length, false);
-    for (const auto &run : key.split(searchSegmentBreak)) {
+    int begin = 0;
+    while (begin < key.size()) {
+        const int separator = key.indexOf(searchSegmentBreak, begin);
+        const int end = separator < 0 ? int(key.size()) : separator;
+        const int size = end - begin;
+        const auto matches = [&](int offset, int queryOffset, int count) {
+            return std::equal(key.constData() + begin + offset,
+                              key.constData() + begin + offset + count,
+                              pattern.constData() + queryOffset);
+        };
         QVector<int> reached;
         for (int matched = 1; matched < length; ++matched) {
             if (!started[matched])
                 continue;
             const int rest = length - matched;
-            if (run.size() >= rest) {
-                if (run.left(rest) == pattern.mid(matched))
+            if (size >= rest) {
+                if (matches(0, matched, rest))
                     return true;
-            } else if (pattern.mid(matched, run.size()) == run) {
-                reached.append(matched + int(run.size()));
+            } else if (matches(0, matched, size)) {
+                reached.append(matched + size);
             }
         }
-        for (int matched = 1; matched < length && matched <= run.size(); ++matched)
-            if (run.right(matched) == pattern.left(matched))
+        for (int matched = 1; matched < length && matched <= size; ++matched)
+            if (matches(size - matched, 0, matched))
                 started[matched] = true;
         for (const int matched : reached)
             started[matched] = true;
+        begin = end + 1;
     }
     return false;
 }
@@ -1979,7 +2006,7 @@ int positionItem(const QString &position)
 }
 } // namespace
 
-bool EngineDocument::mayContain(int item, const QString &query) const
+bool EngineDocument::mayContain(int item, const QString &pattern) const
 {
     auto &texts = source_->searchTexts;
     if (texts.size() != spineItemCount_)
@@ -2001,8 +2028,7 @@ bool EngineDocument::mayContain(int item, const QString &query) const
         texts[item] = bytes.isEmpty() ? QStringLiteral("") : chapterSearchKey(bytes);
     }
     const auto &text = texts[item];
-    const auto pattern = searchKey(query);
-    if (text.isEmpty() || text.contains(pattern))
+    if (text.isEmpty())
         return true;
     // CSS can hide intervening text nodes, joining visible parts of a word.
     return searchKeyMayHold(text, pattern);
@@ -2053,6 +2079,18 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
         result.done = !current || current();
         return result;
     }
+    if (cursor.prepareWholeBook && windowFirst_ >= 0) {
+        const auto ready = prepareFullDocument(current);
+        if (ready == FullDocument::Stopped)
+            return result;
+        if (ready == FullDocument::Ready) {
+            if (full_->setSearchBounds(bounds))
+                return full_->searchLoaded(query, cursor, maximum, scope, details, current);
+            result.done = true;
+            return result;
+        }
+        cursor.prepareWholeBook = false;
+    }
     if (windowFirst_ < 0 || slicePages_ <= 0) {
         if (setSearchBounds(bounds))
             return searchLoaded(query, cursor, maximum, scope, details, current);
@@ -2061,32 +2099,37 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
     }
     const int firstItem = spineItemIndex(bounds.lower);
     const int lastItem = spineItemIndex(bounds.upper);
+    const auto pattern = searchKey(query);
     cursor.item = qMax(cursor.item, firstItem);
     QElapsedTimer budget;
     budget.start();
     while (cursor.item < spineItemCount_ && (lastItem < 0 || cursor.item <= lastItem)
-           && result.hits.size() < maximum && (result.hits.isEmpty() || budget.elapsed() < 8)) {
+           && result.hits.size() < maximum && budget.elapsed() < 8) {
         if (current && !current())
             break;
         const bool loaded = cursor.item >= windowFirst_ && cursor.item <= windowLast_;
-        if (!loaded && cursor.block == 0 && cursor.offset == 0 && !mayContain(cursor.item, query)) {
+        if (!loaded && cursor.block == 0 && cursor.offset == 0
+            && !mayContain(cursor.item, pattern)) {
             ++cursor.item;
             continue;
         }
         auto *document =
                 documentFor(cursor.firstItem >= 0 ? cursor.firstItem : cursor.item, current);
-        if (document && cursor.firstItem >= 0 && document->windowFirst_ != cursor.firstItem)
-            document = openAhead(cursor.firstItem, current);
+        if (document && cursor.firstItem >= 0
+            && (document->windowFirst_ != cursor.firstItem
+                || document->windowLast_ != cursor.lastItem))
+            document = openAhead(cursor.firstItem, current, cursor.lastItem);
         // A long spine item has a layout for one part at a time, and only
         // that part has text to search. Another document goes through the
         // parts: the one on screen keeps its part.
         if (document == this && slices())
-            document = openAhead(cursor.item, current);
+            document = openAhead(cursor.firstItem >= 0 ? cursor.firstItem : cursor.item, current,
+                                 cursor.lastItem);
         if (!document) {
             if (current && !current())
                 break;
             ++cursor.item;
-            cursor.firstItem = -1;
+            cursor.firstItem = cursor.lastItem = -1;
             cursor.block = cursor.offset = cursor.slice = 0;
             continue;
         }
@@ -2118,7 +2161,11 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
         int last = document->windowLast_;
         if (document != this && cursor.item < windowFirst_)
             last = qMin(last, windowFirst_ - 1);
-        SearchCursor local{ cursor.block, cursor.offset, 0 };
+        SearchCursor local;
+        local.block = cursor.block;
+        local.offset = cursor.offset;
+        local.previousStart = cursor.previousStart;
+        local.previousEnd = cursor.previousEnd;
         SearchBatch batch;
         if (document->setSearchBounds(bounds))
             batch = document->searchLoaded(query, local, maximum - result.hits.size(), scope,
@@ -2144,16 +2191,21 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
         }
         cursor.block = batch.cursor.block;
         cursor.offset = batch.cursor.offset;
+        cursor.previousStart = batch.cursor.previousStart;
+        cursor.previousEnd = batch.cursor.previousEnd;
         cursor.firstItem = document->windowFirst_;
+        cursor.lastItem = document->windowLast_;
         if (batch.done && document->slices() && document->sliceEnd_ < document->spineItemText()) {
             // The next part of the same spine item.
             cursor.slice = document->sliceEnd_;
+            cursor.previousStart.clear();
+            cursor.previousEnd.clear();
             cursor.block = cursor.offset = 0;
             if (budget.elapsed() >= 8)
                 break;
         } else if (batch.done) {
             cursor.item = last + 1;
-            cursor.firstItem = -1;
+            cursor.firstItem = cursor.lastItem = -1;
             cursor.block = cursor.offset = cursor.slice = 0;
         } else if (budget.elapsed() >= 8) {
             break;
@@ -2173,6 +2225,8 @@ QVector<SearchHit> EngineDocument::searchDetails(QVector<SearchHit> hits, Search
     const auto bounds = searchBounds(scope, origin);
     if (!bounds.valid)
         return {};
+    if (full_ && full_->setSearchBounds(bounds))
+        return full_->searchDetailsLoaded(std::move(hits), scope);
     if (windowFirst_ < 0 || slicePages_ <= 0)
         return setSearchBounds(bounds) ? searchDetailsLoaded(std::move(hits), scope)
                                        : QVector<SearchHit>();

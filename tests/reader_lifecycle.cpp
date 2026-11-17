@@ -9872,14 +9872,14 @@ private slots:
         waited.start();
         sinceTurn.start();
         host.window()->pageButton(1);
-        while (waited.elapsed() < 120000 && kobalt::layoutProgressPercent() < 100) {
+        while (waited.elapsed() < 120000 && host.session()->layoutProgressPercent() < 100) {
             if (sinceTurn.elapsed() > 3000 && !host.session()->busy()) {
                 host.window()->pageButton(1);
                 sinceTurn.restart();
             }
             QTest::qWait(50);
         }
-        QCOMPARE(kobalt::layoutProgressPercent(), 100);
+        QCOMPARE(host.session()->layoutProgressPercent(), 100);
         // Without a turn, the time no longer grows.
         const auto frozen = [&host] {
             const auto before = host.session()->layoutMilliseconds();

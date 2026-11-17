@@ -1,5 +1,7 @@
 #include "platforms/kobo/nickel-fixes/wifi-idle/wifi_idle.h"
+#include "platforms/kobo/common/nickelfix.h"
 #include <QCoreApplication>
+#include <QTemporaryFile>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -107,6 +109,16 @@ void WirelessWatchdog::onBatteryLevel(int)
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
+    {
+        QTemporaryFile plugin;
+        check(plugin.open(), "cannot create plugin fixture");
+        const auto path = QFile::encodeName(plugin.fileName());
+        check(nickelFixInstalled(path.constData()),
+              "installed plugin must own the fixes before loading");
+        check(plugin.remove(), "cannot remove plugin fixture");
+        check(!nickelFixInstalled(path.constData()),
+              "removed plugin must leave the fixes to Kobalt");
+    }
     {
         const auto stock = reinterpret_cast<bool (*)(QObject *)>(
                 dlsym(RTLD_DEFAULT, "_ZNK16WirelessWatchdog27shouldAttemptToKillWirelessEv"));

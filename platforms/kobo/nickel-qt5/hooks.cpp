@@ -1,5 +1,6 @@
 #include "private_functions.h"
 #include "hooks.h"
+#include "platforms/kobo/common/nickelfix.h"
 #include "platforms/kobo/nickel-fixes/wifi-idle/wifi_idle.h"
 #include "platforms/kobo/nickel-fixes/wifi-idle/wifi_idle_log.h"
 #include "platforms/kobo/common/native_event_history.h"
@@ -20,6 +21,8 @@
 #include <QCryptographicHash>
 #include <QFile>
 
+extern "C" void *nh_dlhook(void *, const char *, void *);
+
 namespace kobalt::nickel_qt5 {
 void (*nativeShowReader)(void *, const void *, const void *, void *, const void *);
 void (*nativeFinishInitialization)(void *);
@@ -35,6 +38,23 @@ bool firmwareSupported()
 } // namespace kobalt::nickel_qt5
 
 using namespace kobalt::nickel_qt5;
+
+static int initializeReaderHooks()
+{
+    const int result = initializeReader();
+    if (result || kobalt::nickelFixInstalled())
+        return result;
+    auto *nickel = dlopen("libnickel.so.1.0.0", RTLD_LAZY | RTLD_NOLOAD);
+    if (nickel) {
+        auto &next = kobalt::nickel::nativeWirelessIdlePredicate;
+        next = reinterpret_cast<decltype(kobalt::nickel::nativeWirelessIdlePredicate)>(
+                nh_dlhook(nickel, "_ZNK16WirelessWatchdog27shouldAttemptToKillWirelessEv",
+                          reinterpret_cast<void *>(kobalt_wireless_idle_predicate)));
+        dlclose(nickel);
+    }
+    return result;
+}
+
 static nh_hook readerHooks[] = {
 #ifdef KOBALT_WIFI_IDLE_DIAGNOSTICS
     { .sym = "_ZN15WirelessManager3offEv",
@@ -44,12 +64,6 @@ static nh_hook readerHooks[] = {
       .desc = "Observe physical Wi-Fi shutdown in diagnostic comparisons",
       .optional = true },
 #endif
-    { .sym = "_ZNK16WirelessWatchdog27shouldAttemptToKillWirelessEv",
-      .sym_new = "kobalt_wireless_idle_predicate",
-      .lib = "libnickel.so.1.0.0",
-      .out = nh_symoutptr(kobalt::nickel::nativeWirelessIdlePredicate),
-      .desc = "Correct the Bluetooth-off Wi-Fi idle delay on verified Qt5 firmware",
-      .optional = true },
     { .sym = "_ZN5Event12setExtraDataE4QMapI7QString8QVariantE",
       .sym_new = "kobalt_event_set_extra_data",
       .lib = "libnickel.so.1.0.0",
@@ -276,11 +290,11 @@ static nh_info info = { .name = "Kobalt",
                         .uninstall_flag = KOBALT_CONFIG_DIR "/uninstall-now",
                         .uninstall_xflag = KOBALT_CONFIG_DIR "/uninstall",
                         .failsafe_delay = 3 };
-NickelHook(.init = initializeReader, .info = &info, .hook = readerHooks,
+NickelHook(.init = initializeReaderHooks, .info = &info, .hook = readerHooks,
            .uninstall = uninstallReader);
 #else
 static nh_info info = { .name = "Kobalt",
                         .desc = "Native CREngine reader experiment",
                         .failsafe_delay = 3 };
-NickelHook(.init = initializeReader, .info = &info, .hook = readerHooks);
+NickelHook(.init = initializeReaderHooks, .info = &info, .hook = readerHooks);
 #endif

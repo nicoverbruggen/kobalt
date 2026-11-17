@@ -108,7 +108,14 @@ bool verifiedPredicate()
     // This function has no text relocations. The verified builds have the
     // same layout. Hash 208 bytes including the literal pool. Clear the Thumb bit.
     const auto address = reinterpret_cast<quintptr>(nativeWirelessIdlePredicate) & ~quintptr(1);
-    if (!address)
+    // A previous mod may own the import. Only inspect Nickel's own export.
+    void *library = dlopen("libnickel.so.1.0.0", RTLD_LAZY | RTLD_NOLOAD);
+    if (!library)
+        return false;
+    const auto stock = reinterpret_cast<decltype(nativeWirelessIdlePredicate)>(
+            dlsym(library, "_ZNK16WirelessWatchdog27shouldAttemptToKillWirelessEv"));
+    dlclose(library);
+    if (!address || nativeWirelessIdlePredicate != stock)
         return false;
     const auto code = QByteArray::fromRawData(reinterpret_cast<const char *>(address), 208);
     const auto hash = QCryptographicHash::hash(code, QCryptographicHash::Sha256).toHex();

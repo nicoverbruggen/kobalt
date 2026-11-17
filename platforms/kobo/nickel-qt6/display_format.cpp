@@ -1,4 +1,5 @@
 #include "display_format.h"
+#include "platforms/kobo/common/nickelfix.h"
 #include "platforms/kobo/display/image_format.h"
 #include "platforms/kobo/display/opaque_copy.h"
 #include "platforms/kobo/display/framebuffer_driver.h"
@@ -101,7 +102,8 @@ void installDisplayFormatHook()
         return;
     }
     void *backend = dlopen("/usr/local/Kobo/platforms/libkobo.so", RTLD_LAZY | RTLD_NOLOAD);
-    if (backend && !qEnvironmentVariableIsSet("KOBALT_DISABLE_OPAQUE_DISPLAY_COPY")) {
+    if (backend && !nickelFixInstalled()
+        && !qEnvironmentVariableIsSet("KOBALT_DISABLE_OPAQUE_DISPLAY_COPY")) {
         nextDrawImage = reinterpret_cast<DrawImage>(nh_dlhook(
                 backend,
                 "_ZN8QPainter9drawImageERK6QRectFRK6QImageS2_6QFlagsIN2Qt19ImageConversionFlagEE",

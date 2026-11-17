@@ -534,6 +534,8 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
 // How long a book with its hidden window shows only the logo before the
 // loading controls and cover appear.
 static constexpr int preparedLoadingDelay = 600;
+// How long Home stays quiet after a close before the book is prepared again.
+static constexpr int reopenPreparationDelay = 3000;
 
 void ReaderCoordinator::prepareOpeningControls()
 {
@@ -1304,6 +1306,14 @@ void ReaderCoordinator::showReader(bool fromQuiet)
                 else if (!lifecycle->blocked()) {
                     authorization->setBlocked(false);
                     timer.start();
+                    // Prepare this book and its hidden window again, so the
+                    // next opening is as quick as the first after a restart.
+                    // An opening or transition meanwhile changes the epoch.
+                    const auto epoch = generation;
+                    kobalt::qt::later(reopenPreparationDelay, this, [this, epoch] {
+                        if (epoch == generation)
+                            preloadLastBook();
+                    });
                 }
             });
         });
@@ -1387,7 +1397,9 @@ void ReaderCoordinator::rememberLastBook()
 
 void ReaderCoordinator::preloadLastBook()
 {
-    if (!bindings_.enabled() || busy || run.reader || run.session || preload.session || quiet.window
+    // A book kept after a close may stay; startPreload() checks it is the
+    // same book.
+    if (!bindings_.enabled() || busy || run.reader || preload.session || quiet.window
         || lifecycle->blocked() || lifecycle->draining || NativeLifecycle::suspended()
         || !environment_.assets.available())
         return;
@@ -1428,8 +1440,11 @@ void ReaderCoordinator::preloadLastBook()
 void ReaderCoordinator::startPreload(const QString &identity, const QString &path,
                                      QJsonObject saved, const QJsonObject &stored)
 {
-    if (!bindings_.enabled() || busy || run.reader || run.session || preload.session || quiet.window
-        || lifecycle->blocked() || lifecycle->draining || NativeLifecycle::suspended())
+    // A kept book stays in memory until the hidden window replaces it, so a
+    // tap meanwhile still reopens it. Another kept book is left alone.
+    if (!bindings_.enabled() || busy || run.reader || (run.session && run.identity != identity)
+        || preload.session || quiet.window || lifecycle->blocked() || lifecycle->draining
+        || NativeLifecycle::suspended())
         return;
     if (saved.value("book").toString() != identity)
         saved = {};
@@ -1479,8 +1494,9 @@ void ReaderCoordinator::startPreload(const QString &identity, const QString &pat
                       const double elapsed = double(self.preload.started.elapsed());
                       // An opening, USB or another transition took over meanwhile.
                       const bool usable = outcome.ready() && !self.busy && !self.run.reader
-                              && !self.run.session && !self.lifecycle->blocked()
-                              && !self.lifecycle->draining && !NativeLifecycle::suspended();
+                              && (!self.run.session || self.run.identity == identity)
+                              && !self.lifecycle->blocked() && !self.lifecycle->draining
+                              && !NativeLifecycle::suspended();
                       diagnostic("book-preload-end",
                                  { { "ready", usable }, { "elapsed_ms", elapsed } });
                       if (!usable) {
@@ -1492,6 +1508,8 @@ void ReaderCoordinator::startPreload(const QString &identity, const QString &pat
                       self.quiet.path = path;
                       if (self.buildQuietReader(self.preload.session, saved, preferences, size)) {
                           self.preload.lease.reset();
+                          // The hidden window holds this book now.
+                          self.run.session.reset();
                           return;
                       }
                       // Without the window, the book is kept as after a close.
@@ -1500,7 +1518,7 @@ void ReaderCoordinator::startPreload(const QString &identity, const QString &pat
                       if (self.preload.lease)
                           self.preload.lease->cancel();
                       self.preload.lease.reset();
-                      if (!kept)
+                      if (!kept || self.run.session)
                           return;
                       self.run.session = std::move(kept);
                       self.run.identity = identity;

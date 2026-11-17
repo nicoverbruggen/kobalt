@@ -374,8 +374,6 @@ private:
     // The palette applyTheme gave the widgets. The window's own palette is
     // already themed, so it is not a base for another one.
     QPalette themePalette;
-    // The window's palette before its first theme.
-    QPalette unthemedPalette;
     // Builds the hidden panels once the book's background work has settled
     // and nobody has touched the screen for a moment, so that their first
     // opening does not wait for them and the build meets neither the

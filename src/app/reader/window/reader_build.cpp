@@ -1546,26 +1546,21 @@ void Reader::ensureSettings()
 {
     if (general)
         return;
-    // The panel is built as the window built it before it was themed: in a
-    // hidden holder with the window's style sheet and font, its palette from
-    // before the theme and no dark flag. Then it moves into the window and
-    // gets the theme, as applyTheme gave it to every widget. Built straight
-    // into the themed window, some colours resolve differently.
-    QWidget holder(this);
-    holder.hide();
-    holder.setGeometry(rect());
-    if (themeReady) {
-        holder.setPalette(unthemedPalette);
-        holder.setProperty("reader_dark", false);
-    }
-    buildSettings(&holder);
+    // The panel is built as the window built its controls before it had a
+    // theme: without the dark flag, so its style sheets are the light ones.
+    // The theme below replaces them, which polishes each widget with the
+    // theme's colors, as applyTheme did for the window's widgets. The panel
+    // is built straight into the window: moving a built panel there made Qt
+    // resolve the style of every widget again, a third of the build on a Kobo.
+    const auto dark = property("reader_dark");
+    if (themeReady)
+        setProperty("reader_dark", false);
+    buildSettings(this);
     // The first fit picks the list or the rail for this screen and restyles
-    // the panel for it, which polishes its widgets again. Do it before the
-    // theme, as the window build did.
+    // the panel for it. Do it before the theme, as the window build did.
     fitSettings();
-    general->setParent(this);
-    general->setGeometry(holder.geometry());
     general->hide();
+    setProperty("reader_dark", dark);
     // Polishing applies the style sheets, which replace the gray roles. The
     // theme restores them, so it comes after, as for the window's widgets.
     general->ensurePolished();

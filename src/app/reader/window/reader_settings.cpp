@@ -1237,8 +1237,6 @@ void Reader::applyTheme(bool dark)
     themeReady = true;
     darkTheme = dark;
     // Theme this window only. Nickel keeps its own palette when we close.
-    if (first)
-        unthemedPalette = palette();
     const auto colors = ui::readerPalette(palette(), dark);
     themePalette = colors;
     setProperty("reader_dark", dark);

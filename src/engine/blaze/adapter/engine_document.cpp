@@ -661,6 +661,7 @@ void EngineDocument::configure(QSize size, const QJsonObject &settings)
     setExtraFontWeight(0);
     searchText_.reset();
     sourceIndex_.reset();
+    nativePositions_.reset();
     contentsIndex_ = {};
     graphIndex_ = {};
     engine_.reset();

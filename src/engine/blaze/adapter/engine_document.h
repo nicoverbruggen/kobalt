@@ -36,7 +36,8 @@ class ColumnView;
 
 namespace nickel {
 class NickelPositionCodec;
-}
+struct NativePositionCache;
+} // namespace nickel
 
 struct ReaderSource;
 struct PageEstimateLayout;
@@ -350,6 +351,9 @@ private:
     void markPageNotes();
     EngineFontInputs fonts_;
     friend class nickel::NickelPositionCodec;
+    // The chapter files that NickelPositionCodec parsed last, released with
+    // this document.
+    mutable std::shared_ptr<nickel::NativePositionCache> nativePositions_;
     std::shared_ptr<ReaderSource> source_;
     // A replacement reads fresh resources but belongs to the same book.
     // Consumed by openSource(), before it touches the embedded font cache.

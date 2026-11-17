@@ -115,19 +115,19 @@ bool readSource(ldomDocument *doc, const QString &path, Source &source)
 // for the place of every page, mostly in the same chapter, and the file does
 // not change while its book is open. `identity` is the ReaderSource identity
 // of the book, which no other book gets.
-const Source *chapterSource(quint64 identity, ldomDocument *doc, const QString &path)
+struct SourceCache
 {
-    struct Cached
-    {
-        quint64 identity = 0;
-        QString path;
-        bool valid = false;
-        Source source;
-    };
+    quint64 identity = 0;
+    QString path;
+    bool valid = false;
+    Source source;
+};
 
-    thread_local Cached cached;
+const Source *chapterSource(SourceCache &cached, quint64 identity, ldomDocument *doc,
+                            const QString &path)
+{
     if (!identity || cached.identity != identity || cached.path != path) {
-        cached = Cached();
+        cached = SourceCache();
         cached.valid = readSource(doc, path, cached.source);
         // A file that could not be read is read again at the next call.
         cached.identity = cached.valid ? identity : 0;
@@ -286,15 +286,15 @@ struct NativePoint
 // Nickel point() locations count DOM children from the document element and
 // measure offsets in UTF-8 bytes. Resolve against the original XML before
 // checking that CREngine retained the identified element's exact text.
-bool nativePoint(quint64 identity, ldomDocument *doc, const QString &path, const QString &point,
-                 NativePoint &result)
+bool nativePoint(SourceCache &cache, quint64 identity, ldomDocument *doc, const QString &path,
+                 const QString &point, NativePoint &result)
 {
     static const QRegularExpression format(
             QStringLiteral("^point\\((/1(?:/[1-9][0-9]*)*)(?::([0-9]+))?\\)$"));
     const auto match = format.match(point);
     if (!match.hasMatch())
         return false;
-    const auto *read = chapterSource(identity, doc, path);
+    const auto *read = chapterSource(cache, identity, doc, path);
     if (!read)
         return false;
     const Source &source = *read;
@@ -359,13 +359,13 @@ bool nativePoint(quint64 identity, ldomDocument *doc, const QString &path, const
 
 // The point() Nickel stores for `units` UTF-16 units into `element`, or an
 // empty string when the source does not have the same element and text.
-QString sourcePoint(quint64 identity, ldomDocument *doc, const QString &path, ldomNode *fragment,
-                    ldomNode *element, int units, bool textEnd)
+QString sourcePoint(SourceCache &cache, quint64 identity, ldomDocument *doc, const QString &path,
+                    ldomNode *fragment, ldomNode *element, int units, bool textEnd)
 {
     ElementPath elementPath;
     if (!engineElementPath(fragment, element, elementPath))
         return {};
-    const auto *read = chapterSource(identity, doc, path);
+    const auto *read = chapterSource(cache, identity, doc, path);
     if (!read)
         return {};
     const Source &source = *read;
@@ -441,12 +441,12 @@ bool unitsBefore(ldomNode *element, ldomNode *target, int offset, int &units, QS
 
 // The text of each element with an id in a chapter file, from one parse.
 // `matches` counts the elements with that id; the text is the first one's.
-// Whitespace on opposite sides of inline markup can survive separately, so
-// `textEnds` keeps where each text token ends.
 struct IdText
 {
-    QString text;
-    QVector<int> textEnds;
+    // The text is `ChapterIds::text` from `begin` to `end`, and its text
+    // tokens end at `ChapterIds::textEnds` from `firstToken` to `endToken`.
+    // Nested elements share the text of their chapter.
+    int begin = 0, end = 0, firstToken = 0, endToken = 0;
     int matches = 0;
     // How the text maps onto `engineText`, the text of the element in the
     // engine: not yet, the same, the same after collapsing XML whitespace
@@ -463,24 +463,33 @@ struct ChapterIds
     bool parseError = false;
     QHash<QString, int> index;
     QVector<IdText> texts;
+    // The text inside elements with an id, once. Whitespace on opposite sides
+    // of inline markup can survive separately, so `textEnds` keeps where each
+    // text token ends.
+    QString text;
+    QVector<int> textEnds;
+
+    QString textOf(const IdText &entry) const
+    {
+        return text.mid(entry.begin, entry.end - entry.begin);
+    }
 };
 
 // The ids of the chapter file that was read last. The reader asks for the
 // place of every page, mostly in the same chapter: one parse serves them
 // all. `identity` is as for chapterSource().
-ChapterIds *chapterIds(quint64 identity, ldomDocument *doc, const QString &path)
+struct IdsCache
 {
-    struct Cached
-    {
-        quint64 identity = 0;
-        QString path;
-        ChapterIds ids;
-    };
+    quint64 identity = 0;
+    QString path;
+    ChapterIds ids;
+};
 
-    thread_local Cached cached;
+ChapterIds *chapterIds(IdsCache &cached, quint64 identity, ldomDocument *doc, const QString &path)
+{
     if (identity && cached.identity == identity && cached.path == path)
         return &cached.ids;
-    cached = Cached();
+    cached = IdsCache();
     cached.identity = identity;
     cached.path = path;
     auto &ids = cached.ids;
@@ -502,6 +511,11 @@ ChapterIds *chapterIds(quint64 identity, ldomDocument *doc, const QString &path)
     QXmlStreamReader parser(xml);
     // The elements with an id that are open, by depth, as indexes in `texts`.
     QVector<QPair<int, int>> open;
+    const auto close = [&ids, &open] {
+        auto &entry = ids.texts[open.takeLast().second];
+        entry.end = ids.text.size();
+        entry.endToken = ids.textEnds.size();
+    };
     int depth = 0;
     while (!parser.atEnd()) {
         parser.readNext();
@@ -516,27 +530,31 @@ ChapterIds *chapterIds(quint64 identity, ldomDocument *doc, const QString &path)
                 found = ids.index.insert(key, ids.texts.size());
                 ids.texts.append(IdText());
             }
-            if (++ids.texts[found.value()].matches == 1)
+            auto &entry = ids.texts[found.value()];
+            if (++entry.matches == 1) {
+                entry.begin = ids.text.size();
+                entry.firstToken = ids.textEnds.size();
                 open.append({ depth, found.value() });
-        } else if (parser.isCharacters() && !open.isEmpty()) {
-            for (const auto &element : open) {
-                auto &entry = ids.texts[element.second];
-                entry.text += parser.text();
-                entry.textEnds.append(entry.text.size());
             }
+        } else if (parser.isCharacters() && !open.isEmpty()) {
+            ids.text += parser.text();
+            ids.textEnds.append(ids.text.size());
         } else if (parser.isEndElement()) {
             while (!open.isEmpty() && open.last().first == depth)
-                open.removeLast();
+                close();
             --depth;
         }
     }
+    // A damaged file can leave elements open; parseError rejects it.
+    while (!open.isEmpty())
+        close();
     ids.parseError = parser.hasError();
     return &ids;
 }
 
-bool nativeText(quint64 identity, ldomDocument *doc, const QString &path, const QString &id,
-                ldomNode *element, QString &sourceText, QVector<int> &engineUnits, QString *error,
-                bool *unusableAnchor = nullptr)
+bool nativeText(IdsCache &cache, quint64 identity, ldomDocument *doc, const QString &path,
+                const QString &id, ldomNode *element, QString &sourceText,
+                QVector<int> &engineUnits, QString *error, bool *unusableAnchor = nullptr)
 {
     engineUnits.clear();
     if (unusableAnchor) {
@@ -547,7 +565,7 @@ bool nativeText(quint64 identity, ldomDocument *doc, const QString &path, const 
             *error = message;
         return false;
     };
-    auto *ids = chapterIds(identity, doc, path);
+    auto *ids = chapterIds(cache, identity, doc, path);
     if (ids->failure)
         return fail(strings::get(ids->failure));
     const auto found = ids->index.constFind(id);
@@ -559,25 +577,26 @@ bool nativeText(quint64 identity, ldomDocument *doc, const QString &path, const 
         return fail(strings::get(
                 "error.native_text_anchor_cannot_be_mapped_without_changing_its_text"));
     }
-    sourceText = entry->text;
+    sourceText = ids->textOf(*entry);
     const auto engineText = qstring(element->getText());
     if (entry->mapping == IdText::Mapping::Unknown || entry->engineText != engineText) {
         entry->engineText = engineText;
         entry->engineUnits.clear();
         entry->mapping = IdText::Mapping::Same;
-        if (entry->text != engineText) {
+        if (sourceText != engineText) {
             // Only accept XML whitespace normalization when the complete
             // result matches the engine. Keep a boundary for every source
             // UTF-16 unit; using the original offset in collapsed text would
             // move the passage.
-            const QString &source = entry->text;
+            const QString &source = ids->text;
             QString collapsed;
             QVector<int> offsets;
-            offsets.reserve(source.size() + 1);
-            int begin = 0;
+            offsets.reserve(sourceText.size() + 1);
+            int begin = entry->begin;
             // Whitespace on opposite sides of inline markup can survive
             // separately.
-            for (const int end : entry->textEnds) {
+            for (int token = entry->firstToken; token < entry->endToken; ++token) {
+                const int end = ids->textEnds[token];
                 bool space = false;
                 for (int i = begin; i < end; ++i) {
                     offsets.append(collapsed.size());
@@ -611,6 +630,14 @@ bool nativeText(quint64 identity, ldomDocument *doc, const QString &path, const 
 }
 } // namespace
 
+// The parsed chapter files of one EngineDocument. The document owns them, so
+// they go when it closes. Its calls stay on one thread.
+struct NativePositionCache
+{
+    SourceCache source;
+    IdsCache ids;
+};
+
 class NickelPositionCodec
 {
 public:
@@ -622,6 +649,15 @@ public:
     {
         return engine.source_ ? engine.source_->identity : 0;
     }
+
+    static NativePositionCache &cache(const EngineDocument &engine)
+    {
+        if (!engine.nativePositions_)
+            engine.nativePositions_ = std::make_shared<NativePositionCache>();
+        return *engine.nativePositions_;
+    }
+
+    static int keptText(const Engine &engine);
 };
 
 // Nickel locations are matched against CREngine's DOM. Another engine has no
@@ -655,7 +691,8 @@ QString NickelPositionCodec::decode(const Engine &other, const QString &location
     NativePoint point;
     const bool structural = id.startsWith("point(");
     if (structural) {
-        if (!nativePoint(sourceIdentity(engine), engine.engine_->getDocument(), path, id, point))
+        if (!nativePoint(cache(engine).source, sourceIdentity(engine),
+                         engine.engine_->getDocument(), path, id, point))
             return fail(strings::get("error.unsupported_native_text_offset"));
         id = point.id;
         offset = point.offset;
@@ -715,8 +752,8 @@ QString NickelPositionCodec::decode(const Engine &other, const QString &location
         // only after checking the complete text stream.
         bool unusableAnchor = false;
         QVector<int> engineUnits;
-        if (!nativeText(sourceIdentity(engine), doc, path, id, element, sourceText, engineUnits,
-                        error, &unusableAnchor)) {
+        if (!nativeText(cache(engine).ids, sourceIdentity(engine), doc, path, id, element,
+                        sourceText, engineUnits, error, &unusableAnchor)) {
             // CREngine drops the whitespace between block children, so an ID
             // on a section around paragraphs without IDs fails this check. A
             // native point still names its own element, which can match even
@@ -826,8 +863,8 @@ QString NickelPositionCodec::encode(const Engine &other, QString *error)
             return chapter;
         const bool textEnd = target->isText() && pointer.getOffset() > 0
                 && pointer.getOffset() == target->getText().length();
-        const auto point =
-                sourcePoint(sourceIdentity(engine), doc, path, fragment, nearest, units, textEnd);
+        const auto point = sourcePoint(cache(engine).source, sourceIdentity(engine), doc, path,
+                                       fragment, nearest, units, textEnd);
         return point.isEmpty() ? chapter : chapter + '#' + point;
     };
     auto *element = target->isText() ? target->getParentNode() : target;
@@ -844,8 +881,8 @@ QString NickelPositionCodec::encode(const Engine &other, QString *error)
     QString sourceText;
     bool unusableAnchor = false;
     QVector<int> engineUnits;
-    if (!nativeText(sourceIdentity(engine), doc, path, id, element, sourceText, engineUnits, error,
-                    &unusableAnchor)) {
+    if (!nativeText(cache(engine).ids, sourceIdentity(engine), doc, path, id, element, sourceText,
+                    engineUnits, error, &unusableAnchor)) {
         if (!unusableAnchor)
             return {};
         if (error)
@@ -876,6 +913,20 @@ QString NickelPositionCodec::encode(const Engine &other, QString *error)
                 - 1;
     return encodedPath + '#' + QString::fromLatin1(QUrl::toPercentEncoding(id)) + ':'
             + QString::number(units);
+}
+
+int NickelPositionCodec::keptText(const Engine &other)
+{
+    const auto *engine = crengine(other);
+    if (!engine || !engine->nativePositions_)
+        return 0;
+    const auto &kept = *engine->nativePositions_;
+    return kept.source.source.text.size() + kept.ids.ids.text.size();
+}
+
+int keptNativeText(const Engine &engine)
+{
+    return NickelPositionCodec::keptText(engine);
 }
 
 PositionCodec positionCodec()

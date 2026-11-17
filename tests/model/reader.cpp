@@ -290,6 +290,80 @@ static void checkNativeWhitespace()
     }
 }
 
+// Nested elements with ids share their text. Each id maps the same text to
+// the same Nickel position at every depth, and deeper nesting does not keep
+// more text.
+static void checkNestedNativeIds()
+{
+    const auto codec = kobalt::nickel::positionCodec();
+    const auto nested = [](int depth) {
+        QByteArray open, close;
+        for (int level = 1; level <= depth; ++level) {
+            open += "<div id='n" + QByteArray::number(level) + "'>";
+            close += "</div>";
+        }
+        return storedEpub(
+                { { "mimetype", "application/epub+zip" },
+                  { "META-INF/container.xml",
+                    "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container' version='1.0'><rootfiles><rootfile full-path='book.opf' media-type='application/oebps-package+xml'/></rootfiles></container>" },
+                  { "book.opf",
+                    "<package xmlns='http://www.idpf.org/2007/opf' version='2.0'><metadata/><manifest><item id='c' href='c.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='c'/></spine></package>" },
+                  { "c.xhtml",
+                    "<html xmlns='http://www.w3.org/1999/xhtml'><body>" + open
+                            + "<p id='p'>Alpha  <em id='e'>beta</em>\n gamma</p>"
+                              "<p id='q'>Delta</p>"
+                            + close
+                            + "<section id='blocks'>\n<p id='r'>One</p>\n</section>"
+                              "</body></html>" } });
+    };
+    QString error;
+    int kept = -1;
+    for (const int depth : { 1, 6 }) {
+        kobalt::EngineDocument model(kobalt::test::readerFonts());
+        require(model.open(nested(depth), QSize(1072, 1328), {}, &error), qPrintable(error));
+        // "Alpha  beta\n gamma" collapses to "Alpha beta gamma" in the engine.
+        // The canonical Nickel position of each source offset, from the
+        // nearest id.
+        const QStringList canonical{ "p:0",  "p:1",  "p:2",  "p:3",  "p:4", "p:5",  "p:7",
+                                     "p:7",  "e:1",  "e:2",  "e:3",  "e:4", "p:13", "p:13",
+                                     "p:14", "p:15", "p:16", "p:17", "p:18" };
+        for (int offset = 0; offset < canonical.size(); ++offset) {
+            const auto inner = "c.xhtml#p:" + QString::number(offset);
+            const auto anchor = codec.decode(model, inner, &error);
+            require(!anchor.isEmpty() && error.isEmpty(), qPrintable(inner + ": " + error));
+            for (int level = 1; level <= depth; ++level) {
+                const auto outer =
+                        "c.xhtml#n" + QString::number(level) + ':' + QString::number(offset);
+                require(codec.decode(model, outer, &error) == anchor && error.isEmpty(),
+                        qPrintable("A nested id moved the position: " + outer + ' ' + error));
+            }
+            require(model.goTo(anchor), "Cannot select the nested position");
+            const auto native = model.platformPosition(codec, &error);
+            require(native == "c.xhtml#" + canonical[offset] && error.isEmpty()
+                            && model.goToPlatform(codec, native, &error)
+                            && model.position() == anchor,
+                    qPrintable("A nested position did not round-trip: " + native));
+        }
+        // The outer ids continue into the next paragraph.
+        for (const auto &pair : { QPair<QString, QString>{ "e:2", "p:9" },
+                                  { "n1:19", "q:1" },
+                                  { "n" + QString::number(depth) + ":23", "q:5" } }) {
+            const auto anchor = codec.decode(model, "c.xhtml#" + pair.first, &error);
+            require(!anchor.isEmpty() && error.isEmpty()
+                            && codec.decode(model, "c.xhtml#" + pair.second, &error) == anchor,
+                    qPrintable("A nested id moved the position: " + pair.first + ' ' + error));
+        }
+        require(!codec.decode(model, "c.xhtml#r:1", &error).isEmpty() && error.isEmpty(),
+                "A paragraph inside a section lost its id");
+        require(codec.decode(model, "c.xhtml#blocks:0", &error).isEmpty() && !error.isEmpty(),
+                "A section without its block whitespace mapped its text");
+        const int text = kobalt::nickel::keptNativeText(model);
+        require(text > 0 && (kept < 0 || text == kept),
+                qPrintable(QString("Nested ids kept %1 text units, not %2").arg(text).arg(kept)));
+        kept = text;
+    }
+}
+
 static void checkKoboStyleHacks()
 {
     const QByteArray css =
@@ -1334,6 +1408,7 @@ int main(int argc, char **argv)
     QGuiApplication app(argc, argv);
     checkDeferredCjkFont();
     checkNativeWhitespace();
+    checkNestedNativeIds();
     checkCachedNativeSources();
     checkChapterArtPositions();
     checkPageFormat();

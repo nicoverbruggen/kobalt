@@ -41,3 +41,5 @@ The Hybrid session test delivers an old pagination result after two font changes
 The chapter-parity reverse-group check records the source anchor and pixels of forward turns, then retraces them after neighboring chapters have been prepared and old documents evicted. It covers one and two columns.
 
 Search scopes use the next page in the displayed layout, including the page beyond an exposed slice. Hybrid prepares the whole book on the first submitted query. Selecting a result keeps the displayed layout. A later page turn can adopt the prepared book. Fast scans the chapter windows in batches. A batch keeps its original spine range and returns each distinct source range once, including matches in ligatures and reordered combining marks.
+
+The page estimate check enlarges the text after Hybrid finishes a background layout. It checks the displayed count before and after the new layout finishes against an independent opening at the larger text size.

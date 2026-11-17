@@ -679,7 +679,7 @@ Engine::RoughPages EngineDocument::roughPages() const
         // page number after that comes from the map.
         estimate.book.reset();
     }
-    if (full_) {
+    if (fullDocumentReady()) {
         const auto anchor = engine_->getPageBookmark(page()).toString();
         auto exact = full_->engine_->getDocument()->createXPointer(anchor);
         if (!exact.isNull()) {

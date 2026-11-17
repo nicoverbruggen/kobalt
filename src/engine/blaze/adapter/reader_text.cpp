@@ -2225,7 +2225,7 @@ QVector<SearchHit> EngineDocument::searchDetails(QVector<SearchHit> hits, Search
     const auto bounds = searchBounds(scope, origin);
     if (!bounds.valid)
         return {};
-    if (full_ && full_->setSearchBounds(bounds))
+    if (fullDocumentReady() && full_->setSearchBounds(bounds))
         return full_->searchDetailsLoaded(std::move(hits), scope);
     if (windowFirst_ < 0 || slicePages_ <= 0)
         return setSearchBounds(bounds) ? searchDetailsLoaded(std::move(hits), scope)

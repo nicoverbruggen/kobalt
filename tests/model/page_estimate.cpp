@@ -1149,6 +1149,28 @@ void emptyItem()
     }
 }
 
+void exactPagesAfterAppearanceChange()
+{
+    const auto files = test::engineBook(false, 1, 220);
+    EngineDocument chapter(test::readerFonts()), reference(test::readerFonts());
+    openFiles(chapter, files);
+    require(chapter.prepareFullDocument({}) == Engine::FullDocument::Ready,
+            "Cannot prepare the first layout");
+    const int original = chapter.roughPages().pages;
+    const QJsonObject larger{ { "font_pixels", 48 }, { "line_spacing_version", 1 } };
+    require(chapter.applyAppearance(appearance::Patch(larger)), "Cannot enlarge the text");
+    openResources(reference, files, larger);
+    require(reference.pages() != original, "Font change must alter pagination");
+    const auto before = chapter.roughPages();
+    require(before.pages == 0 || before.pagesEstimated || before.pages == reference.pages(),
+            "A stale whole-book layout supplied an exact count after reflow");
+    require(chapter.prepareFullDocument({}) == Engine::FullDocument::Ready,
+            "Cannot prepare the second layout");
+    const auto after = chapter.roughPages();
+    require(!after.pagesEstimated && after.pages == reference.pages(),
+            "The new layout must supply the exact total");
+}
+
 void normalizedSearchRanges()
 {
     const auto files = test::publisherPackage(
@@ -3542,6 +3564,7 @@ int main(int argc, char **argv)
     observations();
     emptyItem();
     laterSlice();
+    exactPagesAfterAppearanceChange();
     normalizedSearchRanges();
     searchLongItem();
     searchSplitWords();

@@ -6607,9 +6607,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     {
         QTest::addColumn<int>("mode");
         QTest::addColumn<bool>("adoptWhole");
-        QTest::newRow("fast") << 1 << false;
-        QTest::newRow("hybrid-chapters") << 2 << false;
-        QTest::newRow("hybrid-adopted") << 2 << true;
+        QTest::addColumn<bool>("reopenAccurate");
+        QTest::newRow("fast") << 1 << false << false;
+        QTest::newRow("fast-to-accurate") << 1 << false << true;
+        QTest::newRow("hybrid-chapters") << 2 << false << false;
+        QTest::newRow("hybrid-adopted") << 2 << true << false;
     }
 
     // Saved marks survive chapter eviction, reopening and Hybrid adoption.
@@ -6617,6 +6619,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     {
         QFETCH(int, mode);
         QFETCH(bool, adoptWhole);
+        QFETCH(bool, reopenAccurate);
         renderingMode::setOverride(mode);
         const int quiet = renderingMode::buildQuietMilliseconds();
         renderingMode::setBuildQuietMilliseconds(60000);
@@ -6711,6 +6714,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(bookmarkRow->titleLabel()->text(), bookmark.value("chapter").toString());
         QVERIFY(bookmarkRow->trailingLabel()->text().toInt() > 0);
         QVERIFY(saveCapture("fast-bookmarks"));
+        if (!adoptWhole) {
+            QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
+            QTRY_VERIFY(fixture.visible("rrPinEditor"));
+            QVERIFY(fixture.press("rrPinIcon_map"));
+            QVERIFY(fixture.press("rrPinSave"));
+            QTRY_VERIFY(!fixture.visible("rrPinEditor"));
+        }
         QVERIFY(fixture.press("rrBookmark0"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_COMPARE(fixture.state().value("position"), savedPage);
@@ -6741,10 +6751,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             // chapter must still resolve the saved annotation's source.
             fixture.window.readerWindow()->close();
             QTRY_VERIFY_WITH_TIMEOUT(fixture.window.idle(), 30000);
+            if (reopenAccurate)
+                renderingMode::setOverride(0);
             fixture.window.openBook(book);
             QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
-            QVERIFY(fixture.state().contains("book_fraction"));
+            QCOMPARE(fixture.state().contains("book_fraction"), !reopenAccurate);
+            QVERIFY(fixture.press("rrPage"));
+            QTRY_VERIFY(fixture.visible("rrPinnedBookmark0"));
+            QTRY_VERIFY(fixture.widget("rrPinnedBookmark0")->isEnabled());
+            QVERIFY(fixture.press("rrPinnedBookmark0"));
+            QTRY_COMPARE(fixture.state().value("position"), savedPage);
+            QVERIFY(jumpChapter(8));
         }
         QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrBookmarks"));
@@ -6761,7 +6779,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         const int returnPage = fixture.state().contains("book_fraction")
                 ? fixture.state().value("rough_page").toInt()
                 : fixture.state().value("page").toInt() + 1;
-        if (!adoptWhole)
+        if (!adoptWhole && !reopenAccurate)
             QVERIFY(returnPage > fixture.state().value("page").toInt() + 1);
         QVERIFY(fixture.press("rrAnnotation0"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());

@@ -757,12 +757,13 @@ void Reader::syncPinnedBookmarks()
 {
     if (!pinnedBookmarks)
         return;
-    QVector<Bookmark> pins;
-    for (const auto &item : bookmarks->bookmarks())
-        if (item.pinned() && pins.size() < BookmarkStore::maxPins)
-            pins.append(item);
-    std::stable_sort(pins.begin(), pins.end(), [this](const Bookmark &a, const Bookmark &b) {
-        const int aPage = bookmarks->pageOf(a.position), bPage = bookmarks->pageOf(b.position);
+    const auto &items = bookmarks->bookmarks();
+    QVector<int> pins;
+    for (int i = 0; i < items.size() && pins.size() < BookmarkStore::maxPins; ++i)
+        if (items[i].pinned())
+            pins.append(i);
+    std::stable_sort(pins.begin(), pins.end(), [this](int a, int b) {
+        const int aPage = bookmarks->bookPage(a), bPage = bookmarks->bookPage(b);
         return (aPage < 0 ? INT_MAX : aPage) < (bPage < 0 ? INT_MAX : bPage);
     });
     const bool visible = features::enabled(preferences, features::Bookmarks) && !pins.isEmpty()
@@ -831,7 +832,7 @@ void Reader::syncPinnedBookmarks()
         button->setVisible(i < count);
         if (i >= count)
             continue;
-        const auto &pin = pins[i];
+        const auto &pin = items[pins[i]];
         const int column = i / columnRows;
         const int rows = qMin(columnRows, count - column * columnRows);
         const int columnTop = (trayHeight - (cell * rows + 2 * padding)) / 2;
@@ -846,7 +847,9 @@ void Reader::syncPinnedBookmarks()
         button->setAccessibleName(name);
         button->setToolTip(name);
         button->setProperty("bookmark_position", pin.position);
-        button->setEnabled(bookmarks->pageOf(pin.position) >= 0);
+        button->setEnabled(bookmarks->bookPage(pins[i]) >= 0
+                           || (session->state().contains("book_fraction")
+                               && session->state().value("rough_pages").toInt() <= 0));
     }
     pinnedBookmarks->update();
     pinnedBookmarks->raise();

@@ -69,6 +69,7 @@ public:
     std::function<void(std::function<void()>)> prepareShutdown;
     // False keeps the device awake while pending reader saves are started.
     std::function<bool()> beforeStandby;
+    std::function<void()> afterStandby;
     std::function<bool()> readerInputActive;
     static bool protectStandbyInput();
     static void disconnected();

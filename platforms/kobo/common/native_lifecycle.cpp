@@ -311,8 +311,7 @@ NativeLifecycle::NativeLifecycle(QObject *parent) : QObject(parent)
     if (standby && standby()) {
         const auto entering = connect(standby(), SIGNAL(aboutToSuspend(PermissionRequest *)), this,
                                       SLOT(standbyRequested()), Qt::DirectConnection);
-        const auto leaving = connect(standby(), SIGNAL(resumed()), this, SLOT(standbyResumed()),
-                                     Qt::DirectConnection);
+        const auto leaving = connect(standby(), SIGNAL(resumed()), this, SLOT(standbyResumed()));
         if (diagnosticsActive())
             diagnostic("power-observer",
                        { { "standby_request", bool(entering) },
@@ -349,6 +348,8 @@ void NativeLifecycle::standbyResumed()
 {
     if (diagnosticsActive())
         diagnostic("standby-resumed", {}, false);
+    if (!blocked() && afterStandby)
+        afterStandby();
 }
 
 void NativeLifecycle::usbPlugged()

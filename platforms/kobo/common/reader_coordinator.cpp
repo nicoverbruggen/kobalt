@@ -240,6 +240,10 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     lifecycle->beforeStandby = [this] {
         return busy || !run.reader || run.reader->flushBeforeStandby();
     };
+    lifecycle->afterStandby = [this] {
+        if (!busy && run.reader)
+            run.reader->resumeReadingClock();
+    };
     // busy covers the whole opening, also before and after its engine jobs.
     // A fallback or error dialog also sets busy, but waits for the user.
     lifecycle->openingWorkPending = [this] { return busy && !run.fallbackAlert; };

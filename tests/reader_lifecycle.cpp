@@ -8439,6 +8439,13 @@ private slots:
         QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
         QCOMPARE(ticks, 3);
         QCOMPARE(timer->interval(), 60000);
+        // The wall clock advances during standby while the Qt timer is paused.
+        timeOfDay += 120000;
+        host.window()->resumeReadingClock();
+        QTRY_COMPARE(ticks, 4);
+        host.window()->resumeReadingClock();
+        QCOMPARE(timer->interval(), 60000);
+        QCOMPARE(ticks, 4);
     }
 
     // Checks that the minute clock rests while no strip field, menu or host needs it, and that only a visible consumer asks for the reading pace.

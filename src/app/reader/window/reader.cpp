@@ -2108,6 +2108,21 @@ int Reader::millisecondsOfDay() const
                                       : QTime::currentTime().msecsSinceStartOfDay();
 }
 
+void Reader::resumeReadingClock()
+{
+    if (!isVisible() || lifecycleHidden || closing || services.suspended() || !clockTimer
+        || !clockTimer->isActive())
+        return;
+
+    using namespace kobalt::headerfooter;
+    bool visibleClock = topControls && topControls->isVisible();
+    for (int slot = 0; !visibleClock && slot < slotCount; ++slot)
+        visibleClock = page->chrome.slotFields[slot] == Field::Time
+                && (footerSlot(slot) ? page->showFooter() : page->showHeader());
+    if (visibleClock)
+        startClock();
+}
+
 void Reader::startClock()
 {
     startClock(millisecondsOfDay());

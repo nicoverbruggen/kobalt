@@ -126,6 +126,7 @@ public:
     void cancelWake() override;
     void sleepViewReady() override;
     void wakeReader() override;
+    void resumeReadingClock() override;
     void progressTick() override;
     void refreshHostPresentation() override;
 

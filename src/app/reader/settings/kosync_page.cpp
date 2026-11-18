@@ -286,12 +286,12 @@ void KosyncPage::setSendMetadata(bool enabled)
     metadataOption_->setChecked(enabled);
 }
 
-QString KosyncPage::takePassword()
+void KosyncPage::clearPassword()
 {
-    const auto value = password_;
+    if (password_.isEmpty())
+        return;
     password_.clear();
     updateCaptions();
-    return value;
 }
 
 void KosyncPage::setLastSync(const QDateTime &time)
@@ -452,8 +452,14 @@ void KosyncPage::edit(int field)
     card->rows()->insertWidget(1, row);
     auto *cancel = dialog->secondaryButton();
     auto *save = dialog->primaryButton();
-    const auto submit = [this, field, editor] {
-        if (submitting_)
+    const QPointer<KosyncPage> owner(this);
+    const QPointer<ui::ModalOverlay> editing(dialog);
+    const auto dismiss = [owner, editing] {
+        if (owner && editing && owner->editorDialog == editing)
+            owner->dismissEditor();
+    };
+    const auto submit = [this, owner, editing, dismiss, field, editor] {
+        if (!owner || !editing || editorDialog != editing || submitting_)
             return;
         submitting_ = true;
         auto text = editor->text();
@@ -462,27 +468,32 @@ void KosyncPage::edit(int field)
             && (text.trimmed() == QLatin1String("https://")
                 || text.trimmed() == QLatin1String("http://")))
             text.clear();
-        (field == 0           ? server_
-                 : field == 1 ? username_
-                 : field == 2 ? password_
-                              : deviceName_) = text;
+        auto &value = field == 0 ? server_
+                : field == 1     ? username_
+                : field == 2     ? password_
+                                 : deviceName_;
+        const bool changed = value != text;
+        value = text;
         updateCaptions();
         if (field == 3) {
             if (deviceNameChanged)
                 deviceNameChanged(deviceName_);
-        } else if (field != 2) {
+        } else if (field != 2 && changed) {
             accountEdited_ = true;
             setStatus(strings::get("kosync.account_changed"), false);
         }
         // Native submission runs inside the controller. Destroy it only after
         // its callback and any duplicate Return signal have returned.
-        editorDialog->hide();
-        QTimer::singleShot(0, this, [this] { dismissEditor(); });
+        if (!owner || !editing || editorDialog != editing)
+            return;
+        editing->hide();
+        if (owner)
+            QTimer::singleShot(0, owner.data(), dismiss);
     };
-    connect(cancel, &QPushButton::clicked, this, [this] { dismissEditor(); });
+    connect(cancel, &QPushButton::clicked, this, dismiss);
     connect(save, &QPushButton::clicked, this, submit);
     connect(editor, &QLineEdit::returnPressed, this, submit);
-    editorDialog->dismissed = [this] { dismissEditor(); };
+    editorDialog->dismissed = dismiss;
     keyboard_ = makeKeyboard_(editorDialog, editor);
     keyboard_->setSubmitText(strings::get("common.ok"));
     keyboard_->submitted = submit;
@@ -593,8 +604,7 @@ void KosyncPage::dismissSyncHelp()
 void KosyncPage::hideEvent(QHideEvent *event)
 {
     dismissEditor();
-    password_.clear();
-    updateCaptions();
+    clearPassword();
     QWidget::hideEvent(event);
 }
 

@@ -433,7 +433,7 @@ if(BUILD_TESTING)
             sleepSnapshotReplacesEachClockWithoutChangingTheReadingPage sleepTimeLeftUsesHoursAboveTwoHours sleepTimeLeftApproximate timeRemainingFormatShared
             sleepScreenDefaultsMigrateOnce sleepPngOverlaysUseEitherFolder sleepNativePreviewFollowsSettings sleepSettingsShowWhereToAddPngs sleepGreetingEditor sleepOverlayUsesTheDimmedPage sleepCoverFitsWithoutCroppingOrDimming
             sleepCoverDecodingIsBoundedAndHonorsSourceCancellation wifiStatus readingTimeStatsVisibility readingTimeStatus remoteKeyActivityRequiresActiveReading
-            textPresetsWithoutOpeningWait panelsAfterBackgroundWork closeWithoutWaitingForHost finishChoiceSurvivesSleepAndRequiresActiveReader finishPromptPersistence progressPercentagesAgree kosyncAccountGating kosyncOpening kosyncNetwork kosyncBackgroundWifi kosyncWifiRelease kosyncMoments minuteClock clockRestsWithoutConsumers clockAsksPaceForTimeLeft turnSkipsHiddenControls idleTimers readerStandbySetting wifiPowerSaver wifiPowerSaverAtSleep kosyncManualToolbar kosyncManualConnection kosyncDialogResume kosyncFailure kosyncMissingProgress kosyncMetadata kosyncPasswordSleep kosyncSleepSavesSyncTime kosyncPause kosyncFinal nativeProgressWaitsForSleep appearanceRetryCooldown closeWithUnusableSettings recoveryNoticeAfterFirstPage benchmarkNoticeAfterRun activityBatchesAndLowBattery usbFinalSave developmentOptions developmentStateReports annotationExportHandoff annotationExportOwnerDestruction
+            textPresetsWithoutOpeningWait panelsAfterBackgroundWork closeWithoutWaitingForHost finishChoiceSurvivesSleepAndRequiresActiveReader finishPromptPersistence progressPercentagesAgree kosyncAccountGating kosyncSignInValidation kosyncOpening kosyncNetwork kosyncBackgroundWifi kosyncWifiRelease kosyncMoments minuteClock clockRestsWithoutConsumers clockAsksPaceForTimeLeft turnSkipsHiddenControls idleTimers readerStandbySetting wifiPowerSaver wifiPowerSaverAtSleep kosyncManualToolbar kosyncManualConnection kosyncDialogResume kosyncFailure kosyncMissingProgress kosyncMetadata kosyncPasswordSleep kosyncSleepSavesSyncTime kosyncPause kosyncFinal nativeProgressWaitsForSleep appearanceRetryCooldown closeWithUnusableSettings recoveryNoticeAfterFirstPage benchmarkNoticeAfterRun activityBatchesAndLowBattery usbFinalSave developmentOptions developmentStateReports annotationExportHandoff annotationExportOwnerDestruction
             progressChoiceKeepAndGo progressChoiceWaitsForSettings progressChoiceWaitsForBookmarks
             finishedSyncWithoutPositionKeepsLocalReading
             progressChoiceForOlderAlert progressChoiceUnavailablePosition
@@ -657,6 +657,11 @@ if(BUILD_TESTING)
                 target_link_libraries(kobalt-${name}-tests PRIVATE kobalt-desktop kobalt-core)
             else()
                 target_link_libraries(kobalt-${name}-tests PRIVATE kobalt-regression-runtime)
+            endif()
+            if(check STREQUAL "record_writer")
+                # Build this source again only for the deterministic thread launch test.
+                target_sources(kobalt-${name}-tests PRIVATE "${source}/storage/record_writer.cpp")
+                target_compile_definitions(kobalt-${name}-tests PRIVATE KOBALT_TEST_WRITER_START)
             endif()
             if(check STREQUAL "android_assets")
                 target_sources(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}/platforms/android/assets.cpp")

@@ -1437,7 +1437,7 @@ void ReaderCoordinator::preloadLastBook()
     const auto paths = environment_.paths;
     // The record, the book's saved state and the preferences are read on the
     // writer thread. The archive check reads the book's ZIP directory.
-    lastBook->post(
+    const bool queued = lastBook->tryPost(
             [guard, paths, recordPath = lastBookPath()] {
                 const auto record = storage::readJson(recordPath);
                 const auto identity = record.value("book").toString();
@@ -1461,8 +1461,9 @@ void ReaderCoordinator::preloadLastBook()
                         },
                         Qt::QueuedConnection);
                 return true;
-            },
-            {});
+            });
+    if (!queued)
+        diagnostic("reader-preload-worker-unavailable", {}, DiagnosticSeverity::Warning);
 }
 
 void ReaderCoordinator::startPreload(const QString &identity, const QString &path,

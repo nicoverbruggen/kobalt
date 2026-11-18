@@ -18,7 +18,7 @@ namespace kobalt::kosync {
 QByteArray documentDigest(QIODevice &file);
 QByteArray filenameDigest(const QString &path);
 QUrl serverUrl(const QString &text);
-bool validLogin(const QString &server, const QString &username, const QString &password);
+QString loginError(const QString &server, const QString &username, const QString &password);
 // Pauses automatic syncs for the whole process, so a performance run never
 // reaches the network. The saved setting and manual syncs are unchanged.
 void pauseAutomatic(bool paused);

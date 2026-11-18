@@ -107,8 +107,10 @@
 #include <QTimer>
 #include <QTime>
 #include <QUrl>
+#include <QCryptographicHash>
 #include <QtEndian>
 #include <atomic>
+#include <utility>
 #include <zlib.h>
 
 #ifndef KOBALT_NO_SENSORS
@@ -209,6 +211,7 @@ struct KosyncHttpState
     QByteArray readBody = "{}";
     QByteArray uploadBody;
     QJsonObject lastUpload;
+    QNetworkRequest lastAuthentication;
     bool hold = false;
     QList<QPointer<test::KosyncReply>> held;
 };
@@ -223,6 +226,8 @@ protected:
                                  QIODevice *data) override
     {
         ++state->requests;
+        if (request.url().path().endsWith("/users/auth"))
+            state->lastAuthentication = request;
         QByteArray body = state->readBody;
         if (operation == PutOperation) {
             ++state->uploads;
@@ -7214,6 +7219,110 @@ private slots:
             QCOMPARE(accountBytes(), original);
     }
 
+    // Missing fields do not submit. Failed sign-in keeps the draft for an explicit retry.
+    void kosyncSignInValidation_data()
+    {
+        QTest::addColumn<QString>("editedField");
+        QTest::addColumn<QString>("replacement");
+        QTest::newRow("unchanged") << QString() << QString();
+        QTest::newRow("username") << QString("rrKosyncUsername") << QString("different-reader");
+        QTest::newRow("server") << QString("rrKosyncServer") << QString("https://other.invalid");
+    }
+
+    void kosyncSignInValidation()
+    {
+        QFETCH(QString, editedField);
+        QFETCH(QString, replacement);
+        const auto paths = testPaths();
+        QVERIFY(storage::writeJson(paths.syncAccount(),
+                                   { { "schema", 1 },
+                                     { "server", "https://sync.invalid" },
+                                     { "username", "reader" },
+                                     { "key", "" },
+                                     { "automatic", false },
+                                     { "device_id", "sign-in-test" } }));
+        auto http = std::make_shared<KosyncHttpState>();
+        http->readStatus = 401;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.kosyncHttp = [http] { return std::make_unique<KosyncHttp>(http); };
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        auto *window = host.window();
+        QVERIFY(openSettings(host));
+        window->findChild<QPushButton *>("rrSettingsKosync")->click();
+        auto *login = window->findChild<QPushButton *>("rrKosyncLogin");
+        auto *status = window->findChild<QLabel *>("rrKosyncStatus");
+        auto *password =
+                dynamic_cast<ui::CaptionButton *>(window->findChild<QWidget *>("rrKosyncPassword"));
+        QVERIFY(login && status && password);
+
+        const auto edit = [&](const QString &field, const QString &text) {
+            auto *button = window->findChild<QPushButton *>(field);
+            QVERIFY(button);
+            button->click();
+            QPointer<QLineEdit> input = window->findChild<QLineEdit *>("rrKosyncInput");
+            QVERIFY(input);
+            input->setText(text);
+            window->findChild<QPushButton *>("rrKosyncEditSave")->click();
+            QTRY_VERIFY(!input);
+        };
+        login->click();
+        QCOMPARE(status->text(), strings::get("kosync.missing_password"));
+        QCOMPARE(http->requests, 0);
+        const QString draft = QStringLiteral("test-password");
+        edit("rrKosyncPassword", draft);
+        login->click();
+        QTRY_COMPARE(status->text(), strings::get("kosync.auth_error"));
+        QCOMPARE(http->requests, 1);
+        const auto masked = QStringLiteral("••••••••");
+        QCOMPARE(password->caption(), masked);
+        if (!editedField.isEmpty())
+            edit(editedField, replacement);
+        QCOMPARE(password->caption(), masked);
+        QCOMPARE(http->requests, 1);
+
+        http->readStatus = 200;
+        http->readBody = R"({"authorized":"OK"})";
+        login->click();
+        QTRY_COMPARE(status->text(), strings::get("kosync.signed_in"));
+        QCOMPARE(http->requests, 2);
+        const auto server =
+                editedField == "rrKosyncServer" ? replacement : QString("https://sync.invalid");
+        const auto username = editedField == "rrKosyncUsername" ? replacement : QString("reader");
+        QCOMPARE(http->lastAuthentication.url(), QUrl(server + "/users/auth"));
+        QCOMPARE(http->lastAuthentication.rawHeader("x-auth-user"), username.toUtf8());
+        QCOMPARE(http->lastAuthentication.rawHeader("x-auth-key"),
+                 QCryptographicHash::hash(draft.toUtf8(), QCryptographicHash::Md5).toHex());
+        const auto saved = storage::readJsonFile(paths.syncAccount()).object;
+        QCOMPARE(saved.value("server").toString(), server);
+        QCOMPARE(saved.value("username").toString(), username);
+        QCOMPARE(saved.value("key").toString().toLatin1(),
+                 http->lastAuthentication.rawHeader("x-auth-key"));
+        QCOMPARE(password->caption(), strings::get("kosync.not_set"));
+        QVERIFY(login->isHidden());
+        edit("rrKosyncServer", server);
+        QVERIFY(login->isHidden());
+        edit("rrKosyncUsername", username);
+        QVERIFY(login->isHidden());
+
+        edit("rrKosyncServer", "https://pending.invalid");
+        edit("rrKosyncPassword", "pending-test-password");
+        QCOMPARE(password->caption(), masked);
+        auto *logout = window->findChild<QPushButton *>("rrKosyncLogout");
+        QVERIFY(logout && logout->isEnabled() && !logout->isHidden());
+        logout->click();
+        QCOMPARE(status->text(), strings::get("kosync.signed_out"));
+        QCOMPARE(password->caption(), strings::get("kosync.not_set"));
+        QVERIFY(!kosync::Client(paths.syncAccount()).signedIn());
+        login->click();
+        QCOMPARE(status->text(), strings::get("kosync.missing_password"));
+        QCOMPARE(http->requests, 2);
+    }
+
     // Checks the opening sync against a stalled server: input blocking, Cancel sync, grace period, timeout and repaint.
     void kosyncOpening_data()
     {
@@ -7318,7 +7427,7 @@ private slots:
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() > page);
     }
 
-    // Checks that sleep dismisses a revealed password editor and that it reopens masked and empty after wake.
+    // Sleep dismisses a revealed editor and clears a saved draft before wake.
     void kosyncPasswordSleep()
     {
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
@@ -7331,6 +7440,12 @@ private slots:
         host.window()->findChild<QPushButton *>("rrKosyncPassword")->click();
         QPointer<QLineEdit> input = host.window()->findChild<QLineEdit *>("rrKosyncInput");
         QVERIFY(input);
+        input->setText("draft-password");
+        host.window()->findChild<QPushButton *>("rrKosyncEditSave")->click();
+        QTRY_VERIFY(!input);
+        host.window()->findChild<QPushButton *>("rrKosyncPassword")->click();
+        input = host.window()->findChild<QLineEdit *>("rrKosyncInput");
+        QVERIFY(input && input->text() == "draft-password");
         input->setText("unfinished-password");
         host.window()->findChild<QPushButton *>("rrKosyncPasswordReveal")->click();
         QCOMPARE(input->echoMode(), QLineEdit::Normal);
@@ -12034,10 +12149,15 @@ private:
             QCOMPARE(attempts.count(), 0);
             QVERIFY(host.window()->findChild<QPushButton *>("rrKosyncServer")->isEnabled());
             if (scenario == "login") {
-                // Password consumption makes the next sign-in invalid. It must
-                // report that locally without opening another networking dialog.
-                host.window()->findChild<QPushButton *>("rrKosyncLogin")->click();
+                // A failed connection keeps the draft. Only an explicit retry
+                // opens another connection dialog.
                 QCOMPARE(network->requests, 2);
+                host.window()->findChild<QPushButton *>("rrKosyncLogin")->click();
+                QCOMPARE(network->requests, 3);
+                QVERIFY(network->interactive && network->completed);
+                const auto retried = std::exchange(network->completed, {});
+                retried(false);
+                QCOMPARE(attempts.count(), 0);
             }
         }
         QVERIFY(!kosync::Client(paths.syncAccount()).lastSync().isValid());

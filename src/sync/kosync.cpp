@@ -950,18 +950,24 @@ void Client::sendRequest(const QByteArray &method, const QString &path, const QU
             });
 }
 
-bool validLogin(const QString &server, const QString &username, const QString &password)
+QString loginError(const QString &server, const QString &username, const QString &password)
 {
-    return !serverUrl(server).isEmpty() && !username.trimmed().isEmpty() && !username.contains('\r')
-            && !username.contains('\n') && !username.contains(QChar::Null) && username.size() <= 256
-            && !password.isEmpty();
+    if (serverUrl(server).isEmpty())
+        return message("kosync.invalid_server");
+    if (username.trimmed().isEmpty() || username.contains('\r') || username.contains('\n')
+        || username.contains(QChar::Null) || username.size() > 256)
+        return message("kosync.invalid_username");
+    if (password.isEmpty())
+        return message("kosync.missing_password");
+    return {};
 }
 
 void Client::login(const QString &server, const QString &username, const QString &password,
                    Done done)
 {
-    if (!validLogin(server, username, password)) {
-        done(message("kosync.invalid_account"));
+    const auto error = loginError(server, username, password);
+    if (!error.isEmpty()) {
+        done(error);
         return;
     }
     const auto url = serverUrl(server);

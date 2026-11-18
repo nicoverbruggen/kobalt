@@ -41,10 +41,10 @@ struct ReaderEnvironment
 
     void reportSession(const QJsonObject &report) const
     {
-        if (!paths.sessionReport.isEmpty())
-            sessionReports.post([path = paths.sessionReport,
-                                 report] { return storage::writeJson(path, report); },
-                                {});
+        if (!paths.sessionReport.isEmpty()
+            && !sessionReports.tryPost(
+                    [path = paths.sessionReport, report] { return storage::writeJson(path, report); }))
+            diagnostic("session-report-worker-unavailable", {}, DiagnosticSeverity::Warning);
     }
 
     AssetBundle assets{ QStringLiteral(KOBALT_CONFIG_DIR "/assets"), QStringLiteral(KOBALT_VERSION),

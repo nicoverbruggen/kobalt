@@ -1,14 +1,33 @@
 #include "storage/record_writer.h"
+#include "storage/profile_database.h"
+#include "storage/reader_storage.h"
+#include <QFile>
+#include <QTemporaryDir>
 #include <atomic>
 #include <condition_variable>
 #include <cstdio>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <system_error>
 #include <thread>
 #include "check.h"
 
 using kobalt::storage::RecordWriter;
+
+namespace {
+int rejectedStarts = 0;
+}
+
+namespace kobalt::storage::test {
+void beforeWriterStart()
+{
+    if (rejectedStarts > 0) {
+        --rejectedStarts;
+        throw std::system_error(std::make_error_code(std::errc::resource_unavailable_try_again));
+    }
+}
+} // namespace kobalt::storage::test
 
 namespace {
 // Holds the writer thread inside a write until the test opens it.
@@ -70,11 +89,99 @@ RecordWriter::Write record(Log &log, const std::string &name, bool result = true
         return result;
     };
 }
+void checkLaunchFailure()
+{
+    using namespace kobalt::storage;
+    rejectedStarts = 5;
+    int calls = 0;
+    require(!tryRunOnWriterThread([&] { ++calls; }), "Rejected call ran");
+    {
+        RecordWriter writer;
+        require(!writer.tryPost([&] {
+                    ++calls;
+                    return true;
+                }),
+                "Rejected write was queued");
+        require(writer.idle(), "Unstarted writer kept a pending write");
+    }
+
+    QTemporaryDir profile;
+    require(profile.isValid(), "Cannot create startup profile fixture");
+    const Paths paths{ profile.path() };
+    const auto original = QByteArrayLiteral(R"({"dark_mode":true})");
+    {
+        QFile preferences(paths.preferences());
+        require(preferences.open(QIODevice::WriteOnly)
+                        && preferences.write(original) == original.size(),
+                "Cannot seed legacy preferences");
+    }
+    const auto normalized = readPreferences(paths.preferences());
+    require(normalized.status == ReadStatus::Ok && normalized.object.value("dark_mode").toBool()
+                    && normalized.object.value("schema").toInt() == 1,
+            "Rejected cleanup lost normalized preferences");
+    {
+        QFile preferences(paths.preferences());
+        require(preferences.open(QIODevice::ReadOnly) && preferences.readAll() == original,
+                "Rejected cleanup changed the legacy file");
+    }
+    {
+        QFile database(paths.database());
+        require(database.open(QIODevice::WriteOnly), "Cannot create database placeholder");
+    }
+    QString error;
+    require(inspectProfileDatabase(paths.directory, &error) == ProfileDatabaseState::Unavailable
+                    && error == "profile-writer-unavailable",
+            "Rejected inspection did not report unavailable storage");
+
+    try {
+        runOnWriterThread([&] { ++calls; });
+        require(false, "Required call hid its launch error");
+    } catch (const std::system_error &error) {
+        require(error.code() == std::errc::resource_unavailable_try_again,
+                "Required call changed its launch error");
+    }
+    require(rejectedStarts == 0 && calls == 0, "A rejected operation ran");
+
+    RecordWriter writer;
+    Gate firstRequest;
+    std::atomic_bool blocked{ false };
+    // A first submission races the USB gate. The worker must see the gate
+    // set by the unstarted drain before it executes the accepted operation.
+    std::thread submit([&] {
+        firstRequest.awaitEntered();
+        firstRequest.release();
+        require(writer.tryPost([&] {
+                    require(onWriterThread(), "Retried write used the submitting thread");
+                    require(blocked.load(), "First operation ran before the export gate was set");
+                    ++calls;
+                    return true;
+                }),
+                "Rejected startup could not retry");
+    });
+    require(!drainWriterThread([&] {
+                firstRequest.wait();
+                blocked = true;
+            }),
+            "Unstarted drain reported a worker");
+    submit.join();
+    require(writer.flush() && calls == 1, "Retried startup ran lost or rejected work");
+    try {
+        tryRunOnWriterThread([] { throw std::system_error(std::make_error_code(std::errc::io_error)); });
+        require(false, "Accepted operation hid its own exception");
+    } catch (const std::system_error &error) {
+        require(error.code() == std::errc::io_error, "Accepted operation changed its exception");
+    }
+    readPreferences(paths.preferences());
+    QFile preferences(paths.preferences());
+    require(preferences.open(QIODevice::ReadOnly) && preferences.readAll() != original,
+            "Accepted cleanup did not persist normalized preferences");
+}
 } // namespace
 
 // Checks record writers: queue order, replaced waiting writes, synchronous writes, cancellation, destruction and time limits.
 int main()
 {
+    checkLaunchFailure();
     {
         // Writers share one thread. Writes run in the order their writers
         // were queued; a writer posting again while it runs goes to the back.

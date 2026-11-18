@@ -30,6 +30,7 @@
 #include <deque>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <system_error>
 #include <thread>
 #include <unistd.h>
 
@@ -89,6 +90,7 @@ struct Entry
 std::deque<Entry> &queue = *new std::deque<Entry>;
 QWaitCondition &wake = *new QWaitCondition, &idle = *new QWaitCondition;
 bool writerStarted = false, writing = false, forceFlush = false;
+bool writerStartDeferred = false;
 qint64 firstPending = 0, lastInput = 0;
 void addMemory(QJsonObject &fields);
 
@@ -192,22 +194,24 @@ void append(const QString &name, const QByteArray &bytes, bool sync, qint64 file
     takeDescriptorReserve();
 }
 
-void enqueue(Entry entry)
+bool enqueue(Entry entry)
 {
     if (queue.size() >= queueLimit)
-        return;
+        return false;
     if (queue.empty())
         firstPending = monotonicMilliseconds();
     queue.push_back(std::move(entry));
+    return true;
 }
 
 // Called with the mutex held. No formatting, sampling or I/O holds it.
-void startWriter()
+bool startWriter()
 {
     if (writerStarted)
-        return;
-    writerStarted = true;
-    std::thread([] {
+        return true;
+    if (writerStartDeferred)
+        return false;
+    const auto run = [] {
         QMutexLocker lock(&mutex);
         qint64 lastMemory = 0;
         QString contextPath;
@@ -332,11 +336,22 @@ void startWriter()
                 idle.wakeAll();
             }
         }
-    }).detach();
+    };
+    std::thread worker;
+    try {
+        worker = std::thread(run);
+    } catch (const std::system_error &) {
+        return false;
+    }
+    worker.detach();
+    writerStarted = true;
+    return true;
 }
 
 bool drain(int milliseconds)
 {
+    if (!startWriter())
+        return false;
     // A queued boundary also syncs bytes from earlier unsynced batches when
     // the queue is empty. All file access remains on the writer thread.
     if (fileWrites && !logPath.isEmpty()) {
@@ -351,7 +366,6 @@ bool drain(int milliseconds)
         enqueue(std::move(boundary));
     }
     forceFlush = true;
-    startWriter();
     wake.wakeAll();
     QElapsedTimer timer;
     timer.start();
@@ -492,8 +506,14 @@ void pauseDiagnostics(bool value)
         mainthread::blocking("diagnostic-log-flush");
     QMutexLocker lock(&mutex);
     paused = value;
-    if (value)
-        drain(-1);
+    if (value) {
+        // A failed pre-USB drain must not write to storage during export.
+        writerStartDeferred = !drain(-1);
+    } else if (writerStartDeferred) {
+        writerStartDeferred = false;
+        if (!queue.empty() && startWriter())
+            wake.wakeAll();
+    }
 }
 
 bool diagnosticsActive()
@@ -550,33 +570,37 @@ void diagnosticInput()
 void sampleDiagnosticMemory(std::function<void(QJsonObject)> done)
 {
     QMutexLocker lock(&mutex);
-    if (!done || queue.size() >= queueLimit)
+    if (!done)
         return;
-    if (queue.empty())
-        firstPending = monotonicMilliseconds();
-    queue.push_front({ {},
-                       {},
-                       {},
-                       DiagnosticSeverity::Activity,
-                       0,
-                       0,
-                       -1,
-                       0,
-                       false,
-                       normalLimit,
-                       false,
-                       1,
-                       std::move(done) });
-    startWriter();
-    wake.wakeAll();
+    if (queue.size() < queueLimit) {
+        if (queue.empty())
+            firstPending = monotonicMilliseconds();
+        queue.push_front({ {},
+                           {},
+                           {},
+                           DiagnosticSeverity::Activity,
+                           0,
+                           0,
+                           -1,
+                           0,
+                           false,
+                           normalLimit,
+                           false,
+                           1,
+                           std::move(done) });
+    }
+    // Keep the owned callback queued if the worker cannot start yet.
+    if (startWriter())
+        wake.wakeAll();
 }
 
 bool diagnosticTask(std::function<void()> task)
 {
     QMutexLocker lock(&mutex);
-    if (!task || queue.size() >= queueLimit)
+    if (!task)
         return false;
-    enqueue({ {},
+    const bool queued = enqueue(
+            { {},
               {},
               {},
               DiagnosticSeverity::Activity,
@@ -590,9 +614,9 @@ bool diagnosticTask(std::function<void()> task)
               1,
               {},
               std::move(task) });
-    startWriter();
-    wake.wakeAll();
-    return true;
+    if (startWriter())
+        wake.wakeAll();
+    return queued;
 }
 
 void setDiagnosticsMarker(const QString &profile)
@@ -688,10 +712,10 @@ QString diagnosticLogPath()
 bool sampleDiagnostics(std::function<void()> sample)
 {
     QMutexLocker lock(&mutex);
-    if (!sample || paused || (!detailed && !observer) || logPath.isEmpty()
-        || queue.size() >= queueLimit)
+    if (!sample || paused || (!detailed && !observer) || logPath.isEmpty())
         return false;
-    enqueue({ {},
+    const bool queued = enqueue(
+            { {},
               {},
               {},
               DiagnosticSeverity::Activity,
@@ -705,9 +729,9 @@ bool sampleDiagnostics(std::function<void()> sample)
               1,
               {},
               std::move(sample) });
-    startWriter();
-    wake.wakeAll();
-    return true;
+    if (startWriter())
+        wake.wakeAll();
+    return queued;
 }
 
 void markMemoryBase()
@@ -772,8 +796,8 @@ void diagnostic(const char *event, QJsonObject fields, DiagnosticSeverity severi
             notify = observer;
             if (fileWrites) {
                 enqueue(entry);
-                startWriter();
-                wake.wakeAll();
+                if (startWriter())
+                    wake.wakeAll();
             }
         }
     }

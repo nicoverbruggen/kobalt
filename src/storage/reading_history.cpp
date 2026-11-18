@@ -193,7 +193,6 @@ bool ReadingHistory::save(bool background)
         return true;
     if (!writer)
         writer = std::make_unique<storage::RecordWriter>();
-    posted = generation;
     const auto pending = snapshot();
     auto write = [directory = directory, pending] {
         bool ok = false;
@@ -206,9 +205,11 @@ bool ReadingHistory::save(bool background)
     };
     if (background) {
         writer->post(std::move(write), {});
+        posted = generation;
         return true;
     }
     const bool ok = writer->writeNow(std::move(write));
+    posted = generation;
     acknowledge();
     return ok;
 }

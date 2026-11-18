@@ -9,11 +9,17 @@
 #include <exception>
 #include <mutex>
 #include <pthread.h>
+#include <system_error>
 #include <thread>
 #include <time.h>
 #include <utility>
 
 namespace kobalt::storage {
+#ifdef KOBALT_TEST_WRITER_START
+namespace test {
+void beforeWriterStart();
+}
+#endif
 namespace {
 // A background write that has waited this long runs before further calls, so
 // a run of reads cannot hold it back.
@@ -69,6 +75,7 @@ private:
 class WriterThread
 {
 public:
+    enum class LaunchFailure { Throw, Report };
     // Never destroyed, so no writer outlives its lock at process exit.
     static WriterThread &instance()
     {
@@ -79,33 +86,41 @@ public:
     bool current()
     {
         std::lock_guard<std::mutex> lock(mutex);
-        return started && std::this_thread::get_id() == runner;
+        return std::this_thread::get_id() == worker.get_id();
     }
 
-    void call(const std::function<void()> &operation)
+    bool call(const std::function<void()> &operation, LaunchFailure launchFailure)
     {
         if (current()) {
             operation();
-            return;
+            return true;
         }
         mainthread::BlockingOperation blockingOperation("profile-database");
         Call request{ operation };
         std::unique_lock<std::mutex> lock(mutex);
+        if (!start(launchFailure))
+            return false;
         calls.push_back(&request);
-        start();
         wake.notifyAll();
         finished.wait(lock, [&request] { return request.done; });
         lock.unlock();
         if (request.error)
             std::rethrow_exception(request.error);
+        return true;
     }
 
-    void drain()
+    bool drain(const std::function<void()> &whenUnstarted)
     {
         mainthread::BlockingOperation blockingOperation("profile-database-drain");
         std::unique_lock<std::mutex> lock(mutex);
         assertNotRunner();
+        if (!worker.joinable()) {
+            if (whenUnstarted)
+                whenUnstarted();
+            return false;
+        }
         finished.wait(lock, [this] { return queue.empty() && calls.empty() && !busy; });
+        return true;
     }
 
     void remove(RecordWriter *writer)
@@ -115,10 +130,13 @@ public:
         finished.wait(lock, [writer] { return !writer->running && !writer->pending; });
     }
 
-    void post(RecordWriter *writer, RecordWriter::Write write, RecordWriter::Done done)
+    bool post(RecordWriter *writer, RecordWriter::Write write, RecordWriter::Done done,
+              LaunchFailure launchFailure)
     {
         {
             std::lock_guard<std::mutex> lock(mutex);
+            if (!start(launchFailure))
+                return false;
             if (writer->pending && writer->delivery == RecordWriter::Delivery::Latest) {
                 auto pending = std::find_if(queue.begin(), queue.end(), [writer](const Job &job) {
                     return job.owner == writer;
@@ -130,9 +148,9 @@ public:
                                   std::chrono::steady_clock::now() });
                 ++writer->pending;
             }
-            start();
         }
         wake.notifyAll();
+        return true;
     }
 
     void cancel(RecordWriter *writer)
@@ -182,18 +200,25 @@ private:
     };
 
     // Called with the mutex held.
-    void start()
+    bool start(LaunchFailure launchFailure)
     {
-        if (started)
-            return;
-        started = true;
-        std::thread thread([this] { run(); });
-        runner = thread.get_id();
-        thread.detach();
+        if (worker.joinable())
+            return true;
+        try {
+#ifdef KOBALT_TEST_WRITER_START
+            test::beforeWriterStart();
+#endif
+            worker = std::thread([this] { run(); });
+        } catch (const std::system_error &) {
+            if (launchFailure == LaunchFailure::Throw)
+                throw;
+            return false;
+        }
+        return true;
     }
 
     // A write or its callback that waits for the thread would wait for itself.
-    void assertNotRunner() const { assert(!started || std::this_thread::get_id() != runner); }
+    void assertNotRunner() const { assert(std::this_thread::get_id() != worker.get_id()); }
 
     bool backgroundFirst() const
     {
@@ -257,8 +282,9 @@ private:
     Condition wake, finished;
     std::deque<Job> queue;
     std::deque<Call *> calls;
-    bool started = false, busy = false;
-    std::thread::id runner;
+    bool busy = false;
+    // The process-lifetime singleton keeps the worker joinable.
+    std::thread worker;
 };
 
 RecordWriter::RecordWriter(Delivery delivery) : delivery(delivery) { }
@@ -271,7 +297,14 @@ RecordWriter::~RecordWriter()
 
 void RecordWriter::post(Write write, Done done)
 {
-    WriterThread::instance().post(this, std::move(write), std::move(done));
+    WriterThread::instance().post(this, std::move(write), std::move(done),
+                                  WriterThread::LaunchFailure::Throw);
+}
+
+bool RecordWriter::tryPost(Write write)
+{
+    return WriterThread::instance().post(this, std::move(write), {},
+                                         WriterThread::LaunchFailure::Report);
 }
 
 void RecordWriter::cancel()
@@ -285,7 +318,8 @@ bool RecordWriter::writeNow(Write write)
     mainthread::BlockingOperation blockingOperation("record-writer-write");
     bool saved = false;
     WriterThread::instance().post(this, std::move(write),
-                                  [&saved](bool result) { saved = result; });
+                                  [&saved](bool result) { saved = result; },
+                                  WriterThread::LaunchFailure::Throw);
     WriterThread::instance().flush(this, -1);
     return saved;
 }
@@ -303,7 +337,12 @@ bool RecordWriter::idle() const
 
 void runOnWriterThread(const std::function<void()> &operation)
 {
-    WriterThread::instance().call(operation);
+    WriterThread::instance().call(operation, WriterThread::LaunchFailure::Throw);
+}
+
+bool tryRunOnWriterThread(const std::function<void()> &operation)
+{
+    return WriterThread::instance().call(operation, WriterThread::LaunchFailure::Report);
 }
 
 bool onWriterThread()
@@ -311,8 +350,8 @@ bool onWriterThread()
     return WriterThread::instance().current();
 }
 
-void drainWriterThread()
+bool drainWriterThread(const std::function<void()> &whenUnstarted)
 {
-    WriterThread::instance().drain();
+    return WriterThread::instance().drain(whenUnstarted);
 }
 } // namespace kobalt::storage

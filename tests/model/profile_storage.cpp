@@ -90,6 +90,23 @@ int main(int argc, char **argv)
     QTemporaryDir root;
     require(root.isValid(), "Temporary profile");
     {
+        QTemporaryDir usbRoot;
+        require(usbRoot.isValid(), "Temporary USB profile");
+        const storage::Paths paths{ usbRoot.path() };
+        storage::closeProfile(true);
+        storage::closeProfile();
+        require(!storage::drainWriterThread(), "Closing an unused profile started the worker");
+        QString error;
+        const auto transaction = [](QSqlDatabase &) { return true; };
+        require(!storage::profileTransaction(paths.directory, transaction, &error)
+                        && error == "storage-unavailable" && !QFileInfo::exists(paths.database()),
+                "First database use during USB export accessed the profile");
+        storage::reopenProfile();
+        require(storage::profileTransaction(paths.directory, transaction, &error),
+                "First database use after USB disconnect failed");
+        storage::closeProfile();
+    }
+    {
         QTemporaryDir batchRoot;
         const storage::Paths batch{ batchRoot.path() };
         const QJsonObject oldBook{ { "schema", 1 },

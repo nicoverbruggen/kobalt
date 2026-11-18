@@ -452,7 +452,8 @@ JsonRead readPreferences(const QString &path)
         // A different preference may have changed since this thread read the
         // old format. Migrate the file the profile worker actually finds.
         if (!onWriterThread()) {
-            runOnWriterThread([&] { clean = readPreferences(path); });
+            if (!tryRunOnWriterThread([&] { clean = readPreferences(path); }))
+                diagnostic("settings-cleanup-unsaved", {}, DiagnosticSeverity::Error);
             return clean;
         }
         if (!writeJson(path, clean.object))

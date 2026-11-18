@@ -170,13 +170,15 @@ void Reader::buildKosyncPage()
         if (syncCoordinator->busy())
             return;
         const auto server = kosyncPage->server(), username = kosyncPage->username();
-        const auto password = kosyncPage->takePassword();
-        if (!kosync::validLogin(server, username, password)) {
-            kosyncStatus(strings::get("kosync.invalid_account"));
+        const auto password = kosyncPage->password();
+        const auto error = kosync::loginError(server, username, password);
+        if (!error.isEmpty()) {
+            kosyncStatus(error);
             return;
         }
         syncCoordinator->login(server, username, password, [this, account](const QString &error) {
             if (error.isEmpty()) {
+                kosyncPage->clearPassword();
                 ++kosyncChoiceEpoch;
                 kosyncPositionFailed = false;
                 kosyncPromptDeferred = false;
@@ -189,6 +191,7 @@ void Reader::buildKosyncPage()
     kosyncPage->logoutRequested = [this, account] {
         cancelKosync();
         if (kosyncClient->logout()) {
+            kosyncPage->clearPassword();
             syncCoordinator->resetProgress();
             kosyncPositionFailed = false;
             kosyncPromptDeferred = false;

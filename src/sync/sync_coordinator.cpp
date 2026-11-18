@@ -207,7 +207,7 @@ void SyncCoordinator::cancel(bool keepConnection)
         network_->cancel();
     if (!keepConnection)
         releaseConnection();
-    connecting_ = authenticating_ = false;
+    connecting_ = authenticating_ = uploading_ = false;
     client_.cancel();
     deadline_.stop();
     readerRetry_.stop();
@@ -232,6 +232,7 @@ void SyncCoordinator::releaseConnection()
 
 void SyncCoordinator::complete(const QString &message, bool interactiveConnectionFailed)
 {
+    uploading_ = false;
     readerRetry_.stop();
     readerReady_ = {};
     if (context().queueSyncTime)
@@ -261,7 +262,9 @@ void SyncCoordinator::complete(const QString &message, bool interactiveConnectio
 void SyncCoordinator::flush(bool enabled, Done done)
 {
     QPointer<SyncCoordinator> guard(this);
-    if (connecting_ || authenticating_ || readerReady_) {
+    // A progress read can wait for the reader to settle. Start a fresh read
+    // for the final exchange, which can finish even while the reader hides.
+    if (connecting_ || authenticating_ || readerReady_ || (client_.busy() && !uploading_)) {
         cancel(true);
         if (!guard)
             return;
@@ -291,7 +294,7 @@ void SyncCoordinator::flush(bool enabled, Done done)
     deadline_.start(finishBudget);
     // Aborting an older PUT cannot prove that the server stopped its write.
     // Let it finish before the final read/write exchange, under one budget.
-    flushWaiting_ = client_.busy();
+    flushWaiting_ = uploading_;
     if (!flushWaiting_)
         exchange(true);
 }
@@ -368,6 +371,7 @@ void SyncCoordinator::exchange(bool finalUpload)
                                                       : "kosync.storage_error"));
                         return;
                     }
+                    uploading_ = true;
                     client_.push(
                             document, local, metadata,
                             [this, guard, epoch, local](const QString &error) {

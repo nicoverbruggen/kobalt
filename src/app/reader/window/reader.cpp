@@ -770,6 +770,7 @@ void Reader::sleepReader()
     hideKosyncOpening();
     if (kosyncPage) {
         kosyncPage->dismissEditor();
+        kosyncPage->clearPassword();
         kosyncPage->setStatus(kosyncMessage, false);
     }
     kosyncStarted = false;

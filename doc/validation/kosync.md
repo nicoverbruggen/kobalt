@@ -12,9 +12,11 @@ These checks cover KOSync accounts, automatic and manual sync, sync moments and 
 | `model.sync-coordinator` | Book-scoped attempts, late connection answers, hidden readiness, final-upload handoffs and the reader's document metadata in uploads, without a reader window |
 | `desktop.syncChoiceView` | The choice's scales and their thresholds, the jump label, chapter starts and parents in nested contents, and the sync time text, with a long synthetic book |
 | `desktop.kosyncChoice` | The real asynchronous forward, backward and longer forward choice: titles, actions and focus, the scale, view height, visible bounds and card fit across gallery viewports and text scales |
-| `component.kosync-ui` | The KOSync Settings tab with the Send document metadata checkbox, the Automatic sync sheet, the password editor and the sync notice |
+| `component.kosync-ui` | The KOSync Settings tab with the Send document metadata checkbox, the Automatic sync sheet, the password editor, late editor callbacks and the sync notice |
 | `platform.native-sync-network` | The Kobo connection controller, Wi-Fi release, the Kobo side of the Wi-Fi power saver and the hold on Nickel's background connections |
 | `lifecycle.kosyncAccountGating` | No sync work without a usable account, and the toolbar sync button |
+| `lifecycle.kosyncSignInValidation` | Missing password, retries with retained drafts after a failed sign-in, unchanged account edits, and clearing the draft on sign-in and sign-out |
+| `lifecycle.kosyncPasswordSleep` | Sleep dismisses the editor and clears its draft before wake |
 | `lifecycle.kosyncBackgroundWifi` | Periodic syncs and their silent Wi-Fi connection |
 | `lifecycle.kosyncWifiRelease` | Which syncs release their Wi-Fi request when they end |
 | `lifecycle.kosyncMoments` | Each sync moment switched off |
@@ -90,7 +92,7 @@ These checks do not exercise physical radio drivers, real firmware dialogs or Ni
 
 `kosync-network-unavailable` records a fixed `kosync.no_connection` code, guidance and a `preparation`, `periodic` or `final` stage when no connection is available. This event does not imply an HTTP request was sent. A connection preparation deadline uses `kosync.connection_timeout` in `kosync-deadline`. The manual connection, network, moments and background Wi-Fi lifecycle checks cover these messages and the absence of HTTP traffic.
 
-The sync coordinator owns request cancellation, deadlines, waiting responses, connection release and the final-upload handoff for one opened book. The reader supplies progress and readiness values and retains scheduling, lifecycle eligibility and presentation. A final attempt waits for an older upload under the same two-second deadline. Cancelling or destroying the coordinator drops late connection answers. A repeated connection answer cannot restart the read, and a second attempt is refused while one is active. Observer callbacks may cancel or destroy the coordinator; no further request or final callback reaches that owner. Hidden reading state retains a fetched response without polling; resuming uses the settled local position without repeating the fetch.
+The sync coordinator owns request cancellation, deadlines, waiting responses, connection release and the final-upload handoff for one opened book. The reader supplies progress and readiness values and retains scheduling, lifecycle eligibility and presentation. A final attempt replaces an older progress read and waits for any older upload under the same two-second deadline. Cancelling or destroying the coordinator drops late connection answers. A repeated connection answer cannot restart the read, and a second attempt is refused while one is active. Observer callbacks may cancel or destroy the coordinator; no further request or final callback reaches that owner. Hidden reading state retains a fetched response without polling; resuming uses the settled local position without repeating the fetch.
 
 ## Android pause and retries
 

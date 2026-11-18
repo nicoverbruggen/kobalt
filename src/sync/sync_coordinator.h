@@ -58,7 +58,7 @@ public:
     bool login(const QString &server, const QString &username, const QString &password,
                Client::Done done);
     // The owner decides eligibility. Only an existing connection may be used.
-    // An older HTTP request finishes before the final read/write exchange starts.
+    // An older upload finishes before the final read/write exchange starts.
     // The same deadline covers that wait and the exchange. Cancel drops done.
     void flush(bool enabled, Done done);
     void cancel();
@@ -92,7 +92,7 @@ private:
     Reconciler progress_;
     Done readerReady_, finished_;
     quint64 epoch_ = 0;
-    bool connecting_ = false, authenticating_ = false, finishing_ = false;
+    bool connecting_ = false, authenticating_ = false, uploading_ = false, finishing_ = false;
     bool flushWaiting_ = false, releaseWifi_ = false, retryRead_ = false;
     int backgroundFailures_ = 0;
 

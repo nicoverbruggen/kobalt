@@ -19,7 +19,8 @@ bool profileTransaction(const QString &directory,
 // Waits for waiting writes, then folds the log into the main file, returns it
 // to a rollback journal and closes it. With `keepClosed`, every operation
 // fails until reopenProfile(), for example while USB storage is exported or
-// the device powers off.
+// the device powers off. An unused profile can be blocked before its first
+// database operation without starting the writer thread.
 void closeProfile(bool keepClosed = false);
 void reopenProfile();
 // Whether the profile database in `directory` opens. Incompatible is a Kobalt

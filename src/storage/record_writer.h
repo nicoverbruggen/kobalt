@@ -26,6 +26,8 @@ public:
     ~RecordWriter();
     // `done` runs on the writer thread with the result of `write`.
     void post(Write write, Done done);
+    // Posts optional work without a completion. False if the worker could not start.
+    bool tryPost(Write write);
     // Drops a pending write and waits for a running one. A synchronous write
     // that follows cannot then be overwritten by an older one.
     void cancel();
@@ -47,7 +49,11 @@ private:
 // thread itself it runs at once. An exception from `operation` reaches the
 // caller.
 void runOnWriterThread(const std::function<void()> &operation);
+// False if the worker could not start. Exceptions from operation still reach the caller.
+bool tryRunOnWriterThread(const std::function<void()> &operation);
 bool onWriterThread();
-// Waits until no write or call is waiting or running on the writer thread.
-void drainWriterThread();
+// Waits for accepted work. If the thread has never started, runs whenUnstarted
+// before any caller can start it and returns false. The callback holds the
+// writer mutex and must not submit work.
+bool drainWriterThread(const std::function<void()> &whenUnstarted = {});
 } // namespace kobalt::storage

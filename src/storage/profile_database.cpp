@@ -582,7 +582,7 @@ bool guarded(QString *error, const std::function<void()> &operation)
 {
     bool ok = false;
     const bool routine = Profile::routineWrite;
-    storage::runOnWriterThread([&] {
+    const bool dispatched = storage::tryRunOnWriterThread([&] {
         struct Restore
         {
             bool previous;
@@ -598,6 +598,8 @@ bool guarded(QString *error, const std::function<void()> &operation)
                 *error = failure.code;
         }
     });
+    if (!dispatched && error)
+        *error = QStringLiteral("profile-writer-unavailable");
     return ok;
 }
 } // namespace storage::profile
@@ -617,12 +619,18 @@ bool profileTransaction(const QString &directory,
 
 void closeProfile(bool keepClosed)
 {
-    drainWriterThread();
-    runOnWriterThread([keepClosed] {
-        Profile::instance().close();
+    const auto blockIfRequested = [keepClosed] {
         if (keepClosed)
             profileBlocked = true;
-    });
+    };
+    // USB can arrive before the first database operation. There is no handle
+    // to close then, but a later first open must still see the export block.
+    if (drainWriterThread(blockIfRequested)) {
+        runOnWriterThread([&] {
+            Profile::instance().close();
+            blockIfRequested();
+        });
+    }
 }
 
 void reopenProfile()
@@ -681,14 +689,19 @@ void requestProfileCheckpoint()
 {
     if (profileCheckpointRunning.exchange(true))
         return;
-    // Never destroyed: a checkpoint can be requested until the process ends.
-    static auto *writer = new RecordWriter;
-    writer->post(
-            [] {
-                Profile::instance().checkpoint(false);
-                return true;
-            },
-            [](bool) { profileCheckpointRunning = false; });
+    try {
+        // Never destroyed: a checkpoint can be requested until the process ends.
+        static auto *writer = new RecordWriter;
+        writer->post(
+                [] {
+                    Profile::instance().checkpoint(false);
+                    return true;
+                },
+                [](bool) { profileCheckpointRunning = false; });
+    } catch (...) {
+        profileCheckpointRunning = false;
+        throw;
+    }
 }
 
 bool profileCheckpointPending()

@@ -1611,7 +1611,8 @@ int main(int argc, char **argv)
             waitUntil([&] { return !book.session()->busy(); });
             book.observeReading();
             require(book.checkpoint(&snapshot, true), "Native history routine checkpoint");
-            storage::drainWriterThread();
+            // The writer posts its checkpoint completion to this thread.
+            waitUntil([&] { return !book.savesPending(); });
         }
         require(calls.observed == 4, "History displaced native activity reporting");
         require(historyValue("SELECT COUNT(*) FROM native_history_audit").toInt() == 0,

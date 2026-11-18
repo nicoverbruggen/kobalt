@@ -32,7 +32,9 @@ public:
 
     QString username() const { return username_; }
 
-    QString takePassword();
+    QString password() const { return password_; }
+
+    void clearPassword();
     void dismissEditor();
     QPointer<ui::ModalOverlay> editorDialog;
     std::function<void()> loginRequested, logoutRequested, syncRequested;

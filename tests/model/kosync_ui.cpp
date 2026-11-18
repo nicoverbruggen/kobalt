@@ -181,7 +181,7 @@ void checkKeyboardInputStaysInEditor()
                             "typing while locked keeps the lock icon");
                     dialog->findChild<QPushButton *>("rrKosyncEditSave")->click();
                     QApplication::processEvents();
-                    require(page.takePassword() == "QwQW",
+                    require(page.password() == "QwQW",
                             "saving passes the exact mixed-case password to the account owner");
                     page.findChild<QPushButton *>(field)->click();
                     dialog = page.editorDialog.data();
@@ -635,10 +635,11 @@ int main(int argc, char **argv)
     page->editorDialog->findChild<QPushButton *>("rrKosyncEditCancel")->click();
     QApplication::processEvents();
     QString submitted;
-    page->loginRequested = [&] { submitted = page->takePassword(); };
+    page->loginRequested = [&] { submitted = page->password(); };
     login->click();
-    require(submitted == "private-test-password" && page->takePassword().isEmpty(),
-            "login consumes and clears password");
+    require(submitted == "private-test-password" && page->password() == submitted,
+            "sign-in reads the exact password and leaves the draft for a retry");
+    page->clearPassword();
     page->setAccount("https://sync.example/prefix", "reader", true, true);
     require(automatic->isEnabled() && sync->isEnabled() && logout->isEnabled(),
             "signed-in account enables sync controls");
@@ -984,18 +985,40 @@ int main(int argc, char **argv)
     QApplication::processEvents();
     password->click();
     require(page->editorDialog, "signed-out password editor opens");
+    page->editorDialog->findChild<QLineEdit *>("rrKosyncInput")->setText("draft-password");
+    keyboard->submitted();
+    QApplication::processEvents();
+    require(page->password() == "draft-password", "keeping a draft does not sign in");
+    password->click();
     panel.settingsPages->setCurrentIndex(int(reader::SettingsPage::Display));
-    require(!page->editorDialog && page->takePassword().isEmpty(),
+    require(!page->editorDialog && page->password().isEmpty(),
             "leaving Sync dismisses keyboard and clears secrets");
     tab->click();
     server->click();
     editor = page->editorDialog->findChild<QLineEdit *>("rrKosyncInput");
     require(editor->text() == "https://", "a cleared account prefills the server scheme again");
+    const QPointer<QLineEdit> previous(editor);
     keyboard->submitted();
-    QApplication::processEvents();
     require(page->server().isEmpty()
                     && dynamic_cast<ui::CaptionButton *>(server)->caption()
                             == strings::get("kosync.not_set"),
             "saving only the prefilled scheme leaves the server unset");
+    // Select a different editor before the previous submission's deferred
+    // dismissal runs, as can happen when returning to Sync.
+    panel.settingsPages->setCurrentIndex(int(reader::SettingsPage::Display));
+    tab->click();
+    password->click();
+    const auto replacement = page->editorDialog;
+    require(replacement && replacement->isVisible(), "the replacement password editor opens");
+    require(previous
+                    && QMetaObject::invokeMethod(previous.data(), "returnPressed",
+                                                 Qt::DirectConnection),
+            "the previous editor can deliver a duplicate Return before deletion");
+    require(replacement && replacement->isVisible(),
+            "Return from the previous editor leaves its replacement open");
+    QApplication::processEvents();
+    require(replacement && page->editorDialog == replacement && replacement->isVisible(),
+            "deferred dismissal of the server editor leaves its replacement open");
+    replacement->findChild<QPushButton *>("rrKosyncEditCancel")->click();
     return 0;
 }

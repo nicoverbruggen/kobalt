@@ -40,7 +40,9 @@ if(KOBALT_QT_MAJOR EQUAL 5)
     file(GLOB kobo_wifi_idle_sources ${kobo_glob_options}
         "${kobo_directory}/nickel-fixes/wifi-idle/*.cpp"
         "${kobo_directory}/nickel-fixes/wifi-idle/*.h")
-    list(APPEND kobo_adapter_sources ${kobo_wifi_idle_sources})
+    list(APPEND kobo_adapter_sources ${kobo_wifi_idle_sources}
+        "${kobo_directory}/nickel-fixes/wifi-idle/nickelfix/memory.cc"
+        "${kobo_directory}/nickel-fixes/wifi-idle/nickelfix/kepub-reader/detour.cc")
 endif()
 set(kobo_c_sources "${kobo_directory}/common/install.c" "${kobo_directory}/common/startup_recovery.c")
 # NickelHook's loader, linked into the mod library only.

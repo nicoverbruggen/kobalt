@@ -148,6 +148,7 @@ Kobalt's choices exist because of these. From firmware 4.46.23836 and 6.0.279225
 - **Sleep.** Nickel turns Wi-Fi off about 20 seconds after the sleep screen appears (`N3PowerWorkflowManager`).
 - **Firmware 6.** `WifiWatchdog` turns Wi-Fi off when there has been no network activity for 2 minutes. It checks on Nickel's 10-second battery poll.
 - **Firmware 4.** `WirelessWatchdog` needs 2 minutes without network activity and also 15 minutes since the last `BluetoothHeartbeatEvent`. Nickel sends that event when its Bluetooth manager starts and when its own reader opens a book, whether Bluetooth is on or not. So Wi-Fi can stay on for about 15 minutes after start-up or after a book opened in Nickel's reader. Opening a book in Kobalt sends no such event.
+- On Libra 2 firmware 4.38.23852 the battery callback checks both idle times itself. The Qt5 correction retries that callback when Bluetooth is confirmed off and the existing Kobalt Wi-Fi, sync and reader checks allow it. Nickel still decides whether to turn Wi-Fi off.
 - `MaxWifiTimeout` in Nickel's settings is a connection timeout, not an idle timeout.
 
 ## Bluetooth

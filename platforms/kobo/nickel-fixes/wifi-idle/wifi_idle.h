@@ -35,9 +35,14 @@ private:
     bool retrying = false;
 };
 
+bool installInlineIdle();
+void evaluateInlineIdle(QObject *, int, void (*)(QObject *, int));
+extern void (*nativeAttempt)(QObject *);
 extern bool (*nativeWirelessIdlePredicate)(QObject *);
 } // namespace nickel
 } // namespace kobalt
 
 extern "C" __attribute__((visibility("default"))) bool
 kobalt_wireless_idle_predicate(QObject *watchdog);
+
+extern "C" void kobalt_wifi_attempt(QObject *watchdog);

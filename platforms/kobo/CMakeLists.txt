@@ -102,6 +102,7 @@ endforeach()
 
 if(KOBALT_QT_MAJOR EQUAL 5 AND NOT KOBALT_WIFI_IDLE_FIX)
     set_property(SOURCE
+        "${kobo_directory}/nickel-qt5/hooks.cpp"
         "${kobo_directory}/nickel-fixes/wifi-idle/wifi_idle.cpp"
         "${kobo_directory}/nickel-fixes/wifi-idle/wifi_idle_log.cpp"
         APPEND PROPERTY COMPILE_DEFINITIONS KOBALT_WIFI_IDLE_FIX_DISABLED)

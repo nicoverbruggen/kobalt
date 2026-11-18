@@ -1,4 +1,5 @@
 #include "platforms/kobo/nickel-fixes/wifi-idle/wifi_idle.h"
+#include "platforms/kobo/nickel-fixes/wifi-idle/nickelfix/connectivity/heartbeat_scope.h"
 #include "platforms/kobo/common/nickelfix.h"
 #include <QCoreApplication>
 #include <QTemporaryFile>
@@ -109,6 +110,28 @@ void WirelessWatchdog::onBatteryLevel(int)
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
+    {
+        QObject watchdog, unrelated;
+        qint64 heartbeat = 123;
+        {
+            nfx::HeartbeatScope scope(&watchdog, reinterpret_cast<char *>(&heartbeat), 0);
+            nfx::HeartbeatScope::beforeAttempt(&unrelated);
+            check(heartbeat == 0, "an unrelated shutdown must not consume the retry");
+            nfx::HeartbeatScope::beforeAttempt(&watchdog);
+            check(heartbeat == 123, "permission observers must see the real heartbeat");
+            heartbeat = 456;
+        }
+        check(heartbeat == 456, "a callback heartbeat must survive scope exit");
+        {
+            nfx::HeartbeatScope scope(&watchdog, reinterpret_cast<char *>(&heartbeat), 0);
+        }
+        check(heartbeat == 456, "a forceWifiOn veto must restore the timestamp on return");
+        {
+            nfx::HeartbeatScope scope(&watchdog, reinterpret_cast<char *>(&heartbeat), 0);
+            heartbeat = 789;
+        }
+        check(heartbeat == 789, "a newer heartbeat before shutdown must not be overwritten");
+    }
     {
         QTemporaryFile plugin;
         check(plugin.open(), "cannot create plugin fixture");

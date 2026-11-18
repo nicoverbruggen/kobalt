@@ -50,6 +50,10 @@ static int initializeReaderHooks()
         next = reinterpret_cast<decltype(kobalt::nickel::nativeWirelessIdlePredicate)>(
                 nh_dlhook(nickel, "_ZNK16WirelessWatchdog27shouldAttemptToKillWirelessEv",
                           reinterpret_cast<void *>(kobalt_wireless_idle_predicate)));
+#ifndef KOBALT_WIFI_IDLE_FIX_DISABLED
+        if (!next && !dlsym(nickel, "_ZNK16WirelessWatchdog27shouldAttemptToKillWirelessEv"))
+            kobalt::nickel::installInlineIdle();
+#endif
         dlclose(nickel);
     }
     return result;

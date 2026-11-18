@@ -5,6 +5,8 @@
 // Wi-Fi timestamp or its 900-second Bluetooth timestamp is recent, before
 // checking whether either radio is up. BluetoothHeartbeat's constructor posts
 // a heartbeat even when Bluetooth is off. Wi-Fi can therefore wait 15 minutes.
+// On Libra 2 firmware 4.38.23852 both checks are inside onBatteryLevel().
+// Its verified adapter restores the heartbeat before the shutdown permission check.
 // Qt 6 firmware 6.0.279225 has separate WifiWatchdog and BluetoothWatchdog.
 //
 // After an asynchronous, confirmed Bluetooth-off answer, retry Nickel's own
@@ -25,6 +27,7 @@
 // savings, change Wi-Fi policy, or correct any sleep-drain issue.
 #include "wifi_idle.h"
 #include "wifi_idle_log.h"
+#include "nickelfix/connectivity/heartbeat_scope.h"
 #include "sync/kosync.h"
 #include "platforms/kobo/common/native_symbol.h"
 #include "platforms/kobo/common/native_ui.h"
@@ -39,7 +42,10 @@
 #include <cstring>
 #include <utility>
 
+thread_local nfx::HeartbeatScope *nfx::HeartbeatScope::current_ = nullptr;
+
 namespace kobalt::nickel {
+void (*nativeAttempt)(QObject *);
 bool (*nativeWirelessIdlePredicate)(QObject *);
 
 WifiIdleCorrection::WifiIdleCorrection(QObject *watchdog, WifiIdleBindings api)
@@ -145,7 +151,8 @@ bool predicate(QObject *watchdog, bool ignoreBluetooth)
     return nativeWirelessIdlePredicate(watchdog);
 }
 
-[[maybe_unused]] WifiIdleCorrection *correction(QObject *watchdog)
+[[maybe_unused]] WifiIdleCorrection *correction(QObject *watchdog,
+                                                void (*inlineSlot)(QObject *, int) = nullptr)
 {
     if (auto *existing =
                 watchdog->findChild<WifiIdleCorrection *>(QString(), Qt::FindDirectChildrenOnly))
@@ -170,7 +177,9 @@ bool predicate(QObject *watchdog, bool ignoreBluetooth)
         clock.start();
         return clock.msecsSinceReference();
     };
-    api.predicate = [watchdog](bool ignore) { return predicate(watchdog, ignore); };
+    api.predicate = [watchdog, inlineSlot](bool ignore) {
+        return !inlineSlot && predicate(watchdog, ignore);
+    };
     api.blockedByBluetooth = [watchdog, radio, manager, syncManager, up, connecting, syncing] {
         if (!radio || !manager || !syncManager || !up(radio) || connecting(manager)
             || syncing(syncManager) || NativeSyncNetwork::preparing()
@@ -183,7 +192,17 @@ bool predicate(QObject *watchdog, bool ignoreBluetooth)
         return wifi <= now - wifiIdleMs && bluetooth <= now && bluetooth > now - bluetoothIdleMs;
     };
     api.query = queryNativeBluetoothPower;
-    api.retry = [watchdog, battery] {
+    api.retry = [watchdog, battery, inlineSlot] {
+        if (inlineSlot) {
+            // The older slot checks both timestamps before it asks permission.
+            // Restore the real heartbeat before any permission handler runs.
+            nfx::HeartbeatScope heartbeat(
+                    watchdog, reinterpret_cast<char *>(watchdog) + bluetoothTimestampOffset,
+                    QDateTime::currentMSecsSinceEpoch() - bluetoothIdleMs);
+            mainthread::blocking("nickel-wifi-idle");
+            inlineSlot(watchdog, 0);
+            return;
+        }
         // This is Nickel's normal idle shutdown path. Its child-process waits
         // remain visible to the main-thread diagnostic guard.
         mainthread::blocking("nickel-wifi-idle");
@@ -205,7 +224,27 @@ bool predicate(QObject *watchdog, bool ignoreBluetooth)
     return fix;
 }
 } // namespace
+
+void evaluateInlineIdle(QObject *watchdog, int level, void (*slot)(QObject *, int))
+{
+    auto *app = QCoreApplication::instance();
+    if (!watchdog || !app || QThread::currentThread() != app->thread()
+        || watchdog->thread() != app->thread()) {
+        slot(watchdog, level);
+        return;
+    }
+    QPointer<WifiIdleCorrection> fix = correction(watchdog, slot);
+    slot(watchdog, level);
+    if (fix)
+        fix->evaluate();
+}
 } // namespace kobalt::nickel
+
+extern "C" void kobalt_wifi_attempt(QObject *watchdog)
+{
+    nfx::HeartbeatScope::beforeAttempt(watchdog);
+    kobalt::nickel::nativeAttempt(watchdog);
+}
 
 extern "C" bool kobalt_wireless_idle_predicate(QObject *watchdog)
 {

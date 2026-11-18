@@ -2732,6 +2732,11 @@ public:
         return ch_glyph_index;
     }
 
+    bool hasOwnGlyph(lChar32 code) override {
+        FONT_GUARD
+        return getCharIndex(code, 0) != 0;
+    }
+
     /** \brief get glyph info
         \param glyph is pointer to glyph_info_t struct to place retrieved info
         \return true if glyh was found
@@ -5929,6 +5934,7 @@ protected:
 public:
     explicit LVFontProxy(LVFontRef f) : _wrappedRef(f), _font(f.get()) {}
 
+    bool hasOwnGlyph(lChar32 code) override { return _font->hasOwnGlyph(code); }
     virtual bool getGlyphInfo(lUInt32 c, glyph_info_t* g, lChar32 d=0, bool gi=false, bool fb=false)
         { return _font->getGlyphInfo(c, g, d, gi, fb); }
     virtual bool getGlyphExtraMetric(glyph_extra_metric_t m, lUInt32 c, int& v,
@@ -6004,9 +6010,17 @@ class LVFontSmallCapsTransform : public LVFontProxy
         return (lGetCharProps(ch) & CH_PROP_UPPER) != 0;
     }
     void mapChar(lChar32 ch, LVFont*& font, lChar32& mapped) const {
-        if (isLowercase(ch))                  { font = _smallFont; mapped = toUppercase(ch); }
-        else if (_allCaps && isUppercase(ch)) { font = _smallFont; mapped = ch; }
-        else                                   { font = _font;      mapped = ch; }
+        font = _font;
+        mapped = ch;
+        const bool lower = isLowercase(ch);
+        if (lower || (_allCaps && isUppercase(ch))) {
+            const auto upper = lower ? toUppercase(ch) : ch;
+            // Leave missing characters to normal fallback at their original size and case.
+            if (_smallFont->hasOwnGlyph(upper)) {
+                font = _smallFont;
+                mapped = upper;
+            }
+        }
     }
     // Per-character font/glyph mapping, plus buffer for the longest
     // possible run, so consecutive characters routed to the same font can be
@@ -7172,6 +7186,7 @@ class LVFontSelector {
         return best;
     }
 
+public:
     // requested: opsz (font-optical-sizing) and wdth (font-width); wght and
     //            ital/slnt come from the weight/italic parameters.
     // computed:  the full axis set to hand to FreeType, clamped to the face's
@@ -7229,6 +7244,7 @@ class LVFontSelector {
         return computed;
     }
 
+private:
     // Whether a face may be used by the given document/DocFragment at all.
     static bool faceVisible(const LVFontFace& face, int documentId, int docFragmentIdx)
     {
@@ -8471,13 +8487,12 @@ public:
             hb_face_t* hb_face = hb_ft_face_create(ft_face, NULL);
             if (hb_ot_math_has_data(hb_face))
                 def.has_ot_math = true;
-            { // native small-caps ('smcp' GSUB feature); absence triggers synthesis
-                hb_tag_t smcp = HB_TAG('s','m','c','p');
-                unsigned feat_idx = 0;
-                if (hb_ot_layout_language_find_feature(hb_face, HB_OT_TAG_GSUB,
-                        0, HB_OT_LAYOUT_DEFAULT_LANGUAGE_INDEX, smcp, &feat_idx))
-                    def.has_small_caps = true;
-            }
+            // Small caps can be declared under any script, regardless of script order.
+            const hb_tag_t tags[] = { HB_TAG('s','m','c','p'), HB_TAG_NONE };
+            auto *matches = hb_set_create();
+            hb_ot_layout_collect_features(hb_face, HB_OT_TAG_GSUB, nullptr, nullptr, tags, matches);
+            def.has_small_caps = !hb_set_is_empty(matches);
+            hb_set_destroy(matches);
             hb_face_destroy(hb_face);
         }
         #endif
@@ -8628,26 +8643,18 @@ public:
         if (needsSmallCaps) {
             int small_size = (size * 3 + 2) / 4; // ~75%, rounded up
             if (small_size < 1) small_size = 1;
-            // Carry wdth/opsz through verbatim: computeVariations() only honours
-            // `requested` for those two axes. ital/slnt are NOT taken from
-            // `requested` - computeVariations() derives them solely from the
-            // `italic` bool - so pass the original CSS-requested `italic` flag
-            // (not `face.is_italic || italicize`, which is false for axis-based
-            // oblique faces like Acumin's slnt axis) so the small font's selector
-            // pass recomputes the same slant the main face got.
-            LVFontVariations smallVars;
-            if (computed_variations.wdth_set)
-                smallVars.set(LVFONT_TAG_WDTH, computed_variations.wdth);
+            auto smallVars = computed_variations;
             if (computed_variations.opsz_set)
                 smallVars.set(LVFONT_TAG_OPSZ, computed_variations.opsz * 0.75f);
             // Downscaled glyphs lose apparent stroke thickness, so request a bit
             // of extra weight on the small font to compensate.
             int small_weight = weight + 100;
             if (small_weight > 1000) small_weight = 1000;
-            LVFontRef smallRef = GetFont(small_size, small_weight, italic,
-                                         face.css_family, face.typeface,
-                                         features & ~(LFNT_OT_FEATURES_P_SMCP | LFNT_OT_FEATURES_P_C2SC),
-                                         face.documentId, false, smallVars.empty() ? NULL : &smallVars);
+            // Use the selected face. Matching the family again can lose a
+            // chapter-scoped embedded face or choose a different weight face.
+            auto smallRef = fontForFace(face, small_size, small_weight, italic,
+                    features & ~(LFNT_OT_FEATURES_P_SMCP | LFNT_OT_FEATURES_P_C2SC),
+                    _font_selector.computeVariations(face, smallVars, small_weight, italic));
             if (!smallRef.isNull())
                 ref = LVFontRef(new LVFontSmallCapsTransform(ref, smallRef,
                                     (features & LFNT_OT_FEATURES_P_C2SC) != 0));
@@ -8657,13 +8664,34 @@ public:
         return ref;
     }
 
+    LVFontRef fontForFace(const LVFontFace& face, int size, int weight, bool italic,
+                          int features, const LVFontVariations& computed_variations)
+    {
+        int face_size = size;
+        if (face.css_family == css_ff_monospace && GetMonospaceSizeScale() != 100)
+            face_size = size * GetMonospaceSizeScale() / 100;
+
+        LVFontInstanceKey key;
+        key.face_id          = face.id();
+        key.size             = size;
+        key.face_size        = face_size;
+        key.features         = features;
+        key.requested_weight = weight;
+        key.requested_italic = italic;
+        key.computed_variations_hash = computed_variations.hash();
+
+        LVFontRef cached = _instance_cache.get(key);
+        if (!cached.isNull()) return cached;
+
+        return loadAndCache(face, size, face_size, weight, italic, features, computed_variations, key);
+    }
+
     virtual LVFontRef GetFont(int size, int weight, bool italic, css_font_family_t css_family, lString8 typeface,
                                 int features, int documentId, bool useBias=false,
                                 const LVFontVariations* variations=NULL, int docFragmentIdx = -1)
     {
         FONT_MAN_GUARD
 
-        // 1. Select face + synthesis via LVFontSelector.
         LVFontVariations requested = variations ? *variations : LVFontVariations();
         lString8 preferred;
         if (useBias) {
@@ -8678,27 +8706,7 @@ public:
                          typeface.c_str(), weight, (int)italic, (int)css_family);
             return LVFontRef(NULL);
         }
-
-        // 2. Build instance cache key.
-        int face_size = size;
-        if (m.face->css_family == css_ff_monospace && GetMonospaceSizeScale() != 100)
-            face_size = size * GetMonospaceSizeScale() / 100;
-
-        LVFontInstanceKey key;
-        key.face_id          = m.face->id();
-        key.size             = size;
-        key.face_size        = face_size;
-        key.features         = features;
-        key.requested_weight = weight;
-        key.requested_italic = italic;
-        key.computed_variations_hash = m.computed_variations.hash();
-
-        // 3. Return cached instance if available; otherwise load and cache.
-        LVFontRef cached = _instance_cache.get(key);
-        if (!cached.isNull()) return cached;
-
-        return loadAndCache(*m.face, size, face_size, weight, italic,
-                            features, m.computed_variations, key);
+        return fontForFace(*m.face, size, weight, italic, features, m.computed_variations);
     }
 
     bool checkCharSet( FT_Face face )

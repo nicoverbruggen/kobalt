@@ -457,6 +457,7 @@ public:
         \return true if glyh was found
     */
     virtual bool getGlyphInfo( lUInt32 code, glyph_info_t * glyph, lChar32 def_char=0, bool code_is_glyph_index=false, bool is_fallback=false ) = 0;
+    virtual bool hasOwnGlyph(lChar32) { return false; }
 
     /** \brief add glyph SVG path to SVGGlyphsCollector
     */

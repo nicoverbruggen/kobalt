@@ -7,6 +7,7 @@
 
 #include <lvfntman.h>
 #include <lvdrawbuf.h>
+#include <lvstream.h>
 #include <vector>
 
 #include <cstring>
@@ -23,6 +24,53 @@ std::vector<lUInt32> shapedPixels(LVFontRef font, const lString32 &text)
         for (int x = 0; x < buffer.GetWidth(); ++x)
             pixels.push_back(buffer.GetPixel(x, y));
     return pixels;
+}
+
+void embeddedSmallCaps()
+{
+    const auto directory = kobalt::test::readerAssets().file("fonts").toUtf8();
+    const auto fonts = LVOpenDirectory(lString8(directory.constData()));
+    constexpr int document = 71, fragment = 3;
+    const lString8 family("Chapter Display");
+    require(fontMan->RegisterDocumentFont(document, fonts, lString32(U"InstrumentSerif-Regular.ttf"),
+                                          family, 400, css_fwd_normal, false, fragment),
+            "Cannot register scoped embedded font");
+    const auto normal = fontMan->GetFont(64, 400, false, css_ff_serif, family, 0, document, false,
+                                        nullptr, fragment);
+    const auto small = fontMan->GetFont(48, 500, false, css_ff_serif, family, 0, document, false,
+                                       nullptr, fragment);
+    const auto caps = fontMan->GetFont(64, 400, false, css_ff_serif, family, LFNT_OT_FEATURES_P_SMCP,
+                                      document, false, nullptr, fragment);
+    require(!normal.isNull() && !small.isNull() && !caps.isNull() && caps->getTypeFace() == family,
+            "Cannot load embedded small-caps fixture");
+    require(shapedPixels(caps, lString32(U"book")) == shapedPixels(small, lString32(U"BOOK")),
+            "Faux small caps changed the embedded face");
+    require(caps->getTextWidth(U"book", 4) == small->getTextWidth(U"BOOK", 4)
+                    && caps->getTextWidth(U"book", 4) != normal->getTextWidth(U"book", 4),
+            "Faux small-caps layout did not use the smaller embedded capitals");
+    require(shapedPixels(caps, lString32(U"BOOK")) == shapedPixels(normal, lString32(U"BOOK")),
+            "Faux small caps changed full-size capitals");
+    require(shapedPixels(caps, lString32(U"ω")) == shapedPixels(normal, lString32(U"ω")),
+            "Faux small caps changed the fallback for a missing character");
+
+    const lString8 nativeFamily("Book Small Caps");
+    require(fontMan->RegisterDocumentFont(document, fonts, lString32(U"NotoSerif-Regular.ttf"),
+                                          nativeFamily, 400, css_fwd_normal, false, fragment),
+            "Cannot register the embedded native small-caps font");
+    const auto fromNative = fontMan->GetFont(64, 400, false, css_ff_serif, nativeFamily,
+                                             LFNT_OT_FEATURES_P_SMCP, document, false, nullptr,
+                                             fragment);
+    const auto nativeNormal = fontMan->GetFont(64, 400, false, css_ff_serif, nativeFamily, 0,
+                                               document, false, nullptr, fragment);
+    const auto nativeSmall = fontMan->GetFont(48, 500, false, css_ff_serif, nativeFamily, 0,
+                                              document, false, nullptr, fragment);
+    require(!fromNative.isNull() && !nativeNormal.isNull() && !nativeSmall.isNull(),
+            "Cannot load the native small-caps fixture");
+    const auto native = shapedPixels(fromNative, lString32(U"book"));
+    require(native != shapedPixels(nativeNormal, lString32(U"book"))
+                    && native != shapedPixels(nativeSmall, lString32(U"BOOK")),
+            "Embedded OpenType small caps did not use the font's substitutions");
+    fontMan->UnregisterDocumentFonts(document);
 }
 } // namespace
 
@@ -130,5 +178,6 @@ int main(int argc, char **argv)
             "Mathematical symbols fell through to a text or CJK font");
     require(shapedPixels(primary, lString32(U"漢")) == shapedPixels(cjk, lString32(U"漢")),
             "CJK text lost its covering fallback font");
+    embeddedSmallCaps();
     puts("PASS: production fallback styles, Arabic joining, mathematical symbols and CJK text");
 }

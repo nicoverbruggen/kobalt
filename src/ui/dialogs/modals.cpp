@@ -604,10 +604,11 @@ void ModalOverlay::centerCard()
         // Long wrapped descriptions can exceed one page. Use spare landscape
         // width before paging rows, since a single row cannot be split.
         const int availableWidth = width() - 2 * int(metrics::notice::sideClearance);
-        if (cardArea.isEmpty() && room > 0 && content->height() > room && width() > height()
+        if (!fitChoiceContents && cardArea.isEmpty() && room > 0 && content->height() > room
+            && width() > height()
             && content->width() < availableWidth)
             content->fitToWidth(availableWidth);
-        if (cardArea.isEmpty() && room > 0
+        if (!fitChoiceContents && cardArea.isEmpty() && room > 0
             && (content->height() > room || content->property("card_paged").toBool())) {
             content->setProperty("card_paged", true);
             content->fitToHeight(room);
@@ -720,7 +721,9 @@ void ModalOverlay::setDelayedProgress(bool active, qint64 elapsedMilliseconds, i
 
 void ModalOverlay::resizeEvent(QResizeEvent *)
 {
-    if (property("reader_standard_modal").toBool())
+    if (fitChoiceContents)
+        fitChoiceContents();
+    else if (property("reader_standard_modal").toBool())
         fitCard();
     else
         centerCard();

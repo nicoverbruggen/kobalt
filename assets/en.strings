@@ -1426,6 +1426,7 @@
 "reader.lock_landscape" = "Lock landscape";
 
 "reader.both" = "Both";
+"reader.lock_current_rotation" = "Lock current rotation";
 "reader.formatting_warning" = "Formatting warning";
 "reader.formatting_warning_description" = "This page uses unsupported formatting. You can keep reading, but some text or layout may not appear as intended.";
 

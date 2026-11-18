@@ -243,8 +243,10 @@ public:
     SegmentedRow(QWidget *parent, QVBoxLayout *rows, const char *name, const QString &label,
                  const QString &detail = {});
     QPushButton *add(const QString &name, const QString &text = {});
+    void prepend(QWidget *control);
 
 private:
+    QHBoxLayout *row;
     QFrame *frame;
     QHBoxLayout *layout;
     QButtonGroup *group;

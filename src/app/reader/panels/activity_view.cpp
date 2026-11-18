@@ -17,6 +17,7 @@
 #include <QLocale>
 #include <QPainter>
 #include <QPainterPath>
+#include <QRegularExpression>
 #include <QResizeEvent>
 #include <QSet>
 #include <QtMath>
@@ -78,6 +79,13 @@ QString compactDuration(qint64 milliseconds)
 QString plural(const char *one, const char *many, qint64 count)
 {
     return strings::get(count == 1 ? one : many).arg(count);
+}
+
+QString authorCaption(const QString &author)
+{
+    static const QRegularExpression lineBreak(QStringLiteral("\\s*\\R\\s*"),
+                                              QRegularExpression::UseUnicodePropertiesOption);
+    return author.trimmed().toUpper().replace(lineBreak, QStringLiteral(", "));
 }
 
 // A figure cell's value: minutes under an hour, otherwise hours with the
@@ -956,6 +964,7 @@ public:
     void setBook(const activity::BookTotal &value)
     {
         book = value;
+        author = authorCaption(book.author);
         setObjectName("rrActivityBook");
         setAccessibleName(book.title);
         update();
@@ -1041,7 +1050,7 @@ protected:
                  Qt::AlignLeft | Qt::AlignTop, title, ink);
         y += titleHeight + ui::px(6);
         drawCaption(painter, QRect(left, y, textRight - left, captionHeight),
-                    ui::elideInterfaceText(book.author.toUpper(), caption, textRight - left),
+                    ui::elideInterfaceText(author, caption, textRight - left),
                     Qt::AlignLeft | Qt::AlignTop, note);
         y += captionHeight + ui::px(18);
         if (book.finished) {
@@ -1066,6 +1075,9 @@ protected:
                     QRect(right - ui::px(400), baseline + ui::px(14), ui::px(400), captionHeight),
                     sessions, Qt::AlignRight | Qt::AlignTop, note);
     }
+
+private:
+    QString author;
 };
 } // namespace
 
@@ -2245,7 +2257,7 @@ public:
     void setBook(const QString &name, const QString &by, int value, bool done)
     {
         title = name;
-        author = by;
+        author = authorCaption(by);
         percent = value;
         finished = done;
         update();
@@ -2267,8 +2279,8 @@ protected:
                  ink);
         y += nameHeight + ui::px(8);
         drawCaption(painter, QRect(chrome::inset, y, inner, captionHeight),
-                    ui::elideInterfaceText(author.toUpper(), caption, inner),
-                    Qt::AlignLeft | Qt::AlignTop, ui::noteColor(this));
+                    ui::elideInterfaceText(author, caption, inner), Qt::AlignLeft | Qt::AlignTop,
+                    ui::noteColor(this));
         y += captionHeight + ui::px(20);
         if (finished) {
             drawCaption(painter, QRect(chrome::inset, y, inner, captionHeight),

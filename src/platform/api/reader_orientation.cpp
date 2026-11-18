@@ -6,7 +6,8 @@
 
 namespace kobalt {
 namespace {
-Qt::ScreenOrientation validOrientation(int value)
+Qt::ScreenOrientation validOrientation(int value,
+                                       Qt::ScreenOrientation fallback = Qt::PortraitOrientation)
 {
     switch (value) {
     case Qt::PortraitOrientation:
@@ -15,7 +16,7 @@ Qt::ScreenOrientation validOrientation(int value)
     case Qt::InvertedLandscapeOrientation:
         return static_cast<Qt::ScreenOrientation>(value);
     default:
-        return Qt::PortraitOrientation;
+        return fallback;
     }
 }
 
@@ -90,17 +91,28 @@ ReaderOrientation::~ReaderOrientation()
 
 void ReaderOrientation::configure(const QJsonObject &settings)
 {
-    manualOrientation =
-            validOrientation(settings.value("orientation").toInt(Qt::PortraitOrientation));
+    manualOrientation = validOrientation(settings.value("orientation").toInt());
+    lockedOrientation = sensor
+            ? validOrientation(settings.value("locked_orientation").toInt(), Qt::PrimaryOrientation)
+            : Qt::PrimaryOrientation;
     if (sensor) {
         manualOrientation = orientationAxis(manualOrientation);
     }
     const bool automatic = settings.value("auto_rotate").toBool(false);
-    if (active && !frozen
-        && (!sensor || (!automatic && orientationAxis(currentOrientation) != manualOrientation))) {
+    applyConfiguredOrientation(automatic);
+    setAutomatic(automatic);
+}
+
+void ReaderOrientation::applyConfiguredOrientation(bool automatic)
+{
+    if (!active || frozen)
+        return;
+    if (locked()) {
+        if (currentOrientation != lockedOrientation)
+            apply(lockedOrientation);
+    } else if (!sensor || (!automatic && orientationAxis(currentOrientation) != manualOrientation)) {
         apply(manualOrientation);
     }
-    setAutomatic(automatic);
 }
 
 void ReaderOrientation::start(Qt::ScreenOrientation orientation)
@@ -149,7 +161,8 @@ void ReaderOrientation::start(Qt::ScreenOrientation orientation)
     }
 #endif
     const auto shown = waking ? currentOrientation : orientation;
-    apply(permits(initial) ? initial : permits(shown) ? shown : manualOrientation);
+    const auto preferred = locked() ? lockedOrientation : manualOrientation;
+    apply(permits(initial) ? initial : permits(shown) ? shown : preferred);
     if (sensor) {
         startSensor();
     }
@@ -234,7 +247,7 @@ void ReaderOrientation::freeze()
 
 void ReaderOrientation::rotate()
 {
-    if (frozen)
+    if (frozen || locked())
         return;
     setAutomatic(false);
     manualOrientation = currentOrientation == Qt::InvertedLandscapeOrientation
@@ -250,13 +263,21 @@ bool ReaderOrientation::setAutomatic(bool enabled)
     debounce.stop();
     pending = Qt::PrimaryOrientation;
     automaticRotation = enabled && sensor;
+    if (active && !frozen && sensor && !startSensor())
+        return false;
     if (active && !frozen && sensor) {
-        if (!startSensor()) {
-            return false;
-        }
         follow();
     }
     return !enabled || automaticRotation;
+}
+
+void ReaderOrientation::toggleLock()
+{
+    if (!active || frozen || (!sensor && !locked()))
+        return;
+    lockedOrientation = locked() ? Qt::PrimaryOrientation : currentOrientation;
+    applyConfiguredOrientation(automaticRotation);
+    follow();
 }
 #ifndef KOBALT_NO_SENSORS
 bool ReaderOrientation::startSensor()
@@ -301,9 +322,14 @@ bool ReaderOrientation::filter(QOrientationReading *reading)
 #endif
 bool ReaderOrientation::permits(Qt::ScreenOrientation orientation) const
 {
-    return orientation != Qt::PrimaryOrientation
-            && (automaticRotation || orientation == manualOrientation
-                || (sensor && orientationAxis(orientation) == manualOrientation));
+    if (orientation == Qt::PrimaryOrientation)
+        return false;
+    if (locked())
+        return orientation == lockedOrientation;
+    if (!sensor)
+        return orientation == manualOrientation;
+    return automaticRotation || orientation == manualOrientation
+            || orientationAxis(orientation) == manualOrientation;
 }
 
 void ReaderOrientation::follow()
@@ -329,7 +355,8 @@ void ReaderOrientation::deliver()
 
 QJsonObject ReaderOrientation::settings() const
 {
-    return kobalt::qt::object(
-            { { "orientation", int(manualOrientation) }, { "auto_rotate", automaticRotation } });
+    return kobalt::qt::object({ { "orientation", int(manualOrientation) },
+                                { "auto_rotate", automaticRotation },
+                                { "locked_orientation", int(lockedOrientation) } });
 }
 } // namespace kobalt

@@ -46,9 +46,16 @@ public:
             if (pressed < 0 || !owner->customize
                 || !owner->customizable(owner->entries_[pressed].design))
                 return;
-            held = true;
-            owner->customize(owner->entries_[pressed].design);
+            const auto design = owner->entries_[pressed].design;
+            cancelPress();
+            owner->customize(design);
         });
+    }
+
+    void cancelPress()
+    {
+        hold.stop();
+        pressed = -1;
     }
 
     QRect cell(int slot) const
@@ -89,6 +96,14 @@ public:
     }
 
 protected:
+    bool event(QEvent *event) override
+    {
+        if (event->type() == QEvent::TouchCancel || event->type() == QEvent::UngrabMouse
+            || event->type() == QEvent::Hide)
+            cancelPress();
+        return QWidget::event(event);
+    }
+
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
@@ -110,20 +125,30 @@ protected:
     // Accept the press so the release, which chooses, comes here too.
     void mousePressEvent(QMouseEvent *event) override
     {
+        if (event->button() != Qt::LeftButton)
+            return QWidget::mousePressEvent(event);
         event->accept();
+        cancelPress();
         pressed = entryAt(event->pos());
-        held = false;
-        hold.start();
+        if (pressed >= 0)
+            hold.start();
+    }
+
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (entryAt(event->pos()) != pressed)
+            cancelPress();
+        QWidget::mouseMoveEvent(event);
     }
 
     void mouseReleaseEvent(QMouseEvent *event) override
     {
-        hold.stop();
+        if (event->button() != Qt::LeftButton)
+            return QWidget::mouseReleaseEvent(event);
         const int index = entryAt(event->pos());
-        const bool wasHeld = held;
-        held = false;
-        pressed = -1;
-        if (index < 0 || wasHeld)
+        const bool selected = index >= 0 && index == pressed;
+        cancelPress();
+        if (!selected)
             return;
         const auto entry = gallery->entries_[index];
         if (!entry.enabled) {
@@ -200,7 +225,6 @@ private:
     SleepGallery *gallery;
     QTimer hold;
     int pressed = -1;
-    bool held = false;
 };
 
 SleepGallery::SleepGallery(QWidget *parent, QVector<Entry> entries, sleep::Design current,
@@ -298,7 +322,10 @@ int SleepGallery::pageCount() const
 
 void SleepGallery::showPage(int page)
 {
-    pageIndex_ = qBound(0, page, pageCount() - 1);
+    const int next = qBound(0, page, pageCount() - 1);
+    if (next != pageIndex_)
+        grid_->cancelPress();
+    pageIndex_ = next;
     pager_->setPage(pageIndex_, pageCount());
     grid_->update();
 }

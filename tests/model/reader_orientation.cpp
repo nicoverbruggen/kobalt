@@ -89,6 +89,44 @@ void checkSleepRequest(Factory &factory)
             "Final close releases the sensor filter");
 }
 
+void checkExactLock(Factory &factory)
+{
+    Fixture f(factory);
+    f.rotation.setAutomatic(true);
+    f.backend->sample(QOrientationReading::RightUp);
+    f.rotation.start(Qt::PortraitOrientation);
+    require(f.turns.last() == Qt::InvertedLandscapeOrientation, "Start in inverted landscape");
+    f.backend->sample(QOrientationReading::LeftUp);
+    auto *debounce = f.rotation.findChild<QTimer *>("rrOrientationDebounce");
+    require(debounce && debounce->isActive(), "An opposite angle queues a turn in Both");
+    f.rotation.toggleLock();
+    require(f.rotation.locked() && f.rotation.automatic() && !debounce->isActive(),
+            "Exact lock cancels the pending turn and keeps Both selected");
+    require(f.turns.size() == 1, "Pressing lock does not turn the screen");
+    const auto saved = f.rotation.settings();
+    f.rotation.stop(true);
+    require(f.turns.last() == Qt::PortraitOrientation, "Sleep hands geometry back to Nickel");
+    f.backend->sample(QOrientationReading::TopUp);
+    f.rotation.start(Qt::PortraitOrientation);
+    require(f.turns.last() == Qt::InvertedLandscapeOrientation, "Wake restores the exact lock");
+    f.backend->sample(QOrientationReading::LeftUp);
+    require(!debounce->isActive(), "Exact lock rejects the opposite angle after wake");
+
+    Fixture reopened(factory);
+    reopened.backend->sample(QOrientationReading::LeftUp);
+    reopened.rotation.configure(saved);
+    reopened.rotation.start(Qt::PortraitOrientation);
+    require(reopened.rotation.locked() && reopened.rotation.automatic()
+                    && reopened.turns.last() == Qt::InvertedLandscapeOrientation,
+            "The saved lock overrides the opening orientation and the sensor");
+    reopened.rotation.toggleLock();
+    require(!reopened.rotation.locked() && reopened.rotation.automatic(),
+            "Unlocking keeps the Both mode");
+    settle();
+    require(reopened.turns.last() == Qt::LandscapeOrientation,
+            "Unlocking follows the held sensor reading again");
+}
+
 void checkNativeHandoff(Factory &factory)
 {
     Fixture f(factory);
@@ -436,8 +474,8 @@ int main(int argc, char **argv)
     QList<Qt::ScreenOrientation> turns;
     ReaderOrientation rotation(&sensor, [&](Qt::ScreenOrientation value) { turns.append(value); });
     rotation.configure({});
-    require(!rotation.automatic() && rotation.manual() == Qt::PortraitOrientation,
-            "Default portrait lock");
+    require(!rotation.automatic() && !rotation.locked() && rotation.manual() == Qt::PortraitOrientation,
+            "Old settings without an exact lock keep the default portrait mode");
     rotation.start(Qt::PortraitOrientation);
     require(factory.backend && sensor.isActive(), "Locks start the sensor");
     auto sample = [&](QOrientationReading::Orientation value) {
@@ -485,6 +523,7 @@ int main(int argc, char **argv)
     require(manual.manual() == Qt::InvertedLandscapeOrientation,
             "Sensorless manual preference preserved");
     checkSleepRequest(factory);
+    checkExactLock(factory);
     checkNativeHandoff(factory);
     checkPinScreenHandoff(factory);
     checkOpening(factory);

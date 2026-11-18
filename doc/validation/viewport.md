@@ -8,6 +8,8 @@ These checks cover manual and sensor orientation, orientation handoff at sleep a
 
 `lifecycle.rotationRoundTripKeepsReadingResponsive` sends a return-to-portrait sensor reading while landscape reflow is held on the engine worker. It checks both landscape directions, one and two columns, delivery after reflow, the saved position and page input after the return. It requires `KOBALT_DESKTOP_SENSORS=ON` and does not reproduce firmware or physical sensor timing.
 
+`lifecycle.exactRotationLock` uses the Layout controls to check that the lock cancels pending sensor turns, saves the exact direction separately from the rotation mode, and resumes the chosen mode when unlocked. Set `KOBALT_TEST_ROTATION_CAPTURE` to an existing output directory to capture the Layout panel with the lock available and selected. The sensor-enabled `platform.reader-orientation` check also covers restoring an exact lock after sleep and on reopen.
+
 ## Sensors
 
 Desktop builds are sensorless by default. Configure with `KOBALT_DESKTOP_SENSORS=ON` and a matching prepared Qt Sensors module to add the sensor checks: `platform.reader-orientation` then keeps the production debounce and checks sensor delivery behind the PIN screen, and `lifecycle.sleepRequestFreezesOrientationBeforeHandoff` and `lifecycle.closePublishesHeldOrientationBeforeBackgroundPaint` are registered. These sensor checks stay outside the fast lane.

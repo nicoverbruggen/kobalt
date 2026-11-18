@@ -1,4 +1,5 @@
 #include "reading/header_footer.h"
+#include "app/reader/settings/sleep_editor.h"
 #include "app/reader/settings/sleep_gallery.h"
 #include "render/page_content.h"
 #include "reading/remaining_time.h"
@@ -1248,7 +1249,8 @@ bool Reader::eventFilter(QObject *watched, QEvent *event)
     // disabled colors. Keep the selected orientation visible until it changes.
     auto *rotationButton = controlInput ? qobject_cast<QPushButton *>(watched) : nullptr;
     if (controlInput && rotationButton
-        && (rotationButtons.contains(rotationButton) || rotationButton == autoRotateOption)
+        && (rotationButtons.contains(rotationButton) || rotationButton == autoRotateOption
+            || rotationButton == lockRotationOption)
         && rotationControlsBlocked()) {
         event->accept();
         return true;
@@ -2804,7 +2806,7 @@ bool Reader::pageList(int direction)
             || view == searchPanel || view == acknowledgments || view == fieldChooser
             || view == headerFooterView || view == dictionaryPanel || view == linkPanel
             || view == chapterGraph || view == general || view == menu || view == sleepGallery
-            || view == textPresetGallery || view == activityView) {
+            || view == sleepEditor || view == textPresetGallery || view == activityView) {
             return true;
         }
     }

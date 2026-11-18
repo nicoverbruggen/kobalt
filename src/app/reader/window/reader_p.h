@@ -562,7 +562,7 @@ private:
               *hideTabLabelsOption = nullptr, *zenModeOption = nullptr, *saveWordsOption = nullptr;
     QCheckBox *wifiPowerSaverOption = nullptr;
     QCheckBox *disableStandbyOption = nullptr;
-    QPushButton *autoRotateOption = nullptr;
+    QPushButton *autoRotateOption = nullptr, *lockRotationOption = nullptr;
     bool hideNativeStatus() const;
 
     // Zen mode keeps only Chapters, Search, Annotate and Bookmarks in the reading menu.

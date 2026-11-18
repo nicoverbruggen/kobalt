@@ -219,6 +219,11 @@ QJsonObject cleanPreferences(QJsonObject preferences)
         if (!value.isDouble() || (value != 1 && value != 2 && value != 4 && value != 8))
             preferences.remove("orientation");
     }
+    if (preferences.contains("locked_orientation")) {
+        const auto value = preferences.value("locked_orientation");
+        if (!value.isDouble() || (value != 0 && value != 1 && value != 2 && value != 4 && value != 8))
+            preferences.remove("locked_orientation");
+    }
     const auto number = [&](const char *key, int minimum, int maximum) {
         const auto value = preferences.value(key);
         if (preferences.contains(key)

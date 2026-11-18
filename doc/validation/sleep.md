@@ -1,5 +1,7 @@
 # Sleep, USB and power checks
 
+`lifecycle.sleepGalleryCancelsInterruptedPresses` checks that a touch cancellation or page change during a press does not choose a sleep screen on release. A new tap still chooses the visible design. `lifecycle.sleepCustomEditorShowsTheCover` also checks that a page button leaves the gallery on its current page while the editor covers it.
+
 Asset verification uses the actual USB handoff and completed remount. The lifecycle adapter invalidates assets after the current request releases storage. It requests a recheck only after Nickel's `aboutToUnplug` and `doneProcessing` sequence reopens the volume. An ordinary scan or a stale cancelled completion does not change the verification result. Cancellation after storage release rechecks when the profile becomes available again. `platform.native-lifecycle` checks these callback boundaries. Kobo keeps reading unavailable while the check runs or after it fails.
 
 `lifecycle.readerStandbySetting` checks the default, disabled, invalid and unsupported preference states. It verifies that explicit sleep and a hidden or closed reader are not held awake by the preference. These controlled host checks do not measure hardware standby or battery life.

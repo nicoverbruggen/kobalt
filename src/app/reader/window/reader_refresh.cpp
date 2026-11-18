@@ -759,13 +759,21 @@ void Reader::syncReadingControls()
     if (chapterGraph->isVisible())
         updateGraph();
     updateOrientationBlock();
+    const bool locked = orientation->locked();
     for (auto *button : rotationButtons) {
+        button->setEnabled(!locked);
         button->setChecked(!orientation->automatic()
                            && button->property("orientation").toInt()
                                    == int(orientation->manual()));
     }
     if (autoRotateOption) {
+        autoRotateOption->setEnabled(!locked);
         autoRotateOption->setChecked(orientation->automatic());
+    }
+    if (lockRotationOption) {
+        ui::buttonIcon(lockRotationOption,
+                       locked ? ui::ControlIcon::Lock : ui::ControlIcon::LockOpen);
+        lockRotationOption->setChecked(locked);
     }
     updateLinkReturn();
 }

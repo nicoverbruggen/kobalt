@@ -940,6 +940,16 @@ int main()
     require(!appearance::readerPreferences(qt::object({ { "orientation", 2 } }), sharedOrientation)
                      .contains("auto_rotate"),
             "An old book enabled automatic rotation over a global orientation lock");
+    auto locked = sharedOrientation;
+    locked["locked_orientation"] = 8;
+    require(appearance::cleanPreferences(locked) == locked,
+            "Cleaning settings must preserve the exact lock independently of the mode");
+    for (const auto &invalid : { QJsonValue(true), QJsonValue(-1), QJsonValue(3),
+                                 QJsonValue(1.5), QJsonValue("8") }) {
+        locked["locked_orientation"] = invalid;
+        require(appearance::cleanPreferences(locked) == sharedOrientation,
+                "An invalid lock must keep the chosen rotation mode");
+    }
     require(!appearance::readerPreferences({}, qt::object({ { "bionic_reading", "bold" } }))
                             .contains("bold_reading")
                     && !appearance::readerPreferences({}, {}).contains("bold_reading"),

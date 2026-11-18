@@ -431,6 +431,9 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout,
         button->setCheckable(true);
         hyphenButtons.append(button);
     }
+    // QSS heights exclude padding, as for the font button.
+    const int rowHeight = metrics::control::segmentHeight
+            + 2 * int(metrics::control::segmentVerticalPadding) + 2 * int(metrics::control::border);
     if (!inputs.systemRotation) {
         kobalt::ui::SegmentedRow rotation(pageLayout, pageRows, "rrRotation",
                                           strings::get("reader.rotation"));
@@ -442,8 +445,33 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout,
             button->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
             button->setProperty("full_label", button->text());
             button->setProperty("compact_label", QString());
+            button->setProperty("rotation_mode", true);
+            readerStyle(button, styles::segment()
+                            + "QPushButton[rotation_mode=\"true\"]:checked:disabled{"
+                              "background:palette(midlight);}");
             static_cast<ui::Button *>(button)->setIconLabelGap(ui::px(20));
         };
+        const QSize labelIconSize(metrics::control::chapterIconSize,
+                                  metrics::control::chapterIconSize);
+        const int lockWidth = rowHeight + ui::px(16);
+        if (inputs.automaticRotationAvailable) {
+            auto *lock = new ui::Button({}, pageLayout);
+            lockRotationOption = lock;
+            lock->setObjectName("rrLockRotation");
+            lock->setCheckable(true);
+            lock->setFocusPolicy(Qt::NoFocus);
+            lock->setProperty("segment_first", true);
+            readerStyle(lock, styles::segment());
+            const auto label = strings::get("reader.lock_current_rotation");
+            lock->setAccessibleName(label);
+            lock->setToolTip(label);
+            buttonIcon(lock, ControlIcon::LockOpen);
+            lock->setIconSize(labelIconSize + QSize(ui::px(6), ui::px(6)));
+            lock->setIconLabelGap(ui::px(20));
+            lock->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            lock->setFixedWidth(lockWidth);
+            rotation.prepend(lock);
+        }
         const bool sideButtons = inputs.sideButtons;
         for (int index = 0; index < (inputs.automaticRotationAvailable ? 2 : rotationNames.size());
              ++index) {
@@ -469,15 +497,13 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout,
                       ui::IconRendition::OriginalAsset, sideButtons });
             button->setIconSize(
                     inputs.automaticRotationAvailable
-                            ? QSize(metrics::control::chapterIconSize,
-                                    metrics::control::chapterIconSize)
+                            ? labelIconSize
                             : QSize(metrics::control::iconSize, metrics::control::iconSize));
         }
         autoRotateOption = rotation.add("rrAutoRotate", strings::get("reader.both"));
         if (inputs.automaticRotationAvailable) {
             buttonIcon(autoRotateOption, ControlIcon::RotationBoth);
-            autoRotateOption->setIconSize(
-                    QSize(metrics::control::chapterIconSize, metrics::control::chapterIconSize));
+            autoRotateOption->setIconSize(labelIconSize);
             inlineIconLabel(autoRotateOption);
             auto buttons = rotationButtons;
             buttons.append(autoRotateOption);
@@ -493,10 +519,7 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout,
     headerFooterRow->setObjectName("rrHeaderFooter");
     headerFooterRow->setFocusPolicy(Qt::NoFocus);
     headerFooterRow->setForward(true);
-    // As tall as the segmented rows above it, with their label size. QSS
-    // heights exclude the reader style's padding, as for the font button.
-    const int rowHeight = metrics::control::segmentHeight
-            + 2 * int(metrics::control::segmentVerticalPadding) + 2 * int(metrics::control::border);
+    // As tall as the segmented rows above it, with their label size.
     readerStyle(headerFooterRow,
                 QString("min-height:%1px;max-height:%1px;")
                                 .arg(rowHeight - 2 * metrics::control::padding)

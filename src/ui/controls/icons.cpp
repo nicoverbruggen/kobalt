@@ -123,6 +123,14 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         result.canvas = 256;
         result.filled = true;
         phosphorGeometry(QStringLiteral("door-open"), path);
+    } else if (icon == ControlIcon::LockOpen) {
+        result.canvas = 256;
+        result.filled = true;
+        phosphorGeometry(QStringLiteral("lock"), path);
+        // Open the right side of the shackle without changing the lock body.
+        QPainterPath gap;
+        gap.addRect(QRectF(152, 56, 32, 24));
+        path = path.subtracted(gap);
     } else if (icon == ControlIcon::ZoomIn || icon == ControlIcon::ZoomOut) {
         result.canvas = 256;
         result.filled = true;
@@ -770,6 +778,7 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons)
             && icon != ControlIcon::Bold && icon != ControlIcon::WordsAdd
             && icon != ControlIcon::WordsSaved && icon != ControlIcon::DeviceRotate
             && icon != ControlIcon::ZoomIn && icon != ControlIcon::ZoomOut
+            && icon != ControlIcon::LockOpen
             && (icon < ControlIcon::SearchChapter || icon > ControlIcon::SearchAfter)
             && (icon < ControlIcon::Rows || icon > ControlIcon::Export)
             && (icon < ControlIcon::KeyboardShift || icon > ControlIcon::KeyboardReturn)

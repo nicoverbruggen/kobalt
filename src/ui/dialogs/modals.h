@@ -108,6 +108,8 @@ public:
     }
 
     std::function<void()> dismissed;
+    // A choice list can page its own rows to fit the available viewport.
+    std::function<void()> fitChoiceContents;
 
 protected:
     bool eventFilter(QObject *object, QEvent *event) override;

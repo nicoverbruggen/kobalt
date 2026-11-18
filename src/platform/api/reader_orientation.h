@@ -55,14 +55,17 @@ public:
     // Ignore manual turns while frozen so wake can restore the reading orientation.
     void rotate();
     bool setAutomatic(bool enabled);
+    // Pin the displayed direction without changing the selected rotation mode.
+    void toggleLock();
     void setBlocked(bool blocked);
 
     bool automaticAvailable() const { return sensor != nullptr; }
 
-    // Auto permits every sensor orientation. With Auto off, sensor devices
-    // still follow both orientations matching manual(), normalized to an axis.
-    // Devices without a sensor keep the exact manual orientation.
+    // While unlocked, Auto permits every sensor orientation. With Auto off,
+    // sensor devices follow both orientations matching manual(), normalized
+    // to an axis. Devices without a sensor keep the exact manual orientation.
     bool automatic() const { return automaticRotation; }
+    bool locked() const { return lockedOrientation != Qt::PrimaryOrientation; }
 
     Qt::ScreenOrientation manual() const { return manualOrientation; }
 
@@ -81,6 +84,7 @@ private:
     Qt::ScreenOrientation manualOrientation = Qt::PortraitOrientation;
     Qt::ScreenOrientation nativeOrientation = Qt::PortraitOrientation;
     Qt::ScreenOrientation currentOrientation = Qt::PortraitOrientation;
+    Qt::ScreenOrientation lockedOrientation = Qt::PrimaryOrientation;
     Qt::ScreenOrientation pending = Qt::PrimaryOrientation;
     // The filter rejects samples, so sensor->reading() is stale while active.
     Qt::ScreenOrientation heldOrientation = Qt::PrimaryOrientation;
@@ -95,6 +99,7 @@ private:
     bool filter(QOrientationReading *reading) override;
 #endif
     bool startSensor();
+    void applyConfiguredOrientation(bool automatic);
     bool permits(Qt::ScreenOrientation orientation) const;
     void follow();
     void deliver();

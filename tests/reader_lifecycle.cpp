@@ -931,6 +931,86 @@ private slots:
         QVERIFY2(!dialog, "The detached confirmation still refers to the deleted Settings panel");
     }
 
+    void settingsChoiceFitsAfterResize_data()
+    {
+        QTest::addColumn<QString>("tabName");
+        QTest::addColumn<QString>("buttonName");
+        QTest::newRow("session-timeout") << QString("rrSettingsSystem")
+                                         << QString("rrSessionTimeout");
+        QTest::newRow("screen-refresh") << QString("rrSettingsDisplay")
+                                        << QString("rrScreenRefresh");
+    }
+
+    void settingsChoiceFitsAfterResize()
+    {
+        QFETCH(QString, tabName);
+        QFETCH(QString, buttonName);
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        const QSize portraitSize(720, 1440);
+        host.open(fixture(), portraitSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        auto *window = host.window();
+        window->show();
+        QTRY_VERIFY(window->readyForPresentation());
+        QVERIFY(openSettings(host));
+        auto *tab = window->findChild<QPushButton *>(tabName);
+        auto *button = window->findChild<QPushButton *>(buttonName);
+        QVERIFY(tab && button);
+        tab->click();
+        button->click();
+        const auto popupName = buttonName + QStringLiteral("Popup");
+        const QPointer<QWidget> popup = window->findChild<QWidget *>(popupName);
+        QVERIFY(popup && popup->isVisible());
+        QCOMPARE(popup->geometry(), window->rect());
+
+        auto *card = popup->findChild<QWidget *>("rrModalCard");
+        QVERIFY(card && popup->rect().contains(card->geometry()));
+        window->resize(portraitSize.transposed());
+        QCOMPARE(window->size(), portraitSize.transposed());
+        QCOMPARE(popup->geometry(), window->rect());
+        QVERIFY2(popup->rect().contains(card->geometry()),
+                 "Changing orientation clipped the chooser");
+        auto *choices = popup->findChild<QWidget *>(buttonName + QStringLiteral("Choices"));
+        auto *next = popup->findChild<QPushButton *>(buttonName + QStringLiteral("Next"));
+        auto *previous = popup->findChild<QPushButton *>(buttonName + QStringLiteral("Previous"));
+        QVERIFY(choices && next && previous);
+        const auto options = choices->findChildren<QCheckBox *>();
+        QVERIFY(!options.isEmpty());
+        for (int i = 0; i < options.size() && previous->isEnabled(); ++i)
+            previous->click();
+        QSet<QCheckBox *> seen;
+        for (int i = 0; i < options.size(); ++i) {
+            for (auto *option : options) {
+                if (option->isVisible()) {
+                    const QRect bounds(option->mapTo(popup, QPoint()), option->size());
+                    QVERIFY(popup->rect().contains(bounds));
+                    seen.insert(option);
+                }
+            }
+            if (!next->isEnabled())
+                break;
+            next->click();
+        }
+        QCOMPARE(seen.size(), options.size());
+        window->resize(portraitSize);
+        QCOMPARE(window->size(), portraitSize);
+        QVERIFY(popup->rect().contains(card->geometry()));
+        QVERIFY(!next->isVisible());
+        for (auto *option : options)
+            QVERIFY(option->isVisible());
+        QTest::keyClick(popup, Qt::Key_Escape);
+        QTRY_VERIFY(!popup);
+        window->resize(portraitSize.transposed());
+        button->click();
+        auto *reopened = window->findChild<QWidget *>(popupName);
+        QVERIFY(reopened && reopened->isVisible());
+        card = reopened->findChild<QWidget *>("rrModalCard");
+        QVERIFY2(card && reopened->rect().contains(card->geometry()),
+                 "Opening the chooser in landscape clips its card");
+    }
+
     void appearanceTeardownStopsPanelCallbacks_data()
     {
         QTest::addColumn<QString>("buttonName");
@@ -4032,6 +4112,106 @@ private slots:
         QTRY_COMPARE(shown, Qt::ScreenOrientation(expected));
     }
 
+    void exactRotationLock()
+    {
+        test::Factory factory;
+        test::SensorRegistration registration("kobalt-lock-test", &factory);
+        QOrientationSensor sensor;
+        sensor.setIdentifier("kobalt-lock-test");
+        QVERIFY(sensor.start());
+        factory.backend->sample(QOrientationReading::TopDown);
+        auto shown = Qt::PortraitOrientation;
+        ReaderOrientation rotation(&sensor, [&](Qt::ScreenOrientation value) { shown = value; });
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        host.rotation = &rotation;
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        rotation.start(Qt::PortraitOrientation);
+        QCOMPARE(shown, Qt::InvertedPortraitOrientation);
+        auto *window = host.window();
+        Canvas canvas(window, nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(window->readyForPresentation());
+        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        QVERIFY(click(canvas, window->findChild<QPushButton *>("rrNavLayout")));
+        auto *portrait = window->findChild<QPushButton *>("rrOrientation1");
+        auto *landscape = window->findChild<QPushButton *>("rrOrientation2");
+        auto *both = window->findChild<QPushButton *>("rrAutoRotate");
+        QTRY_VERIFY(portrait && portrait->isVisible() && portrait->isChecked());
+        QVERIFY(landscape && landscape->isVisible());
+        QVERIFY(both && both->isVisible());
+        auto *lock = window->findChild<QPushButton *>("rrLockRotation");
+        QVERIFY(lock && lock->isVisible() && !lock->isChecked());
+        const auto capture = qEnvironmentVariable("KOBALT_TEST_ROTATION_CAPTURE");
+        if (!capture.isEmpty())
+            QVERIFY(window->grab().save(capture + "/rotation-controls.png"));
+        const int lockRight = lock->mapTo(window, lock->rect().topRight()).x();
+        const int portraitLeft = portrait->mapTo(window, QPoint()).x();
+        QVERIFY2(lockRight + 1 < portraitLeft,
+                 qPrintable(QString("Lock ends at %1 and Portrait starts at %2, lock width %3")
+                                    .arg(lockRight).arg(portraitLeft).arg(lock->width())));
+        QVERIFY(!lock->icon().isNull());
+        const auto unlockedIcon = lock->icon().pixmap(lock->iconSize()).toImage();
+
+        auto *debounce = rotation.findChild<QTimer *>("rrOrientationDebounce");
+        QVERIFY(debounce);
+        factory.backend->sample(QOrientationReading::TopUp);
+        QVERIFY(debounce->isActive());
+        QVERIFY(click(canvas, lock));
+        QVERIFY(lock->isChecked() && portrait->isChecked() && !both->isChecked());
+        QVERIFY(lock->isEnabled() && !portrait->isEnabled() && !landscape->isEnabled()
+                && !both->isEnabled());
+        QVERIFY(lock->icon().pixmap(lock->iconSize()).toImage() != unlockedIcon);
+        QCOMPARE(shown, Qt::InvertedPortraitOrientation);
+        QVERIFY(!debounce->isActive());
+        if (!capture.isEmpty())
+            QVERIFY(window->grab().save(capture + "/rotation-locked.png"));
+        factory.backend->sample(QOrientationReading::LeftUp);
+        factory.backend->sample(QOrientationReading::TopUp);
+        QVERIFY(!debounce->isActive());
+        QCOMPARE(shown, Qt::InvertedPortraitOrientation);
+
+        QVERIFY(click(canvas, window->findChild<QPushButton *>("rrNavLayout")));
+        QTRY_VERIFY(!lock->isVisible());
+        const auto savedRotation = storage::readJson(testPaths().preferences());
+        QCOMPARE(savedRotation.value("locked_orientation").toInt(),
+                 int(Qt::InvertedPortraitOrientation));
+        QCOMPARE(savedRotation.value("orientation").toInt(), int(Qt::PortraitOrientation));
+        QVERIFY(!savedRotation.value("auto_rotate").toBool());
+
+        QVERIFY(click(canvas, window->findChild<QPushButton *>("rrNavLayout")));
+        QTRY_VERIFY(lock->isVisible() && lock->isChecked() && portrait->isChecked());
+        QVERIFY(click(canvas, lock));
+        QVERIFY(!lock->isChecked() && portrait->isChecked() && both->isEnabled());
+        QVERIFY(click(canvas, both));
+        factory.backend->sample(QOrientationReading::LeftUp);
+        QVERIFY(debounce->isActive());
+        QVERIFY(click(canvas, lock));
+        QVERIFY(both->isChecked() && lock->isChecked() && !both->isEnabled());
+        if (!capture.isEmpty())
+            QVERIFY(window->grab().save(capture + "/rotation-both-locked.png"));
+        factory.backend->sample(QOrientationReading::TopUp);
+        QVERIFY(!debounce->isActive());
+        QCOMPARE(shown, Qt::InvertedPortraitOrientation);
+
+        factory.backend->sample(QOrientationReading::LeftUp);
+        QVERIFY(click(canvas, lock));
+        QVERIFY(both->isChecked() && !lock->isChecked() && both->isEnabled());
+        QCOMPARE(lock->icon().pixmap(lock->iconSize()).toImage(), unlockedIcon);
+        QVERIFY(debounce->isActive());
+        QVERIFY(click(canvas, window->findChild<QPushButton *>("rrNavLayout")));
+        QTRY_VERIFY(!lock->isVisible());
+        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        QTRY_COMPARE(shown, Qt::LandscapeOrientation);
+        const auto unlocked = storage::readJson(testPaths().preferences());
+        QCOMPARE(unlocked.value("locked_orientation").toInt(-1), int(Qt::PrimaryOrientation));
+        QVERIFY(unlocked.value("auto_rotate").toBool());
+    }
+
     void sleepRequestFreezesOrientationBeforeHandoff_data()
     {
         QTest::addColumn<bool>("handoff");
@@ -6174,10 +6354,22 @@ private slots:
         auto *editor = openEditor();
         QVERIFY(editor);
         QTRY_VERIFY(showsCover(editor));
+        // The editor covers the gallery. A hardware page button must not
+        // change the hidden gallery page behind it.
+        auto *counter = gallery->findChild<QLabel *>("rrSleepGalleryPage");
+        auto *nextPage = gallery->findChild<QPushButton *>("rrSleepGalleryNext");
+        QVERIFY(counter && nextPage && nextPage->isEnabled());
+        const auto startingPage = counter->text();
+        host.window()->pageButton(1);
+        QCOMPARE(counter->text(), startingPage);
         QVERIFY(click(canvas, editor->findChild<QPushButton *>("rrSleepEditorDone")));
         QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSleepEditor")
                     || !host.window()->findChild<QWidget *>("rrSleepEditor")->isVisible());
         QVERIFY(gallery->isVisible());
+        host.window()->pageButton(1);
+        QVERIFY(counter->text() != startingPage);
+        host.window()->pageButton(-1);
+        QCOMPARE(counter->text(), startingPage);
         editor = openEditor();
         QVERIFY(editor);
         // Done kept the decoded cover, so it shows at once.
@@ -6209,6 +6401,46 @@ private slots:
         customEditor->setWallpaper("second", bound, QImage());
         customEditor->setWallpaper("third", bound, QImage());
         QVERIFY(first.isDetached());
+    }
+
+    void sleepGalleryCancelsInterruptedPresses_data()
+    {
+        QTest::addColumn<bool>("pageChanged");
+        QTest::newRow("touch-cancelled") << false;
+        QTest::newRow("page-changed") << true;
+    }
+
+    void sleepGalleryCancelsInterruptedPresses()
+    {
+        QFETCH(bool, pageChanged);
+        using Design = sleep::Design;
+        QWidget window;
+        window.resize(nativeSize);
+        reader::SleepGallery gallery(&window,
+                                    { { Design::Stock }, { Design::Custom }, { Design::Page },
+                                      { Design::Bookmark }, { Design::Seal }, { Design::Letter } },
+                                    Design::Stock, {}, window.size());
+        gallery.setGeometry(window.rect());
+        QList<Design> choices;
+        gallery.chosen = [&](Design value) { choices.append(value); };
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto *grid = gallery.findChild<QWidget *>("rrSleepGalleryGrid");
+        QVERIFY(grid && grid->isVisible());
+        const QPoint left(grid->width() / 4, grid->height() / 4);
+        QTest::mousePress(grid, Qt::LeftButton, Qt::NoModifier, left);
+        if (pageChanged) {
+            auto *next = gallery.findChild<QPushButton *>("rrSleepGalleryNext");
+            QVERIFY(next && next->isEnabled());
+            next->click();
+        } else {
+            QTouchEvent event(QEvent::TouchCancel, QTest::createTouchDevice());
+            QCoreApplication::sendEvent(grid, &event);
+        }
+        QTest::mouseRelease(grid, Qt::LeftButton, Qt::NoModifier, left);
+        QVERIFY2(choices.isEmpty(), "An interrupted press selected a sleep screen");
+        QTest::mouseClick(grid, Qt::LeftButton, Qt::NoModifier, left);
+        QCOMPARE(choices, QList<Design>{ pageChanged ? Design::Seal : Design::Stock });
     }
 
     void sleepGreetingEditor()

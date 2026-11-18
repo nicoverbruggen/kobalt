@@ -287,8 +287,8 @@ SleepEditor::SleepEditor(QWidget *parent, Setup setup) : ui::Panel(parent), setu
         topRows->setSpacing(0);
         rows->addWidget(stateRow_);
         // Which screen the controls change, shown only when the two differ.
-        ui::SegmentedRow state(stateRow_, topRows, "rrSleepEditorState",
-                               strings::get("sleep.custom_editing"));
+        stateRow_->setAccessibleName(strings::get("sleep.custom_editing"));
+        ui::SegmentedRow state(stateRow_, topRows, "rrSleepEditorState", {});
         sleepingTab_ = state.add("rrSleepEditorSleeping", strings::get("sleep.sleeping"));
         poweredOffTab_ = state.add("rrSleepEditorPoweredOff", strings::get("sleep.powered_off"));
         for (auto *tab : { sleepingTab_, poweredOffTab_ })

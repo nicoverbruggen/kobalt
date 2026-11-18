@@ -791,10 +791,19 @@ QHBoxLayout *labeledRow(QWidget *parent, QVBoxLayout *rows, const QString &label
 SegmentedRow::SegmentedRow(QWidget *parent, QVBoxLayout *rows, const char *name,
                            const QString &label, const QString &detail)
 {
-    row = labeledRow(parent, rows, label, detail, QString(name) + "Detail");
     frame = new QFrame(parent);
     frame->setObjectName(name);
-    row->addWidget(frame, 1);
+    if (label.isEmpty()) {
+        row = horizontalRow();
+        rows->addLayout(row);
+        row->setSpacing(0);
+        row->addStretch(1);
+        row->addWidget(frame, 6);
+        row->addStretch(1);
+    } else {
+        row = labeledRow(parent, rows, label, detail, QString(name) + "Detail");
+        row->addWidget(frame, 1);
+    }
     layout = new QHBoxLayout(frame);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);

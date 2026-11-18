@@ -4134,6 +4134,18 @@ void checkPinnedBookmarks(int preset, bool dark)
             QVERIFY(fixture.press("rrNavStats"));
             QTRY_VERIFY(fixture.visible("rrChapterGraph"));
             checkStatsPins(fixture, i + 1);
+            if (i == 0 && captureDirectory.isEmpty()) {
+                QVERIFY(fixture.press(fixture.visible("rrGraphActivity") ? "rrGraphActivity"
+                                                                         : "rrGraphActivityCell"));
+                QTRY_VERIFY(fixture.visible("rrActivityWelcome"));
+                QVERIFY(!fixture.visible("rrPinnedBookmarks"));
+                QVERIFY(fixture.press("rrActivityWelcomeClose"));
+                QTRY_VERIFY(fixture.widget("rrActivityBooksTab")->isEnabled());
+                QVERIFY(fixture.press("rrActivityBooksTab"));
+                QVERIFY(!fixture.visible("rrPinnedBookmarks"));
+                QVERIFY(fixture.press("rrActivityClose"));
+                checkStatsPins(fixture, i + 1);
+            }
             if (captureDirectory.isEmpty()) {
                 auto *mode = qobject_cast<QPushButton *>(fixture.widget("rrGraphMode"));
                 QVERIFY(mode);

@@ -769,7 +769,7 @@ void Reader::syncPinnedBookmarks()
     const bool visible = features::enabled(preferences, features::Bookmarks) && !pins.isEmpty()
             && topControls->isVisible() && !session->busy() && !lifecycleHidden && !closing
             && !services.suspended() && !annotationMode && !seekOpen && !appearanceEdit.panelOpen()
-            && !settingsVisible() && !menu->isVisible() && !choices->isVisible()
+            && !activityView && !settingsVisible() && !menu->isVisible() && !choices->isVisible()
             && !lightPopup->isVisible() && !bookmarkList->isVisible() && !acknowledgmentsVisible()
             && !searchPanel->isVisible() && !dictionaryPanel->isVisible() && !linksActive()
             && !lookupPending && !syncDialog && !kosyncDialog && !finishDialog

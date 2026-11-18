@@ -30,7 +30,7 @@ public:
            std::function<QString()> clock = {},
            std::function<void(ReaderHostServices &)> configureServices = {});
     ~Window() override;
-    void openBook(const QString &path);
+    void openBook(const QString &path, const QString &position = {});
     // Saves the visible preview without Mac chrome. Device surroundings remain transparent.
     // Returns the new PNG path, or an empty string and an error. Existing files are never replaced.
     QString saveScreenshot(const QString &directory, QString *error = nullptr);

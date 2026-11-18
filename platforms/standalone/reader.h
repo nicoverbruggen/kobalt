@@ -19,12 +19,9 @@ public:
                      std::function<ReaderHostServices()> services,
                      std::function<void(Qt::ScreenOrientation)> rotate, QObject *parent = nullptr);
     ~ReaderController() override;
+    // An opening may show a saved passage when the book becomes ready.
     void open(const QString &path, QSize pixels, QString sourceKey = {},
-              bool restartAtStart = false);
-
-    // The next opening shows this position once the book is ready, for example
-    // a saved word's passage. An unresolved position keeps the saved page.
-    void setStartPosition(QString position) { startPosition = std::move(position); }
+              bool restartAtStart = false, QString position = {});
 
     void close();
     QJsonObject lastBook() const;
@@ -57,18 +54,22 @@ private:
     Phase phase = Phase::Idle;
     storage::Paths paths;
     EngineFontInputs fonts;
-    QString placeholder, current, pending, currentSourceKey, pendingSourceKey, startPosition,
-            openingPosition;
+    QString placeholder, current, currentSourceKey, openingPosition;
+    struct BookOpen
+    {
+        QString path, sourceKey, position;
+        QSize pixels;
+        bool restartAtStart = false;
+    } pending;
     std::shared_ptr<ReadingHistory::Profile> historyProfile;
-    QSize pendingSize;
-    bool restartAtStart = false, pendingRestartAtStart = false;
+    bool restartAtStart = false;
     std::function<ReaderHostServices()> services;
     ReaderOrientation orientation;
     std::unique_ptr<native::PublicationEndpoint> source;
     std::unique_ptr<ReaderSession> opening;
     QPointer<ReaderWindow> window_;
     std::shared_ptr<SourceLease> lease;
-    void begin(const QString &path, QSize pixels);
+    void begin(BookOpen request);
     // Moves unusable saved data aside. Until the storage works, books do not open.
     void prepareProfile();
     bool storageFailed = false;

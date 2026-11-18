@@ -37,7 +37,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class KobaltActivity extends QtActivity {
     private static final int PICK_BOOK = 41;
@@ -46,7 +45,7 @@ public class KobaltActivity extends QtActivity {
     private native void prepareDictionaries(String directory);
     private static final long MAX_BOOK_BYTES = 128L * 1024 * 1024;
     private final ExecutorService importer = Executors.newSingleThreadExecutor();
-    private final AtomicLong request = new AtomicLong();
+    private final PickerDelivery picker = new PickerDelivery();
     private BooxDevice boox;
     private ScreenBrightness screenBrightness;
     private boolean nativeLight;
@@ -55,15 +54,13 @@ public class KobaltActivity extends QtActivity {
     private final ExecutorService brightnessWriter = Executors.newSingleThreadExecutor();
     private BooxRefresh booxRefresh;
     private boolean resumed;
-    private boolean ready = false;
     private boolean reading = false, libraryDark = false;
     private volatile boolean readingGeometryReady = false;
     private volatile boolean libraryGeometryReady = false;
     private volatile long libraryContentSize;
     private int surfaceWidth, surfaceHeight;
     private int surfaceLeft, surfaceTop, surfaceRight, surfaceBottom, surfaceCorner;
-    private String pendingPath;
-    private native void openBook(String path);
+    private native void openBook(String path, long request);
     private native boolean turnPage(int direction, int volumeKey);
     private int volumeButtons;
     public int volumeButtons() { return volumeButtons; }
@@ -82,7 +79,7 @@ public class KobaltActivity extends QtActivity {
         final boolean previous = key == KeyEvent.KEYCODE_VOLUME_UP || key == KeyEvent.KEYCODE_PAGE_UP;
         if (next || previous) {
             if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
-                if (ready && turnPage(next ? 1 : -1, key == KeyEvent.KEYCODE_VOLUME_UP ? 1
+                if (picker.ready() && turnPage(next ? 1 : -1, key == KeyEvent.KEYCODE_VOLUME_UP ? 1
                         : key == KeyEvent.KEYCODE_VOLUME_DOWN ? 2 : 0)) {
                     pageKeys.add(key);
                     return true;
@@ -188,7 +185,7 @@ public class KobaltActivity extends QtActivity {
                     }
                 }
             }
-            if (ready && width > 0 && height > 0 && (width != surfaceWidth || height != surfaceHeight
+            if (picker.ready() && width > 0 && height > 0 && (width != surfaceWidth || height != surfaceHeight
                     || left != surfaceLeft || top != surfaceTop || right != surfaceRight || bottom != surfaceBottom
                     || corner != surfaceCorner)) {
                 surfaceWidth = width; surfaceHeight = height;
@@ -302,9 +299,11 @@ public class KobaltActivity extends QtActivity {
     }
     public int readerDensity() { return getResources().getDisplayMetrics().densityDpi; }
     public void readerReady() {
-        ready = true;
-        showStartup();
-        if (pendingPath != null) { openBook(pendingPath); pendingPath = null; }
+        runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            showStartup();
+            picker.markReady();
+        });
     }
     public void chooseBook() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -401,12 +400,7 @@ public class KobaltActivity extends QtActivity {
                 for (android.content.UriPermission grant : getContentResolver().getPersistedUriPermissions())
                     hadGrant |= grant.getUri().equals(tree) && grant.isReadPermission();
                 getContentResolver().takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                String label = tree.getLastPathSegment();
-                try (Cursor cursor = getContentResolver().query(DocumentsContract.buildDocumentUriUsingTree(tree,
-                        DocumentsContract.getTreeDocumentId(tree)), new String[] {DocumentsContract.Document.COLUMN_DISPLAY_NAME},
-                        null, null, null)) {
-                    if (cursor != null && cursor.moveToFirst()) label = cursor.getString(0);
-                }
+                String label = folderLabel(tree);
                 String key = UserFolders.KINDS[code - PICK_RESOURCE_FOLDER];
                 android.content.SharedPreferences settings = getSharedPreferences("user-folders", MODE_PRIVATE);
                 String old = settings.getString(key, "");
@@ -429,16 +423,18 @@ public class KobaltActivity extends QtActivity {
                 toast("Kobalt could not keep access to this folder.");
                 return;
             }
-            String label = tree.getLastPathSegment();
+            String label = folderLabel(tree);
+            picker.folder(() -> folderChosen(tree.toString(), label == null ? "" : label));
+        }
+    }
+    private String folderLabel(Uri tree) {
+        return PickerDelivery.label(tree.getLastPathSegment(), () -> {
             try (Cursor cursor = getContentResolver().query(DocumentsContract.buildDocumentUriUsingTree(tree,
                     DocumentsContract.getTreeDocumentId(tree)), new String[] {DocumentsContract.Document.COLUMN_DISPLAY_NAME},
                     null, null, null)) {
-                if (cursor != null && cursor.moveToFirst() && cursor.getString(0) != null) label = cursor.getString(0);
-            } catch (Exception ignored) {
-                // The URI's last segment is a usable label.
+                return cursor != null && cursor.moveToFirst() ? cursor.getString(0) : null;
             }
-            if (ready) folderChosen(tree.toString(), label == null ? "" : label);
-        }
+        });
     }
     public void releaseFolder(String uri) {
         android.content.SharedPreferences settings = getSharedPreferences("user-folders", MODE_PRIVATE);
@@ -515,8 +511,8 @@ public class KobaltActivity extends QtActivity {
     }
     // Copies a library book to the reader's cache path, unless the copy there
     // is current, then opens it. Only the open book is kept in the cache.
-    public void openLibraryBook(String uri, String destination, long size, long modified) {
-        final long generation = request.incrementAndGet();
+    public void openLibraryBook(String uri, String destination, long size, long modified, long request) {
+        final long generation = picker.beginBook();
         importer.execute(() -> {
             File target = new File(destination);
             File temporary = null;
@@ -531,7 +527,7 @@ public class KobaltActivity extends QtActivity {
                         byte[] buffer = new byte[65536];
                         int count;
                         while ((count = input.read(buffer)) != -1) {
-                            if (request.get() != generation) return;
+                            if (!picker.current(generation)) return;
                             output.write(buffer, 0, count);
                         }
                         output.getFD().sync();
@@ -544,15 +540,15 @@ public class KobaltActivity extends QtActivity {
                     for (File other : others)
                         if (!other.equals(target) && other.getName().endsWith(".epub")) other.delete();
                 runOnUiThread(() -> {
-                    if (request.get() != generation || isFinishing() || isDestroyed()) return;
-                    if (ready) openBook(destination); else pendingPath = destination;
+                    if (isFinishing() || isDestroyed()) return;
+                    picker.book(generation, () -> openBook(destination, request));
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
-                    if (request.get() != generation || isDestroyed()) return;
+                    if (!picker.current(generation) || isDestroyed()) return;
                     toast("Could not open EPUB: " + error.getMessage());
                     // An empty path returns the library from its loading view.
-                    if (ready) openBook("");
+                    if (picker.ready()) openBook("", request);
                 });
             } finally {
                 if (temporary != null) temporary.delete();
@@ -568,7 +564,7 @@ public class KobaltActivity extends QtActivity {
             toast("Open an EPUB through Android's document picker.");
             return;
         }
-        final long generation = request.incrementAndGet();
+        final long generation = picker.beginBook();
         importer.execute(() -> {
             File temporary = null;
             try {
@@ -583,7 +579,7 @@ public class KobaltActivity extends QtActivity {
                     long total = 0;
                     int count;
                     while ((count = input.read(buffer)) != -1) {
-                        if (request.get() != generation) return;
+                        if (!picker.current(generation)) return;
                         total += count;
                         if (total > MAX_BOOK_BYTES) throw new java.io.IOException("EPUB exceeds the 128 MiB import limit");
                         output.write(buffer, 0, count);
@@ -599,12 +595,12 @@ public class KobaltActivity extends QtActivity {
                 final String path = destination.getAbsolutePath();
                 rememberSyncFilename(uri, path);
                 runOnUiThread(() -> {
-                    if (request.get() != generation || isFinishing() || isDestroyed()) return;
-                    if (ready) openBook(path); else pendingPath = path;
+                    if (isFinishing() || isDestroyed()) return;
+                    picker.book(generation, () -> openBook(path, 0));
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
-                    if (request.get() == generation && !isDestroyed()) toast("Could not open EPUB: " + error.getMessage());
+                    if (picker.current(generation) && !isDestroyed()) toast("Could not open EPUB: " + error.getMessage());
                 });
             } finally {
                 if (temporary != null) temporary.delete();
@@ -613,10 +609,9 @@ public class KobaltActivity extends QtActivity {
     }
     public void exitReader() { finishAndRemoveTask(); }
     @Override protected void onDestroy() {
-        ready = false;
+        picker.destroy();
         if (brightnessObserver != null) getContentResolver().unregisterContentObserver(brightnessObserver);
         if (booxRefresh != null) booxRefresh.cancel();
-        request.incrementAndGet();
         importer.shutdownNow();
         brightnessWriter.shutdown();
         super.onDestroy();

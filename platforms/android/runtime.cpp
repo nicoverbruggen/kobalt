@@ -11,7 +11,7 @@
 
 namespace {
 QPointer<QObject> owner;
-std::function<void(QString)> openExternal;
+std::function<void(QString, qint64)> bookOpened;
 std::function<void(int, int)> volumeButton;
 std::function<void(QString, QString)> chosenFolder;
 std::function<void(QSize, QMargins, int)> resizedSurface;
@@ -19,14 +19,14 @@ std::atomic<bool> pageButtonsAvailable{ false };
 } // namespace
 
 namespace kobalt::android {
-void setCallbacks(QObject *receiver, std::function<void(QString)> openBook,
+void setCallbacks(QObject *receiver, std::function<void(QString, qint64)> openBook,
                   std::function<void(int, int)> turnPage,
                   std::function<void(QString, QString)> folderChosen,
                   std::function<void(QSize, QMargins, int)> surfaceResized)
 {
     pageButtonsAvailable.store(false);
     owner = receiver;
-    openExternal = std::move(openBook);
+    bookOpened = std::move(openBook);
     volumeButton = std::move(turnPage);
     chosenFolder = std::move(folderChosen);
     resizedSurface = std::move(surfaceResized);
@@ -63,11 +63,13 @@ void chooseResourceFolder(int kind, bool clear)
     });
 }
 
-void openLibraryBook(const QString &uri, const QString &destination, qint64 size, qint64 modified)
+void openLibraryBook(const QString &uri, const QString &destination, qint64 size, qint64 modified,
+                     qint64 request)
 {
     QNativeInterface::QAndroidApplication::context().callMethod<void>(
             "openLibraryBook", QJniObject::fromString(uri).object<jstring>(),
-            QJniObject::fromString(destination).object<jstring>(), jlong(size), jlong(modified));
+            QJniObject::fromString(destination).object<jstring>(), jlong(size), jlong(modified),
+            jlong(request));
 }
 
 void setPageButtonsAvailable(bool available)
@@ -179,18 +181,15 @@ void hideKeyboard()
 }
 } // namespace kobalt::android
 
-extern "C" JNIEXPORT void JNICALL Java_org_kobalt_android_KobaltActivity_openBook(JNIEnv *env,
-                                                                                  jobject,
-                                                                                  jstring value)
+extern "C" JNIEXPORT void JNICALL
+Java_org_kobalt_android_KobaltActivity_openBook(JNIEnv *, jobject, jstring value, jlong request)
 {
-    const auto text = env->GetStringUTFChars(value, nullptr);
-    if (!text)
+    if (!value)
         return;
-    const auto path = QString::fromUtf8(text);
-    env->ReleaseStringUTFChars(value, text);
-    QMetaObject::invokeMethod(qApp, [path] {
-        if (owner && openExternal)
-            openExternal(path);
+    const auto path = QJniObject(value).toString();
+    QMetaObject::invokeMethod(qApp, [path, request] {
+        if (owner && bookOpened)
+            bookOpened(path, request);
     });
 }
 
@@ -221,22 +220,15 @@ Java_org_kobalt_android_KobaltActivity_turnPage(JNIEnv *, jobject, jint directio
     return true;
 }
 
-extern "C" JNIEXPORT void JNICALL Java_org_kobalt_android_KobaltActivity_folderChosen(JNIEnv *env,
-                                                                                      jobject,
-                                                                                      jstring uri,
-                                                                                      jstring label)
+extern "C" JNIEXPORT void JNICALL
+Java_org_kobalt_android_KobaltActivity_folderChosen(JNIEnv *, jobject, jstring uri, jstring label)
 {
-    const auto text = [env](jstring value) {
-        const auto chars = env->GetStringUTFChars(value, nullptr);
-        if (!chars)
-            return QString();
-        const auto result = QString::fromUtf8(chars);
-        env->ReleaseStringUTFChars(value, chars);
-        return result;
-    };
-    const auto key = text(uri), name = text(label);
+    if (!uri)
+        return;
+    const auto key = QJniObject(uri).toString();
     if (key.isEmpty())
         return;
+    const auto name = label ? QJniObject(label).toString() : QString();
     QMetaObject::invokeMethod(qApp, [key, name] {
         if (owner && chosenFolder)
             chosenFolder(key, name);

@@ -44,27 +44,36 @@ final class BooxRefresh {
         }
     }
     boolean available() { return available; }
-    private SurfaceView surface(View root) {
-        if (!root.isShown()) return null;
-        if (root.getClass().getName().equals("org.qtproject.qt.android.QtSurface")) return (SurfaceView)root;
-        SurfaceView found = null;
+    static final class SurfaceSearch<T> {
+        private T match;
+        private boolean ambiguous;
+        boolean add(T surface) {
+            if (match != null) ambiguous = true;
+            match = surface;
+            return !ambiguous;
+        }
+        T only() { return ambiguous ? null : match; }
+    }
+    private boolean findSurface(View root, SurfaceSearch<SurfaceView> search) {
+        if (!root.isShown()) return true;
+        if (root.getClass().getName().equals("org.qtproject.qt.android.QtSurface"))
+            return search.add((SurfaceView)root);
         if (root instanceof ViewGroup) {
             ViewGroup group = (ViewGroup)root;
-            for (int i = 0; i < group.getChildCount(); ++i) {
-                SurfaceView child = surface(group.getChildAt(i));
-                if (child != null) {
-                    if (found != null) throw new IllegalStateException("Multiple Qt surfaces");
-                    found = child;
-                }
-            }
+            for (int i = 0; i < group.getChildCount(); ++i)
+                if (!findSurface(group.getChildAt(i), search)) return false;
         }
-        return found;
+        return true;
     }
     // Android UI thread publishes immutable geometry; Qt never reads View state.
     void publish(View root, boolean active) {
         if (!available || !active) { target = null; return; }
         try {
-            SurfaceView view = surface(root);
+            // Qt may show old and replacement surfaces in the same pre-draw.
+            // Wait for a sole target, as when its view is absent.
+            SurfaceSearch<SurfaceView> search = new SurfaceSearch<>();
+            findSurface(root, search);
+            SurfaceView view = search.only();
             target = view != null && view.isAttachedToWindow() && view.getWidth() > 0 && view.getHeight() > 0
                     ? new Target(view) : null;
         } catch (RuntimeException | LinkageError error) {

@@ -117,26 +117,26 @@ bool ReaderController::resetBook(const QString &path)
 }
 
 void ReaderController::open(const QString &path, QSize pixels, QString sourceKey,
-                            bool restartAtStart)
+                            bool restartAtStart, QString position)
 {
     if (phase == Phase::Reading && path == current)
         return;
+    BookOpen request{ path, std::move(sourceKey), std::move(position), pixels, restartAtStart };
     if (!idle()) {
-        pending = path;
-        pendingSourceKey = std::move(sourceKey);
-        pendingSize = pixels;
-        pendingRestartAtStart = restartAtStart;
+        pending = std::move(request);
         retire();
         return;
     }
-    this->restartAtStart = restartAtStart;
-    currentSourceKey = std::move(sourceKey);
-    openingPosition = std::exchange(startPosition, {});
-    begin(path, pixels);
+    begin(std::move(request));
 }
 
-void ReaderController::begin(const QString &path, QSize pixels)
+void ReaderController::begin(BookOpen book)
 {
+    const auto &path = book.path;
+    const auto pixels = book.pixels;
+    restartAtStart = book.restartAtStart;
+    currentSourceKey = std::move(book.sourceKey);
+    openingPosition = std::move(book.position);
     // Known exception: opening from the library prepares the profile on the
     // main thread, also while another book is still open.
     mainthread::AllowBlocking allow("library opening");
@@ -379,7 +379,7 @@ void ReaderController::begin(const QString &path, QSize pixels)
 
 void ReaderController::close()
 {
-    pending.clear();
+    pending = {};
     if (idle())
         emit closed();
     else
@@ -433,11 +433,9 @@ void ReaderController::release()
             guard->current.clear();
             guard->phase = Phase::Idle;
             reportBookClose(std::exchange(guard->closing, {}));
-            if (!guard->pending.isEmpty()) {
-                guard->restartAtStart = std::exchange(guard->pendingRestartAtStart, false);
-                guard->currentSourceKey = std::exchange(guard->pendingSourceKey, {});
-                guard->begin(std::exchange(guard->pending, {}), guard->pendingSize);
-            } else
+            if (!guard->pending.path.isEmpty())
+                guard->begin(std::exchange(guard->pending, {}));
+            else
                 emit guard->closed();
         });
     });

@@ -1,3 +1,4 @@
+#include "platforms/android/library_open.h"
 #include "library/arrangement.h"
 #include "library/book_metadata.h"
 #include "library/library_index.h"
@@ -171,6 +172,37 @@ QStringList titles(const QVector<const Book *> &books)
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
+
+    // The Android Library applies a passage only after its own provider copy.
+    {
+        kobalt::android::LibraryOpen pending;
+        const auto request = pending.begin("book-a", "/body/p[2]");
+        const auto match = pending.complete(request);
+        require(match.key == "book-a" && match.position == "/body/p[2]",
+                "Matching provider result lost its passage");
+        require(pending.complete(request).key.isEmpty(), "Provider result was delivered twice");
+
+        const auto older = pending.begin("book-a", "/body/p[4]");
+        const auto current = pending.begin("book-a", "/body/p[6]");
+        require(pending.complete(older).key.isEmpty(),
+                "A late copy for the same book superseded a newer passage");
+        require(pending.complete(current).position == "/body/p[6]",
+                "An obsolete copy consumed the newer passage");
+
+        const auto cancelled = pending.begin("book-a", "/body/p[8]");
+        pending.cancel();
+        require(pending.complete(cancelled).key.isEmpty(),
+                "An external open left the cancelled provider request active");
+        const auto ordinary = pending.begin("book-b", {});
+        const auto book = pending.complete(ordinary);
+        require(book.key == "book-b" && book.position.isEmpty(),
+                "An ordinary book open inherited a cancelled passage");
+
+        const auto failed = pending.begin("book-a", "/body/p[10]");
+        pending.complete(failed);
+        require(pending.complete(failed).key.isEmpty(),
+                "A failed provider copy left a pending passage");
+    }
 
     // Metadata from EPUB 3 and EPUB 2 packages, with a percent-encoded cover path.
     {

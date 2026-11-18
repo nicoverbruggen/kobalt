@@ -15469,6 +15469,73 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!reader->property("reader_full_flash").toBool());
     }
 
+    // Cancelling and replacing an opening keeps only the latest request's passage.
+    void standaloneOpeningPassageFollowsRequest()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        storage::Paths paths{ directory.path() };
+        paths.stateReport = directory.filePath("state.json");
+        standalone::ReaderController controller(
+                paths, fixtureFonts(), fixturePlaceholder(),
+                [] {
+                    auto services = desktop::readerHostServices();
+                    services.suspended = [] { return false; };
+                    return services;
+                },
+                [](Qt::ScreenOrientation) {});
+        const auto drain = qScopeGuard([&] {
+            controller.close();
+            if (!QTest::qWaitFor([&] { return controller.idle(); }, 10000))
+                QTest::qFail("Opening controller did not drain", __FILE__, __LINE__);
+        });
+        connect(&controller, &standalone::ReaderController::opened, &controller,
+                [&] { controller.window()->show(); });
+        QSignalSpy opened(&controller, &standalone::ReaderController::opened);
+        const QSize pixels(600, 800);
+        const auto position = [&] {
+            controller.window()->checkpoint();
+            return storage::readJson(paths.stateReport).value("position").toString();
+        };
+
+        QVERIFY(writeBook(directory.path(), "original.epub", test::songbook(12)));
+        const auto original = directory.filePath("original.epub");
+        controller.open(original, pixels);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!position().isEmpty());
+        const auto beginning = position();
+        controller.window()->scriptedPageButton(1);
+        QTRY_VERIFY(!position().isEmpty() && position() != beginning);
+        const auto abandoned = position();
+        controller.window()->scriptedPageButton(1);
+        QTRY_VERIFY(!position().isEmpty() && position() != abandoned);
+        const auto requested = position();
+        controller.close();
+        QTRY_VERIFY(controller.idle());
+
+        const auto first = directory.filePath("first.epub");
+        const auto skipped = directory.filePath("skipped.epub");
+        const auto replacement = directory.filePath("replacement.epub");
+        QVERIFY(QFile::copy(original, first));
+        QVERIFY(QFile::copy(original, skipped));
+        QVERIFY(QFile::copy(original, replacement));
+        controller.open(first, pixels, {}, false, abandoned);
+        controller.open(skipped, pixels);
+        controller.open(replacement, pixels, {}, false, requested);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 10000);
+        QCOMPARE(controller.path(), replacement);
+        QTRY_COMPARE(position(), requested);
+
+        // Replacing an opening with an ordinary book open must clear its passage.
+        controller.close();
+        QTRY_VERIFY(controller.idle());
+        controller.open(first, pixels, {}, false, abandoned);
+        controller.open(skipped, pixels);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 3, 10000);
+        QCOMPARE(controller.path(), skipped);
+        QTRY_COMPARE(position(), beginning);
+    }
+
     // Checks that a controller recovers an interrupted earlier session and records each opened book under its source key.
     void standaloneHistorySourceKeys()
     {

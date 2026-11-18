@@ -735,7 +735,7 @@ void Reader::renderTextPresetGallery()
     auto round = std::make_shared<Round>();
     round->pending = wanted.size();
     const QPointer<TextPresetGallery> gallery(textPresetGallery);
-    const auto colors = ui::themeColors(darkTheme);
+    const auto colors = ui::themeColors(this);
     const auto finished = [gallery, round, cancelled, size, colors](const QString &id,
                                                                     const QImage &sample) {
         // A failed sample still finishes, so a page of previews is not held

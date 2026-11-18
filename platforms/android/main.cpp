@@ -343,7 +343,7 @@ private:
     void applyLibraryTheme()
     {
         const bool dark = controller.preferences().value("dark_mode").toBool(false);
-        start->setDark(dark);
+        start->applyLibraryTheme(controller.preferences(), controller.fontSources());
         setPalette(start->palette());
         android::setLibraryDark(dark);
     }

@@ -36,6 +36,16 @@
       "size": 70012
     },
     {
+      "path": "fonts/Kalam-Bold.ttf",
+      "sha256": "2f6576601db015d4f6c08678120277fc8510b98c06e932ce7a6a9cbff4cbdded",
+      "size": 460896
+    },
+    {
+      "path": "fonts/Kalam-Regular.ttf",
+      "sha256": "57cecb63d4608019371954274ae1d8c397764debd5b19d4a33c1efa4dc923c0b",
+      "size": 427360
+    },
+    {
       "path": "fonts/NotoNaskhArabic-Bold.ttf",
       "sha256": "04017b0ccdd1156dcde3bc386734c1b03165261762f16a025c8afc9088ae76e9",
       "size": 279468
@@ -154,6 +164,11 @@
       "path": "fonts/NotoSerifThai-Regular.ttf",
       "sha256": "747b5bb1fdd329850ddd3218d872a3d2a96ab0dd544f51e5300c6d1b12071b62",
       "size": 45424
+    },
+    {
+      "path": "fonts/PlaypenSans.ttf",
+      "sha256": "e083f9da8be210e08ea982ab510894641aab37590e70620d6db73f8de881ec4a",
+      "size": 1567080
     },
     {
       "path": "fonts/ebook-core.json",

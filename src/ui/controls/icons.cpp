@@ -15,6 +15,110 @@
 #include "reader_icon_vectors.h"
 
 namespace kobalt::ui {
+QString iconStyleId(IconStyle style)
+{
+    switch (style) {
+    case IconStyle::Rings:
+        return QStringLiteral("rings");
+    case IconStyle::Color:
+        return QStringLiteral("color");
+    case IconStyle::Pastel:
+        return QStringLiteral("pastel");
+    default:
+        return QStringLiteral("monochrome");
+    }
+}
+
+IconStyle iconStyleFromId(const QString &id)
+{
+    if (id == "rings")
+        return IconStyle::Rings;
+    if (id == "color")
+        return IconStyle::Color;
+    if (id == "pastel")
+        return IconStyle::Pastel;
+    return IconStyle::Monochrome;
+}
+
+IconStyle widgetIconStyle(const QWidget *widget)
+{
+    for (; widget; widget = widget->parentWidget()) {
+        const auto value = widget->property("kobalt_icon_style");
+        if (value.isValid())
+            return static_cast<IconStyle>(value.toInt());
+    }
+    return IconStyle::Monochrome;
+}
+
+QColor paintIconBackground(QPainter &painter, IconStyle style, ControlIcon icon, const QRect &area,
+                           const QColor &normalInk)
+{
+    if (style == IconStyle::Monochrome)
+        return normalInk;
+    QColor paper, ink;
+    switch (icon) {
+    case ControlIcon::Chapters:
+    case ControlIcon::System:
+    case ControlIcon::Bookmark:
+        paper = QColor(255, 204, 215);
+        ink = QColor(124, 32, 66);
+        break;
+    case ControlIcon::Compass:
+    case ControlIcon::Display:
+    case ControlIcon::Sync:
+        paper = QColor(171, 231, 218);
+        ink = QColor(16, 87, 77);
+        break;
+    case ControlIcon::Typography:
+    case ControlIcon::Styling:
+    case ControlIcon::Annotate:
+        paper = QColor(225, 203, 250);
+        ink = QColor(93, 48, 134);
+        break;
+    case ControlIcon::Light:
+    case ControlIcon::Layout:
+    case ControlIcon::Swipe:
+    case ControlIcon::Undo:
+        paper = QColor(255, 220, 153);
+        ink = QColor(121, 65, 15);
+        break;
+    default:
+        paper = QColor(186, 219, 253);
+        ink = QColor(35, 77, 129);
+        break;
+    }
+    if (style == IconStyle::Color)
+        return normalInk.lightness() > 128 ? paper : ink.lighter(128);
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(paper);
+    const int side = qMin(area.width(), area.height());
+    QRectF tile(0, 0, side, side);
+    tile.moveCenter(QRectF(area).center());
+    if (style == IconStyle::Rings) {
+        ink = normalInk.lightness() > 128 ? paper : ink;
+        const qreal stroke = qMax(1, side / 18);
+        painter.setPen(QPen(ink, stroke));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(tile.adjusted(stroke / 2, stroke / 2, -stroke / 2, -stroke / 2));
+    } else {
+        painter.drawRoundedRect(tile, side * .28, side * .28);
+    }
+    painter.restore();
+    return ink;
+}
+
+void paintStyledIcon(QPainter &painter, IconStyle style, ControlIcon icon, const QRect &area,
+                     const QColor &normalInk)
+{
+    const auto ink = paintIconBackground(painter, style, icon, area, normalInk);
+    const int pad = style == IconStyle::Rings ? qMin(area.width(), area.height()) / 5
+            : style == IconStyle::Pastel      ? qMin(area.width(), area.height()) / 9
+                                              : 0;
+    paintOpeningIcon(painter, icon, area.adjusted(pad, pad, -pad, -pad), ink);
+}
+
 QStringList bookmarkIconNames()
 {
     return { "map",      "compass",   "home",   "flag",     "heart",     "lightbulb", "people",
@@ -807,15 +911,14 @@ void Button::refreshIcon()
 {
     if (!hasConfiguredIcon)
         return;
-    const bool dark = darkTheme(this);
-    if (hasIconTheme && iconDark == dark)
+    const auto &colors = themeColors(this);
+    if (hasIconTheme && iconInk == colors.ink)
         return;
     const auto &configuration = configuredIcon;
-    const auto &colors = themeColors(dark);
     setIcon(QIcon(new VectorIconEngine(configuration.glyph, colors.ink,
                                        configuration.rotationSideButtons, configuration.rendition,
                                        colors.paper)));
-    iconDark = dark;
+    iconInk = colors.ink;
     hasIconTheme = true;
 }
 

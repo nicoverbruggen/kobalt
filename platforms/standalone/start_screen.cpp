@@ -1,4 +1,8 @@
 #include "start_screen.h"
+#include "app/reader/settings/interface_style.h"
+#include "assets/font_catalog.h"
+#include "ui/style/fonts.h"
+#include "ui/style/private_text.h"
 #include "app/library/library_view.h"
 #include "library/library_store.h"
 #include "canvas.h"
@@ -76,6 +80,8 @@ void StartScreen::buildLibrary()
     view->resourceFolderLabels = resourceFolderLabels;
     view->chooseResourceFolder = chooseResourceFolder;
     view->setKeyboardFactory(keyboard);
+    view->setProperty("kobalt_icon_style", property("kobalt_icon_style"));
+    view->setProperty("kobalt_palette", property("kobalt_palette"));
     view->setDark(dark);
     view->show();
     if (hostScaled)
@@ -180,13 +186,41 @@ bool StartScreen::libraryShown() const
     return canvas && currentWidget() == canvas;
 }
 
-void StartScreen::setDark(bool value)
+void StartScreen::applyLibraryTheme(const QJsonObject &preferences, const FontSources &sources)
+{
+    const auto style = reader::savedInterfaceStyle(preferences);
+    QString mainFace, monoFace;
+    const auto mono = preferences.value("ui_mono_font_face").toString();
+    if (!style.mainFace.isEmpty() || !mono.isEmpty()) {
+        for (const auto &font : discoverReadingFonts(sources)) {
+            if (font.family != style.mainFace && font.family != mono)
+                continue;
+            for (const auto &file : font.files)
+                ui::registerPrivateInterfaceFont(file, font.family);
+            if (font.family == style.mainFace)
+                mainFace = font.family;
+            if (font.family == mono)
+                monoFace = font.family;
+        }
+    }
+    ui::setInterfaceFontFamily(mainFace);
+    ui::setInterfaceMonoFontFamily(monoFace);
+    setProperty("kobalt_icon_style", int(style.icons));
+    view->setProperty("kobalt_icon_style", int(style.icons));
+    view->setFont(ui::interfaceFont());
+    setDark(preferences.value("dark_mode").toBool(), style.palette);
+}
+
+void StartScreen::setDark(bool value, const QString &paletteId)
 {
     dark = value;
+    setProperty("kobalt_palette", paletteId);
     setProperty("reader_dark", dark);
-    ui::applyReaderPalette(this, ui::readerPalette(palette(), dark));
-    if (view)
+    ui::applyReaderPalette(this, ui::readerPalette(palette(), dark, paletteId));
+    if (view) {
+        view->setProperty("kobalt_palette", paletteId);
         view->setDark(dark);
+    }
     if (canvas) {
         canvas->setProperty("reader_dark", dark);
         ui::applyReaderPalette(canvas, view->palette());

@@ -475,21 +475,21 @@ protected:
         const int top = labelsHidden ? (height() - chrome::tabIcon) / 2
                                      : (height() - chrome::tabIcon - chrome::tabGap - capital) / 2;
         const QRect icon((width() - chrome::tabIcon) / 2, top, chrome::tabIcon, chrome::tabIcon);
-        painter.setPen(color);
+        const auto style = ui::widgetIconStyle(this);
         if (glyph == ui::ControlIcon::Typography) {
-            painter.setFont(sample);
+            auto face = sample;
+            painter.setPen(ui::paintIconBackground(painter, style, glyph, icon, color));
+            if (style == ui::IconStyle::Pastel || style == ui::IconStyle::Rings)
+                face.setPixelSize(qMax(1, face.pixelSize() * 3 / 4));
+            painter.setFont(face);
             ui::drawOpticalText(painter, QRect(0, icon.top(), width(), icon.height()),
                                 QStringLiteral("Aa"), true, {});
         } else {
-            const auto vector = ui::controlIcon(glyph, color);
-            // Annotate has no QIcon form. The notice painter draws the same glyph.
-            if (vector.isNull())
-                ui::paintOpeningIcon(painter, glyph, icon, color);
-            else
-                vector.paint(&painter, icon);
+            ui::paintStyledIcon(painter, style, glyph, icon, color);
         }
         if (labelsHidden)
             return;
+        painter.setPen(color);
         painter.setFont(label);
         ui::drawOpticalText(
                 painter,
@@ -1053,8 +1053,6 @@ void Navigation::placeZenToolbar(QSize size, const QVector<QWidget *> &actions,
             rowTop + (int(chrome::statusHeight) - int(ui::metrics::control::border)) / 2;
     // The clock centers its digits' ink in its label, so the label centers
     // on the row.
-    if (auto *label = dynamic_cast<ui::InterfaceLabel *>(clock))
-        label->setOpticalCentering(true);
     const int clockTop = rowCenter - line / 2;
     const int clockWidth = qMin(ui::textPx(160), clock->sizeHint().width());
     clock->setGeometry(left + (groupWidth - clockWidth) / 2, clockTop, clockWidth, line);
@@ -1100,8 +1098,6 @@ void Navigation::placeToolbar(QSize size, const QVector<QWidget *> &actions, boo
         toolbar->clearMask();
     zenMark->hide();
     zenStatsButton->hide();
-    if (auto *label = dynamic_cast<ui::InterfaceLabel *>(clock))
-        label->setOpticalCentering(false);
     zenStatsPanel->hide();
     if (exitAction->property("reader_arrow_only").toBool()) {
         exitAction->setProperty("reader_arrow_only", false);

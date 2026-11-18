@@ -28,6 +28,8 @@ QStringList fontFiles(File file)
         add(file("fonts/ebook-core/" + entry.toObject().value("file").toString()));
     for (const auto *face : { "Regular", "Italic", "Bold" })
         add(file(QString("fonts/IBMPlexSans-%1.ttf").arg(face)));
+    for (const auto *face : { "Kalam-Regular.ttf", "Kalam-Bold.ttf", "PlaypenSans.ttf" })
+        add(file(QStringLiteral("fonts/") + QLatin1String(face)));
     for (const auto *name : kobalt::scriptFallbackFontFiles)
         add(file(QString("fonts/") + QLatin1String(name)));
     return result;

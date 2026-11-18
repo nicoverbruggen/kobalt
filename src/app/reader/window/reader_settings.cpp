@@ -440,16 +440,14 @@ void Reader::openSettings()
     if (!settingsDefaultFontFace.isEmpty()
         && !session->fontFaces().contains(settingsDefaultFontFace))
         settingsDefaultFontFace = defaultFontFace;
-    settingsUiFontFace = preferences.value("ui_font_face").toString();
-    settingsUiMonoFontFace = preferences.value("ui_mono_font_face").toString();
-    settingsHeaderFooterFontFace = preferences.value("header_footer_font_face").toString();
+    loadThemeSettings();
     settingsDictionaryFontFace = preferences.value("dictionary_font_face").toString();
     settingsDictionaryFontSize = preferences.value("dictionary_font_size").toInt(100);
-    settingsHeaderFooterWeight = ui::headerFooterAddedWeight();
     settingsTimeRemainingFormat =
             remainingTime::approximate(preferences) ? "approximate" : "detailed";
     settingsPercentageFormat = headerfooter::decimalPercentages(preferences) ? "decimal" : "whole";
     settingsRenderingMode = renderingMode::value(renderingMode::fromPreferences(preferences));
+    static_cast<SettingsPanel *>(general)->selectTheme(interfaceTheme(), themeDraft);
     hideTabLabelsOption->setChecked(preferences.value("hide_tab_labels").toBool(false));
     saveWordsOption->setChecked(preferences.value("save_looked_up_words").toBool(true));
     zenModeOption->setChecked(preferences.value("zen_mode").toBool(false));
@@ -459,7 +457,7 @@ void Reader::openSettings()
         wifiPowerSaverOption->setChecked(preferences.value(wifiPowerSaverKey).toBool(false));
     if (disableStandbyOption)
         disableStandbyOption->setChecked(preferences.value(disableReaderStandbyKey).toBool(false));
-    for (auto *face : { &settingsUiFontFace, &settingsUiMonoFontFace, &settingsHeaderFooterFontFace,
+    for (auto *face : { &themeDraft.mainFace, &settingsMonoFace, &settingsStripFace,
                         &settingsDictionaryFontFace })
         if (!session->fontFaces().contains(*face))
             face->clear();
@@ -874,12 +872,17 @@ void Reader::applySettings()
     }
     auto next = preferences;
     next["default_font_face"] = settingsDefaultFontFace;
-    next["ui_font_face"] = settingsUiFontFace;
-    next["ui_mono_font_face"] = settingsUiMonoFontFace;
-    next["header_footer_font_face"] = settingsHeaderFooterFontFace;
+    next["ui_font_face"] = customTheme.mainFace;
+    next["ui_mono_font_face"] = settingsMonoFace;
+    next["header_footer_font_face"] = settingsStripFace;
     next["dictionary_font_face"] = settingsDictionaryFontFace;
     next["dictionary_font_size"] = settingsDictionaryFontSize;
-    next["header_footer_added_weight"] = settingsHeaderFooterWeight;
+    next["header_footer_added_weight"] = settingsStripWeight;
+    next["ui_palette"] = customTheme.palette;
+    next["ui_icon_style"] = ui::iconStyleId(customTheme.icons);
+    next.remove("ui_colorful_icons");
+    next["ui_theme"] = static_cast<SettingsPanel *>(general)->selectedTheme;
+    next.remove("playful_theme");
     next["hide_tab_labels"] = hideTabLabelsOption->isChecked();
     next[features::debugModeKey] =
             static_cast<SettingsPanel *>(general)->debugModeOption->isChecked();
@@ -984,7 +987,6 @@ void Reader::applySettings()
     bookmarkList->setSortOrder(preferences.value("marks_sort").toString("position"));
     showMenuView();
     showNavigationBarButtons();
-    ui::setHeaderFooterAddedWeight(settingsHeaderFooterWeight);
     applyInterfaceFonts();
     dictionaryPanel->setDefinitionFont(settingsDictionaryFontFace, settingsDictionaryFontSize);
     navigation->setStatusVisible(!hideNativeStatus());
@@ -1228,7 +1230,8 @@ void Reader::themeWidget(QWidget *widget, const QPalette &colors)
 
 void Reader::applyTheme(bool dark)
 {
-    if (themeReady && darkTheme == dark)
+    if (themeReady && darkTheme == dark
+        && property("kobalt_palette").toString() == themeDraft.palette)
         return;
     // The first theme is part of showing the reader.
     const bool first = !themeReady;
@@ -1237,7 +1240,8 @@ void Reader::applyTheme(bool dark)
     themeReady = true;
     darkTheme = dark;
     // Theme this window only. Nickel keeps its own palette when we close.
-    const auto colors = ui::readerPalette(palette(), dark);
+    setProperty("kobalt_palette", themeDraft.palette);
+    const auto colors = ui::readerPalette(palette(), dark, themeDraft.palette);
     themePalette = colors;
     setProperty("reader_dark", dark);
     ui::applyReaderPalette(this, colors);
@@ -1539,18 +1543,55 @@ void Reader::applyEdgeLight()
     }
 }
 
+QString Reader::interfaceTheme() const
+{
+    return savedThemeId(preferences);
+}
+
+InterfaceStyle Reader::themeStyle(const QString &theme) const
+{
+    return theme == "custom" ? customTheme : themePreset(theme);
+}
+
+void Reader::loadThemeSettings()
+{
+    customTheme = customInterfaceStyle(preferences);
+    settingsMonoFace = preferences.value("ui_mono_font_face").toString();
+    settingsStripFace = preferences.value("header_footer_font_face").toString();
+    settingsStripWeight = preferences.value("header_footer_added_weight").toInt(2);
+    for (auto *face : { &customTheme.mainFace, &settingsMonoFace, &settingsStripFace })
+        if (!session->fontFaces().contains(*face))
+            face->clear();
+    themeDraft = themeStyle(interfaceTheme());
+}
+
+void Reader::markThemeCustom()
+{
+    customTheme = themeDraft;
+    applyInterfaceFonts();
+    static_cast<SettingsPanel *>(general)->selectTheme(QStringLiteral("custom"), themeDraft);
+}
+
+void Reader::applyThemeFonts()
+{
+    setProperty("kobalt_icon_style", int(themeDraft.icons));
+    ui::setInterfaceFontFamily(themeDraft.mainFace);
+    ui::setInterfaceMonoFontFamily(settingsMonoFace);
+    ui::setHeaderFooterFontFamily(settingsStripFace);
+    ui::setHeaderFooterAddedWeight(settingsStripWeight);
+}
+
 void Reader::applyInterfaceFonts()
 {
-    for (const auto &face :
-         { settingsUiFontFace, settingsUiMonoFontFace, settingsHeaderFooterFontFace })
+    for (const auto &face : { themeDraft.mainFace, settingsMonoFace, settingsStripFace })
         if (!face.isEmpty())
             registerPickerFonts(face);
     const auto previousUi = ui::interfaceFont().family(),
                previousStrip = ui::headerFooterFont().family(),
                previousMono = ui::chromeFont().family();
-    ui::setInterfaceFontFamily(settingsUiFontFace);
-    ui::setInterfaceMonoFontFamily(settingsUiMonoFontFace);
-    ui::setHeaderFooterFontFamily(settingsHeaderFooterFontFace);
+    applyThemeFonts();
+    if (themeReady)
+        applyTheme(darkTheme);
     if (previousUi == ui::interfaceFont().family()
         && previousStrip == ui::headerFooterFont().family()
         && previousMono == ui::chromeFont().family())
@@ -1578,24 +1619,24 @@ void Reader::showSettingsFonts()
     panel->renderingButton->setCaption(
             SettingsPanel::renderingModeLabel(settingsRenderingMode).toUpper());
     panel->headerFooterWeightButton->setCaption(
-            (settingsHeaderFooterWeight ? strings::get("settings.header_footer_weight_heavier")
-                                                  .arg(settingsHeaderFooterWeight)
-                                        : strings::get("settings.header_footer_weight_lighter"))
+            (settingsStripWeight ? strings::get("settings.header_footer_weight_heavier")
+                                           .arg(settingsStripWeight)
+                                 : strings::get("settings.header_footer_weight_lighter"))
                     .toUpper());
     panel->uiFontButton->setCaption(
-            (settingsUiFontFace.isEmpty()
+            (themeDraft.mainFace.isEmpty()
                      ? strings::get("settings.font_default_value").arg("IBM Plex Sans")
-                     : fontDisplayName(settingsUiFontFace))
+                     : fontDisplayName(themeDraft.mainFace))
                     .toUpper());
     panel->uiMonoFontButton->setCaption(
-            (settingsUiMonoFontFace.isEmpty()
+            (settingsMonoFace.isEmpty()
                      ? strings::get("settings.font_default_value").arg("IBM Plex Mono")
-                     : fontDisplayName(settingsUiMonoFontFace))
+                     : fontDisplayName(settingsMonoFace))
                     .toUpper());
     panel->headerFooterFontButton->setCaption(
-            (settingsHeaderFooterFontFace.isEmpty()
+            (settingsStripFace.isEmpty()
                      ? strings::get("settings.font_default_value").arg("IBM Plex Mono")
-                     : fontDisplayName(settingsHeaderFooterFontFace))
+                     : fontDisplayName(settingsStripFace))
                     .toUpper());
     const auto sample = [this](ui::CaptionButton *button, const QString &family) {
         if (button->typefacePreview() != family)
@@ -1603,13 +1644,11 @@ void Reader::showSettingsFonts()
         button->setTypefacePreview(family);
     };
     sample(panel->uiFontButton,
-           settingsUiFontFace.isEmpty() ? QStringLiteral("IBM Plex Sans") : settingsUiFontFace);
+           themeDraft.mainFace.isEmpty() ? QStringLiteral("IBM Plex Sans") : themeDraft.mainFace);
     sample(panel->uiMonoFontButton,
-           settingsUiMonoFontFace.isEmpty() ? QStringLiteral("IBM Plex Mono")
-                                            : settingsUiMonoFontFace);
+           settingsMonoFace.isEmpty() ? QStringLiteral("IBM Plex Mono") : settingsMonoFace);
     sample(panel->headerFooterFontButton,
-           settingsHeaderFooterFontFace.isEmpty() ? QStringLiteral("IBM Plex Mono")
-                                                  : settingsHeaderFooterFontFace);
+           settingsStripFace.isEmpty() ? QStringLiteral("IBM Plex Mono") : settingsStripFace);
     const auto dictionaryDefault = bookFace();
     const auto dictionaryFace =
             settingsDictionaryFontFace.isEmpty() ? dictionaryDefault : settingsDictionaryFontFace;
@@ -1657,9 +1696,9 @@ void Reader::openSettingsFont(const QString &key)
                               strings::get("settings.sans_font"),
                               strings::get("settings.mono_font") };
     const auto selected = isDefault ? settingsDefaultFontFace
-            : isUi                  ? settingsUiFontFace
-            : isMono                ? settingsUiMonoFontFace
-            : isHeaderFooter        ? settingsHeaderFooterFontFace
+            : isUi                  ? themeDraft.mainFace
+            : isMono                ? settingsMonoFace
+            : isHeaderFooter        ? settingsStripFace
             : isDictionary          ? settingsDictionaryFontFace
                                     : settingsFontFaces.value(key).toString();
     auto fonts = session->fontCatalog();
@@ -1688,20 +1727,24 @@ void Reader::openSettingsFont(const QString &key)
                                               : isDictionary
                                               ? bookFace()
                                               : fallbackFontDefaults(session->fontFaces())[index])),
-            [this, key, isDefault, isUi, isMono, isHeaderFooter,
+            [this, key, selected, isDefault, isUi, isMono, isHeaderFooter,
              isDictionary](const QString &family) {
                 if (isDefault)
                     settingsDefaultFontFace = family;
                 else if (isUi)
-                    settingsUiFontFace = family;
+                    themeDraft.mainFace = family;
                 else if (isMono)
-                    settingsUiMonoFontFace = family;
+                    settingsMonoFace = family;
                 else if (isHeaderFooter)
-                    settingsHeaderFooterFontFace = family;
+                    settingsStripFace = family;
                 else if (isDictionary)
                     settingsDictionaryFontFace = family;
                 else
                     settingsFontFaces[key] = family;
+                if (isUi && family != selected)
+                    markThemeCustom();
+                else if ((isMono || isHeaderFooter) && family != selected)
+                    applyInterfaceFonts();
                 showSettingsFonts();
                 refresh();
             });

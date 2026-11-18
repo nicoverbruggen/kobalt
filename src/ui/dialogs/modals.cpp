@@ -605,8 +605,7 @@ void ModalOverlay::centerCard()
         // width before paging rows, since a single row cannot be split.
         const int availableWidth = width() - 2 * int(metrics::notice::sideClearance);
         if (!fitChoiceContents && cardArea.isEmpty() && room > 0 && content->height() > room
-            && width() > height()
-            && content->width() < availableWidth)
+            && width() > height() && content->width() < availableWidth)
             content->fitToWidth(availableWidth);
         if (!fitChoiceContents && cardArea.isEmpty() && room > 0
             && (content->height() > room || content->property("card_paged").toBool())) {
@@ -814,7 +813,7 @@ PopupWindow::PopupWindow(QWidget *source, bool dark)
         background = source->grab();
     setWindowModality(Qt::ApplicationModal);
     setProperty("reader_dark", dark);
-    const auto colors = readerPalette(palette(), dark);
+    const auto colors = readerPalette(palette(), dark, interfacePalette(this));
     setPalette(colors);
     setFont(interfaceFont());
     readerStyle(this, styles::reader());

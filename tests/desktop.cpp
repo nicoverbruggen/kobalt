@@ -740,6 +740,11 @@ struct Fixture
                     modal->objectName().isEmpty() ? QStringLiteral("rrCard") : modal->objectName();
             auto *previous = modal->findChild<QPushButton *>(name + "Previous");
             auto *next = modal->findChild<QPushButton *>(name + "Next");
+            if (!previous && name.endsWith(QStringLiteral("Popup"))) {
+                const auto prefix = name.left(name.size() - 5);
+                previous = modal->findChild<QPushButton *>(prefix + "Previous");
+                next = modal->findChild<QPushButton *>(prefix + "Next");
+            }
             while (!target->isVisible() && previous && previous->isVisible()
                    && previous->isEnabled())
                 if (!click(previous))
@@ -7846,6 +7851,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             counterName = view == "downloaded-dictionaries" ? "rrDictionariesPage"
                                                             : "rrSettingsOptionsPage";
             if (view == "settings-fonts") {
+                QVERIFY(revealSettingsOption(fixture, "rrTheming"));
+                QVERIFY(fixture.press("rrTheming"));
+                QVERIFY(fixture.press("rrThemePreset"));
+                QVERIFY(fixture.press("rrTheme_custom"));
                 QVERIFY(revealSettingsOption(fixture, "rrUiFont"));
                 QVERIFY(fixture.press("rrUiFont"));
                 counterName = "rrSettingsFontPage";
@@ -16854,6 +16863,175 @@ private slots:
                      qPrintable(QString("%1 vs %2").arg(right).arg(mark->x() - groupLeft)));
         }
         QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-zen-battery"));
+    }
+
+    void playfulTheme_data() { screenshotVariants(); }
+
+    void playfulTheme()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        auto saved = storage::readJson(fixture.paths.preferences());
+        saved["ui_font_face"] = QStringLiteral("NV Jost");
+        saved["header_footer_added_weight"] = 6;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto bookFace = fixture.state().value("font_face");
+        QCOMPARE(ui::interfaceFont().family(), QStringLiteral("NV Jost"));
+        const auto showTheme = [&] {
+            return fixture.press("rrSettings") && fixture.press("rrSettingsSystem")
+                    && revealSettingsOption(fixture, "rrTheming") && fixture.press("rrTheming");
+        };
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(showTheme());
+        QVERIFY(fixture.press("rrSettingsBack"));
+        QVERIFY(revealSettingsOption(fixture, "rrTheming"));
+        QVERIFY(fixture.press("rrTheming"));
+        QVERIFY(!fixture.visible("rrSettingsRail"));
+        QVERIFY(fixture.press("rrThemePreset"));
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-theme-presets"));
+        QVERIFY(fixture.press("rrTheme_playful"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_COMPARE(ui::interfaceFont().family(), QStringLiteral("Kalam"));
+        QCOMPARE(ui::headerFooterAddedWeight(), 6);
+        QTRY_VERIFY(storage::readJson(fixture.paths.preferences()).value("ui_theme").toString()
+                    == "playful");
+        const QString secondBook = fixture.paths.directory + "/second.epub";
+        QVERIFY(QFile::copy(book, secondBook));
+        fixture.window.openBook(secondBook);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QCOMPARE(ui::interfaceFont().family(), QStringLiteral("Kalam"));
+        QCOMPARE(ui::nativeEditorFontData(ui::interfaceFont()),
+                 assets->fontData("Kalam-Regular.ttf"));
+        QVERIFY(!ui::nativeEditorFontData(ui::interfaceFont()).isEmpty());
+        QCOMPARE(fixture.state().value("font_face"), bookFace);
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        for (bool footer : { false, true }) {
+            if (!(footer ? page->bottomHeight() : page->topHeight()))
+                continue;
+            const auto strip = page->stripSnapshot(footer);
+            QVERIFY(!strip.isNull());
+            QCOMPARE(strip.pixelColor(0, 0), ui::themeColors(dark).paper);
+        }
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-playful-reading"));
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-playful-menu"));
+        QVERIFY(showTheme());
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-playful-settings"));
+        QVERIFY(fixture.press("rrIconTheme"));
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-theme-icons"));
+        QVERIFY(fixture.press("rrIconTheme_color"));
+        QVERIFY(fixture.press("rrColorTheme"));
+        QVERIFY(fixture.press("rrColorTheme_sage"));
+        QCOMPARE(ui::dividerColor(fixture.widget("rrThemePreset")),
+                 ui::themeColors(dark, "sage").divider);
+        auto *presetRow = static_cast<ui::CaptionButton *>(fixture.widget("rrThemePreset"));
+        QCOMPARE(presetRow->caption(), QStringLiteral("CUSTOM"));
+        QVERIFY(fixture.press("rrThemePreset"));
+        QVERIFY(fixture.press("rrTheme_classic"));
+        QCOMPARE(ui::interfaceFont().family(), QStringLiteral("IBM Plex Sans"));
+        QCOMPARE(presetRow->font().family(), QStringLiteral("IBM Plex Sans"));
+        QCOMPARE(ui::dividerColor(presetRow), ui::themeColors(dark).divider);
+        QTRY_VERIFY(!fixture.widget("rrThemePopup"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_COMPARE(ui::interfaceFont().family(), QStringLiteral("IBM Plex Sans"));
+        if (!fixture.visible("rrSettings"))
+            QVERIFY(fixture.press("rrPage"));
+        QVERIFY(showTheme());
+        QVERIFY(fixture.press("rrThemePreset"));
+        QVERIFY(fixture.press("rrTheme_custom"));
+        QVERIFY(revealSettingsOption(fixture, "rrUiFont"));
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-custom-theme"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_COMPARE(ui::interfaceFont().family(), QStringLiteral("Kalam"));
+        QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("ui_theme").toString(),
+                     QStringLiteral("custom"));
+        QCOMPARE(storage::readJson(fixture.paths.preferences()).value("ui_palette"),
+                 QJsonValue("sage"));
+        QCOMPARE(storage::readJson(fixture.paths.preferences()).value("ui_icon_style"),
+                 QJsonValue("color"));
+        if (!fixture.visible("rrSettings"))
+            QVERIFY(fixture.press("rrPage"));
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-color-only-menu"));
+        QVERIFY(showTheme());
+        QVERIFY(fixture.press("rrThemePreset"));
+        QVERIFY(fixture.press("rrTheme_notebook"));
+        QCOMPARE(ui::interfaceFont().family(), QStringLiteral("Playpen Sans"));
+        QVERIFY(!ui::nativeEditorFontData(ui::interfaceFont()).isEmpty());
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-notebook-settings"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        if (!fixture.visible("rrSettings"))
+            QVERIFY(fixture.press("rrPage"));
+        if (fixture.visible("rrMenuClock")) {
+            auto *clock = fixture.widget("rrMenuClock");
+            const auto image = clock->grab().toImage();
+            const int paper = qGray(clock->palette().color(QPalette::Window).rgb());
+            int top = image.height(), bottom = -1;
+            for (int y = 0; y < image.height(); ++y)
+                for (int x = 0; x < image.width(); ++x)
+                    if (qAbs(qGray(image.pixel(x, y)) - paper) > 48) {
+                        top = qMin(top, y);
+                        bottom = y;
+                        break;
+                    }
+            QVERIFY(bottom >= top);
+            const int below = image.height() - bottom - 1;
+            QVERIFY(top > 0 && below > 0);
+            QVERIFY(qAbs(top - below) <= 2 * image.devicePixelRatio());
+        }
+        auto *zoomImage = fixture.widget("rrScrubberImage");
+        QVERIFY(zoomImage->isVisible());
+        QVERIFY2(zoomImage->width() >= zoomImage->sizeHint().width(),
+                 qPrintable(QString("Zoom image width %1, needed %2")
+                                    .arg(zoomImage->width())
+                                    .arg(zoomImage->sizeHint().width())));
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-notebook-menu"));
+    }
+
+    void paletteViews_data() { screenshotVariants(); }
+
+    void paletteViews()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        for (const auto *palette : { "sage", "sepia" }) {
+            Fixture fixture(dark);
+            QVERIFY(fixture.prepared);
+            auto saved = storage::readJson(fixture.paths.preferences());
+            saved["ui_theme"] = QStringLiteral("custom");
+            saved["ui_palette"] = QString::fromLatin1(palette);
+            saved["ui_font_face"] = QStringLiteral("Playpen Sans");
+            saved["zen_mode"] = true;
+            QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
+            selectPreview(fixture, preset);
+            QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+            fixture.window.openBook(book);
+            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            openPrologueBody(fixture);
+            if (!fixture.visible("rrBottomNavigation"))
+                QVERIFY(fixture.press("rrPage"));
+            QTRY_VERIFY(fixture.visible("rrNavSearch"));
+            const auto prefix = screenshotVariant(preset, dark) + "-" + palette;
+            QVERIFY(capture(fixture, prefix + "-zen"));
+            fixture.window.readerWindow()->close();
+            QTRY_VERIFY(fixture.window.idle());
+            auto *start = fixture.window.findChild<standalone::StartScreen *>();
+            QVERIFY(start && start->libraryShown());
+            auto *toolbar = start->library()->findChild<QPushButton *>("librarySearch");
+            QVERIFY(toolbar);
+            QCOMPARE(ui::widgetIconStyle(toolbar), ui::IconStyle::Monochrome);
+            QCOMPARE(ui::interfacePalette(toolbar), QString::fromLatin1(palette));
+            QCOMPARE(toolbar->window()->font().family(), QStringLiteral("Playpen Sans"));
+            QVERIFY(capture(fixture, prefix + "-library"));
+        }
     }
 
     void standbySettings_data() { screenshotVariants(); }

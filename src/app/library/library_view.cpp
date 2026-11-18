@@ -844,6 +844,7 @@ LibraryView::LibraryView(const Index &index, std::function<QString(const QString
     const auto cell = [this](ui::ControlIcon icon, const char *name, const QString &label) {
         auto *button = new ui::CellButton(icon, this);
         button->setObjectName(name);
+        button->setProperty("themed_icon", true);
         button->setAccessibleName(label);
         button->setRule(Qt::LeftEdge);
         return button;
@@ -1083,7 +1084,7 @@ void LibraryView::setScanning(bool value, int count)
 void LibraryView::setDark(bool value)
 {
     dark = value;
-    const auto colors = ui::readerPalette(palette(), dark);
+    const auto colors = ui::readerPalette(palette(), dark, ui::interfacePalette(this));
     setProperty("reader_dark", dark);
     ui::applyReaderPalette(this, colors);
     for (auto *widget : findChildren<QWidget *>()) {
@@ -1335,7 +1336,7 @@ void LibraryView::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     // The reader style sheet on this root widget keeps its own text color, so
     // take the ink from the theme rather than the palette.
-    const auto &ink = ui::themeColors(dark).ink;
+    const auto &ink = ui::themeColors(this).ink;
     painter.fillRect(0, chrome::actionHeight - chrome::heavyRule, width(), chrome::heavyRule, ink);
     painter.fillRect(0,
                      chrome::actionHeight + chrome::toolStripHeight - ui::metrics::control::border,
@@ -1380,7 +1381,7 @@ void LibraryView::showBookMenu(const QString &key)
         header.image = QImage(ui::metrics::actionMenu::thumbnailWidth,
                               ui::metrics::actionMenu::thumbnailHeight, QImage::Format_RGB32);
         QPainter painter(&header.image);
-        const auto &colors = ui::themeColors(dark);
+        const auto &colors = ui::themeColors(this);
         BookPages::paintPlainCover(painter, header.image.rect(), book, colors.ink, colors.paper);
     }
     header.title = book.displayTitle();

@@ -32,6 +32,8 @@ public:
     // Reader preferences such as dark mode, shared by every book.
     QJsonObject preferences() const;
 
+    const FontSources &fontSources() const { return fonts.sources; }
+
     ReaderWindow *window() const { return window_; }
 
     bool idle() const { return phase == Phase::Idle; }

@@ -4,6 +4,10 @@
 #include <QStackedWidget>
 #include <functional>
 
+namespace kobalt {
+struct FontSources;
+}
+
 namespace kobalt::library {
 class LibraryView;
 class Store;
@@ -38,7 +42,8 @@ public:
     void applyTextSize();
     void setKeyboardFactory(KeyboardFactory factory);
     // Follows the reader's dark mode setting.
-    void setDark(bool dark);
+    void applyLibraryTheme(const QJsonObject &preferences, const FontSources &sources);
+    void setDark(bool dark, const QString &palette = {});
     library::LibraryView *library();
     WidgetCanvas *libraryCanvas();
 

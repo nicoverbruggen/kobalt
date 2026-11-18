@@ -460,7 +460,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
         if (!controller.window())
             start->applyTextSize();
     });
-    start->setDark(controller.preferences().value("dark_mode").toBool(false));
+    start->applyLibraryTheme(controller.preferences(), controller.fontSources());
     connect(start, &standalone::StartScreen::bookRequested, this,
             [this](const QString &path) { openBook(path); });
     connect(start, &standalone::StartScreen::passageRequested, this,
@@ -591,7 +591,7 @@ Window::Window(storage::Paths paths, EngineFontInputs fonts, QString placeholder
     });
     connect(&controller, &standalone::ReaderController::closed, this, [this] {
         recordProgress();
-        start->setDark(controller.preferences().value("dark_mode").toBool(false));
+        start->applyLibraryTheme(controller.preferences(), controller.fontSources());
         if (!failed)
             start->showLibrary();
         stack->setCurrentWidget(start);

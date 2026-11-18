@@ -93,7 +93,8 @@ private:
     Qt::Alignment contentAlignment = Qt::AlignHCenter;
     int iconLabelGap = 0;
     bool iconAboveLabel = false;
-    bool hasConfiguredIcon = false, hasIconTheme = false, iconDark = false;
+    bool hasConfiguredIcon = false, hasIconTheme = false;
+    QColor iconInk;
 };
 
 // A selectable diagram of the actual page hit regions, with a label below it.
@@ -260,6 +261,15 @@ public:
     // Typeface rows reserve an Aa sample before their chevron.
     void setTypefacePreview(const QString &face);
 
+    void setIconStylePreview(IconStyle style)
+    {
+        previewIcons = true;
+        previewStyle = style;
+        update();
+    }
+
+    void setSample(QWidget *sample);
+
     QString typefacePreview() const { return previewFace; }
 
     void setRule(Edges edges)
@@ -294,6 +304,9 @@ private:
     Presentation mode;
     ControlIcon glyph = ControlIcon::Link;
     QString note, previewFace, description;
+    QWidget *rowSample = nullptr;
+    bool previewIcons = false;
+    IconStyle previewStyle = IconStyle::Monochrome;
     QFont previewFont;
     int previewDensity = 0;
     Edges rule;

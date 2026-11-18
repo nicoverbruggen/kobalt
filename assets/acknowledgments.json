@@ -288,6 +288,28 @@
   },
   {
     "group": "fonts",
+    "name": "Playpen Sans",
+    "version": "Version 2.000",
+    "description": "Interface handwriting by the Playpen Sans Project Authors.",
+    "license": "SIL Open Font License 1.1",
+    "url": "https://github.com/TypeTogether/Playpen-Sans",
+    "notices": [
+      "PlaypenSans-OFL"
+    ]
+  },
+  {
+    "group": "fonts",
+    "name": "Kalam",
+    "version": "2.001",
+    "description": "Handwriting for the Playful theme, by Indian Type Foundry.",
+    "license": "SIL Open Font License 1.1",
+    "url": "https://github.com/google/fonts/tree/main/ofl/kalam",
+    "notices": [
+      "Kalam-OFL"
+    ]
+  },
+  {
+    "group": "fonts",
     "name": "Instrument Serif",
     "version": "0b58fb370093",
     "description": "Loading-screen wordmark and caption, by the Instrument Serif Project Authors.",

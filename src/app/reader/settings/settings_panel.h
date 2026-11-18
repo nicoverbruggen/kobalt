@@ -9,6 +9,7 @@
 #include "ui/controls/text.h"
 #include "ui/dialogs/modals.h"
 #include "dictionaries_page.h"
+#include "interface_style.h"
 #include "kosync_page.h"
 #include "assets/font_catalog.h"
 #include "reading/style_sample.h"
@@ -172,6 +173,13 @@ public:
     void showPowerManagement(bool visible);
     int fitContent(QSize availableSize);
     ui::DescribedOption *hideTabLabelsOption = nullptr, *saveWordsOption = nullptr;
+    ui::CaptionButton *themingButton = nullptr, *presetButton = nullptr, *iconThemeButton = nullptr,
+                      *paletteButton = nullptr;
+    QString selectedTheme;
+    void selectTheme(const QString &theme, const InterfaceStyle &style);
+    enum class ThemeChoice { Preset, Icons, Palette };
+    void showThemeChoices(ThemeChoice kind, const InterfaceStyle &style,
+                          std::function<void(const QString &)> chosen);
     ui::DescribedOption *wifiPowerSaverOption = nullptr;
     ui::DescribedOption *disableStandbyOption = nullptr;
     ui::DescribedOption *hideBookOnSleepOption = nullptr;
@@ -235,6 +243,7 @@ private:
                             const QString &alignment, int secondary,
                             std::function<void(int, int)> pairChosen);
     QWidget *tabRail = nullptr, *optionsColumn = nullptr;
+    QWidget *themingPage = nullptr;
     bool zen = false, lightSupported = false;
     void updateZenPage();
     QWidget *zenPage = nullptr, *zenMarkBox = nullptr, *zenLeaveBar = nullptr,

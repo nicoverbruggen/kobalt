@@ -477,6 +477,10 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     backButton->hide();
     headingRows->addWidget(backButton);
     connect(backButton, &QPushButton::clicked, this, [this] {
+        if (settingsPages->currentWidget() == themingPage) {
+            settingsPages->setCurrentIndex(int(SettingsPage::System));
+            return;
+        }
         sectionOpen = false;
         // In Zen mode, back returns from About to the Zen page.
         if (zen)
@@ -1012,20 +1016,42 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
             check(systemPage, "rrHideTabLabels", strings::get("settings.hide_tab_labels"),
                   strings::get("settings.hide_tab_labels_description"));
     systemRows->addWidget(hideTabLabelsOption);
-    uiFontButton = ui::makeCaptionButton(systemPage, nullptr, "rrUiFont",
+    themingPage = new QWidget(settingsPages);
+    themingButton = ui::makeCaptionButton(systemPage, systemRows, "rrTheming",
+                                          strings::get("settings.theming"),
+                                          [this] { settingsPages->setCurrentWidget(themingPage); });
+    auto *themeRows = new QVBoxLayout(themingPage);
+    themeRows->setContentsMargins(0, 0, 0, 0);
+    themeRows->setSpacing(0);
+    section(themingPage, themeRows, "rrThemeSelectionSection",
+            strings::get("settings.theme_selection"));
+    presetButton = ui::makeCaptionButton(themingPage, themeRows, "rrThemePreset",
+                                         strings::get("settings.theme_preset"), [] { });
+    section(themingPage, themeRows, "rrThemeDetailsSection",
+            strings::get("settings.theme_details"));
+    iconThemeButton = ui::makeCaptionButton(themingPage, themeRows, "rrIconTheme",
+                                            strings::get("settings.icon_theme"), [] { });
+    paletteButton = ui::makeCaptionButton(themingPage, themeRows, "rrColorTheme",
+                                          strings::get("settings.palette"), [] { });
+    uiFontButton = ui::makeCaptionButton(themingPage, nullptr, "rrUiFont",
                                          strings::get("settings.ui_font"), [] { });
-    uiMonoFontButton = ui::makeCaptionButton(systemPage, nullptr, "rrUiMonoFont",
+    uiMonoFontButton = ui::makeCaptionButton(themingPage, nullptr, "rrUiMonoFont",
                                              strings::get("settings.ui_mono_font"), [] { });
     headerFooterFontButton =
-            ui::makeCaptionButton(systemPage, nullptr, "rrHeaderFooterFont",
+            ui::makeCaptionButton(themingPage, nullptr, "rrHeaderFooterFont",
                                   strings::get("settings.header_footer_font"), [] { });
-    systemRows->addWidget(uiFontButton);
-    systemRows->addWidget(uiMonoFontButton);
-    systemRows->addWidget(headerFooterFontButton);
+    section(themingPage, themeRows, "rrPrimaryTypographySection",
+            strings::get("settings.primary_typography"));
+    themeRows->addWidget(uiFontButton);
+    themeRows->addWidget(uiMonoFontButton);
+    section(themingPage, themeRows, "rrSecondaryTypographySection",
+            strings::get("settings.secondary_typography"));
+    themeRows->addWidget(headerFooterFontButton);
     headerFooterWeightButton =
-            ui::makeCaptionButton(systemPage, nullptr, "rrHeaderFooterWeight",
+            ui::makeCaptionButton(themingPage, nullptr, "rrHeaderFooterWeight",
                                   strings::get("settings.header_footer_weight"), [] { });
-    systemRows->addWidget(headerFooterWeightButton);
+    themeRows->addWidget(headerFooterWeightButton);
+    themeRows->addStretch(1);
     section(systemPage, systemRows, "rrSystemDictionarySection",
             strings::get("settings.section_dictionary_ui"));
     saveWordsOption = check(systemPage, "rrSaveWords", strings::get("settings.save_words"),
@@ -1116,6 +1142,7 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     zenPage = new QWidget(settingsPages);
     zenPage->setObjectName("rrZenSettings");
     settingsPages->addWidget(zenPage);
+    settingsPages->addWidget(themingPage);
     auto *zenRows = new QVBoxLayout(zenPage);
     zenRows->setContentsMargins(0, 0, 0, 0);
     zenRows->setSpacing(0);
@@ -1227,6 +1254,10 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
                           navigationBarButton,
                           menuViewButton,
                           disabledFeaturesButton,
+                          themingButton,
+                          presetButton,
+                          iconThemeButton,
+                          paletteButton,
                           uiFontButton,
                           uiMonoFontButton,
                           headerFooterFontButton,
@@ -1284,6 +1315,125 @@ SettingsPanel::SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs)
     styleTabs(false);
     fitRail();
     hide();
+}
+
+namespace {
+QString themeName(const QString &id)
+{
+    return strings::get(("settings.theme_" + id).toUtf8().constData());
+}
+
+QString iconStyleName(const QString &id)
+{
+    return strings::get(("settings.icon_" + id).toUtf8().constData());
+}
+
+class ThemeSample final : public QWidget
+{
+public:
+    using Kind = SettingsPanel::ThemeChoice;
+
+    ThemeSample(QWidget *parent, InterfaceStyle style, Kind kind)
+        : QWidget(parent), style(style), kind(kind)
+    {
+        setFixedSize((kind == Kind::Preset ? 4 : 2) * chrome::tabIcon + chrome::tabGap,
+                     chrome::tabIcon);
+    }
+
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        const auto &colors = ui::themeColors(ui::darkTheme(this), style.palette);
+        if (kind == Kind::Palette) {
+            int x = 0;
+            for (const auto &ink : { colors.pressedPaper, colors.divider, colors.ink }) {
+                painter.fillRect(x, height() / 5, width() / 3, height() * 3 / 5, ink);
+                x += width() / 3;
+            }
+            return;
+        }
+        int x = 0;
+        const int side = height();
+        const auto ink = kind == Kind::Preset ? colors.ink : ui::labelInk(this);
+        if (kind == Kind::Preset)
+            painter.fillRect(rect(), colors.pressedPaper);
+        for (auto icon : { ui::ControlIcon::Compass, ui::ControlIcon::Bookmark }) {
+            ui::paintStyledIcon(painter, style.icons, icon, QRect(x, 0, side, side), ink);
+            x += side + chrome::tabGap;
+        }
+        if (kind == Kind::Preset) {
+            auto font = ui::interfaceFont(chrome::labelText);
+            font.setFamily(style.mainFace.isEmpty() ? QStringLiteral("IBM Plex Sans")
+                                                    : style.mainFace);
+            painter.setFont(font);
+            painter.setPen(ink);
+            ui::drawOpticalText(painter, QRect(x, 0, width() - x, height()), QStringLiteral("Aa"),
+                                true);
+        }
+    }
+
+private:
+    InterfaceStyle style;
+    Kind kind;
+};
+
+QString paletteName(const QString &id)
+{
+    return strings::get(("settings.palette_" + id).toUtf8().constData());
+}
+} // namespace
+
+void SettingsPanel::selectTheme(const QString &theme, const InterfaceStyle &style)
+{
+    selectedTheme = theme;
+    const auto caption = themeName(theme).toUpper();
+    themingButton->setCaption(caption);
+    presetButton->setCaption(caption);
+    presetButton->setSample(new ThemeSample(presetButton, style, ThemeChoice::Preset));
+    paletteButton->setCaption(paletteName(style.palette).toUpper());
+    paletteButton->setSample(new ThemeSample(paletteButton, style, ThemeChoice::Palette));
+    iconThemeButton->setCaption(iconStyleName(ui::iconStyleId(style.icons)).toUpper());
+    iconThemeButton->setIconStylePreview(style.icons);
+    themingPage->update();
+}
+
+void SettingsPanel::showThemeChoices(ThemeChoice kind, const InterfaceStyle &style,
+                                     std::function<void(const QString &)> chosen)
+{
+    if (sheet)
+        return;
+    const bool icons = kind == ThemeChoice::Icons, palette = kind == ThemeChoice::Palette;
+    const QString name = icons ? "rrIconTheme" : palette ? "rrColorTheme" : "rrTheme";
+    auto *choices = openChoiceSheet(name,
+                                    strings::get(icons             ? "settings.icon_theme"
+                                                         : palette ? "settings.palette"
+                                                                   : "settings.theme_preset"));
+    const QStringList ids = icons ? QStringList{ "monochrome", "color", "pastel", "rings" }
+            : palette             ? QStringList{ "grayscale", "blue", "sage", "sepia" }
+                                  : QStringList{ "classic", "playful", "notebook", "custom" };
+    const QString current = icons ? ui::iconStyleId(style.icons)
+            : palette             ? style.palette
+                                  : selectedTheme;
+    for (const auto &id : ids) {
+        auto *option = choices->add(name + "_" + id,
+                                    icons             ? iconStyleName(id)
+                                            : palette ? paletteName(id)
+                                                      : themeName(id));
+        auto preview = kind == ThemeChoice::Preset && id != "custom" ? themePreset(id) : style;
+        if (icons)
+            preview.icons = ui::iconStyleFromId(id);
+        if (palette)
+            preview.palette = id;
+        auto *sample = new ThemeSample(option, preview, kind);
+        option->setPreview(sample, sample->size());
+    }
+    choices->setCurrent(ids.indexOf(current));
+    choices->chosen = [this, ids, chosen](int index) {
+        dismissSheet();
+        chosen(ids[index]);
+    };
+    ui::fitChoiceSheet(sheet, choices);
+    presentSheet();
 }
 
 void SettingsPanel::styleTabs(bool list)
@@ -1364,17 +1514,20 @@ int SettingsPanel::fitContent(QSize availableSize)
     // About, opened from it, has a back cell, as an opened section has.
     const bool zenPageShown = zen && settingsPages->currentIndex() == int(SettingsPage::Zen);
     const bool sectionShown = zen ? !zenPageShown : listMode && sectionOpen;
-    const bool showList = !zen && listMode && !sectionOpen;
-    const bool rail = !zen && !listMode;
+    const bool theming = settingsPages->currentWidget() == themingPage;
+    const bool showList = !theming && !zen && listMode && !sectionOpen;
+    const bool rail = !theming && !zen && !listMode;
     tabRail->setVisible(rail || showList);
     optionsColumn->setVisible(!showList);
-    backButton->setVisible(sectionShown);
-    closeButton->setVisible(!sectionShown);
+    backButton->setVisible(sectionShown || theming);
+    closeButton->setVisible(!sectionShown || theming);
     zenMarkBox->setVisible(zen);
-    settingsTitle->setText(sectionShown ? settingsTabButtons[settingsPages->currentIndex()]
-                                                  ->property("reader_tab_label")
-                                                  .toString()
-                                        : strings::get("settings.title"));
+    settingsTitle->setText(theming ? strings::get("settings.theming")
+                                   : sectionShown
+                                   ? settingsTabButtons[settingsPages->currentIndex()]
+                                             ->property("reader_tab_label")
+                                             .toString()
+                                   : strings::get("settings.title"));
     if (showList) {
         tabRail->setFixedWidth(availableSize.width());
         optionsPager->hide();

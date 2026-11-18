@@ -215,6 +215,7 @@ private:
     QImage renderStrip(int height, const std::function<void(QPainter &)> &draw);
     void paintHeader(QPainter &painter, bool sleeping = false) const;
     void paintFooter(QPainter &painter, bool sleeping = false) const;
+    QColor pagePaper() const;
     void paintContents(QPainter &painter, bool sleeping = false) const;
     void paintBody(QPainter &painter) const;
     bool changingViewport = false, viewportNoticeVisible = false;

@@ -12,6 +12,8 @@
 
 `desktop.settingsDebugMode` checks that the Debug tab and Faster are hidden without debug mode, that the Debug mode checkbox shows the tab at once and offers Faster, that turning it off changes Faster back to Hybrid, the device facts, that closing Settings saves `debug_mode`, that the header and footer picker offers the performance fields only in debug mode, and that Evict book cache asks first, can be cancelled and closes the book. The desktop app has no parsed-book cache; `engine.large-toc` checks the eviction itself.
 
+The `playfulTheme` gallery case switches presets in the reader, checks that Classic restores IBM Plex Sans while Settings is open, and checks custom icon and palette persistence across preset switches. It captures Notebook settings. The palette gallery shows Sage and Sepia in the Library and the Zen menu.
+
 `desktop.settingsStandby` checks supported and unsupported hosts, the default state, confirmation, cancellation, unanswered-warning dismissal, persistence after reopening and re-enabling standby. The gallery includes the System settings pages and the standby confirmation. The same case turns on debug mode and captures the Debug pages and the eviction confirmation.
 
 `desktop.settingsAutomaticOpening` gives the reader a host reader choice. It checks that turning Open books automatically in Kobalt off shows a confirmation, that Cancel and closing Settings keep it on and save nothing, that confirming turns it off and that turning it on applies at once. The gallery includes the confirmation.

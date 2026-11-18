@@ -80,7 +80,9 @@ void Button::paintEvent(QPaintEvent *)
             const bool invertPressed = isCheckable() || property("reader_invert_pressed").toBool();
             const bool active = isEnabled()
                     && (primary ? !isDown() : invertPressed && (isChecked() || isDown()));
-            const auto colors = primary ? readerPalette(palette(), darkTheme(this)) : palette();
+            const auto colors = primary
+                    ? readerPalette(palette(), darkTheme(this), interfacePalette(this))
+                    : palette();
             painter.setPen(colors.color(!isEnabled()     ? QPalette::Mid
                                                 : active ? QPalette::Window
                                                          : QPalette::WindowText));
@@ -90,6 +92,18 @@ void Button::paintEvent(QPaintEvent *)
             const int gap = text().isEmpty() || icon().isNull()
                     ? 0
                     : (iconLabelGap ? iconLabelGap : px(12));
+            const auto paintIcon = [&](const QRect &area) {
+                const auto tab = property("reader_tab_icon");
+                const auto style = tab.isValid() ? widgetIconStyle(this) : IconStyle::Monochrome;
+                if (isEnabled() && style != IconStyle::Monochrome) {
+                    paintStyledIcon(painter, style, ControlIcon(tab.toInt()), area,
+                                    painter.pen().color());
+                    return;
+                }
+                icon().paint(&painter, area, Qt::AlignCenter,
+                             isEnabled() ? QIcon::Normal : QIcon::Disabled,
+                             active ? QIcon::On : QIcon::Off);
+            };
             if (iconAboveLabel) {
                 // Capitals' height is the label's ink, so the icon and that
                 // ink centre as one group, as in the bottom tabs.
@@ -97,9 +111,7 @@ void Button::paintEvent(QPaintEvent *)
                 const int top = (height() - iconSize().height() - gap - capital) / 2;
                 const QRect area((width() - iconSize().width()) / 2, top, iconSize().width(),
                                  iconSize().height());
-                icon().paint(&painter, area, Qt::AlignCenter,
-                             isEnabled() ? QIcon::Normal : QIcon::Disabled,
-                             active ? QIcon::On : QIcon::Off);
+                paintIcon(area);
                 drawOpticalText(painter, QRect(0, area.bottom() + 1 + gap, width(), capital),
                                 text(), true);
                 return;
@@ -109,11 +121,7 @@ void Button::paintEvent(QPaintEvent *)
                            style()->subElementRect(QStyle::SE_PushButtonContents, &option, this)
                                    .left())
                     : (width() - glyph.width() - gap - labelWidth) / 2;
-            icon().paint(
-                    &painter,
-                    QRect(left, (height() - glyph.height()) / 2, glyph.width(), glyph.height()),
-                    Qt::AlignCenter, isEnabled() ? QIcon::Normal : QIcon::Disabled,
-                    active ? QIcon::On : QIcon::Off);
+            paintIcon(QRect(left, (height() - glyph.height()) / 2, glyph.width(), glyph.height()));
             drawOpticalText(painter, QRect(left + glyph.width() + gap, 0, labelWidth, height()),
                             text(), true);
             return;
@@ -130,8 +138,9 @@ void Button::paintEvent(QPaintEvent *)
             const bool primary = property("reader_primary_action").toBool();
             const bool segment = property("segment_first").isValid();
             const bool inverted = segment ? isChecked() || isDown() : primary && !isDown();
-            const auto colors =
-                    primary || segment ? readerPalette(palette(), darkTheme(this)) : palette();
+            const auto colors = primary || segment
+                    ? readerPalette(palette(), darkTheme(this), interfacePalette(this))
+                    : palette();
             painter.setPen(colors.color(!isEnabled()       ? QPalette::Mid
                                                 : inverted ? QPalette::Window
                                                            : QPalette::WindowText));
@@ -177,10 +186,16 @@ void Button::paintEvent(QPaintEvent *)
             painter.setOpacity(.4);
         // Toolbar cells keep their size; large text can enlarge their icons.
         const QSize glyph = toolbar ? iconSize() * detail::iconScale : iconSize();
-        icon().paint(&painter,
-                     QRect((width() - glyph.width()) / 2, (height() - glyph.height()) / 2,
-                           glyph.width(), glyph.height()),
-                     Qt::AlignCenter, QIcon::Normal, active ? QIcon::On : QIcon::Off);
+        const QRect bounds((width() - glyph.width()) / 2, (height() - glyph.height()) / 2,
+                           glyph.width(), glyph.height());
+        const auto style =
+                toolbar && hasConfiguredIcon ? widgetIconStyle(this) : IconStyle::Monochrome;
+        if (style != IconStyle::Monochrome) {
+            paintStyledIcon(painter, style, configuredIcon.glyph, bounds, active ? paper : ink);
+        } else {
+            icon().paint(&painter, bounds, Qt::AlignCenter, QIcon::Normal,
+                         active ? QIcon::On : QIcon::Off);
+        }
     }
 }
 
@@ -453,6 +468,23 @@ CaptionButton::CaptionButton(Presentation presentation, QWidget *parent)
 {
 }
 
+void CaptionButton::setSample(QWidget *sample)
+{
+    delete rowSample;
+    rowSample = sample;
+    auto *box = layout();
+    if (!box) {
+        auto *row = new QHBoxLayout(this);
+        row->setContentsMargins(0, 0, metrics::chrome::actionRight, 0);
+        row->addStretch();
+        box = row;
+    }
+    rowSample->setAttribute(Qt::WA_TransparentForMouseEvents);
+    box->addWidget(rowSample);
+    rowSample->show();
+    update();
+}
+
 void CaptionButton::setTypefacePreview(const QString &face)
 {
     if (previewFace == face && previewDensity == density())
@@ -585,7 +617,10 @@ void CaptionButton::paintEvent(QPaintEvent *)
             icon().paint(&painter,
                          QRect(chrome::inset - px(7), (height() - chrome::cellIcon) / 2 + px(1),
                                chrome::cellIcon, chrome::cellIcon));
-        const int previewWidth = previewFace.isEmpty() ? 0 : int(px(88));
+        const int previewWidth = rowSample ? rowSample->width()
+                : previewIcons             ? 2 * chrome::tabIcon + chrome::tabGap
+                : previewFace.isEmpty()    ? 0
+                                           : int(px(88));
         const int textWidth = qMax(0,
                                    width() - left - chrome::actionRight
                                            - (previewWidth ? previewWidth + px(20) : 0));
@@ -623,7 +658,15 @@ void CaptionButton::paintEvent(QPaintEvent *)
                     painter, QRect(left, top + titleHeight + px(12), textWidth, descriptionHeight),
                     description);
         }
-        if (previewWidth) {
+        if (previewIcons) {
+            int x = width() - chrome::actionRight - previewWidth;
+            for (auto glyph : { ControlIcon::Compass, ControlIcon::Bookmark }) {
+                const int side = chrome::tabIcon;
+                paintStyledIcon(painter, previewStyle, glyph,
+                                QRect(x, (height() - side) / 2, side, side), labelInk(this));
+                x += side + chrome::tabGap;
+            }
+        } else if (!rowSample && previewWidth) {
             painter.setFont(previewFont);
             drawOpticalText(
                     painter,
@@ -817,7 +860,12 @@ void CellButton::paintCell(bool fillWhenChecked, int glyphOffset)
     const auto paintGlyph = [this, &painter, glyphOffset](const QRect &bounds,
                                                           const QColor &color) {
         if (glyphMask.isNull()) {
-            controlIcon(glyph, color).paint(&painter, bounds.translated(glyphOffset, 0));
+            const auto style = property("themed_icon").toBool() ? widgetIconStyle(this)
+                                                                : IconStyle::Monochrome;
+            if (style == IconStyle::Monochrome)
+                controlIcon(glyph, color).paint(&painter, bounds.translated(glyphOffset, 0));
+            else
+                paintStyledIcon(painter, style, glyph, bounds.translated(glyphOffset, 0), color);
             return;
         }
         auto tinted = glyphMask.copy();

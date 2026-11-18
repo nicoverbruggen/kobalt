@@ -1242,6 +1242,12 @@ bool PageScrubber::eventFilter(QObject *watched, QEvent *event)
 
 bool PageScrubber::event(QEvent *event)
 {
+    // The action buttons have manual geometry. A new typeface can change
+    // their preferred widths even when the scrubber itself hasn't resized.
+    if (event->type() == QEvent::FontChange
+        && !(requestedLinksLabel.isEmpty() && requestedReturnLabel.isEmpty()
+             && imageLabel.isEmpty()))
+        arrange();
     return pointerEvent(event) || QWidget::event(event);
 }
 } // namespace kobalt::ui

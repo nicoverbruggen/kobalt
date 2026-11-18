@@ -1,5 +1,6 @@
 #pragma once
 #include <future>
+#include "app/reader/settings/interface_style.h"
 #include "reading/features.h"
 // Private to the reader window: its declaration and the widgets only it uses.
 // Include it only from the reader's own translation units.
@@ -607,6 +608,7 @@ private:
     kobalt::Acknowledgments *acknowledgments = nullptr;
 
     bool acknowledgmentsVisible() const { return acknowledgments && acknowledgments->isVisible(); }
+
     QStackedWidget *panels;
     QLabel *previewLabel;
     kobalt::reader::AppearancePreview *appearancePreview = nullptr;
@@ -703,12 +705,18 @@ private:
     QPointer<kobalt::ui::ModalOverlay> fontDefaultDialog, settingsSheet;
     QJsonObject settingsFontFaces;
     QString settingsDefaultFontFace;
-    QString settingsUiFontFace, settingsUiMonoFontFace, settingsHeaderFooterFontFace;
+    InterfaceStyle themeDraft, customTheme;
+    QString settingsMonoFace, settingsStripFace;
+    int settingsStripWeight = 2;
+    InterfaceStyle themeStyle(const QString &theme) const;
+    void loadThemeSettings();
+    void markThemeCustom();
     QString settingsDictionaryFontFace;
     QString settingsTimeRemainingFormat, settingsPercentageFormat;
     QString settingsRenderingMode;
     int settingsDictionaryFontSize = 100;
-    int settingsHeaderFooterWeight = 2;
+    QString interfaceTheme() const;
+    void applyThemeFonts();
     void applyInterfaceFonts();
     void showSettingsFonts();
     void openSettingsFont(const QString &key);

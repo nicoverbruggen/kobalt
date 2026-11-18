@@ -4,6 +4,8 @@ Label `library`. Build `mac-tests`, then run `ctest --preset mac -L library` fro
 
 These checks cover Library onboarding, folder scanning, covers, list and grid layouts, the scan caption, action buttons, Library page buttons, text inheritance for new books and reopening finished books. `model.library` checks the catalogue model. The `desktop` checks drive the standalone Library and reader, and the `ui` checks measure Library widgets in pixels. `session.reading-book`, in [Storage and history](storage.md), checks reopening finished books in the session.
 
+The theming gallery returns from a book to the Library and checks the saved preset’s typeface, palette and toolbar icons. The standalone Library also applies these settings at startup.
+
 The About checks open the screen from an empty Library without requesting a book. They cover shared version fields, project-row painting through the standalone canvas, project paging, nested Back navigation, both themes, portrait and landscape sizes, and interface text at 100% and 150%. The gallery includes the Library entry and all About pages.
 
 Android Open With and the Library use the same native delivery callback. A Library provider copy carries its request ID so a cancelled or older copy cannot reuse a passage. The portable Library model test checks request matching, cancellation and supersession. Android picker delivery and rendering still need device validation. These checks do not validate Nickel database actions or reopening on a physical Kobo or Android device.

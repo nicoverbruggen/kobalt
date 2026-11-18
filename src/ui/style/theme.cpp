@@ -10,7 +10,7 @@
 #endif
 
 namespace kobalt::ui {
-const ThemeColors &themeColors(bool dark)
+const ThemeColors &themeColors(bool dark, const QString &palette)
 {
     static const ThemeColors light = [] {
         ThemeColors colors;
@@ -52,12 +52,56 @@ const ThemeColors &themeColors(bool dark)
         colors.sleepDim = QColor(0, 0, 0, 40);
         return colors;
     }();
+    const auto tinted = [](ThemeColors colors, QColor paper, QColor ink, QColor secondary,
+                           QColor divider, QColor disabled, QColor pressed) {
+        colors.paper = paper;
+        colors.ink = ink;
+        colors.secondaryInk = colors.outline = secondary;
+        colors.divider = divider;
+        colors.disabledInk = disabled;
+        colors.pressedPaper = pressed;
+        colors.lightHintPaper = colors.pressedPaper;
+        colors.overviewPaper = colors.lightHintPaper;
+        colors.swipeCaptionInk = colors.secondaryInk;
+        colors.openingTrack = colors.divider;
+        colors.modalFade = colors.paper;
+        colors.modalFade.setAlpha(90);
+        return colors;
+    };
+    static const auto blueDay =
+            tinted(light, "#f8fbff", "#183758", "#3d6082", "#9bbad6", "#6986a1", "#d9e9f8");
+    static const auto blueNight =
+            tinted(night, "#101d2c", "#e6f2ff", "#b8d5ef", "#496e92", "#819db7", "#294661");
+    static const auto sageDay =
+            tinted(light, "#f8faf6", "#253d30", "#46604e", "#acbcae", "#697e6d", "#e0e9de");
+    static const auto sageNight =
+            tinted(night, "#171f19", "#edf3ea", "#bfd0be", "#536b59", "#91a693", "#304235");
+    static const auto sepiaDay =
+            tinted(light, "#fcf9f1", "#403428", "#685443", "#c9bba6", "#827362", "#eee5d5");
+    static const auto sepiaNight =
+            tinted(night, "#231e19", "#f5ede0", "#d5c4ac", "#71624e", "#a99a86", "#44392d");
+    if (palette == "blue")
+        return dark ? blueNight : blueDay;
+    if (palette == "sage")
+        return dark ? sageNight : sageDay;
+    if (palette == "sepia")
+        return dark ? sepiaNight : sepiaDay;
     return dark ? night : light;
+}
+
+QString interfacePalette(const QWidget *widget)
+{
+    for (; widget; widget = widget->parentWidget()) {
+        const auto value = widget->property("kobalt_palette");
+        if (value.isValid())
+            return value.toString();
+    }
+    return {};
 }
 
 const ThemeColors &themeColors(const QWidget *widget)
 {
-    return themeColors(darkTheme(widget));
+    return themeColors(darkTheme(widget), interfacePalette(widget));
 }
 
 namespace {
@@ -168,7 +212,7 @@ QColor labelInk(const QWidget *widget, QPalette::ColorRole role)
     // Qt polishes the widget, so light does not read it. Dark uses the palette.
     if (widget->isEnabled() || darkTheme(widget))
         return widget->palette().color(role);
-    return themeColors(false).ink;
+    return themeColors(widget).ink;
 }
 
 void paintHeaderRules(QPainter &painter, const QWidget *view)
@@ -195,15 +239,16 @@ void readerStyle(QWidget *widget, const QString &source)
                                        : index == 1 ? chromeFont()
                                                     : headerFooterFont())
                                       .family();
-    const auto key = QString(dark ? "1\n" : "0\n") + families[0] + '\n' + families[1] + '\n'
-            + families[2] + '\n' + source;
+    const auto palette = interfacePalette(widget);
+    const auto key = palette + QString(dark ? "1\n" : "0\n") + families[0] + '\n' + families[1]
+            + '\n' + families[2] + '\n' + source;
     static QHash<QString, QString> sheets;
     auto sheet = sheets.constFind(key);
     if (sheet == sheets.constEnd()) {
         // Sources that name a book font can keep adding entries.
         if (sheets.size() >= 512)
             sheets.clear();
-        const auto &colors = themeColors(dark);
+        const auto &colors = themeColors(dark, palette);
         auto style = QString("QPushButton{border-radius:%1px;} ")
                              .arg(int(metrics::control::buttonRadius));
         style += source.contains('{') ? source : QString("*{%1}").arg(source);
@@ -238,9 +283,9 @@ void readerStyle(QWidget *widget, const QString &source)
         applyStyleSheet(widget, *sheet);
 }
 
-QPalette readerPalette(QPalette colors, bool dark)
+QPalette readerPalette(QPalette colors, bool dark, const QString &palette)
 {
-    const auto &theme = themeColors(dark);
+    const auto &theme = themeColors(dark, palette);
     for (const auto role :
          { QPalette::Window, QPalette::Base, QPalette::Button, QPalette::HighlightedText })
         colors.setColor(role, theme.paper);

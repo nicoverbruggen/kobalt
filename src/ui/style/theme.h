@@ -14,7 +14,8 @@ struct ThemeColors
     QColor modalFade, modalPattern, sleepDim;
 };
 
-const ThemeColors &themeColors(bool dark);
+const ThemeColors &themeColors(bool dark, const QString &palette = {});
+QString interfacePalette(const QWidget *widget);
 const ThemeColors &themeColors(const QWidget *widget);
 using Edges = QFlags<Qt::Edge>;
 // These components use public Qt Widgets APIs shared by Qt 5 and Qt 6.
@@ -36,7 +37,7 @@ QColor labelInk(const QWidget *widget, QPalette::ColorRole role = QPalette::Wind
 void paintHeaderRules(QPainter &painter, const QWidget *view);
 void readerStyle(QWidget *widget, const QString &source);
 // The reader's paper, ink and gray roles in light or dark mode.
-QPalette readerPalette(QPalette base, bool dark);
+QPalette readerPalette(QPalette base, bool dark, const QString &palette = {});
 // Sets the palette, then replays the widget's reader style sheet. Qt can replace
 // gray roles while applying QSS, so restore the fixed theme roles afterwards.
 void applyReaderPalette(QWidget *widget, const QPalette &colors);

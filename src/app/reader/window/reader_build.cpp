@@ -178,8 +178,8 @@ protected:
         const int top = qRound((height() - 1) / 2.0 + letterOffset
                                - (arrowInk.top() + arrowInk.bottom()) / 2.0)
                 + int(metrics::chrome::returnArrowOffset);
-        ui::controlIcon(ControlIcon::Back, pressed ? paper : ink)
-                .paint(&painter, QRect((iconCell.width() - glyph) / 2, top, glyph, glyph));
+        const QRect bounds((iconCell.width() - glyph) / 2, top, glyph, glyph);
+        ui::controlIcon(ControlIcon::Back, pressed ? paper : ink).paint(&painter, bounds);
     }
 
 private:
@@ -333,22 +333,17 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     };
     // Choose the text weight before the first font is used.
     kobalt::ui::setInterfaceWeight(kobalt::ui::heavierTextSteps);
-    settingsUiFontFace = preferences.value("ui_font_face").toString();
-    settingsUiMonoFontFace = preferences.value("ui_mono_font_face").toString();
-    settingsHeaderFooterFontFace = preferences.value("header_footer_font_face").toString();
+    loadThemeSettings();
     settingsDictionaryFontFace = preferences.value("dictionary_font_face").toString();
     settingsDictionaryFontSize = preferences.value("dictionary_font_size").toInt(100);
-    for (auto *face : { &settingsUiFontFace, &settingsUiMonoFontFace, &settingsHeaderFooterFontFace,
+    for (auto *face : { &themeDraft.mainFace, &settingsMonoFace, &settingsStripFace,
                         &settingsDictionaryFontFace }) {
         if (!session->fontFaces().contains(*face))
             face->clear();
         if (!face->isEmpty())
             registerPickerFonts(*face);
     }
-    ui::setInterfaceFontFamily(settingsUiFontFace);
-    ui::setInterfaceMonoFontFamily(settingsUiMonoFontFace);
-    ui::setHeaderFooterFontFamily(settingsHeaderFooterFontFace);
-    ui::setHeaderFooterAddedWeight(preferences.value("header_footer_added_weight").toInt(2));
+    applyThemeFonts();
     // Set only our window; native Nickel controls keep their own font.
     setFont(kobalt::ui::interfaceFont());
     kobalt::ui::keepInterfaceUnhinted(this);
@@ -763,7 +758,9 @@ void Reader::buildToolbar()
     auto *status = new QGridLayout;
     status->setContentsMargins(metrics::panel::statusMargins);
     toolbar->addLayout(status);
-    menuClock = new ui::InterfaceLabel(topControls);
+    auto *clockLabel = new ui::InterfaceLabel(topControls);
+    clockLabel->setOpticalCentering(true);
+    menuClock = clockLabel;
     menuClock->setObjectName("rrMenuClock");
     menuClock->setFixedHeight(metrics::panel::statusHeight);
     menuClock->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -1810,6 +1807,40 @@ void Reader::buildSettings(QWidget *parent)
     refreshButton = settings->refreshButton;
     resetDefaults = settings->resetDefaults;
     settingsError = settings->settingsError;
+    connect(settings->presetButton, &QPushButton::clicked, this, [this, settings] {
+        for (const auto *id : { "classic", "playful", "notebook" }) {
+            const auto face = themePreset(id).mainFace;
+            registerPickerFonts(face.isEmpty() ? QStringLiteral("IBM Plex Sans") : face);
+        }
+        registerPickerFonts(customTheme.mainFace.isEmpty() ? QStringLiteral("IBM Plex Sans")
+                                                           : customTheme.mainFace);
+        settings->showThemeChoices(SettingsPanel::ThemeChoice::Preset, customTheme,
+                                   [this, settings](const QString &id) {
+                                       themeDraft = themeStyle(id);
+                                       applyInterfaceFonts();
+                                       settings->selectTheme(id, themeDraft);
+                                       showSettingsFonts();
+                                   });
+    });
+    connect(settings->paletteButton, &QPushButton::clicked, this, [this, settings] {
+        settings->showThemeChoices(SettingsPanel::ThemeChoice::Palette, themeDraft,
+                                   [this](const QString &id) {
+                                       if (themeDraft.palette != id) {
+                                           themeDraft.palette = id;
+                                           markThemeCustom();
+                                       }
+                                   });
+    });
+    connect(settings->iconThemeButton, &QPushButton::clicked, this, [this, settings] {
+        settings->showThemeChoices(SettingsPanel::ThemeChoice::Icons, themeDraft,
+                                   [this](const QString &id) {
+                                       const auto icons = ui::iconStyleFromId(id);
+                                       if (themeDraft.icons != icons) {
+                                           themeDraft.icons = icons;
+                                           markThemeCustom();
+                                       }
+                                   });
+    });
     connect(settings->uiFontButton, &QPushButton::clicked, this,
             [this] { openSettingsFont("ui_font_face"); });
     connect(settings->dictionaryFontButton, &QPushButton::clicked, this,
@@ -1851,14 +1882,16 @@ void Reader::buildSettings(QWidget *parent)
     });
     connect(settings->headerFooterWeightButton, &QPushButton::clicked, this, [this, settings] {
         auto sampleFont = ui::headerFooterFont(page->headerTextPixels());
-        if (!settingsHeaderFooterFontFace.isEmpty())
-            sampleFont.setFamily(settingsHeaderFooterFontFace);
-        settings->showHeaderFooterWeights(settingsHeaderFooterWeight, sampleFont,
-                                          [this](int steps) {
-                                              settingsHeaderFooterWeight = steps;
-                                              showSettingsFonts();
-                                              refresh();
-                                          });
+        if (!settingsStripFace.isEmpty())
+            sampleFont.setFamily(settingsStripFace);
+        settings->showHeaderFooterWeights(settingsStripWeight, sampleFont, [this](int steps) {
+            if (settingsStripWeight != steps) {
+                settingsStripWeight = steps;
+                applyInterfaceFonts();
+            }
+            showSettingsFonts();
+            refresh();
+        });
     });
     connect(settings->defaultFontButton, &QPushButton::clicked, this,
             [this] { openSettingsFont("default_font_face"); });
@@ -1937,15 +1970,17 @@ void Reader::buildSettings(QWidget *parent)
     settings->restoreDefaultsConfirmed = [this] {
         restoringDefaults = true;
         inpageFootnotesOption->setChecked(false);
-        settingsUiFontFace.clear();
-        settingsUiMonoFontFace.clear();
-        settingsHeaderFooterFontFace.clear();
+        customTheme = {};
+        themeDraft = {};
+        settingsMonoFace.clear();
+        settingsStripFace.clear();
+        settingsStripWeight = 2;
         settingsDictionaryFontFace.clear();
         settingsDictionaryFontSize = 100;
-        settingsHeaderFooterWeight = 2;
         settingsTimeRemainingFormat = "detailed";
         settingsPercentageFormat = "whole";
         settingsRenderingMode = renderingMode::value(renderingMode::Mode::Hybrid);
+        static_cast<SettingsPanel *>(general)->selectTheme("classic", themeDraft);
         hideTabLabelsOption->setChecked(false);
         zenModeOption->setChecked(false);
         if (wifiPowerSaverOption)

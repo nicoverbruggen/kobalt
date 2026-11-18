@@ -927,7 +927,7 @@ void ReadingPage::paintEvent(QPaintEvent *)
     const auto paintCovers = [&] {
         if (!stripsBlank)
             return;
-        const auto paper = palette().color(QPalette::Window);
+        const auto paper = pagePaper();
         painter.fillRect(0, 0, width(), topHeight(), paper);
         painter.fillRect(0, height() - bottomHeight(), width(), bottomHeight(), paper);
     };
@@ -1127,7 +1127,7 @@ void ReadingPage::setStripsHidden(bool hidden)
 
 void ReadingPage::paintContents(QPainter &painter, bool sleeping) const
 {
-    painter.fillRect(rect(), palette().color(QPalette::Window));
+    painter.fillRect(rect(), pagePaper());
     paintBody(painter);
     if (sleeping) {
         painter.save();
@@ -1395,12 +1395,17 @@ void ReadingPage::hideEvent(QHideEvent *event)
     QWidget::hideEvent(event);
 }
 
+QColor ReadingPage::pagePaper() const
+{
+    return ui::themeColors(ui::darkTheme(this)).paper;
+}
+
 QImage ReadingPage::renderStrip(int height, const std::function<void(QPainter &)> &draw)
 {
     if (!height)
         return {};
     QImage result(width(), height, QImage::Format_RGB32);
-    result.fill(palette().color(QPalette::Window));
+    result.fill(pagePaper());
     QPainter painter(&result);
     painter.setFont(font());
     painter.setPen(palette().color(QPalette::WindowText));
@@ -1442,8 +1447,7 @@ void ReadingPage::paintSlots(QPainter &painter, const QRect &bounds, bool footer
         leftRoom = shared * widths[0] / (widths[0] + widths[2]);
         rightRoom = shared - leftRoom;
     }
-    const auto ink = palette().color(QPalette::WindowText),
-               paper = palette().color(QPalette::Window);
+    const auto ink = palette().color(QPalette::WindowText), paper = pagePaper();
     paintContent(painter, QRect(side, bounds.y(), qMax(0, leftRoom), bounds.height()),
                  chrome.slotFields[first], slotContents[first], Qt::AlignLeft, ink, paper,
                  sleeping);

@@ -2791,6 +2791,13 @@ void Reader::openGraph()
     choices->hide();
     topControls->show();
     bottomControls->hide();
+    const bool showActivity =
+            book->tracksReadingHistory() && features::enabled(preferences, features::Activity);
+    if (showActivity)
+        chapterGraph->activityRequested = [this] { openActivity(); };
+    else
+        chapterGraph->activityRequested = {};
+    chapterGraph->setActivity({});
     updateGraph();
     if (navigation) {
         chapterGraph->setAvailableHeight(navigation->contentBottom(size())
@@ -2800,7 +2807,8 @@ void Reader::openGraph()
     chapterGraph->open();
     if (navigation)
         navigation->stackPanel(chapterGraph);
-    loadActivity();
+    if (showActivity)
+        loadActivity();
     refresh();
 }
 

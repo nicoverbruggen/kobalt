@@ -147,7 +147,8 @@ void Reader::finishActivityEdit(bool ok)
 
 void Reader::openActivity()
 {
-    if (activityView || !book || !book->tracksReadingHistory())
+    if (activityView || !book || !book->tracksReadingHistory()
+        || !features::enabled(preferences, features::Activity))
         return;
     session->cancelPendingTurn();
     activityView = new ActivityView(this);

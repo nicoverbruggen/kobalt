@@ -1816,6 +1816,8 @@
 "settings.disable_features_description" = "Maybe you find yourself not needing some of the features Kobalt offers. You can hide what you don't need.";
 "features.navigate" = "Navigation";
 "features.navigate_description" = "Hides the Navigate tab and its options. If it is your default menu view, the default returns to None.";
+"features.activity" = "Activity";
+"features.activity_description" = "Hides the Activity section in Stats. Reading history continues.";
 "features.stats" = "Stats";
 "features.stats_description" = "Hides the Stats tab and its options. Reading history and time estimates continue.";
 "features.annotations" = "Annotations";

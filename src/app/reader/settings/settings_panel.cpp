@@ -2861,8 +2861,8 @@ void SettingsPanel::showDebug(bool visible)
 
 void SettingsPanel::updateFeatureOptions()
 {
-    const char *names[] = { "navigate", "stats", "annotations",    "bookmarks",
-                            "kosync",   "words", "highlight_links" };
+    const char *names[] = { "navigate", "stats", "annotations",     "bookmarks",
+                            "kosync",   "words", "highlight_links", "activity" };
     static_assert(sizeof(names) == sizeof(features::keys), "A feature without a name");
     QStringList hidden;
     for (int i = 0; i < int(sizeof(names) / sizeof(*names)); ++i)
@@ -2903,12 +2903,12 @@ void SettingsPanel::showDisabledFeatures()
     card->heading(strings::get("settings.disable_features"),
                   strings::get("settings.disable_features_description"));
     auto draft = std::make_shared<QJsonObject>(featurePreferences);
-    const char *names[] = { "navigate", "stats", "annotations",    "bookmarks",
-                            "kosync",   "words", "highlight_links" };
+    const char *names[] = { "navigate", "stats", "annotations",     "bookmarks",
+                            "kosync",   "words", "highlight_links", "activity" };
     const ui::ControlIcon icons[] = { ui::ControlIcon::Compass,  ui::ControlIcon::Graph,
                                       ui::ControlIcon::Annotate, ui::ControlIcon::Bookmark,
                                       ui::ControlIcon::Sync,     ui::ControlIcon::Note,
-                                      ui::ControlIcon::Link };
+                                      ui::ControlIcon::Link,     ui::ControlIcon::Calendar };
     static_assert(sizeof(icons) / sizeof(*icons) == sizeof(names) / sizeof(*names),
                   "A feature without an icon");
     QVector<ui::DescribedOption *> options;

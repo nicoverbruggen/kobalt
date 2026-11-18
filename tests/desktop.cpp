@@ -12730,6 +12730,32 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 [](const QString &, const char *) {});
     }
 
+    void activityVisibility_data()
+    {
+        QTest::addColumn<bool>("hideActivity");
+        QTest::newRow("shown") << false;
+        QTest::newRow("hidden") << true;
+    }
+
+    void activityVisibility()
+    {
+        QFETCH(bool, hideActivity);
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(),
+                                   { { "disable_activity", hideActivity } }));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(!fixture.widget("rrNavActivity"));
+        QVERIFY(fixture.press("rrNavStats"));
+        QTRY_VERIFY(fixture.visible("rrChapterGraph"));
+        QCOMPARE(fixture.visible("rrGraphActivity") || fixture.visible("rrGraphActivityCell"),
+                 !hideActivity);
+    }
+
     void activityCopyNavigation()
     {
         const QDate today(2026, 11, 17);
@@ -13172,9 +13198,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         saved["dense_stats_chart"] = true;
         saved["navigation_bar_buttons"] = "pages";
         QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
-        const char *keys[] = { "disable_navigate",       "disable_stats",  "disable_annotations",
-                               "disable_bookmarks",      "disable_kosync", "disable_words",
-                               "disable_highlight_links" };
+        const char *keys[] = { "disable_navigate",        "disable_stats",   "disable_annotations",
+                               "disable_bookmarks",       "disable_kosync",  "disable_words",
+                               "disable_highlight_links", "disable_activity" };
         for (int pass = 0; pass < 2; ++pass) {
             QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
             fixture.window.openBook(path);
@@ -13194,7 +13220,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             auto *featuresButton =
                     static_cast<ui::CaptionButton *>(fixture.widget("rrDisabledFeatures"));
             const QString allHidden =
-                    "Navigation, Stats, Annotations, Bookmarks, KOSync, My Words, Highlight links";
+                    "Navigation, Stats, Annotations, Bookmarks, KOSync, My Words, Highlight links, Activity";
             QCOMPARE(featuresButton->caption(), pass ? allHidden : QString("None"));
             QVERIFY(fixture.press("rrDisabledFeatures"));
             QTRY_VERIFY(fixture.visible("rrDisabledFeaturesPopup"));
@@ -17106,6 +17132,27 @@ private slots:
             QCOMPARE(toolbar->window()->font().family(), QStringLiteral("Playpen Sans"));
             QVERIFY(capture(fixture, prefix + "-library"));
         }
+    }
+
+    void activityHiddenEntry_data() { screenshotVariants(); }
+
+    void activityHiddenEntry()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), { { "disable_activity", true } }));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavStats"));
+        QTRY_VERIFY(fixture.visible("rrChapterGraph"));
+        QVERIFY(!fixture.visible("rrGraphActivity") && !fixture.visible("rrGraphActivityCell"));
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-stats-activity-hidden-entry"));
     }
 
     void standbySettings_data() { screenshotVariants(); }

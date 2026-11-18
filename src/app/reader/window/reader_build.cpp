@@ -1085,11 +1085,6 @@ void Reader::buildOverlays()
     chapterGraph->changed = [this] { saveSoon(); };
     chapterGraph->denseChanged = [this](bool dense) { setDenseGraph(dense); };
     chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
-    // Activity needs the reading history; the legacy diagnostic backend has none.
-    if (book->tracksReadingHistory()) {
-        chapterGraph->activityRequested = [this] { openActivity(); };
-        chapterGraph->setActivity({});
-    }
     choices = new ChoiceScreen(this);
     choices->hide();
     pinnedBookmarks = new BookmarkTray(this);

@@ -414,6 +414,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "stats-dense-reading", "Moby Dick" },
         { "stats-dense-setting", "Dense graph setting" },
         { "stats-activity", "Stats with the Activity row" },
+        { "stats-activity-hidden-entry", "Stats with Activity hidden" },
         { "stats-activity-welcome", "Activity welcome" },
         { "stats-activity-overview", "Activity overview" },
         { "stats-activity-calendar", "Activity calendar" },

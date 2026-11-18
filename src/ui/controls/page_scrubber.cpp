@@ -356,19 +356,15 @@ void PageScrubber::setBook(int page, int pages, const QVector<QPair<int, QString
         chapters = values;
         zoomLevel = initialZoomLevel();
         overviewExpanded = false;
-        rangeFirst = 0;
-        rangeLast = count - 1;
     }
     current = qBound(0, page, totalPages - 1);
     if (size.isValid()) {
         pageSize = size;
     }
-    if (selecting()) {
+    if (selecting() && !changed)
         return;
-    }
-    if (changed || current < rangeFirst || current > rangeLast) {
+    if (changed || current < rangeFirst || current > rangeLast)
         centerRange(current);
-    }
     syncRange(changed);
     arrange();
 }

@@ -26,6 +26,9 @@ namespace chrome = ui::metrics::chrome;
 namespace metrics = ui::metrics;
 
 namespace {
+constexpr int previewMargin = 28;
+constexpr int previewFrameGap = 8;
+
 QString backdropLabel(sleep::Mode mode)
 {
     switch (mode) {
@@ -73,12 +76,13 @@ public:
     // The screen's place in the widget, keeping the screen's shape.
     QRect screenArea() const
     {
-        const int margin = ui::px(28);
+        const int margin = ui::px(previewMargin);
         const QSize screen = editor->setup_.screen;
         const QSize room(qMax(1, width() - 2 * margin), qMax(1, height() - 2 * margin));
         const QSize fitted = screen.isEmpty() ? QSize() : screen.scaled(room, Qt::KeepAspectRatio);
-        return { (width() - fitted.width()) / 2, (height() - fitted.height()) / 2, fitted.width(),
-                 fitted.height() };
+        const bool split = !editor->setup_.arrange && !editor->setup_.custom.same;
+        const int top = split ? margin : (height() - fitted.height()) / 2;
+        return { (width() - fitted.width()) / 2, top, fitted.width(), fitted.height() };
     }
 
     // The area each other place covers, in widget coordinates.
@@ -151,7 +155,7 @@ protected:
                           editor->page_, editor->overlay_, shot, editor->wallpaper(pixels),
                           off ? SleepStatus::PoweredOff : SleepStatus::Sleeping);
         // The same thin frame as an unselected gallery preview.
-        const int gap = ui::px(8);
+        const int gap = ui::px(previewFrameGap);
         painter.setRenderHint(QPainter::Antialiasing, false);
         painter.setPen(QPen(ui::dividerColor(this), int(metrics::control::border)));
         painter.setBrush(Qt::NoBrush);
@@ -260,21 +264,36 @@ SleepEditor::SleepEditor(QWidget *parent, Setup setup) : ui::Panel(parent), setu
     });
     rows->addWidget(heading);
 
-    auto *top = new QWidget(this);
-    auto *topRows = new QVBoxLayout(top);
-    topRows->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
-    topRows->setSpacing(0);
-    rows->addWidget(top);
     if (!setup_.arrange) {
+        same_ = checklistOption(this, "rrSleepEditorSame", strings::get("sleep.custom_same"),
+                                strings::get("sleep.custom_same_description"), false);
+        same_->setChecked(setup_.custom.same);
+        connect(same_, &QCheckBox::toggled, this, [this](bool checked) {
+            setup_.custom.same = checked;
+            // Turning it off starts power off from the sleeping screen.
+            if (!checked)
+                setup_.custom.off = setup_.custom.sleep;
+            powerOff_ = !checked;
+            refresh();
+        });
+        rows->addWidget(same_);
+
+        stateRow_ = new QWidget(this);
+        auto *topRows = new QVBoxLayout(stateRow_);
+        // The preview frame's centered stroke takes up half its width outside the frame.
+        const int frameInset = ui::px(previewMargin) - ui::px(previewFrameGap)
+                - int(metrics::control::border) / 2;
+        topRows->setContentsMargins(chrome::inset, frameInset, chrome::inset, 0);
+        topRows->setSpacing(0);
+        rows->addWidget(stateRow_);
         // Which screen the controls change, shown only when the two differ.
-        ui::SegmentedRow state(top, topRows, "rrSleepEditorState",
+        ui::SegmentedRow state(stateRow_, topRows, "rrSleepEditorState",
                                strings::get("sleep.custom_editing"));
         sleepingTab_ = state.add("rrSleepEditorSleeping", strings::get("sleep.sleeping"));
         poweredOffTab_ = state.add("rrSleepEditorPoweredOff", strings::get("sleep.powered_off"));
         for (auto *tab : { sleepingTab_, poweredOffTab_ })
             tab->setCheckable(true);
         sleepingTab_->setChecked(true);
-        stateRow_ = ui::controlRowOf(sleepingTab_);
         connect(sleepingTab_, &QPushButton::clicked, this, [this] {
             powerOff_ = false;
             refresh();
@@ -343,20 +362,9 @@ SleepEditor::SleepEditor(QWidget *parent, Setup setup) : ui::Panel(parent), setu
     } else {
         stepper("rrSleepEditorBackdrop", strings::get("sleep.custom_background"), backdropValue_,
                 backdropCount_, [this](int direction) { stepBackdrop(direction); });
+        controlRows->addSpacing(ui::px(12));
         stepper("rrSleepEditorStatus", strings::get("sleep.custom_status"), statusValue_,
                 statusCount_, [this](int direction) { stepStatus(direction); });
-        same_ = checklistOption(this, "rrSleepEditorSame", strings::get("sleep.custom_same"),
-                                strings::get("sleep.custom_same_description"), true);
-        same_->setChecked(setup_.custom.same);
-        connect(same_, &QCheckBox::toggled, this, [this](bool checked) {
-            setup_.custom.same = checked;
-            // Turning it off starts power off from the sleeping screen.
-            if (!checked)
-                setup_.custom.off = setup_.custom.sleep;
-            powerOff_ = !checked;
-            refresh();
-        });
-        rows->addWidget(same_);
     }
     refresh();
 }

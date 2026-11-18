@@ -70,6 +70,21 @@ void embeddedSmallCaps()
     require(native != shapedPixels(nativeNormal, lString32(U"book"))
                     && native != shapedPixels(nativeSmall, lString32(U"BOOK")),
             "Embedded OpenType small caps did not use the font's substitutions");
+    const lString8 mixedFamily("Mixed script small caps");
+    require(fontMan->RegisterDocumentFont(document, fonts, lString32(U"ebook-core/NV_Palatium-Regular.ttf"),
+                                          mixedFamily, 400, css_fwd_normal, false, fragment),
+            "Cannot register the embedded mixed-script font");
+    const auto mixed = fontMan->GetFont(64, 400, false, css_ff_serif, mixedFamily, LFNT_OT_FEATURES_P_SMCP,
+                                        document, false, nullptr, fragment);
+    const auto reduced = fontMan->GetFont(48, 500, false, css_ff_serif, mixedFamily, 0,
+                                          document, false, nullptr, fragment);
+    require(!mixed.isNull() && !reduced.isNull(), "Cannot load mixed-script font instances");
+    require(shapedPixels(mixed, lString32(U"ωб")) == shapedPixels(reduced, lString32(U"ΩБ")),
+            "Latin small caps suppressed Greek and Cyrillic synthesis");
+    require(shapedPixels(mixed, lString32(U"ω\u0301")) == shapedPixels(reduced, lString32(U"Ω\u0301")),
+            "A combining accent lost its synthetic small-cap base");
+    require(shapedPixels(mixed, lString32(U"book")) != shapedPixels(reduced, lString32(U"BOOK")),
+            "Latin small caps were synthesized in a font with native Latin substitutions");
     fontMan->UnregisterDocumentFonts(document);
 }
 } // namespace

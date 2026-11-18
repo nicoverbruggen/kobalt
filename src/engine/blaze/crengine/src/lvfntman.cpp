@@ -1731,6 +1731,9 @@ protected:
     LVFontVariations _variations; // variable font axis values applied to this instance
 #if USE_HARFBUZZ==1
     hb_font_t* _hb_font;
+    hb_script_t _capsScript = HB_SCRIPT_INVALID;
+    hb_language_t _capsLanguage = HB_LANGUAGE_INVALID;
+    int _capsFeatures = 0;
     hb_buffer_t* _hb_buffer;
     LVArray<hb_feature_t> _hb_features;
     // Blaze: pair kerning from memory. See koblazeKernRun().
@@ -2730,6 +2733,37 @@ public:
             }
         }
         return ch_glyph_index;
+    }
+
+    bool hasNativeCaps(lChar32 ch, TextLangCfg *lang, int feature) {
+#if USE_HARFBUZZ==1
+        FONT_GUARD
+        if (!_hb_font)
+            return false;
+        const auto script = hb_unicode_script(hb_unicode_funcs_get_default(), ch);
+        const auto language = lang ? lang->getHBLanguage() : hb_language_get_default();
+        if (script != _capsScript || language != _capsLanguage) {
+            _capsScript = script;
+            _capsLanguage = language;
+            _capsFeatures = 0;
+            hb_tag_t scripts[HB_OT_MAX_TAGS_PER_SCRIPT], languages[HB_OT_MAX_TAGS_PER_LANGUAGE];
+            unsigned ns = HB_OT_MAX_TAGS_PER_SCRIPT, nl = HB_OT_MAX_TAGS_PER_LANGUAGE;
+            hb_ot_tags_from_script_and_language(script, language, &ns, scripts, &nl, languages);
+            auto *face = hb_font_get_face(_hb_font);
+            unsigned si, li;
+            hb_ot_layout_table_select_script(face, HB_OT_TAG_GSUB, ns, scripts, &si, nullptr);
+            if (si != HB_OT_LAYOUT_NO_SCRIPT_INDEX) {
+                hb_ot_layout_script_select_language(face, HB_OT_TAG_GSUB, si, nl, languages, &li);
+                if (hb_ot_layout_language_find_feature(face, HB_OT_TAG_GSUB, si, li, HB_TAG('s','m','c','p'), nullptr))
+                    _capsFeatures |= LFNT_OT_FEATURES_P_SMCP;
+                if (hb_ot_layout_language_find_feature(face, HB_OT_TAG_GSUB, si, li, HB_TAG('c','2','s','c'), nullptr))
+                    _capsFeatures |= LFNT_OT_FEATURES_P_C2SC;
+            }
+        }
+        return (_capsFeatures & feature) != 0;
+#else
+        return false;
+#endif
     }
 
     bool hasOwnGlyph(lChar32 code) override {
@@ -5998,6 +6032,7 @@ class LVFontSmallCapsTransform : public LVFontProxy
 {
     LVFontRef  _smallRef;  // keeps the small font alive
     LVFont   * _smallFont; // fast pointer; matches _smallRef throughout lifetime (same pattern as LVFontProxy::_wrappedRef/_font)
+    LVFreeTypeFace * _nativeCaps; // owned by the normal font reference
     bool       _allCaps; // true for all-small-caps (c2sc): uppercase is shrunk too
 
     static lChar32 toUppercase(lChar32 ch) {
@@ -6009,11 +6044,14 @@ class LVFontSmallCapsTransform : public LVFontProxy
     static bool isUppercase(lChar32 ch) {
         return (lGetCharProps(ch) & CH_PROP_UPPER) != 0;
     }
-    void mapChar(lChar32 ch, LVFont*& font, lChar32& mapped) const {
+    void mapChar(lChar32 ch, LVFont*& font, lChar32& mapped, TextLangCfg *lang = NULL) const {
         font = _font;
         mapped = ch;
         const bool lower = isLowercase(ch);
         if (lower || (_allCaps && isUppercase(ch))) {
+            if (_nativeCaps && _nativeCaps->hasNativeCaps(ch, lang,
+                    lower ? LFNT_OT_FEATURES_P_SMCP : LFNT_OT_FEATURES_P_C2SC))
+                return;
             const auto upper = lower ? toUppercase(ch) : ch;
             // Leave missing characters to normal fallback at their original size and case.
             if (_smallFont->hasOwnGlyph(upper)) {
@@ -6036,20 +6074,36 @@ class LVFontSmallCapsTransform : public LVFontProxy
               widths(new lUInt16[len]), flags(new lUInt8[len]) {}
         ~MappedRun() { delete[] font; delete[] mapped; delete[] widths; delete[] flags; }
     };
-    void fillMappedRun(const lChar32 * text, int len, MappedRun & run) const {
-        for (int i = 0; i < len; i++)
-            mapChar(text[i], run.font[i], run.mapped[i]);
+    bool fillMappedRun(const lChar32 * text, int len, MappedRun & run, TextLangCfg *lang) const {
+        bool synthetic = false;
+        for (int i = 0; i < len; i++) {
+            mapChar(text[i], run.font[i], run.mapped[i], lang);
+#if USE_HARFBUZZ==1
+            // Keep accents in the shaping run of the reduced capital they follow.
+            if (i && run.font[i - 1] == _smallFont && run.font[i] != _smallFont) {
+                const auto category = hb_unicode_general_category(hb_unicode_funcs_get_default(), text[i]);
+                if (category == HB_UNICODE_GENERAL_CATEGORY_NON_SPACING_MARK
+                        || category == HB_UNICODE_GENERAL_CATEGORY_SPACING_MARK
+                        || category == HB_UNICODE_GENERAL_CATEGORY_ENCLOSING_MARK) {
+                    run.font[i] = _smallFont;
+                    run.mapped[i] = text[i];
+                }
+            }
+#endif
+            synthetic |= run.font[i] == _smallFont;
+        }
+        return synthetic;
     }
 public:
-    LVFontSmallCapsTransform(LVFontRef normalFont, LVFontRef smallFont, bool allCaps = false)
-        : LVFontProxy(normalFont), _smallRef(smallFont), _smallFont(smallFont.get()), _allCaps(allCaps) {}
+    LVFontSmallCapsTransform(LVFontRef normalFont, LVFontRef smallFont, LVFreeTypeFace *nativeCaps, bool allCaps)
+        : LVFontProxy(normalFont), _smallRef(smallFont), _smallFont(smallFont.get()), _nativeCaps(nativeCaps), _allCaps(allCaps) {}
 
     virtual void setBitmapMode(bool m)           { LVFontProxy::setBitmapMode(m); _smallFont->setBitmapMode(m); }
     virtual void setKerningMode(kerning_mode_t m) { LVFontProxy::setKerningMode(m); _smallFont->setKerningMode(m); }
     virtual void setHintingMode(hinting_mode_t m) { LVFontProxy::setHintingMode(m); _smallFont->setHintingMode(m); }
     virtual void clearCache() { LVFontProxy::clearCache(); _smallFont->clearCache(); }
     virtual void Clear()      { LVFontProxy::Clear();      _smallRef.Clear(); }
-    virtual bool hasOTMathSupport() const { return false; }
+    virtual bool hasOTMathSupport() const { return _nativeCaps && _font->hasOTMathSupport(); }
 
     virtual int getCharWidth(lChar32 ch, lChar32 d=0)
         { LVFont* f; lChar32 m; mapChar(ch, f, m); return f->getCharWidth(m, d); }
@@ -6058,7 +6112,14 @@ public:
     virtual int getRightSideBearing(lChar32 ch, bool n=false, bool i=false)
         { LVFont* f; lChar32 m; mapChar(ch, f, m); return f->getRightSideBearing(m, n, i); }
     virtual bool getGlyphInfo(lUInt32 c, glyph_info_t* g, lChar32 d=0, bool gi=false, bool fb=false)
-        { LVFont* f; lChar32 m; mapChar((lChar32)c, f, m); return f->getGlyphInfo((lUInt32)m, g, d, gi, fb); }
+        {
+            if (gi) return _font->getGlyphInfo(c, g, d, true, fb);
+            LVFont* f; lChar32 m; mapChar((lChar32)c, f, m); return f->getGlyphInfo((lUInt32)m, g, d, false, fb);
+        }
+    bool collectGlyphSVGPath(SVGGlyphsCollector *svg, lUInt32 c, bool gi=false, bool fb=false) override {
+        if (gi) return _font->collectGlyphSVGPath(svg, c, true, fb);
+        LVFont* f; lChar32 m; mapChar((lChar32)c, f, m); return f->collectGlyphSVGPath(svg, m, false, fb);
+    }
     virtual bool getGlyphExtraMetric(glyph_extra_metric_t mt, lUInt32 c, int& v,
                                       bool s=true, lChar32 d=0, bool fb=false)
         { LVFont* f; lChar32 m; mapChar((lChar32)c, f, m); return f->getGlyphExtraMetric(mt, (lUInt32)m, v, s, d, fb); }
@@ -6068,7 +6129,8 @@ public:
         if (len <= 0)
             return 0;
         MappedRun run(len);
-        fillMappedRun(text, len, run);
+        if (!fillMappedRun(text, len, run, lc))
+            return _font->getTextWidth(text, len, lc);
         lUInt32 w = 0;
         int i = 0;
         while (i < len) {
@@ -6095,7 +6157,8 @@ public:
         if (len <= 0)
             return 0;
         MappedRun run(len);
-        fillMappedRun(text, len, run);
+        if (!fillMappedRun(text, len, run, lc))
+            return _font->measureText(text, len, widths, flags, max_width, def_char, lc, ls, ah, hints);
         int total = 0;
         int i = 0;
         while (i < len) {
@@ -6128,7 +6191,9 @@ public:
         lUInt32 noDecFlags = flags & ~LFNT_DRAW_DECORATION_MASK;
         if (len > 0) {
             MappedRun run(len);
-            fillMappedRun(text, len, run);
+            if (!fillMappedRun(text, len, run, lc))
+                return _font->DrawTextString(buf, x, y, text, len, def_char, palette, addHyphen,
+                        lc, flags, letter_spacing, width, text_decoration_back_gap, target_w, target_h, svg);
             int i = 0;
             while (i < len) {
                 LVFont* f = run.font[i];
@@ -8488,7 +8553,7 @@ public:
             if (hb_ot_math_has_data(hb_face))
                 def.has_ot_math = true;
             // Small caps can be declared under any script, regardless of script order.
-            const hb_tag_t tags[] = { HB_TAG('s','m','c','p'), HB_TAG_NONE };
+            const hb_tag_t tags[] = { HB_TAG('s','m','c','p'), HB_TAG('c','2','s','c'), HB_TAG_NONE };
             auto *matches = hb_set_create();
             hb_ot_layout_collect_features(hb_face, HB_OT_TAG_GSUB, nullptr, nullptr, tags, matches);
             def.has_small_caps = !hb_set_is_empty(matches);
@@ -8638,8 +8703,7 @@ public:
 
         // Apply small-caps synthesis: wrap with a transform that routes lowercase
         // letters to uppercase glyphs rendered at ~75% of the normal size.
-        bool needsSmallCaps = (features & (LFNT_OT_FEATURES_P_SMCP | LFNT_OT_FEATURES_P_C2SC))
-                               && !face.has_small_caps;
+        bool needsSmallCaps = (features & (LFNT_OT_FEATURES_P_SMCP | LFNT_OT_FEATURES_P_C2SC));
         if (needsSmallCaps) {
             int small_size = (size * 3 + 2) / 4; // ~75%, rounded up
             if (small_size < 1) small_size = 1;
@@ -8656,7 +8720,7 @@ public:
                     features & ~(LFNT_OT_FEATURES_P_SMCP | LFNT_OT_FEATURES_P_C2SC),
                     _font_selector.computeVariations(face, smallVars, small_weight, italic));
             if (!smallRef.isNull())
-                ref = LVFontRef(new LVFontSmallCapsTransform(ref, smallRef,
+                ref = LVFontRef(new LVFontSmallCapsTransform(ref, smallRef, face.has_small_caps ? font : nullptr,
                                     (features & LFNT_OT_FEATURES_P_C2SC) != 0));
         }
 

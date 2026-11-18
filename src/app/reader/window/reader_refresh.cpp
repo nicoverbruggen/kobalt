@@ -195,7 +195,7 @@ void Reader::refresh()
     }
     openPendingDestination();
     syncNavigation();
-    if (seekOpen && !session->busy() && session->state().contains("book_fraction"))
+    if (seekOpen && !session->busy())
         pageScrubber->showCurrentPage();
     finishAnnotationPresentation();
 }
@@ -674,10 +674,15 @@ void Reader::syncReadingControls()
     QVector<QPair<int, QString>> chapters;
     for (const auto &chapter : session->chapters())
         chapters.append({ chapter.page, chapter.title });
-    pageScrubber->setChapterBar(chapterBar);
+    // The turn may adopt Hybrid's whole-book layout. Keep the open Navigate
+    // panel until it can show the new reading page in whole-book coordinates.
+    const bool keepNavigation = seekOpen && !chapterBar && !session->busy()
+            && !resizePending && !appearanceEdit.applying() && pageScrubber->chapterNavigationPending();
+    pageScrubber->setChapterBar(chapterBar, keepNavigation);
     pageScrubber->setChapterJumps(chapterBar
                                   || pageNavigation::barButtons(preferences)
-                                          == pageNavigation::BarButtons::Chapters);
+                                          == pageNavigation::BarButtons::Chapters,
+                                  keepNavigation);
     if (chapterBar) {
         const bool before =
                 session->page() > 0 || session->state().value("continues_before").toBool();

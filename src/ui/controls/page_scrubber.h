@@ -22,8 +22,8 @@ public:
     SettingSlider *slider() const { return position; }
 
     void setBook(int page, int pages, const QVector<QPair<int, QString>> &chapters, QSize pageSize);
-    void setChapterJumps(bool enabled);
-    void setChapterBar(bool enabled);
+    void setChapterJumps(bool enabled, bool keepNavigation = false);
+    void setChapterBar(bool enabled, bool keepNavigation = false);
     void setChapterPosition(int index, int count, QString title, int percent, int bookPage,
                             int bookPages, const QVector<int> &chapterPages);
     void setBookmarkedPages(const QVector<int> &pages);
@@ -45,6 +45,8 @@ public:
     bool hasActions() const { return actionsHeight() > 0; }
 
     bool selecting() const { return candidate >= 0; }
+
+    bool chapterNavigationPending() const { return chapterBar && navigationPending; }
 
     int selectedPage() const { return candidate; }
 

@@ -608,7 +608,8 @@ void ReaderCoordinator::prepareOpeningControls()
                 run.loading->prepareControls(preferences);
             }
             run.loading->loadCover(coverPath);
-            run.loading->setProgress(run.openingPercent);
+            run.loading->setProgress(kobalt::openingProgressPercent(run.openingStage,
+                                                                    run.openingPercent));
         });
         ui::setInterfaceWeight(ui::heavierTextSteps);
     } else {
@@ -761,10 +762,6 @@ void ReaderCoordinator::prepareOpening(kobalt::ReaderBookRoute candidate)
     }
 }
 
-// Where the opening bar stands when the engine has the book, and when the
-// reader window is built. The rest fills when the first page is ready.
-static constexpr int openingBarEngine = 60, openingBarWindow = 80;
-
 void ReaderCoordinator::updateOpening(kobalt::OpeningStage stage, int percent)
 {
     if (!run.loading || int(stage) < int(run.openingStage))
@@ -785,14 +782,7 @@ void ReaderCoordinator::updateOpening(kobalt::OpeningStage stage, int percent)
     run.openingStage = stage;
     run.openingPercent = percent;
     run.progressPainted = now;
-    // Each operation advances one part of the bar. It never resets when
-    // the engine moves to the next operation and does not estimate time.
-    // The engine's operations fill only the first part: the reader window
-    // and its first page still follow, and a full bar must mean that the
-    // page is about to show.
-    const int overall = (int(stage) * 100 + percent) * openingBarEngine
-            / ((int(kobalt::OpeningStage::Ready) + 1) * 100);
-    run.loading->setProgress(overall);
+    run.loading->setProgress(kobalt::openingProgressPercent(stage, percent));
 }
 
 void ReaderCoordinator::status(const QString &value, const QString &reason)
@@ -1278,7 +1268,7 @@ void ReaderCoordinator::showReader(bool fromQuiet)
     }
     const double created = creating.nsecsElapsed() / 1e6;
     if (run.loading)
-        run.loading->setProgress(openingBarWindow);
+        run.loading->setProgress(kobalt::openingBarWindow);
     // While the reader is visible and awake, its clock tick runs this check, so
     // the device wakes once a minute. The timer then only covers a reader that
     // is hidden or asleep, and the tick keeps pushing it back.

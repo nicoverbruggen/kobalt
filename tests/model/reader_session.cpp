@@ -1466,13 +1466,20 @@ int run(int argc, char **argv)
             require(report.revision == latestRender.revision && report.percent >= 0
                             && report.percent <= 100,
                     "Stale relayout progress reached the replacement job");
-            require(report.overallPercent() >= overall && report.overallPercent() <= 100,
+            require(report.overallPercent() >= overall && report.overallPercent() < 100,
                     "Relayout progress moved backwards at a phase boundary");
             overall = report.overallPercent();
             formatted |= report.stage == OpeningStage::Pages;
         }
         require(formatted && !session->renderProgress().active,
                 "Completed relayout lost formatting progress or kept its progress active");
+        RenderProgress pagination;
+        pagination.stage = OpeningStage::Styles;
+        pagination.percent = 100;
+        require(pagination.overallPercent() == 10, "Styles used the pagination share");
+        pagination.stage = OpeningStage::Pages;
+        pagination.percent = 50;
+        require(pagination.overallPercent() == 54, "Pagination has the wrong share of progress");
         auto bionicSettings = session->state();
         const auto applyBionic = [&](const QString &mode) {
             bionicSettings["bold_reading"] = mode;

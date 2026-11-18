@@ -183,6 +183,8 @@ QImage EngineDocument::drawTextSample(const TextSampleRequest &request)
                    false);
     // Gray pixels in RGB: Qt 5.2 on Kobo has no grayscale image format.
     QImage image(request.canvas, QImage::Format_RGB32);
+    if (image.isNull())
+        return {};
     for (int row = 0; row < buffer.GetHeight(); ++row) {
         const auto *gray = buffer.GetScanLine(row);
         auto *pixels = reinterpret_cast<QRgb *>(image.scanLine(row));

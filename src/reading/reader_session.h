@@ -95,8 +95,12 @@ struct RenderProgress
     // Reflow styles and pagination share one bar; a phase change never empties it.
     int overallPercent() const
     {
-        const int phase = qBound(0, int(stage) - int(OpeningStage::Styles), 2);
-        return qMin(100, (phase * 100 + qBound(0, percent, 100)) / 2);
+        const int done = qBound(0, percent, 100);
+        if (stage == OpeningStage::Styles)
+            return done * 10 / 100;
+        if (stage == OpeningStage::Pages)
+            return 10 + done * 89 / 100;
+        return stage == OpeningStage::Ready ? 99 : 0;
     }
 };
 

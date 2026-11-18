@@ -387,7 +387,7 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     // The page estimate does not wait for the whole book: a build from the
     // cache goes first only once the estimate has every spine item.
     const bool cacheFirst =
-            !reading && renderingMode::countsInBackground() && engine->progress->percent() >= 80;
+            !reading && renderingMode::countsInBackground() && engine->progress->estimateComplete();
     bool more = cacheFirst ? false : measure();
     if (!current())
         return;

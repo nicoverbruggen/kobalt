@@ -30,9 +30,6 @@
 
 namespace kobalt::standalone {
 namespace {
-// Match the native host: engine, window, then presentation.
-constexpr int openingBarEngine = 60, openingBarWindow = 80;
-
 QString recentText(QString text)
 {
     // Keep metadata and the optional cover below the 256 KiB record limit.
@@ -353,19 +350,21 @@ void ReaderController::begin(BookOpen book)
                         emit guard->opened();
                 });
             },
-            [guard, lastStage = OpeningStage::Content,
+            [guard, lastStage = OpeningStage::Content, lastPercent = -1,
              painted = QElapsedTimer{}](OpeningStage stage, int percent) mutable {
                 if (!guard || guard->phase != Phase::Opening)
                     return;
                 percent = qBound(0, percent, 100);
+                if (stage < lastStage || (stage == lastStage && percent <= lastPercent))
+                    return;
                 // Match Kobo's progress cadence to avoid excessive e-ink redraws.
                 if (stage == lastStage && percent != 100 && painted.isValid()
                     && painted.elapsed() < 200)
                     return;
                 lastStage = stage;
+                lastPercent = percent;
                 painted.start();
-                emit guard->openingProgress((int(stage) * 100 + percent) * openingBarEngine
-                                            / ((int(OpeningStage::Ready) + 1) * 100));
+                emit guard->openingProgress(openingProgressPercent(stage, percent));
             },
             [guard](QImage cover) {
                 if (guard && guard->phase == Phase::Opening)

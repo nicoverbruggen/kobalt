@@ -50,6 +50,8 @@ QImage unpacked(const QImage &image)
     if (image.format() != QImage::Format_Indexed8)
         return image;
     QImage page(image.size(), QImage::Format_RGB32);
+    if (page.isNull())
+        return {};
     for (int y = 0; y < image.height(); ++y) {
         const auto *from = image.constScanLine(y);
         auto *to = reinterpret_cast<QRgb *>(page.scanLine(y));
@@ -64,8 +66,12 @@ template <class Convert>
 qint64 convert(StyleSample &sample, Convert change)
 {
     qint64 bytes = 0;
+    bool failed = false;
     const auto each = [&](QImage &image) {
+        if (failed || image.isNull())
+            return;
         image = change(image);
+        failed = image.isNull();
         bytes += imageBytes(image);
     };
     for (auto &spread : sample.spreads)
@@ -75,7 +81,7 @@ qint64 convert(StyleSample &sample, Convert change)
         each(image);
     for (auto &image : sample.details)
         each(image);
-    return bytes;
+    return failed ? -1 : bytes;
 }
 
 QStringList fontFiles(const QStringList &paths)
@@ -155,9 +161,11 @@ bool StyleSampleCache::find(bool landscape, const QByteArray &key, StyleSample *
     for (int index = 0; index < list.size(); ++index) {
         if (list[index].key != key)
             continue;
+        auto unpackedSample = list[index].sample;
+        if (convert(unpackedSample, unpacked) < 0)
+            return false;
         list.move(index, 0);
-        *sample = list.first().sample;
-        convert(*sample, unpacked);
+        *sample = std::move(unpackedSample);
         return true;
     }
     return false;
@@ -175,7 +183,7 @@ void StyleSampleCache::insert(bool landscape, const QByteArray &key, const Style
         }
     Entry entry{ key, sample, 0 };
     entry.bytes = convert(entry.sample, packed);
-    if (entry.bytes > limit)
+    if (entry.bytes < 0 || entry.bytes > limit)
         return;
     list.prepend(std::move(entry));
     while (bytes(landscape) > limit)

@@ -541,13 +541,14 @@ void PageScrubber::setBookmarkedPages(const QVector<int> &pages)
     }
 }
 
-void PageScrubber::setChapterJumps(bool enabled)
+void PageScrubber::setChapterJumps(bool enabled, bool keepNavigation)
 {
     enabled = enabled || chapterBar;
     if (chapterJumps == enabled) {
         return;
     }
-    cancel();
+    if (!keepNavigation)
+        cancel();
     chapterJumps = enabled;
     buttonIcon(previous, enabled ? ControlIcon::PreviousChapter : ControlIcon::Previous);
     buttonIcon(next, enabled ? ControlIcon::NextChapter : ControlIcon::Next);
@@ -557,11 +558,12 @@ void PageScrubber::setChapterJumps(bool enabled)
     updateButtons();
 }
 
-void PageScrubber::setChapterBar(bool enabled)
+void PageScrubber::setChapterBar(bool enabled, bool keepNavigation)
 {
     if (chapterBar == enabled)
         return;
-    cancel();
+    if (!keepNavigation)
+        cancel();
     chapterBar = enabled;
     zoomLevel = 0;
     overviewExpanded = false;

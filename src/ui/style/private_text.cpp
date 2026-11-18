@@ -1452,6 +1452,8 @@ QImage renderFontPreviewBitmap(const QStringList &files, const QString &family, 
         return {};
     // Keep only coverage. The GUI colors it for the current theme/selection.
     QImage mask(size, QImage::Format_Indexed8);
+    if (mask.isNull())
+        return {};
     QVector<QRgb> colors(256);
     for (int i = 0; i < 256; ++i)
         colors[i] = qRgba(0, 0, 0, i);

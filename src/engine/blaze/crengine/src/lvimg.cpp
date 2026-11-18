@@ -1654,6 +1654,8 @@ int LVGifFrame::DecodeFromBuffer( const unsigned char * buf, int buf_size, int &
 
     // create stream buffer
     stream_buffer = new unsigned char[stream_buffer_size+3];
+    // The decoder reads up to three bytes at a time, including at the end.
+    memset(stream_buffer + stream_buffer_size, 0, 3);
     // copy data to stream buffer
     int sb_index = 0;
     for (i=0; p[i]; ) {

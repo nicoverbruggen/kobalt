@@ -23,6 +23,17 @@ struct PagePreview
 enum class OpeningStage { Content, Text, Styles, Pages, Ready };
 using OpeningProgress = std::function<void(OpeningStage, int)>;
 
+inline constexpr int openingBarEngine = 94;
+inline constexpr int openingBarWindow = 98;
+
+inline int openingProgressPercent(OpeningStage stage, int percent)
+{
+    // Whole-book pagination takes most of the engine's opening time.
+    constexpr int starts[] = { 0, 3, 14, 19, 90, openingBarEngine };
+    const int index = int(stage);
+    return starts[index] + (starts[index + 1] - starts[index]) * qBound(0, percent, 100) / 100;
+}
+
 struct ChapterProgress
 {
     QString title;

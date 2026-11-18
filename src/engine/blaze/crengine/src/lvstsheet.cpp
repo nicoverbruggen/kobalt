@@ -420,6 +420,7 @@ enum LVCssSelectorPseudoElement
     csspe_after  = 2,   // ::after
     csspe_first_letter  = 3,   // ::first-letter
     csspe_first_line    = 4,   // ::first-line
+    csspe_existing_first_letter = 5, // User-agent styling of an existing pseudo element.
 };
 
 static const char * css_pseudo_elements[] =
@@ -428,6 +429,7 @@ static const char * css_pseudo_elements[] =
     "after",
     "first-letter",
     "first-line",
+    "-cr-existing-first-letter",
     NULL
 };
 
@@ -7791,7 +7793,8 @@ bool LVCssSelector::check( const ldomNode * node, bool allow_cache ) const
         }
         // We might be the pseudoElem that was created by this selector: we need to
         // confirm that by checking the rules on the real element that created us.
-        if ( _pseudo_elem == csspe_first_letter && node->hasAttribute(attr_FirstLetter) ) {
+        if ( (_pseudo_elem == csspe_first_letter || _pseudo_elem == csspe_existing_first_letter)
+             && node->hasAttribute(attr_FirstLetter) ) {
             // We need to find among ancestors the one that got to get a HasFirstLetter attribute
             // (this pseudoElem FirstLetter can be its grandchild), which is the
             // one that matched initially.
@@ -7840,6 +7843,9 @@ bool LVCssSelector::check( const ldomNode * node, bool allow_cache ) const
             // This pseudo-element node doesn't match this selector's pseudo-element type
             return false;
         }
+    }
+    else if ( _pseudo_elem == csspe_existing_first_letter ) {
+        return false; // Never request a first letter on the originating element.
     }
     else if ( _id==0 && node->isBoxingNode() ) {
         // Don't apply "... *" or '.classname' selectors to boxing nodes
@@ -8329,7 +8335,7 @@ bool LVCssSelector::parse( const char * &str, lxmlDocBase * doc, bool useragent_
                         if ( *str==':' ) // skip double ::
                             str++;
                         int n = parse_name( str, css_pseudo_elements, -1 );
-                        if (n != -1) {
+                        if (n != -1 && (useragent_sheet || n+1 != csspe_existing_first_letter)) {
                             _pseudo_elem = n+1; // starts at 1
                             _specificity += WEIGHT_SPECIFICITY_ELEMENT;
                             // Done with this selector: we expect ::before and ::after
@@ -8445,6 +8451,12 @@ void LVCssSelector::applyToPseudoElement( const ldomNode * node, css_style_rec_t
         // It masquerades as a pseudoElem: get the source pseudoElem for the following
         // checks (the style remains the one of the cloneNode).
         node = node->getCloneNodeSource();
+    }
+    if ( _pseudo_elem == csspe_existing_first_letter ) {
+        // Apply the decoration without changing display or marking this pseudo as active.
+        // A previously generated first letter stays hidden when its author rule is gone.
+        _decl->apply(style);
+        return;
     }
     if ( node->getNodeId() == el_pseudoElem ) {
         if (    ( _pseudo_elem == csspe_before && node->hasAttribute(attr_Before) )

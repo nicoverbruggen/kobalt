@@ -744,6 +744,54 @@ static void checkJpeg(bool progressive)
             "CREngine did not preserve JPEG colors");
 }
 
+static void checkDrawPalette()
+{
+    LVColorDrawBuf color(2, 2, 32);
+    lUInt32 externalPixel = 0;
+    LVColorDrawBuf external(1, 1, reinterpret_cast<lUInt8 *>(&externalPixel), 32);
+    for (const auto *buffer : { &color, &external }) {
+        require(buffer->GetBackgroundColor() == buffer->GetWhiteColor()
+                        && buffer->GetTextColor() == buffer->GetBlackColor(),
+                "Color draw buffer has an incorrect default palette");
+    }
+    for (const int bits : { 2, 8 }) {
+        LVGrayDrawBuf gray(2, 2, bits);
+        require(gray.GetBackgroundColor() == gray.GetWhiteColor()
+                        && gray.GetTextColor() == gray.GetBlackColor(),
+                "Gray draw buffer lost its pixel-format palette");
+    }
+    LVInkMeasurementDrawBuf ink;
+    {
+        const LVDrawStateSaver restore(ink);
+        ink.SetBackgroundColor(0xff0000);
+        ink.SetTextColor(0x0000ff);
+        ink.FillRect(2, 3, 6, 9, ink.GetBackgroundColor());
+    }
+    require(ink.GetBackgroundColor() == 0xffffffU && ink.GetTextColor() == 0,
+            "Ink measurement did not restore the default palette");
+    lvRect bounds;
+    require(ink.getInkArea(bounds) && bounds.left == 2 && bounds.top == 3
+                    && bounds.right == 6 && bounds.bottom == 9,
+            "Palette handling changed the measured ink bounds");
+}
+
+static void checkGif()
+{
+    // A 2x2 GIF with red left pixels and blue right pixels.
+    auto gif = QByteArray::fromHex("47494638396102000200800000ff00000000ff"
+                                   "2c000000000200020000020404433005003b");
+    auto image = LVCreateStreamImageSource(
+            LVCreateMemoryStream(gif.data(), gif.size(), false, LVOM_READ));
+    require(!image.isNull() && image->GetWidth() == 2 && image->GetHeight() == 2,
+            "CREngine rejected GIF dimensions");
+    LVColorDrawBuf pixels(2, 2, 32);
+    pixels.Clear(0xffffff);
+    pixels.Draw(image, 0, 0, 2, 2, false);
+    require((pixels.GetPixel(0, 0) & 0xffffffU) == 0xff0000U
+                    && (pixels.GetPixel(1, 1) & 0xffffffU) == 0x0000ffU,
+            "CREngine did not preserve the first and last GIF pixels");
+}
+
 static void checkSvg()
 {
     QByteArray svg =
@@ -1570,8 +1618,10 @@ int main(int argc, char **argv)
         require(kobalt::fontFamilyKey("KF Libron") == kobalt::fontFamilyKey("Libron"),
                 "Legacy font alias changed");
     }
+    checkDrawPalette();
     checkJpeg(false);
     checkJpeg(true);
+    checkGif();
     checkSvg();
     checkKoboStyleHacks();
     checkDarkModeTextColors();
@@ -3662,5 +3712,5 @@ int main(int argc, char **argv)
     require(!reopened.open(bytes, QSize(1072, 1328), invalid, &error),
             "Invalid stored position silently accepted");
     std::puts(
-            "PASS: JPEG and SVG decoding, publisher CSS, chapter boundaries, EPUB preflight, page bounds, cache, typography and persisted anchors");
+            "PASS: GIF, JPEG and SVG decoding, publisher CSS, chapter boundaries, EPUB preflight, page bounds, cache, typography and persisted anchors");
 }

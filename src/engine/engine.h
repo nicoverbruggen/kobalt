@@ -29,14 +29,20 @@ class LayoutProgress
 {
 public:
     int percent() const { return percent_.load(); }
+    bool estimateComplete() const { return estimateComplete_.load(); }
 
-    void reset() { percent_ = 0; }
+    void reset()
+    {
+        percent_ = 0;
+        estimateComplete_ = false;
+    }
 
     void setEstimateProgress(int measured, int items);
     void setBuildProgress(int percent);
 
 private:
     std::atomic_int percent_{ 0 };
+    std::atomic_bool estimateComplete_{ false };
 };
 
 // One open book in one rendering engine. The application reaches an engine

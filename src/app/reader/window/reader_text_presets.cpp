@@ -108,7 +108,11 @@ QImage presetTileImage(const QImage &sample, QSize size, const ui::ThemeColors &
     if (sample.isNull() || size.isEmpty())
         return {};
     const auto source = sample.convertToFormat(QImage::Format_RGB32);
+    if (source.isNull())
+        return {};
     QImage grey(source.size(), QImage::Format_Indexed8);
+    if (grey.isNull())
+        return {};
     for (int y = 0; y < source.height(); ++y) {
         const auto *from = reinterpret_cast<const QRgb *>(source.constScanLine(y));
         auto *to = grey.scanLine(y);
@@ -126,10 +130,14 @@ QImage presetTileImage(const QImage &sample, QSize size, const ui::ThemeColors &
                             mix(ink.blue(), paper.blue()));
     }
     grey.setColorTable(table);
+    const auto scaled = grey.scaledToWidth(size.width(), Qt::SmoothTransformation);
+    if (scaled.isNull())
+        return {};
     QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull())
+        return {};
     image.fill(paper);
     QPainter painter(&image);
-    const auto scaled = grey.scaledToWidth(size.width(), Qt::SmoothTransformation);
     painter.drawImage(QPoint(), scaled, QRect(QPoint(), size));
     painter.end();
     return image;

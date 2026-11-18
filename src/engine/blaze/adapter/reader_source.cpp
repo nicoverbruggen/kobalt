@@ -1372,7 +1372,7 @@ std::unique_ptr<EngineDocument> EngineDocument::openSide(const QJsonObject &sett
 }
 
 namespace {
-constexpr int estimateShare = 80;
+constexpr int estimateShare = 15;
 } // namespace
 
 void LayoutProgress::setEstimateProgress(int measured, int items)
@@ -1381,6 +1381,8 @@ void LayoutProgress::setEstimateProgress(int measured, int items)
     // only goes forward until resetLayoutProgress().
     if (items <= 0)
         return;
+    if (measured >= items)
+        estimateComplete_ = true;
     const int done = estimateShare * qBound(0, measured, items) / items;
     int seen = percent_.load();
     while (done > seen && !percent_.compare_exchange_weak(seen, done)) { }
@@ -1663,22 +1665,16 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
                 koblazeSetPausePoint(&FullBuild::pausePoint, state);
                 try {
                     const StopCheck check(wanted);
-                    // The text, its styles and its pages each count for a
-                    // third. Each slice of pages counts from zero again.
-                    const OpeningProgress progress = [bookProgress](OpeningStage stage,
-                                                                    int percent) {
-                        const int part = stage == OpeningStage::Styles ? 1
-                                : stage == OpeningStage::Pages         ? 2
-                                                                       : 0;
-                        // 99 at most: 100 is the book that is ready.
+                    const OpeningProgress progress = [bookProgress](OpeningStage stage, int percent) {
                         bookProgress->setBuildProgress(
-                                qMin(99, (part * 100 + qBound(0, percent, 100)) / 3));
+                                openingProgressPercent(stage, percent) * 99 / openingBarEngine);
                     };
                     opened = source->resources
                             ? document->openResources(source->resources->fresh(), source->sizes,
                                                       size, saved, &error, progress)
                             : document->open(source->bytes, size, saved, &error, progress);
                     if (opened && document->pages() > 0) {
+                        bookProgress->setBuildProgress(99);
                         document->wordCounts(wanted);
                         // The record for the next opening needs them. The
                         // page turn that shows this document must not.

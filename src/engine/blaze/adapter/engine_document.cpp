@@ -1486,9 +1486,11 @@ void EngineDocument::applyStyleSheet()
     }
     // Normalize ink in PageDrawBuffer so SVG currentColor keeps its publisher
     // value. Clear CSS backgrounds outside SVG so theme ink stays readable.
+    // An unconditional ::first-letter rule splits joining scripts into separate glyph runs.
+    // Style only first letters that another rule has generated.
     if (normalizeTextColors_)
         overrides +=
-                "*:not(svg, svg *), *:not(svg, svg *)::before, *:not(svg, svg *)::after, *:not(svg, svg *)::first-letter { background-color:transparent !important; }\n";
+                "*:not(svg, svg *), *:not(svg, svg *)::before, *:not(svg, svg *)::after, *:not(svg, svg *)::-cr-existing-first-letter { background-color:transparent !important; }\n";
     overrides +=
             "svg[data-kobalt-fullpage=\"1\"] { width:100% !important; height:100vh !important; }\n";
     // A one-screen-pixel boundary stops a leading illustration's margin from

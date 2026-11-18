@@ -99,6 +99,8 @@ QImage unpacked(const QImage &image)
         return image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     const auto table = image.colorTable();
     QImage tile(image.size(), QImage::Format_ARGB32_Premultiplied);
+    if (tile.isNull())
+        return {};
     for (int y = 0; y < image.height(); ++y) {
         const auto *from = image.constScanLine(y);
         auto *to = reinterpret_cast<QRgb *>(tile.scanLine(y));
@@ -441,8 +443,11 @@ bool PreviewStore::find(const QByteArray &key, QImage *image)
     for (int index = 0; index < entries.size(); ++index) {
         if (entries[index].key != key)
             continue;
+        auto unpackedTile = unpacked(entries[index].image);
+        if (unpackedTile.isNull())
+            return false;
         entries.move(index, 0);
-        *image = unpacked(entries.first().image);
+        *image = std::move(unpackedTile);
         return true;
     }
     return false;

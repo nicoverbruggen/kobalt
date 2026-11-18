@@ -245,6 +245,7 @@ static void checkTextColors()
     const QByteArray css =
             "body {color:#334455;background-color:#ffddaa}"
             "#title {color:#e8f0f0 !important;background-color:#222 !important}"
+            "#title::first-letter {font-size:2em;background-color:#ddccbb !important}"
             "a {color:#0000ff !important;text-decoration:underline} p::before {content:'Before ';color:red !important}";
     QMap<QString, qint64> sizes, referenceSizes;
     const auto source = fixture(body, sizes, css);
@@ -259,6 +260,7 @@ static void checkTextColors()
             .replace("#ffddaa", "transparent")
             .replace("#e8f0f0", "#000")
             .replace("#222", "transparent")
+            .replace("#ddccbb", "transparent")
             .replace("#0000ff", "#000")
             .replace("color:red", "color:#000");
     const auto reference = fixture(referenceBody, referenceSizes, referenceCss);
@@ -354,6 +356,37 @@ static void checkTextColors()
     }
 }
 
+// Normalizing colors must leave Arabic words in a single shaping run.
+static void checkArabicTextColors()
+{
+    for (const QByteArray &body : { QByteArray("<p dir='rtl'>سلام</p>"),
+                                   QByteArray("<p dir='rtl'>نص <span>سلام</span></p>") }) {
+        QMap<QString, qint64> sizes, separatedSizes;
+        const auto source = fixture(body, sizes);
+        auto separatedBody = body;
+        separatedBody.replace("سلام", "س&#x200c;لام");
+        const auto separated = fixture(separatedBody, separatedSizes);
+        EngineDocument model(test::readerFonts()), reference(test::readerFonts());
+        QString error;
+        require(model.openResources(source, sizes, { 800, 1000 }, {}, &error), qPrintable(error));
+        require(reference.openResources(separated, separatedSizes, { 800, 1000 }, {}, &error),
+                qPrintable(error));
+        const auto joined = model.image(0);
+        require(joined != reference.image(0), "Arabic fixture did not distinguish joined letters");
+        require(model.applyAppearance(appearance::Patch({ { "normalize_text_colors", true } })),
+                "Cannot enable text color normalization");
+        require(model.image(0) == joined, "Text color normalization changed Arabic joining");
+
+        // Removing a real initial rule must hide its generated node on the next reflow.
+        model.setUserStyleSheet("p::first-letter, span::first-letter {font-size:2em}");
+        model.applyAppearance(appearance::Patch({ { "normalize_text_colors", false } }));
+        require(model.image(0) != joined, "The stylesheet did not produce a visible initial");
+        model.setUserStyleSheet({});
+        model.applyAppearance(appearance::Patch({ { "normalize_text_colors", true } }));
+        require(model.image(0) == joined, "A removed initial still interrupted Arabic joining");
+    }
+}
+
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
@@ -368,6 +401,7 @@ int main(int argc, char **argv)
         return 0;
     }
     checkHorizontalRuleDensity();
+    checkArabicTextColors();
     checkTextColors();
     const QByteArray prose =
             " ordinary words continue through the paragraph, with enough text to distinguish prose from a heading or separator. The words keep their original order and their source anchors.";

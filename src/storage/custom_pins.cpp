@@ -189,6 +189,8 @@ QImage customPinMask(const QByteArray &svg)
         return {};
     bitmap.convertToRGBA();
     QImage mask(96, 96, QImage::Format_ARGB32_Premultiplied);
+    if (mask.isNull())
+        return {};
     bool ink = false;
     for (int y = 0; y < 96; ++y) {
         auto *row = reinterpret_cast<QRgb *>(mask.scanLine(y));

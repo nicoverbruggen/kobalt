@@ -1805,6 +1805,13 @@ void pageFormattingWarnings()
             require(false, "Page warning did not follow visible computed CSS");
         }
     }
+    // A skipped first word leaves no preceding underline to extend.
+    const QByteArray decorated = "<p><span class='skip'>Hidden</span> <u>Visible words</u></p>";
+    EngineDocument hidden(test::readerFonts()), transparent(test::readerFonts());
+    openResources(hidden, book(".skip{visibility:hidden}", decorated), {});
+    openResources(transparent, book(".skip{color:transparent}", decorated), {});
+    require(hidden.image(0) == transparent.image(0),
+            "Hidden or transparent leading words changed the following underline");
     const auto pages = book("p{page-break-before:always}.bad{writing-mode:sideways-rl}",
                             "<p>First supported page.</p><p class='bad'>Unsupported page.</p>"
                             "<p>Last supported page.</p>");
@@ -3387,18 +3394,26 @@ void layoutProgressForward()
     using namespace kobalt;
     LayoutProgress progress;
     progress.setEstimateProgress(5, 10);
-    require(progress.percent() == 40, "Estimate progress was not recorded");
+    require(progress.percent() == 7 && !progress.estimateComplete(),
+            "Partial estimate progress was not recorded");
     progress.setBuildProgress(75);
-    require(progress.percent() == 95, "Build progress was not recorded");
+    require(progress.percent() == 78 && !progress.estimateComplete(),
+            "Build progress changed whether the estimate was complete");
     progress.setEstimateProgress(10, 10);
-    require(progress.percent() == 95, "Resumed estimate work moved the progress back");
+    require(progress.percent() == 78 && progress.estimateComplete(),
+            "Finished estimate did not preserve the published build progress");
     progress.setBuildProgress(50);
-    require(progress.percent() == 95, "An earlier build slice moved the progress back");
+    require(progress.percent() == 78, "An earlier build slice moved the progress back");
+    progress.setBuildProgress(99);
+    require(progress.percent() == 99, "An unfinished whole book showed completion");
+    progress.setBuildProgress(100);
+    require(progress.percent() == 100, "A ready whole book did not show completion");
     LayoutProgress other;
     other.reset();
-    require(progress.percent() == 95, "Opening a second reader reset the first");
+    require(progress.percent() == 100, "Opening a second reader reset the first");
     progress.reset();
-    require(progress.percent() == 0, "A new layout kept the old progress");
+    require(progress.percent() == 0 && !progress.estimateComplete(),
+            "A new layout kept the old progress");
 }
 
 int main(int argc, char **argv)

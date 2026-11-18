@@ -9915,6 +9915,89 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTest::newRow("slices") << 2;
     }
 
+    void hybridNavigateHandoff_data()
+    {
+        QTest::addColumn<bool>("touch");
+        QTest::newRow("thumbnail") << true;
+        QTest::newRow("page-button") << false;
+    }
+
+    void hybridNavigateHandoff()
+    {
+        QFETCH(bool, touch);
+        Fixture fixture(false);
+        QVERIFY(fixture.prepared);
+        if (touch) {
+            // The whole-book bar restores this preference on the handoff.
+            auto preferences = storage::readJson(fixture.paths.preferences());
+            preferences["navigation_bar_buttons"] = "pages";
+            QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        }
+        QTemporaryDir logs;
+        QVERIFY(logs.isValid());
+        const auto ready = std::make_shared<std::atomic_bool>(false);
+        initializeDiagnostics(logs.path());
+        pauseDiagnostics(false);
+        setDiagnosticObserver([ready](const QJsonObject &event) {
+            if (event.value("event") == "full-document-ready")
+                ready->store(true);
+        });
+        renderingMode::setOverride(2);
+        const auto quiet = renderingMode::buildQuietMilliseconds();
+        renderingMode::setBuildQuietMilliseconds(400);
+        const auto restore = qScopeGuard([quiet] {
+            renderingMode::setOverride(-1);
+            renderingMode::setBuildQuietMilliseconds(quiet);
+            setDiagnosticObserver({});
+            pauseDiagnostics(true);
+        });
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *reader = fixture.window.readerWindow();
+        for (int turn = 0; turn < 4; ++turn) {
+            const auto before = fixture.state().value("position");
+            test::skipPageTurnWindow();
+            reader->pageButton(1);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool()
+                        && fixture.state().value("position") != before);
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(ready->load(), 15000);
+        QVERIFY(fixture.state().contains("book_fraction"));
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavSeek"));
+        auto *navigate = dynamic_cast<ui::PageScrubber *>(fixture.widget("rrPageScrubber"));
+        QVERIFY(navigate);
+        QTRY_VERIFY(navigate->previewReady());
+        QVERIFY(fixture.visible("rrBookPositionIndicator"));
+        for (int turn = 0; turn < 3 && fixture.state().contains("book_fraction"); ++turn) {
+            const auto before = fixture.state().value("position");
+            if (touch) {
+                auto *next = fixture.widget("rrPreviewNextPage");
+                QVERIFY(next && next->isVisible());
+                QVERIFY(fixture.click(next, { 10, next->height() / 2 }));
+            } else {
+                test::skipPageTurnWindow();
+                reader->pageButton(1);
+            }
+            QTRY_VERIFY(!fixture.state().value("busy").toBool()
+                        && fixture.state().value("position") != before);
+            QVERIFY(navigate->isVisible());
+            QTRY_VERIFY(navigate->previewReady());
+        }
+        QVERIFY(!fixture.state().contains("book_fraction"));
+        QVERIFY(!fixture.visible("rrBookPositionIndicator"));
+        QVERIFY(fixture.visible("rrBookPosition"));
+        const int readingPage = fixture.state().value("page").toInt();
+        const auto readingPosition = fixture.state().value("position");
+        QCOMPARE(navigate->selectedPage(), readingPage);
+        reader->pageButton(1);
+        QTRY_COMPARE(navigate->selectedPage(), readingPage + 1);
+        QTRY_VERIFY(navigate->previewReady());
+        QCOMPARE(fixture.state().value("position"), readingPosition);
+    }
+
     // A book that Hybrid laid out as a whole opens again in the chapter with
     // the pages of the whole book, not with an estimate. With slices of two
     // pages the saved page is in a later slice of its chapter.
@@ -15455,7 +15538,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QSignalSpy opened(&controller, &standalone::ReaderController::opened);
         controller.open(book, QSize(600, 800));
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
-        QVERIFY(progress.contains(60) && progress.contains(80));
+        QVERIFY(progress.contains(openingBarEngine) && progress.contains(openingBarWindow));
+        QCOMPARE(openingProgressPercent(OpeningStage::Pages, 0), 19);
+        QCOMPARE(openingProgressPercent(OpeningStage::Pages, 50), 54);
+        QCOMPARE(openingProgressPercent(OpeningStage::Ready, 100), openingBarEngine);
         QCOMPARE(progress.last(), 100);
         QCOMPARE(progress.count(100), 1);
         QVERIFY(std::is_sorted(progress.cbegin(), progress.cend()));

@@ -7024,7 +7024,8 @@ void LFormattedText::Draw( LVDrawBuf * buf, int x, int y, ldomMarkedRangeList * 
 #endif
 
             int text_decoration_back_gap;
-            lUInt16 lastWordSrcIndex;
+            // Hidden leading words can skip the first assignment. Source indices are unsigned.
+            int lastWordSrcIndex = -1;
             ldomNode * last_vertical_decoration_owner = NULL;
             int last_vertical_decoration_end = -1;
             ldomNode * last_vertical_overline_owner = NULL;

@@ -366,28 +366,31 @@ private slots:
         QCOMPARE(powerOffs + reboots, 0);
     }
 
-    void screensaverChain_data()
-    {
-        QTest::addColumn<bool>("screensaverLast");
-        QTest::addColumn<bool>("low");
-        for (bool last : { false, true })
-            for (bool low : { false, true })
-                QTest::newRow(
-                        (QByteArray::number(last) + "-" + QByteArray::number(low)).constData())
-                        << last << low;
-    }
-
     void screensaverChain()
     {
-        QFETCH(bool, screensaverLast);
-        QFETCH(bool, low);
+        // Load once for all four scenarios so ASan registers the fixture globals once.
+        QLibrary screensaver(QStringLiteral(KOBALT_SCREENSAVER_FIXTURE));
+        QVERIFY2(screensaver.load(), qPrintable(screensaver.errorString()));
+        for (bool screensaverLast : { false, true }) {
+            for (bool low : { false, true }) {
+                init();
+                checkScreensaverChain(screensaver, screensaverLast, low);
+                cleanup();
+            }
+        }
+        kobalt::nativePowerOff = powerOff;
+        QVERIFY(screensaver.unload());
+    }
+
+private:
+    void checkScreensaverChain(QLibrary &screensaver, bool screensaverLast, bool low)
+    {
         using PowerOff = void (*)(void *, bool);
-        QLibrary addon(QStringLiteral(KOBALT_SCREENSAVER_FIXTURE));
-        QVERIFY2(addon.load(), qPrintable(addon.errorString()));
         const auto hook =
-                reinterpret_cast<PowerOff>(addon.resolve("hook_N3PowerWorkflowManager_powerOff"));
-        const auto reset = reinterpret_cast<void (*)(PowerOff)>(addon.resolve("fixtureReset"));
-        const auto calls = reinterpret_cast<int (*)()>(addon.resolve("fixtureCalls"));
+                reinterpret_cast<PowerOff>(screensaver.resolve("hook_N3PowerWorkflowManager_powerOff"));
+        const auto reset =
+                reinterpret_cast<void (*)(PowerOff)>(screensaver.resolve("fixtureReset"));
+        const auto calls = reinterpret_cast<int (*)()>(screensaver.resolve("fixtureCalls"));
         const auto stock = reinterpret_cast<PowerOff>(
                 dlsym(RTLD_DEFAULT, "_ZN22N3PowerWorkflowManager8powerOffEb"));
         QVERIFY(hook && reset && calls && stock);
@@ -438,8 +441,6 @@ private slots:
             kobalt::NativeLifecycle unsupported(nullptr);
             QVERIFY(!unsupported.connected());
         }
-        kobalt::nativePowerOff = powerOff;
-        QVERIFY(addon.unload());
     }
 };
 QTEST_GUILESS_MAIN(ShutdownTests)

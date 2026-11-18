@@ -14,6 +14,13 @@
       }
     },
     {
+      "name": "mac-sanitize",
+      "inherits": "mac",
+      "displayName": "Mac memory and object lifetime checks",
+      "binaryDir": "${sourceDir}/../../build/desktop-mac-sanitize",
+      "cacheVariables": { "KOBALT_SANITIZE": "ON" }
+    },
+    {
       "name": "mac-perf",
       "inherits": "mac",
       "displayName": "Mac performance measurements",
@@ -35,6 +42,13 @@
       }
     },
     {
+      "name": "linux-sanitize",
+      "inherits": "linux",
+      "displayName": "Linux memory and object lifetime checks",
+      "binaryDir": "${sourceDir}/../../build/desktop-linux-sanitize",
+      "cacheVariables": { "KOBALT_SANITIZE": "ON" }
+    },
+    {
       "name": "linux-perf",
       "inherits": "linux",
       "displayName": "Linux performance measurements",
@@ -45,6 +59,12 @@
     }
   ],
   "buildPresets": [
+    {
+      "name": "mac-sanitize",
+      "configurePreset": "mac-sanitize",
+      "targets": ["kobalt-desktop-tests", "kobalt-reader-ui-tests", "kobalt-reader-lifecycle-tests"],
+      "jobs": 2
+    },
     { "name": "mac", "configurePreset": "mac", "targets": ["Kobalt"], "jobs": 2 },
     { "name": "mac-kobo-checks", "configurePreset": "mac", "targets": ["kobo-checks"], "jobs": 2 },
     { "name": "mac-tests", "configurePreset": "mac", "targets": ["kobalt-tests"], "jobs": 2 },
@@ -55,6 +75,12 @@
     { "name": "mac-perf", "configurePreset": "mac-perf", "targets": ["perf"], "jobs": 2 },
     { "name": "mac-eval", "configurePreset": "mac", "targets": ["kobalt-eval-compare"], "jobs": 2 },
     { "name": "linux", "configurePreset": "linux", "targets": ["Kobalt"], "jobs": 2 },
+    {
+      "name": "linux-sanitize",
+      "configurePreset": "linux-sanitize",
+      "targets": ["kobalt-desktop-tests", "kobalt-reader-ui-tests", "kobalt-reader-lifecycle-tests"],
+      "jobs": 2
+    },
     { "name": "linux-tests", "configurePreset": "linux", "targets": ["kobalt-tests"], "jobs": 2 },
     { "name": "linux-fast-tests", "configurePreset": "linux", "targets": ["kobalt-fast-tests"], "jobs": 2 },
     { "name": "linux-light-tests", "configurePreset": "linux", "targets": ["kobalt-desktop-tests"], "jobs": 2 },
@@ -64,6 +90,21 @@
     { "name": "linux-eval", "configurePreset": "linux", "targets": ["kobalt-eval-compare"], "jobs": 2 }
   ],
   "testPresets": [
+    {
+      "name": "sanitize",
+      "hidden": true,
+      "filter": { "include": { "name": "^(desktop[.](startup|reading)|ui[.]openingLogoSplash|lifecycle[.]teardownRemovesApplicationFilter)$" } },
+      "environment": { "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1" },
+      "output": { "outputOnFailure": true },
+      "execution": { "jobs": 1, "noTestsAction": "error" }
+    },
+    { "name": "mac-sanitize", "inherits": "sanitize", "configurePreset": "mac-sanitize" },
+    {
+      "name": "linux-sanitize",
+      "inherits": "sanitize",
+      "configurePreset": "linux-sanitize",
+      "environment": { "ASAN_OPTIONS": "detect_leaks=1" }
+    },
     {
       "name": "mac",
       "configurePreset": "mac",

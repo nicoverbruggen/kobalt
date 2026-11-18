@@ -720,6 +720,12 @@ Action sessionLists()
                         QDir(QStringLiteral(KOBALT_TEST_FIXTURES))
                                 .absoluteFilePath("../../build/parity-session-XXXXXX"));
                 require(scratch.isValid(), "Cannot create session list profile");
+                // Read the fixture anchors before the session worker starts using CREngine.
+                auto &model = *reader.model;
+                require(model.goTo(model.chapters()[4].position),
+                        "Cannot prepare highlight fixture");
+                const auto hits = model.searchPage("the", model.page()).hits;
+                require(!hits.isEmpty(), "No session highlight fixture");
                 auto owned = std::make_unique<ReaderSession>(test::readerFonts(),
                                                              test::readerPlaceholder());
                 auto &session = *owned;
@@ -818,11 +824,6 @@ Action sessionLists()
                 // with the same fresh slice as the original fixture.
                 go(chapters[8].position);
                 go(chapters[4].position);
-                auto &model = *reader.model;
-                require(model.goTo(model.chapters()[4].position),
-                        "Cannot prepare highlight fixture");
-                const auto hits = model.searchPage("the", model.page()).hits;
-                require(!hits.isEmpty(), "No session highlight fixture");
                 bool saved = false;
                 highlights.save(hits.first().start, hits.first().end, {}, [&](bool ok) {
                     require(ok, "Cannot save session highlight");

@@ -80,6 +80,11 @@ cat > "$scratch/native-bin/cmake" <<'SH'
 if [[ $1 == -P ]]; then
     printf '%s/cache\n' "$KOBALT_NATIVE_FIXTURE"
 else
+    if [[ $1 == --preset ]]; then
+        printf '%s\n' "$2" > "$KOBALT_NATIVE_FIXTURE/configure-preset"
+    elif [[ $1 == --build && $2 == --preset ]]; then
+        printf '%s\n' "$3" > "$KOBALT_NATIVE_FIXTURE/build-preset"
+    fi
     for argument in "$@"; do
         if [[ $argument == -DKOBALT_SDK_ID=* ]]; then
             printf '%s' "${argument#*=}" > "$KOBALT_NATIVE_FIXTURE/sdk-id"
@@ -131,10 +136,18 @@ GITHUB_REF=refs/heads/develop JOBS=2 \
     CONTAINER_ENGINE="$scratch/native-bin/docker" CMAKE_COMMAND="$scratch/native-bin/cmake" \
     PATH="$scratch/native-bin:$PATH" bash "$scratch/native/platforms/ci/native-tests.sh" build
 [[ ! -e "$scratch/native/ctest-args" ]]
+[[ $(cat "$scratch/native/configure-preset") == linux ]]
+[[ $(cat "$scratch/native/build-preset") == linux-tests ]]
+KOBALT_NATIVE_SANITIZE=1 JOBS=2 \
+    CONTAINER_ENGINE="$scratch/native-bin/docker" CMAKE_COMMAND="$scratch/native-bin/cmake" \
+    PATH="$scratch/native-bin:$PATH" bash "$scratch/native/platforms/ci/native-tests.sh"
+[[ $(cat "$scratch/native/configure-preset") == linux-sanitize ]]
+[[ $(cat "$scratch/native/build-preset") == linux-sanitize ]]
+[[ $(cat "$scratch/native/ctest-args") == '--preset linux-sanitize' ]]
 if KOBALT_TEST_SHARD=3 KOBALT_TEST_SHARDS=2 bash platforms/ci/native-tests.sh test; then
     echo 'Native CI accepted an invalid shard' >&2; exit 1
 fi
-echo 'PASS: native CI coverage selection, sharding and failure propagation'
+echo 'PASS: native CI coverage selection, sharding, sanitizer opt-in and failure propagation'
 # Source manifests must have disjoint names and complete checksums.
 jq -es '([.[0]|keys[]] + [.[1]|keys[]]) as $keys | ($keys|length)==($keys|unique|length) and (all(.[]|to_entries[]; (.key|test("^[a-z0-9-]+$")) and (.value.url|startswith("https://")) and (.value.sha256|test("^[a-f0-9]{64}$"))))' dependencies/manifest.json dependencies/release-sources.json > /dev/null
 # Fail closed before consulting tools or producing an APK when secrets are absent.

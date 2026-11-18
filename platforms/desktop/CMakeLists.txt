@@ -52,6 +52,13 @@ if(BUILD_TESTING)
 endif()
 include("${KOBALT_ROOT}/dependencies/local-engine.cmake")
 kobalt_local_engine()
+option(KOBALT_SANITIZE "Check desktop memory accesses and C++ object lifetimes" OFF)
+if(KOBALT_SANITIZE)
+    # Instrument the app and tests. Some external libraries build without RTTI.
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer
+                        "$<$<COMPILE_LANGUAGE:CXX>:-fsanitize=vptr>")
+    add_link_options(-fsanitize=address,vptr)
+endif()
 add_subdirectory("${KOBALT_ROOT}/assets" "${CMAKE_CURRENT_BINARY_DIR}/assets")
 
 file(READ "${KOBALT_ASSETS}/manifest.json" assets)
@@ -280,6 +287,7 @@ if(BUILD_TESTING)
         BASE "${CMAKE_CURRENT_SOURCE_DIR}" FILES "${CMAKE_CURRENT_SOURCE_DIR}/screenshot-gallery.html")
     target_link_libraries(kobalt-desktop-tests PRIVATE kobalt-desktop kobalt-core Qt6::Test Qt6::GuiPrivate)
     target_compile_definitions(kobalt-desktop-tests PRIVATE
+        KOBALT_TEST_SANITIZED=$<BOOL:${KOBALT_SANITIZE}>
         KOBALT_TEST_ASSETS="${KOBALT_ASSETS}" KOBALT_TEST_ZIP="${KOBALT_TEST_ZIP}" KOBALT_TEST_BOOK="${test_book}"
         KOBALT_TEST_CORPUS="${KOBALT_ROOT}/tests/fixtures/public-domain"
         KOBALT_SCREENSHOT_BOOKS="${KOBALT_ROOT}/build/screenshot-books"
@@ -297,6 +305,9 @@ if(BUILD_TESTING)
         set(test_timeout 30)
         if(lane STREQUAL "integration")
             # Allow the full viewport/theme matrix, selected at test runtime.
+            set(test_timeout 300)
+        elseif(KOBALT_SANITIZE AND check STREQUAL "reading")
+            # Instrumented rendering can exceed the normal deadline.
             set(test_timeout 300)
         endif()
         math(EXPR ctest_timeout "${test_timeout} + 5")

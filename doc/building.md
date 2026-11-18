@@ -232,6 +232,8 @@ Native CI uses LLD and keeps the default Qt autogen dependencies. The manual wor
 
 To run the CI suite locally in the same image, run `bash platforms/ci/native-tests.sh` from the repository root. It pulls the pinned image. Set `KOBALT_LINUX_IMAGE` to use another prepared image without pulling, such as a local kobuild build, and `JOBS` to set the parallelism. The local default remains the ordinary compiler and linker; set `KOBALT_COMPILER_CACHE=1` and `KOBALT_NATIVE_LINKER=lld` to use the CI tools. `KOBALT_NATIVE_AUTOGEN_DEPENDS=OFF` selects the optional scheduling experiment. `native-tests.sh build` compiles without running tests; `native-tests.sh test` runs the existing suite. `KOBALT_TEST_SHARD` and `KOBALT_TEST_SHARDS` select an exhaustive CTest index partition. Outside GitHub, set `KOBALT_TEST_ALL_VARIANTS=1` to measure the tagged-release coverage locally. Outputs go to `build/desktop-linux/` and dependencies to the shared dependency cache.
 
+Set `KOBALT_NATIVE_SANITIZE=1` for [desktop memory checks](validation.md#desktop-memory-checks). This mode uses `build/desktop-linux-sanitize/` and a focused serial test run. Use one shard and leave linker benchmarking off.
+
 A tag such as `v1.0-beta.4` supplies the displayed version and Android version name. Package filenames stay fixed across releases so download links remain compatible: `Kobalt-qt5.zip`, `Kobalt-qt6.zip`, `Kobalt-android-arm64.apk` and `Kobalt-sources.tar.gz`. Branch builds use the version in `assets/manifest.json`. CI checks that a triggering tag identifies the checked-out commit. Local builds can set `KOBALT_RELEASE_VERSION` to test the same path without editing the tracked asset manifest.
 
 Add these repository secrets under GitHub Settings → Secrets and variables → Actions:

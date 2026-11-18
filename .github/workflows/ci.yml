@@ -6,6 +6,10 @@ on:
     tags: ['v*']
   workflow_dispatch:
     inputs:
+      native_sanitize:
+        description: Run headless Linux AddressSanitizer and object-lifetime checks
+        type: boolean
+        default: false
       benchmark_linkers:
         description: Compare GNU ld and LLD using the same compiled objects
         type: boolean
@@ -143,6 +147,21 @@ jobs:
           KOBALT_TEST_SHARD: ${{ matrix.shard }}
           KOBALT_TEST_SHARDS: ${{ inputs.native_shards || '2' }}
         run: bash platforms/ci/native-tests.sh test
+
+  native-sanitize:
+    needs: validation
+    if: inputs.native_sanitize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Run native sanitizer checks
+        env:
+          KOBALT_NATIVE_SANITIZE: '1'
+          JOBS: '2'
+        run: bash platforms/ci/native-tests.sh
 
   build-kobo:
     needs: [validation, native-tests]

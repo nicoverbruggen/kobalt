@@ -14,6 +14,19 @@ linker=${KOBALT_NATIVE_LINKER:-default}
 [[ "$linker" == default || "$linker" == lld ]] || exit 2
 autogen=${KOBALT_NATIVE_AUTOGEN_DEPENDS:-ON}
 [[ "$autogen" == ON || "$autogen" == OFF ]] || exit 2
+sanitize=${KOBALT_NATIVE_SANITIZE:-0}
+case "$sanitize" in
+    0) configure=linux; build=linux-tests ;;
+    1)
+        configure=linux-sanitize
+        build=linux-sanitize
+        if [[ "$shards" != 1 || "${KOBALT_BENCHMARK_LINKERS:-0}" != 0 ]]; then
+            echo 'Sanitizer checks require one shard and no linker benchmark' >&2
+            exit 2
+        fi
+        ;;
+    *) echo 'KOBALT_NATIVE_SANITIZE must be 0 or 1' >&2; exit 2 ;;
+esac
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
 # Tags require every variant, including manual runs on a tag. Branch CI
@@ -42,6 +55,7 @@ jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN)}
     --volume "$root:/work" --volume "$cache:/dependency-cache" \
     --workdir /work/platforms/desktop "$image" bash -euc '
         jobs=$1; sdk_id=$2; mode=$3; compiler_cache=$4; linker=$5; autogen=$6; shard=$7; shards=$8
+        configure=$9; build=${10}
         if [[ "$mode" != test ]]; then
             options=(-DCMAKE_AUTOGEN_ORIGIN_DEPENDS="$autogen")
             if [[ "$compiler_cache" == 1 ]]; then
@@ -55,10 +69,10 @@ jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN)}
             [[ "$linker" != lld ]] || flags=-fuse-ld=lld
             options+=(-DCMAKE_EXE_LINKER_FLAGS="$flags" -DCMAKE_SHARED_LINKER_FLAGS="$flags")
             started=$SECONDS
-            cmake --preset linux -DKOBALT_DEPENDENCY_CACHE=/dependency-cache -DKOBALT_DEPENDENCY_JOBS="$jobs" -DKOBALT_SDK_ID="$sdk_id" "${options[@]}"
+            cmake --preset "$configure" -DKOBALT_DEPENDENCY_CACHE=/dependency-cache -DKOBALT_DEPENDENCY_JOBS="$jobs" -DKOBALT_SDK_ID="$sdk_id" "${options[@]}"
             echo "Native configure: $((SECONDS - started)) seconds"
             started=$SECONDS
-            cmake --build --preset linux-tests --parallel "$jobs"
+            cmake --build --preset "$build" --parallel "$jobs"
             echo "Native compile/link: $((SECONDS - started)) seconds"
             [[ "$compiler_cache" != 1 ]] || ccache --show-stats
             if [[ "$KOBALT_BENCHMARK_LINKERS" == 1 ]]; then
@@ -78,7 +92,11 @@ jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN)}
             fi
         fi
         if [[ "$mode" != build ]]; then
-            # CTest indices partition every test exactly once, including tag variants.
-            ctest --preset linux --parallel "$jobs" -I "$shard,,$shards"
+            if [[ "$configure" == linux-sanitize ]]; then
+                ctest --preset "$configure"
+            else
+                # CTest indices partition every test exactly once, including tag variants.
+                ctest --preset "$configure" --parallel "$jobs" -I "$shard,,$shards"
+            fi
         fi
-    ' native-tests "$jobs" "$sdk_id" "$mode" "$compiler_cache" "$linker" "$autogen" "$shard" "$shards"
+    ' native-tests "$jobs" "$sdk_id" "$mode" "$compiler_cache" "$linker" "$autogen" "$shard" "$shards" "$configure" "$build"

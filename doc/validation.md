@@ -20,6 +20,48 @@ Use the light lane for routine UI changes. It checks startup, opening and paging
 
 Gallery workers, scene filters and their limits are described in [Screenshots and gallery](validation/gallery.md).
 
+### Desktop memory checks
+
+Use the sanitizer presets for bug fixing and regression testing. They exercise normal startup, opening and reading a book, the logo-only opening screen and reader teardown. The tests run headlessly with local fixtures and temporary profiles.
+
+AddressSanitizer detects invalid memory accesses in the paths the tests execute. Its allocator made the uninitialized opening label fail consistently in the regression case. It does not detect every uninitialized read. UndefinedBehaviorSanitizer's `vptr` check detects operations on C++ objects whose type or lifetime is invalid. A report from either tool fails the test. The presets instrument Kobalt's desktop code and tests. They reuse the prepared Qt SDK and dependency libraries.
+
+Save the failing test name and the first Kobalt stack frame. Fix the cause and rerun the same test, followed by the affected suite. Use the ordinary build for timings. Before testing a Kobo startup change on a physical device, exercise the target package on matching firmware in a disposable test environment.
+
+#### Mac
+
+Run these commands from `platforms/desktop/`. Select the same Qt SDK as the regular Mac build.
+
+```sh
+cmake --preset mac-sanitize -DCMAKE_PREFIX_PATH="$HOME/Qt/6.11.3/macos"
+cmake --build --preset mac-sanitize
+ctest --preset mac-sanitize
+```
+
+For another reader UI or lifecycle case, use `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ctest --test-dir ../../build/desktop-mac-sanitize -R '<test name>' --output-on-failure`.
+
+Apple Clang's AddressSanitizer on this Mac does not include LeakSanitizer. To inspect the opening test separately, build `kobalt-reader-ui-tests` in the regular Mac Debug build and run it under the macOS leak checker:
+
+```sh
+QT_QPA_PLATFORM=minimal:enable_fonts:freetype QT_STYLE_OVERRIDE=Fusion \
+  TMPDIR="$PWD/../../build/desktop-mac/test-tmp" \
+  leaks --atExit -- ../../build/desktop-mac/kobalt-reader-ui-tests openingLogoSplash
+```
+
+Read the test result and the leak summary. Zero reported leaks describes that process at exit. The tool can report limits on the memory it could inspect.
+
+#### Linux and CI
+
+Run from the repository root to use the pinned kobuild Linux image:
+
+```sh
+KOBALT_NATIVE_SANITIZE=1 bash platforms/ci/native-tests.sh
+```
+
+The Linux preset also enables LeakSanitizer. The command builds in `build/desktop-linux-sanitize/` and runs the selected cases one at a time. Use the runner's `build` or `test` argument to run only that step. For another reader UI or lifecycle case in an instrumented Linux build, run `ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ctest --test-dir build/desktop-linux-sanitize -R '<test name>' --output-on-failure` from the repository root inside the SDK.
+
+On GitHub, run **Build and release** manually with **Run headless Linux AddressSanitizer and object-lifetime checks** selected. The sanitizer job runs alongside the regular native tests and reports its own result. The release package jobs still require the regular native suite.
+
 Use `ctest --preset mac -N` to list registered tests. Use `-R` to select a test name. Use `-L` with a group label to select a group: `model`, `engine`, `session`, `desktop`, `resource`, `component`, `ui`, `platform` or `corpus`. Use `-L` with an area label from [Area checks](#area-checks) to select a feature area. CTest does not build tests automatically. A failed test prints its assertion and captured output. CTest keeps the latest run in `build/desktop-mac/Testing/Temporary/LastTest.log`.
 
 ## Area checks

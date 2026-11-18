@@ -10321,7 +10321,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QElapsedTimer waited, sinceTurn;
         waited.start();
         sinceTurn.start();
-        while (waited.elapsed() < 120000) {
+        // The instrumented build needs more time to lay out all 3,000 chapters.
+        const int layoutTimeout = KOBALT_TEST_SANITIZED ? 270000 : 120000;
+        while (waited.elapsed() < layoutTimeout) {
             if (seen.isEmpty() || seen.last() != status())
                 seen.append(status());
             if (status().contains(QStringLiteral("layout: full")))
@@ -14520,6 +14522,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 std::atomic_bool entered{ false };
             };
 
+            // Let Hybrid finish preparing neighbouring pages before blocking its worker.
+            QTRY_VERIFY_WITH_TIMEOUT(!fixture.window.readerWindow()->busy(), 10000);
             auto gate = std::make_shared<Gate>();
             auto unblock = qScopeGuard([gate] { gate->release.release(); });
             qt::invoke(

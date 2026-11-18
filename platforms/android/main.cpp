@@ -414,6 +414,7 @@ private:
         if (book.key.isEmpty() || closing)
             return;
         if (book.folder.isEmpty()) {
+            android::supersedeBookRequest();
             libraryOpen.cancel();
             openBook(key, { {}, position });
             return;

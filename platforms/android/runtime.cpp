@@ -72,6 +72,11 @@ void openLibraryBook(const QString &uri, const QString &destination, qint64 size
             jlong(request));
 }
 
+void supersedeBookRequest()
+{
+    QNativeInterface::QAndroidApplication::context().callMethod<void>("supersedeBookRequest");
+}
+
 void setPageButtonsAvailable(bool available)
 {
     pageButtonsAvailable.store(available);
@@ -182,13 +187,14 @@ void hideKeyboard()
 } // namespace kobalt::android
 
 extern "C" JNIEXPORT void JNICALL
-Java_org_kobalt_android_KobaltActivity_openBook(JNIEnv *, jobject, jstring value, jlong request)
+Java_org_kobalt_android_KobaltActivity_openBook(JNIEnv *, jobject activity, jstring value, jlong request,
+                                               jlong generation)
 {
     if (!value)
         return;
     const auto path = QJniObject(value).toString();
-    QMetaObject::invokeMethod(qApp, [path, request] {
-        if (owner && bookOpened)
+    QMetaObject::invokeMethod(qApp, [path, request, generation, activity = QJniObject(activity)] {
+        if (owner && bookOpened && activity.callMethod<jboolean>("currentBookRequest", generation))
             bookOpened(path, request);
     });
 }

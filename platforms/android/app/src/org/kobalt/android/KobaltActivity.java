@@ -60,7 +60,11 @@ public class KobaltActivity extends QtActivity {
     private volatile long libraryContentSize;
     private int surfaceWidth, surfaceHeight;
     private int surfaceLeft, surfaceTop, surfaceRight, surfaceBottom, surfaceCorner;
-    private native void openBook(String path, long request);
+    private native void openBook(String path, long request, long generation);
+
+    // Qt checks the generation again when its queued open reaches the reader.
+    public boolean currentBookRequest(long generation) { return picker.current(generation); }
+    public void supersedeBookRequest() { picker.beginBook(); }
     private native boolean turnPage(int direction, int volumeKey);
     private int volumeButtons;
     public int volumeButtons() { return volumeButtons; }
@@ -541,14 +545,14 @@ public class KobaltActivity extends QtActivity {
                         if (!other.equals(target) && other.getName().endsWith(".epub")) other.delete();
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed()) return;
-                    picker.book(generation, () -> openBook(destination, request));
+                    picker.book(generation, () -> openBook(destination, request, generation));
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {
                     if (!picker.current(generation) || isDestroyed()) return;
                     toast("Could not open EPUB: " + error.getMessage());
                     // An empty path returns the library from its loading view.
-                    if (picker.ready()) openBook("", request);
+                    if (picker.ready()) openBook("", request, generation);
                 });
             } finally {
                 if (temporary != null) temporary.delete();
@@ -596,7 +600,7 @@ public class KobaltActivity extends QtActivity {
                 rememberSyncFilename(uri, path);
                 runOnUiThread(() -> {
                     if (isFinishing() || isDestroyed()) return;
-                    picker.book(generation, () -> openBook(path, 0));
+                    picker.book(generation, () -> openBook(path, 0, generation));
                 });
             } catch (Exception error) {
                 runOnUiThread(() -> {

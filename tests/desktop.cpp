@@ -1278,7 +1278,7 @@ bool capture(Fixture &fixture, const QString &name, QWidget *nativeScreen = null
         && !captureOnly.contains("@" + test::screenshotIdentity(parts.captured(3)).first))
         return true;
     // Activity's book lists load their covers in the background.
-    for (const char *list : { "rrActivityBooks", "rrActivityHidden" })
+    for (const char *list : { "rrActivityBooks", "rrActivityHidden", "rrActivityCopies" })
         if (auto *books = fixture.widget(list); books && books->isVisible()) {
             QElapsedTimer waited;
             waited.start();
@@ -1649,6 +1649,9 @@ void seedActivity(Fixture &fixture, const QString &previous, const QString &posi
                 auto *session = add(0, 7, 48, part);
                 session->book = openKey;
                 session->identity = current.value("book").toString();
+                // An earlier copy at the same path has its own session key.
+                if (date < activityToday)
+                    session->book = QStringLiteral("previous-type-tester");
                 session->title = QStringLiteral("Trevelyan's Type Tester");
                 session->author = QStringLiteral("Aven Teral");
                 session->start = previous;
@@ -1880,6 +1883,9 @@ void activityTour(Fixture &fixture, const Scene &scene, const Pages &pages)
     }
     QVERIFY(!open.isEmpty());
     QVERIFY(fixture.press(open.constData()));
+    QTRY_VERIFY(fixture.visible("rrActivityCopies"));
+    pages("stats-activity-copies", "rrActivityCopies");
+    QVERIFY(fixture.press("rrActivityCopy1"));
     QTRY_VERIFY(fixture.visible("rrActivityBookPage"));
     QTRY_VERIFY(static_cast<ui::ListHeader *>(fixture.widget("rrActivityChartBand"))
                         ->leftLabel()
@@ -12722,6 +12728,44 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         activityTour(
                 fixture, [](const QString &) { return true; },
                 [](const QString &, const char *) {});
+    }
+
+    void activityCopyNavigation()
+    {
+        const QDate today(2026, 11, 17);
+        ActivityRecords records;
+        for (int i = 0; i < 3; ++i) {
+            ActivitySession session;
+            session.book = QString::number(i);
+            session.identity = "native-" + session.book;
+            session.sourceKey = "/books/" + session.book + "/Book.epub";
+            session.title = "Book";
+            session.author = "Author";
+            session.started = QDateTime(today, QTime(9 + i, 0)).toMSecsSinceEpoch();
+            session.milliseconds = 12 * 60000;
+            session.observed = session.started + session.milliseconds;
+            records.sessions.append(session);
+        }
+        ActivityView view(nullptr);
+        view.resize(1072, 1448);
+        view.show();
+        view.showSection(ActivityView::Section::Books);
+        view.setRecords(records, activity::summarize(records, today));
+        auto *group = view.findChild<QPushButton *>("rrActivityBook1");
+        QVERIFY(group && group->isVisible());
+        group->click();
+        auto *newest = view.findChild<QPushButton *>("rrActivityCopy1");
+        QVERIFY(newest && newest->isVisible());
+        QVERIFY(newest->accessibleDescription().startsWith("1 · /books/2/Book.epub"));
+        newest->click();
+        records.hidden.insert("2");
+        view.setRecords(records, activity::summarize(records, today));
+        view.closeBook("2");
+        QVERIFY(newest->isVisible());
+        QVERIFY(newest->accessibleDescription().startsWith("1 · /books/1/Book.epub"));
+        auto *second = view.findChild<QPushButton *>("rrActivityCopy2");
+        QVERIFY(second && second->isVisible());
+        QVERIFY(second->accessibleDescription().startsWith("2 · /books/0/Book.epub"));
     }
 
     // The book row and heading paint a single-line caption from saved authors.

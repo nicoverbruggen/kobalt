@@ -156,15 +156,34 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
     QMap<QDate, QHash<QString, BookTotal>> months;
     QHash<QString, BookTotal> hiddenBooks;
     QHash<QString, const ActivitySession *> latest;
+    for (const auto &session : records.sessions)
+        if (localDate(session.started) <= today)
+            latest.insert(session.book, &session);
+    // Use the newest metadata for each stored key. Missing titles or authors
+    // cannot identify a work, so those keys keep their own rows.
+    QMap<QPair<QString, QString>, QString> namedBooks;
+    QHash<QString, QString> groupFor;
+    for (auto it = latest.cbegin(); it != latest.cend(); ++it) {
+        const auto title = it.value()->title.simplified();
+        const auto author = it.value()->author.simplified();
+        if (title.isEmpty() || author.isEmpty()) {
+            groupFor.insert(it.key(), it.key());
+            continue;
+        }
+        auto &group = namedBooks[qMakePair(title, author)];
+        if (group.isEmpty())
+            group = it.key();
+        groupFor.insert(it.key(), group);
+    }
     for (const auto &session : records.sessions) {
         const auto date = localDate(session.started);
         if (date > today)
             continue;
-        latest.insert(session.book, &session);
+        const auto group = groupFor.value(session.book);
         if (!countsAsSession(session))
             continue;
         ++summary.sessions;
-        allBooks.insert(session.book);
+        allBooks.insert(group);
         QMap<QDate, qint64> monthTime;
         bool readToday = false;
         visitHours(session, [&](const QDate &day, int hour, qint64 milliseconds) {
@@ -174,12 +193,12 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
             summary.hours[hour] += milliseconds;
             if (day == today) {
                 readToday = true;
-                todayBooks.insert(session.book);
+                todayBooks.insert(group);
             }
             if (monthOf(day) == monthOf(today))
-                monthBooks.insert(session.book);
+                monthBooks.insert(group);
             if (day == summary.bestDayDate)
-                bestDayBooks.insert(session.book);
+                bestDayBooks.insert(group);
         });
         if (readToday)
             ++summary.todaySessions;
@@ -207,11 +226,30 @@ Summary summarize(const ActivityRecords &records, const QDate &today,
 
     for (auto it = months.cend(); it != months.cbegin();) {
         --it;
-        MonthBooks month{ it.key(), 0, {} };
+        MonthBooks month;
+        month.month = it.key();
+        QHash<QString, QVector<BookTotal>> groups;
         for (auto book : it.value()) {
             describe(book, *latest.value(book.book), records);
             month.milliseconds += book.milliseconds;
-            month.books.append(book);
+            groups[groupFor.value(book.book)].append(book);
+        }
+        for (auto copies : groups) {
+            std::sort(copies.begin(), copies.end(),
+                      [](const BookTotal &left, const BookTotal &right) {
+                          return left.last != right.last ? left.last > right.last
+                                                         : left.book < right.book;
+                      });
+            auto row = copies.first();
+            if (copies.size() > 1) {
+                month.copies.insert(row.book, copies);
+                for (int index = 1; index < copies.size(); ++index) {
+                    row.milliseconds += copies[index].milliseconds;
+                    row.sessions += copies[index].sessions;
+                    row.first = qMin(row.first, copies[index].first);
+                }
+            }
+            month.books.append(row);
         }
         std::sort(month.books.begin(), month.books.end(),
                   [](const BookTotal &left, const BookTotal &right) {

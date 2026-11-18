@@ -1173,6 +1173,8 @@
 "activity.title" = "Activity";
 /* The page of one book in Activity. */
 "activity.book_title" = "Book Activity";
+"activity.copies" = "Book copies";
+"activity.copies_count" = "%1 copies";
 "activity.hidden_title" = "Hidden Books";
 /* The row at the end of Books that opens the hidden books. */
 "activity.hidden_books" = "Hidden books";

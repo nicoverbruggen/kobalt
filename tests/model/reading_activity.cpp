@@ -60,6 +60,34 @@ void daysAndFallback()
     require(summary.todaySessions == 1 && summary.todayBooks == 1, "Today's sessions were wrong");
 }
 
+void matchingBooks()
+{
+    ActivityRecords records;
+    records.sessions = { session("file-a", today, 7, 30, "The Fortress"),
+                         session("file-b", today, 9, 20, "The Fortress"),
+                         session("native-c", today, 10, 10, "The Fortress"),
+                         session("file-d", today, 11, 5, "The Fortress") };
+    records.sessions.last().author = "Different Author";
+    const auto summary = activity::summarize(records, today);
+    const auto &month = summary.months.first();
+    require(summary.books == 2 && summary.booksThisMonth == 2 && summary.todayBooks == 2
+                    && month.books.size() == 2,
+            "Matching titles and authors should count as one book");
+    const auto &first = month.books.first();
+    require(first.book == "native-c" && first.milliseconds == 60 * minute && first.sessions == 3
+                    && month.copies.value(first.book).size() == 3,
+            "The monthly row lost time or copy identities");
+    records.hidden.insert("file-b");
+    const auto hidden = activity::summarize(records, today);
+    require(hidden.months.first().books.first().milliseconds == 40 * minute
+                    && hidden.hiddenBooks.first().book == "file-b" && hidden.books == 2,
+            "Hiding one copy changed the totals of another");
+    for (auto &item : records.sessions)
+        item.author.clear();
+    require(activity::summarize(records, today).books == 4,
+            "Missing authors must not group unrelated books");
+}
+
 // A streak survives a day that has not had reading yet, and breaks after it.
 void streaks()
 {
@@ -488,6 +516,7 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     daysAndFallback();
+    matchingBooks();
     streaks();
     weekAndMonths();
     hours();

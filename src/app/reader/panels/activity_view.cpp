@@ -13,6 +13,7 @@
 #include "ui/style/private_text.h"
 #include "ui/style/styles.h"
 #include "ui/style/theme.h"
+#include <QUrl>
 #include <QDateTime>
 #include <QLocale>
 #include <QPainter>
@@ -961,12 +962,14 @@ public:
         return { height * 2 / 3, height };
     }
 
-    void setBook(const activity::BookTotal &value)
+    void setBook(const activity::BookTotal &value, const QString &caption = {})
     {
         book = value;
+        copyCaption = caption;
         author = authorCaption(book.author);
         setObjectName("rrActivityBook");
         setAccessibleName(book.title);
+        setAccessibleDescription(caption);
         update();
     }
 
@@ -978,6 +981,8 @@ public:
     }
 
     activity::BookTotal book;
+    QString copyCaption;
+    QDate month;
     QImage cover;
     bool missing = false;
 
@@ -1053,7 +1058,11 @@ protected:
                     ui::elideInterfaceText(author, caption, textRight - left),
                     Qt::AlignLeft | Qt::AlignTop, note);
         y += captionHeight + ui::px(18);
-        if (book.finished) {
+        if (!copyCaption.isEmpty()) {
+            drawCaption(painter, QRect(left, y, textRight - left, captionHeight),
+                        ui::elideInterfaceText(copyCaption, caption, textRight - left),
+                        Qt::AlignLeft | Qt::AlignTop, ink);
+        } else if (book.finished) {
             drawCaption(painter, QRect(left, y, textRight - left, captionHeight),
                         strings::get("activity.finished_mark"), Qt::AlignLeft | Qt::AlignTop, ink);
         } else if (book.percent >= 0) {
@@ -1119,7 +1128,7 @@ public:
     // The books in groups, each under its band, and a row to the hidden
     // books after them when there are any. A group without a month is the
     // hidden books' own list.
-    void setGroups(const QVector<activity::MonthBooks> &groups, int hidden)
+    void setGroups(const QVector<activity::MonthBooks> &groups, int hidden, bool firstPage = false)
     {
         known.clear();
         missingBooks.clear();
@@ -1127,10 +1136,12 @@ public:
         months = groups;
         hiddenCount = hidden;
         // A reload, such as after hiding a book, keeps the page in view.
-        showPage(page);
+        showPage(firstPage ? 0 : page);
     }
 
-    std::function<void(const QString &)> chosen;
+    QHash<QString, QString> copyCaptions, copyDescriptions;
+    bool showCopySource = false;
+    std::function<void(QDate, const QString &)> chosen;
     std::function<void()> hiddenRequested;
 
 protected:
@@ -1224,8 +1235,10 @@ private:
                             month.month.isValid()
                                     ? english().toString(month.month, QStringLiteral("MMMM yyyy"))
                                     : strings::get("activity.hidden"),
-                            plural("activity.book_count", "activity.books_count",
-                                   month.books.size())
+                            (showCopySource
+                                     ? strings::get("activity.copies_count").arg(month.books.size())
+                                     : plural("activity.book_count", "activity.books_count",
+                                              month.books.size()))
                                     + QStringLiteral(" · ") + duration(month.milliseconds));
                     header->setGeometry(0, y, width(), ui::metrics::list::headerHeight);
                     header->show();
@@ -1236,12 +1249,22 @@ private:
                     auto *row = new BookRow(this);
                     connect(row, &QPushButton::clicked, this, [this, row] {
                         if (chosen)
-                            chosen(row->book.book);
+                            chosen(row->month, row->book.book);
                     });
                     rows.append(row);
                 }
                 auto *row = rows[rowsUsed++];
-                row->setBook(month.books[item.book]);
+                const auto &book = month.books[item.book];
+                const int copies = month.copies.value(book.book).size();
+                row->month = month.month;
+                QString caption;
+                if (copies)
+                    caption = strings::get("activity.copies_count").arg(copies);
+                else if (showCopySource)
+                    caption = copyCaptions.value(book.book);
+                row->setBook(book, caption);
+                if (showCopySource)
+                    row->setAccessibleDescription(copyDescriptions.value(book.book));
                 row->setCover(covers.value(month.books[item.book].book),
                               missingBooks.contains(month.books[item.book].book));
                 if (!known.contains(month.books[item.book].book))
@@ -2629,7 +2652,20 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
     overview = new ActivityOverview(this);
     calendar = new ActivityCalendar(this);
     books = new ActivityBooks(this, "rrActivityBooks", "rrActivityBook", true);
-    books->chosen = [this](const QString &key) { openBook(key); };
+    books->chosen = [this](QDate month, const QString &key) {
+        for (const auto &group : summary.months)
+            if (group.month == month && group.copies.contains(key)) {
+                const auto copy = group.copies.value(key).first();
+                copiesTitle = copy.title.simplified();
+                copiesAuthor = copy.author.simplified();
+                copiesMonth = month;
+                detail = Detail::Copies;
+                updateCopies(true);
+                arrange();
+                return;
+            }
+        openBook(key);
+    };
     books->coversRequested = [this](const QVector<activity::BookTotal> &wanted, QSize size) {
         if (coversRequested)
             coversRequested(wanted, size);
@@ -2639,11 +2675,18 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
         arrange();
     };
     hiddenPage = new ActivityBooks(this, "rrActivityHidden", "rrActivityHiddenBook", false);
-    hiddenPage->chosen = [this](const QString &key) {
+    hiddenPage->chosen = [this](QDate, const QString &key) {
         openBook(key);
         bookReturn = Detail::Hidden;
     };
     hiddenPage->coversRequested = books->coversRequested;
+    copiesPage = new ActivityBooks(this, "rrActivityCopies", "rrActivityCopy", false);
+    copiesPage->showCopySource = true;
+    copiesPage->chosen = [this](QDate, const QString &key) {
+        openBook(key);
+        bookReturn = Detail::Copies;
+    };
+    copiesPage->coversRequested = books->coversRequested;
     recordsPage = new ActivityRecordsPage(this);
     bookPage = new ActivityBookPage(this);
     milestonesPage = new ActivityMilestones(this);
@@ -2687,6 +2730,79 @@ void ActivityView::setUnavailable()
     arrange();
 }
 
+void ActivityView::updateCopies(bool firstPage)
+{
+    activity::MonthBooks copies;
+    copies.month = copiesMonth;
+    for (const auto &month : summary.months) {
+        if (month.month != copiesMonth)
+            continue;
+        for (const auto &group : month.copies) {
+            const auto &copy = group.first();
+            if (copy.title.simplified() == copiesTitle
+                && copy.author.simplified() == copiesAuthor) {
+                copies.books = group;
+                break;
+            }
+        }
+        break;
+    }
+    if (copies.books.isEmpty()) {
+        if (detail == Detail::Copies)
+            detail = Detail::None;
+        if (bookReturn == Detail::Copies)
+            bookReturn = Detail::None;
+        return;
+    }
+    QStringList sources;
+    for (const auto &copy : copies.books) {
+        const QUrl identity(copy.identity);
+        sources.append(identity.isLocalFile()                   ? identity.toLocalFile()
+                               : copy.sourceKey.startsWith('/') ? copy.sourceKey
+                                                                : copy.identity);
+        copies.milliseconds += copy.milliseconds;
+    }
+    // Start each narrow caption at the part of its source that distinguishes
+    // this copy. In sorted order only the two neighbouring sources can share
+    // a longer prefix. Keep the complete source in the accessible description.
+    auto ordered = sources;
+    ordered.removeDuplicates();
+    ordered.sort();
+    QHash<QString, QString> labels;
+    for (int i = 0; i < ordered.size(); ++i) {
+        const auto &source = ordered[i];
+        int start = 0;
+        for (int other : { i - 1, i + 1 }) {
+            if (other < 0 || other >= ordered.size())
+                continue;
+            int common = 0;
+            while (common < source.size() && common < ordered[other].size()
+                   && source[common] == ordered[other][common])
+                ++common;
+            start = qMax(start, common);
+        }
+        // When the source is also a prefix of another, show its filename.
+        if (ordered.size() == 1 || start == source.size())
+            start = source.lastIndexOf('/') + 1;
+        labels.insert(source, source.mid(start));
+    }
+    copiesPage->copyCaptions.clear();
+    copiesPage->copyDescriptions.clear();
+    for (int i = 0; i < copies.books.size(); ++i) {
+        const auto &copy = copies.books[i];
+        const auto date =
+                english().toString(activity::localDate(copy.last), QStringLiteral("d MMM yyyy"));
+        const auto number = QString::number(i + 1) + QStringLiteral(" · ");
+        auto caption = labels.value(sources[i]);
+        if (!caption.isEmpty())
+            caption += QStringLiteral(" · ");
+        copiesPage->copyCaptions.insert(copy.book, number + caption + date);
+        copiesPage->copyDescriptions.insert(copy.book,
+                                            number + sources[i] + QStringLiteral(" · ") + date);
+    }
+    copiesPage->setGroups({ copies }, 0, firstPage);
+}
+
 void ActivityView::setRecords(ActivityRecords value, activity::Summary computed)
 {
     records = std::move(value);
@@ -2698,6 +2814,8 @@ void ActivityView::setRecords(ActivityRecords value, activity::Summary computed)
     overview->setSummary(summary, records);
     calendar->setSummary(summary, records);
     books->setSummary(summary, records);
+    if (detail == Detail::Copies || bookReturn == Detail::Copies)
+        updateCopies();
     activity::MonthBooks hidden;
     hidden.books = summary.hiddenBooks;
     for (const auto &book : hidden.books)
@@ -2734,6 +2852,7 @@ void ActivityView::setCover(const QString &book, const QImage &cover, bool missi
 {
     books->setCover(book, cover, missing);
     hiddenPage->setCover(book, cover, missing);
+    copiesPage->setCover(book, cover, missing);
 }
 
 void ActivityView::showSection(Section section)
@@ -2782,6 +2901,7 @@ void ActivityView::arrange()
     title->setText(detail == Detail::Book ? strings::get("activity.book_title")
                            : detail == Detail::Milestones
                            ? strings::get("activity.milestones_title")
+                           : detail == Detail::Copies ? strings::get("activity.copies")
                            : detail == Detail::Hidden ? strings::get("activity.hidden_title")
                                                       : strings::get("activity.title"));
     // The section cells give way to the title on a narrow screen.
@@ -2827,6 +2947,8 @@ void ActivityView::arrange()
     milestonesPage->setGeometry(body);
     hiddenPage->setVisible(ready && detail == Detail::Hidden);
     hiddenPage->setGeometry(body);
+    copiesPage->setVisible(ready && detail == Detail::Copies);
+    copiesPage->setGeometry(body);
     update();
 }
 } // namespace kobalt

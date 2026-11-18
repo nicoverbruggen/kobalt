@@ -86,8 +86,11 @@ private:
     Section current = Section::Overview;
     // A book's page, every milestone or the hidden books, opened from a
     // section with a back cell. A book's page returns to where it opened.
-    enum class Detail { None, Book, Milestones, Hidden };
+    enum class Detail { None, Book, Milestones, Hidden, Copies };
     Detail detail = Detail::None, bookReturn = Detail::None;
+    QDate copiesMonth;
+    QString copiesTitle, copiesAuthor;
+    void updateCopies(bool firstPage = false);
     QString currentBook;
     bool loading = true, unavailable = false;
     QWidget *header;
@@ -97,7 +100,7 @@ private:
     QLabel *message;
     class ActivityOverview *overview;
     class ActivityCalendar *calendar;
-    class ActivityBooks *books, *hiddenPage;
+    class ActivityBooks *books, *hiddenPage, *copiesPage;
     class ActivityRecordsPage *recordsPage;
     class ActivityBookPage *bookPage;
     class ActivityMilestones *milestonesPage;

@@ -50,4 +50,6 @@ Covers come from the book files. Only the books on the shown page of Books load,
 
 A day counts as a reading day from one minute of reading. A session counts from two minutes; a shorter one, such as opening a book to look something up, adds its time to the day but is not listed or counted. Streaks count consecutive reading days. A streak stays current until a whole day passes without reading. Weeks start on Monday. Days use the daily totals of the sleep widget; days from before those totals use their sessions. Finished books are the books Kobalt marked as finished. Kobalt does not save when a book was finished. Totals start when history recording started, and the All time band names that day. Landscape screens put the parts of each section side by side.
 
+Books groups copies with the same title and author under one monthly row. Tap the row to see each copy’s reading time and sessions. Hiding or deleting activity applies to the selected copy. A missing title or author keeps the copy separate.
+
 Activity reads the history on the profile writer thread, computes its summary there too and shows it when it arrives. It writes only the cover cache, the choice that the first-opening alert was shown, the list of hidden books and deletions. The open book adds its time that is not saved yet.

@@ -35,7 +35,7 @@ bool hasInk(const QImage &image)
 }
 
 // Text preset tiles are drawn with the engine's fonts and no sample document.
-// Each example's face draws, a narrow canvas breaks words with the
+// Each example's face draws, the gallery canvas breaks words with the
 // hyphenation patterns, and the time of the first draw of a face, which
 // loads it, is reported apart from a draw with the face loaded.
 void examplesDraw()
@@ -57,15 +57,17 @@ void examplesDraw()
         std::printf("%s: first draw %.1f ms, loaded %.1f ms\n", qPrintable(face), loading, drawing);
         require(engine->pages() == 0, "A sample must not open a document");
     }
-    // Words that do not fit a narrow line are broken only with hyphenation.
-    auto sample = request(QStringLiteral("NV Jost"));
-    sample.canvas = QSize(300, 480);
-    sample.margin = 10;
+    // The gallery can crop the lower lines on short screens. Check that the
+    // first few body lines differ at the size of the bundled Kobalt preset.
+    auto sample = request(QStringLiteral("Libron"));
+    sample.alignment = QStringLiteral("left");
     const auto plain = engine->drawTextSample(sample);
     sample.hyphenate = true;
     const auto hyphenated = engine->drawTextSample(sample);
-    require(!plain.isNull() && !hyphenated.isNull(), "Narrow samples must draw");
-    require(plain != hyphenated, "Hyphenation must change the line breaks");
+    require(!plain.isNull() && !hyphenated.isNull(), "Gallery samples must draw");
+    const QRect visible(0, 0, sample.canvas.width(), 240);
+    require(plain.copy(visible) != hyphenated.copy(visible),
+            "Hyphenation must change line breaks near the top of a gallery sample");
 }
 } // namespace
 

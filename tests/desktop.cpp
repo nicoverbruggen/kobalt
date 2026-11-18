@@ -2772,6 +2772,21 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
     if (screenshots) {
         QVERIFY(fixture.press("rrTextPresetNameCancel"));
         QTRY_VERIFY(!fixture.visible("rrTextPresetName"));
+        // Include an otherwise identical pair to show the effect of hyphenation.
+        QVERIFY(fixture.press("rrTextPreset_kobalt"));
+        QTRY_VERIFY_WITH_TIMEOUT(settled(), 30000);
+        QVERIFY(fixture.press("rrHyphenation_on"));
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrTextPresetSaveAs") && settled(), 30000);
+        QVERIFY(fixture.press("rrTextPresetSaveAs"));
+        QTRY_VERIFY(fixture.visible("rrTextPresetNameInput"));
+        auto *hyphenatedName = fixture.window.readerWindow()->findChild<QLineEdit *>(
+                "rrTextPresetNameInput");
+        QVERIFY(hyphenatedName);
+        hyphenatedName->setText("Hyphenation on");
+        QVERIFY(fixture.press("rrTextPresetNameSave"));
+        QTRY_VERIFY(!fixture.visible("rrTextPresetName"));
+        QTRY_COMPARE(fixture.widget("rrTextPresetToggle")->accessibleDescription(),
+                     QString("Hyphenation on"));
     } else {
         // A taken name keeps the dialog open; a new one saves and selects the preset.
         input->setText("kobalt");

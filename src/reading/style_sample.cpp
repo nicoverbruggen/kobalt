@@ -452,11 +452,19 @@ void setTextSampleText(TextSampleRequest &request)
 {
     static const auto text = [] {
         QPair<QString, QStringList> result;
+        bool inExcerpt = false;
         for (const auto &block : sampleDocument(false, false).blocks) {
-            if (!block.paragraph && result.first.isEmpty() && result.second.isEmpty())
+            if (!block.paragraph && result.first.isEmpty())
                 result.first = block.text;
-            else if (block.paragraph && result.second.size() < paragraphSampleCount)
+            if (!block.paragraph)
+                continue;
+            // This paragraph shows hyphenation within the first few lines at the default size.
+            if (block.text.startsWith(QLatin1String("Either the well was very deep")))
+                inExcerpt = true;
+            if (inExcerpt)
                 result.second.append(block.text);
+            if (result.second.size() == paragraphSampleCount)
+                break;
         }
         return result;
     }();

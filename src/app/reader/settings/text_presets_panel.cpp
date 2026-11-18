@@ -658,7 +658,6 @@ private:
         const auto image = gallery->previews.value(view.id);
         if (!image.isNull())
             painter.drawImage(preview.topLeft(), image);
-        paintBadges(painter, preview, view, colors);
         // Selected tiles get a heavy frame and an inverted caption.
         const bool marked = selected || down;
         painter.fillRect(caption, marked ? colors.ink : colors.paper);
@@ -703,48 +702,6 @@ private:
                               onBaseline(caption.left() + inset, nameWidth + 2,
                                          ui::interfaceLineAscent(nameFont), nameHeight),
                               name, Qt::AlignLeft | Qt::AlignTop);
-    }
-
-    // The alignment and hyphenation of a preset, in one chip in the bottom
-    // right corner of its preview: an icon for the alignment, then words for
-    // hyphenation. The chip sits on a band of paper across the preview, so
-    // it covers no text and the sample ends on whole lines.
-    void paintBadges(QPainter &painter, const QRect &preview, const TextPresetView &view,
-                     const ui::ThemeColors &colors)
-    {
-        const QFont font = ui::captionFont(chrome::captionText);
-        const int height = ui::px(36), pad = ui::px(10), icon = ui::px(24), gap = ui::px(8);
-        const int rule = metrics::control::border;
-        const bool aligned = view.alignment == QLatin1String("left")
-                || view.alignment == QLatin1String("justify");
-        const auto hyphenation = view.hyphenation == QLatin1String("on") ? strings::get("common.on")
-                : view.hyphenation == QLatin1String("auto") ? strings::get("common.auto")
-                                                            : strings::get("common.off");
-        const auto word = strings::get("reader.hyphenation").toUpper() + QLatin1Char(' ')
-                + hyphenation.toUpper();
-        const int wordWidth = ui::interfaceTextWidth(word, font);
-        const int width = pad + (aligned ? icon + gap : 0) + wordWidth + pad;
-        const int inset = ui::px(12);
-        const QRect chip(preview.right() + 1 - inset - width, preview.bottom() + 1 - inset - height,
-                         width, height);
-        painter.fillRect(QRect(preview.left(), chip.top() - inset, preview.width(),
-                               preview.bottom() + 1 - (chip.top() - inset)),
-                         colors.paper);
-        ui::paintEdges(painter, chip,
-                       ui::Edges(Qt::TopEdge) | Qt::BottomEdge | Qt::LeftEdge | Qt::RightEdge,
-                       colors.ink, rule);
-        int left = chip.left() + pad;
-        if (aligned) {
-            ui::controlIcon(view.alignment == QLatin1String("left") ? ui::ControlIcon::AlignLeft
-                                                                    : ui::ControlIcon::AlignJustify,
-                            colors.ink)
-                    .paint(&painter, QRect(left, chip.center().y() - icon / 2, icon, icon));
-            left += icon + gap;
-        }
-        painter.setPen(colors.ink);
-        painter.setFont(font);
-        ui::drawInterfaceText(painter, QRect(left, chip.top(), wordWidth + 2, chip.height()), word,
-                              Qt::AlignLeft | Qt::AlignVCenter);
     }
 
     TextPresetGallery *gallery;

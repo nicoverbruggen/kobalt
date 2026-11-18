@@ -92,7 +92,7 @@ void renderStyleSample(EngineFontInputs fonts, StyleSampleRequest request, QObje
 // image.
 void renderTextSample(EngineFontInputs fonts, TextSampleRequest request, QObject *context,
                       std::function<void(QImage)> finished);
-// The heading and opening paragraphs of the layout sample, for a text sample.
+// Text for the Text Presets gallery, with breakable words near the start.
 void setTextSampleText(TextSampleRequest &request);
 // Reading settings without the book-specific keys a sample cannot use.
 QJsonObject styleSampleSettings(QJsonObject state);

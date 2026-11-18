@@ -133,12 +133,23 @@ QImage presetTileImage(const QImage &sample, QSize size, const ui::ThemeColors &
     const auto scaled = grey.scaledToWidth(size.width(), Qt::SmoothTransformation);
     if (scaled.isNull())
         return {};
+    // Stop at a blank row so a short tile never cuts across the last line.
+    const auto hasInk = [&scaled, paper](int y) {
+        for (int x = 0; x < scaled.width(); ++x)
+            if (scaled.pixel(x, y) != paper.rgb())
+                return true;
+        return false;
+    };
+    int visible = qMin(scaled.height(), size.height() - ui::px(12));
+    while (visible > 0 && hasInk(visible - 1))
+        --visible;
     QImage image(size, QImage::Format_ARGB32_Premultiplied);
     if (image.isNull())
         return {};
     image.fill(paper);
     QPainter painter(&image);
-    painter.drawImage(QPoint(), scaled, QRect(QPoint(), size));
+    if (visible > 0)
+        painter.drawImage(QPoint(), scaled, QRect(0, 0, size.width(), visible));
     painter.end();
     return image;
 }
@@ -158,8 +169,6 @@ TextPresetView Reader::textPresetView(const Preset &preset)
     view.id = preset.id;
     view.name = preset.name;
     view.detail = presetDetail(preset);
-    view.alignment = preset.alignment;
-    view.hyphenation = preset.hyphenation;
     const auto face =
             preset.fontFace.isEmpty() ? QString::fromLatin1(defaultFontFace) : preset.fontFace;
     for (const auto &font : textPresetSettings()->fontCatalog())

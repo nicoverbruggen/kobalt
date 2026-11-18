@@ -611,8 +611,10 @@ private:
     bool delayed = false;
     std::shared_ptr<CoverRead> coverRead;
     QProgressBar *progress = nullptr;
-    QLabel *brand, *label, *hint;
-    OpeningRedirect *redirect;
+    QLabel *brand = nullptr;
+    QLabel *label = nullptr;
+    QLabel *hint = nullptr;
+    OpeningRedirect *redirect = nullptr;
     ui::ChoiceModal *failureDialog = nullptr;
     bool storageFailure = false;
     bool fallback = false, automatic = false;
@@ -620,7 +622,7 @@ private:
     const bool embedded;
     bool showCover;
     QTimer hintTimer;
-    ui::Button *cancel;
+    ui::Button *cancel = nullptr;
     bool painted = false;
     std::function<void()> firstPaint;
 };

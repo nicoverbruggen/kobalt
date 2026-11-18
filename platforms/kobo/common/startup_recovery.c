@@ -86,10 +86,11 @@ bool kobalt_startup_complete(const char *path)
 
 static bool write_record(const char *path, const char *text)
 {
-    char *temporary = malloc(strlen(path) + sizeof(".XXXXXX"));
+    const size_t capacity = strlen(path) + sizeof(".XXXXXX");
+    char *temporary = malloc(capacity);
     if (!temporary)
         return false;
-    sprintf(temporary, "%s.XXXXXX", path);
+    snprintf(temporary, capacity, "%s.XXXXXX", path);
     int fd = mkstemp(temporary);
     if (fd < 0) {
         free(temporary);

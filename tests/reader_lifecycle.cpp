@@ -909,6 +909,23 @@ private slots:
                  "The reader's application filter still consumed events during teardown");
     }
 
+    void settingsTeardownReleasesConfirmation()
+    {
+        QWidget window;
+        reader::SettingsPanelInputs inputs;
+        inputs.automaticBookOpeningSupported = true;
+        auto settings = std::make_unique<reader::SettingsPanel>(&window, inputs);
+        auto *automatic = settings->findChild<QCheckBox *>("rrAutomaticBookOpening");
+        QVERIFY(automatic && automatic->isEnabled());
+        automatic->setChecked(true);
+        automatic->click();
+        const QPointer<QWidget> dialog =
+                window.findChild<QWidget *>("rrAutomaticBookOpeningConfirmation");
+        QVERIFY(dialog && dialog->parentWidget() == &window);
+        settings.reset();
+        QVERIFY2(!dialog, "The detached confirmation still refers to the deleted Settings panel");
+    }
+
     void appearanceTeardownStopsPanelCallbacks_data()
     {
         QTest::addColumn<QString>("buttonName");

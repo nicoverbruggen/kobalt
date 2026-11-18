@@ -1559,6 +1559,7 @@ SettingsPanel::~SettingsPanel()
     delete restoreDialog;
     delete restorePresetsDialog;
     delete standbyDialog;
+    delete automaticOpeningDialog;
     delete sheet;
 }
 

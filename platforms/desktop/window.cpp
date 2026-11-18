@@ -929,6 +929,8 @@ Window::~Window()
 {
     qApp->removeEventFilter(this);
     setTouchCursor(false);
+    // The Library disconnects its store callback while the store is still alive.
+    delete start;
 }
 
 void Window::setTouchCursor(bool visible, bool pressed)

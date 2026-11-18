@@ -1,5 +1,7 @@
 # Settings and controls checks
 
+`lifecycle.settingsTeardownReleasesConfirmation` opens the automatic-opening confirmation and destroys Settings while the reader window still exists. It checks that the confirmation is destroyed with Settings.
+
 `lifecycle.appearanceRelayoutPreservesPassage` turns once and checks that the new passage survives changes to typeface, size, weight, margins, Bold Reading, dark mode and viewport. It identifies the passage by its canonical position, including when the turn opens the first page of a new chapter.
 
 `desktop.settingsOpeningCover` checks the cover default, saving the logo choice, reopening with the logo and restoring the cover. `ui.openingCoverDisabled` checks that cached and late cover delivery cannot replace the logo or repaint the view, while progress, reopening status and native-reader handoff remain available. The loading gallery includes logo and logo-reopening screens. These checks use headless hosts; physical e-ink refresh remains unverified.

@@ -414,9 +414,11 @@ void ReaderController::release()
 {
     if (lease)
         lease->cancel();
-    if (window_) {
-        window_->finished = {};
-        delete window_.data();
+    if (auto *window = window_.data()) {
+        window->finished = {};
+        // Removing child widgets sends events through the host's application filter.
+        window_.clear();
+        delete window;
     }
     opening.reset();
     QPointer<ReaderController> guard(this);

@@ -291,7 +291,13 @@ public:
         });
     }
 
-    ~Window() override { android::setCallbacks(nullptr, {}, {}); }
+    ~Window() override
+    {
+        android::setCallbacks(nullptr, {}, {});
+        qApp->removeEventFilter(this);
+        // The Library disconnects its store callback while the store is still alive.
+        delete start;
+    }
 
 private:
     standalone::ReaderController controller;

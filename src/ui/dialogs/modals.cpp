@@ -199,6 +199,17 @@ void PopupCard::updateListDividers()
             if (auto *row = dynamic_cast<ListRow *>(widget)) {
                 row->setTopDivider(top);
                 previousBottom = true;
+            } else if (auto *option = dynamic_cast<DescribedOption *>(widget);
+                       option && (option->presentation().dividers & Qt::BottomEdge)) {
+                auto presentation = option->presentation();
+                if (bool(presentation.dividers & Qt::TopEdge) != top) {
+                    if (top)
+                        presentation.dividers |= Qt::TopEdge;
+                    else
+                        presentation.dividers &= ~Edges(Qt::TopEdge);
+                    option->setPresentation(presentation);
+                }
+                previousBottom = true;
             } else if (auto *list = dynamic_cast<RadioList *>(widget)) {
                 list->setTopDivider(top);
                 previousBottom = !list->options().isEmpty()

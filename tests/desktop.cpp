@@ -10300,9 +10300,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         using namespace headerfooter;
         Fixture fixture;
         QVERIFY(fixture.prepared);
-        // Many spine items keep the background layout busy long enough to
-        // see its progress. The page estimate measures one item at a time.
-        QVERIFY(test::writeBook(fixture.directory.path(), "songs.epub", test::songbook(3000)));
+        // Use one chapter with enough songs to observe progress before the next turn.
+        QVERIFY(test::writeBook(fixture.directory.path(), "songs.epub", test::songbook(300)));
         const auto large = fixture.directory.filePath("songs.epub");
         auto layout = presetLayout(Preset::Default);
         layout.slotFields[1] = Field::BookStatus;
@@ -10336,8 +10335,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QElapsedTimer waited, sinceTurn;
         waited.start();
         sinceTurn.start();
-        // The instrumented build needs more time to lay out all 3,000 chapters.
-        const int layoutTimeout = KOBALT_TEST_SANITIZED ? 270000 : 120000;
+        // Allow extra time when running with sanitizers.
+        const int layoutTimeout = KOBALT_TEST_SANITIZED ? 60000 : 30000;
         while (waited.elapsed() < layoutTimeout) {
             if (seen.isEmpty() || seen.last() != status())
                 seen.append(status());

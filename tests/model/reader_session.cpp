@@ -1266,6 +1266,7 @@ int run(int argc, char **argv)
                     "Replacing the complete appearance did not restore the captured snapshot");
             session->updated = {};
         }
+        ReaderMarkupRequest previewMarkup;
         {
             const auto rawImage = session->image();
             const auto emptyGeneration = session->markupGeneration();
@@ -1297,6 +1298,7 @@ int run(int argc, char **argv)
             request.saved.append({ hits.first().start, hits.last().end, "blue" });
             request.draftStart = hits.first().start;
             request.draftEnd = hits.last().end;
+            previewMarkup = request;
             const auto generation = session->setMarkup(request);
             require(generation > emptyGeneration && session->setMarkup(request) == generation,
                     "Markup snapshot must change generation only when its content changes");
@@ -1304,6 +1306,10 @@ int run(int argc, char **argv)
             invalid.draftStart = QString(4097, 'x');
             require(session->setMarkup(invalid) == generation,
                     "Oversized source anchor changed markup");
+            invalid = request;
+            invalid.saved.first().end.clear();
+            require(session->setMarkup(invalid) == generation,
+                    "A changed range with a missing endpoint replaced the saved markup");
             invalid = request;
             invalid.saved.resize(2001);
             require(session->setMarkup(invalid) == generation,
@@ -1330,6 +1336,13 @@ int run(int argc, char **argv)
             require(!session->markup().saved.first().rectangles.isEmpty()
                             && !session->markup().draft.rectangles.isEmpty(),
                     "Current visible saved and draft markup must both be captured");
+            const auto savedRanges = session->markup().request.saved;
+            request.draftEnd = hits.first().end;
+            require(session->setMarkup(request) != generation && capture()
+                            && session->markup().request.draftEnd == request.draftEnd
+                            && session->markup().request.saved.constData()
+                                    == savedRanges.constData(),
+                    "Moving a draft replaced the unchanged saved ranges");
             int callbacks = 0;
             bool staleAccepted = true, latestAccepted = false;
             session->captureMarkup([&](bool ready) {
@@ -1337,6 +1350,7 @@ int run(int argc, char **argv)
                 if (++callbacks == 2)
                     opened.quit();
             });
+            request.draftEnd = previewMarkup.draftEnd;
             request.saved.first().color = "pink";
             session->setMarkup(request);
             session->captureMarkup([&](bool ready) {
@@ -1775,6 +1789,7 @@ int run(int argc, char **argv)
                 "Retained reopen through fresh access lost the readable layout");
         auto preview =
                 std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
+        const auto previewGeneration = session->setMarkup(previewMarkup);
         preview->openPreview(*session, QSize(758, 900), [&](QString error) {
             require(error.isEmpty(), qPrintable(error));
             opened.quit();
@@ -1782,6 +1797,10 @@ int run(int argc, char **argv)
         opened.exec();
         require(!preview->image().isNull(),
                 "Reopened preview could not read through the new lease");
+        require(preview->markup().request == previewMarkup
+                        && preview->markup().generation == previewGeneration
+                        && preview->markup().imageKey == preview->image().cacheKey(),
+                "The first appearance preview frame lost the reopened book's markup");
         require(preview->cachedPages() == 1, "A settings preview rendered unused neighbour pages");
         preview->updated = [&] {
             if (!preview->busy())

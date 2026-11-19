@@ -11979,10 +11979,19 @@ private slots:
         QTemporaryDir directory;
         storage::Paths paths{ directory.path() };
         QVERIFY(storage::writeJson(paths.preferences(), { { "highlight_help_seen", true } }));
+        int colorQueries = 0;
+        bool inColor = true;
         ReaderFixture host(paths, testFonts, testPlaceholder);
         if (markup == "grayscale") {
             host.configureServices = [](ReaderHostServices &services) {
                 services.colorDisplay = [] { return false; };
+            };
+        } else if (markup == "elsewhere-256") {
+            host.configureServices = [&](ReaderHostServices &services) {
+                services.colorDisplay = [&] {
+                    ++colorQueries;
+                    return inColor;
+                };
             };
         }
         CloseHost cleanup{ host };
@@ -12084,6 +12093,23 @@ private slots:
             return true;
         };
         QVERIFY(barrier());
+        if (markup == "elsewhere-256") {
+            for (bool color : { true, false }) {
+                inColor = color;
+                colorQueries = 0;
+                prepared = false;
+                host.window()->preparePresentation([&](bool ready) {
+                    preparationSucceeded = ready;
+                    prepared = true;
+                });
+                QTRY_VERIFY(prepared && preparationSucceeded);
+                const auto &saved = host.session()->markup().request.saved;
+                QCOMPARE(saved.size(), 256);
+                QCOMPARE(saved.first().color, color ? QString("blue") : QString("gray"));
+                QVERIFY2(colorQueries < saved.size(),
+                         "Refreshing the same book checked display capability for every highlight");
+            }
+        }
         if (markup == "grayscale") {
             QVector<QRect> rects;
             done = false;

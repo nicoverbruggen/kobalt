@@ -32,6 +32,8 @@ public:
 
     QString error() const { return error_; }
 
+    quint64 generation() const { return generation_; }
+
     const QVector<Highlight> &highlights() const;
     // Ordinary reading fetches payloads only for visible rows or an edited passage.
     bool excerpts(const QStringList &ids, QVector<HighlightExcerpt> *rows);

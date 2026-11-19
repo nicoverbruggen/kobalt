@@ -1135,20 +1135,38 @@ void Reader::syncAnnotationControls()
 
 void Reader::syncMarkupRequest()
 {
-    ReaderMarkupRequest request;
-    for (const auto &item : highlights->highlights()) {
-        if (item.id != annotationDraft->editingId()) {
-            request.saved.append(
-                    { item.start, item.end,
-                      colorAnnotations() ? highlightDisplayColor(item.color) : QString("gray"),
-                      highlightDisplayStyle(item.style) });
+    const quint64 generation = highlights->generation();
+    const auto &editingId = annotationDraft->editingId();
+    const auto &items = highlights->highlights();
+    const bool inColor = !items.isEmpty() && colorAnnotations();
+    const bool savedChanged = !savedMarkupReady || savedMarkupGeneration != generation
+            || savedMarkupEditingId != editingId || savedMarkupInColor != inColor;
+    const auto &start = annotationDraft->range().start;
+    const QString end = start.isEmpty() ? QString() : annotationDraft->end();
+    // A new appearance preview inherits the current request in ReaderSession::openPreview.
+    if (!savedChanged && annotationRequest.draftStart == start && annotationRequest.draftEnd == end)
+        return;
+
+    if (savedChanged) {
+        QVector<ReaderMarkupRange> saved;
+        saved.reserve(items.size());
+        for (const auto &item : items) {
+            if (item.id != editingId) {
+                saved.append({ item.start, item.end,
+                               inColor ? highlightDisplayColor(item.color) : QStringLiteral("gray"),
+                               highlightDisplayStyle(item.style) });
+            }
         }
+        // A note edit changes the highlight generation but keeps the displayed ranges.
+        if (annotationRequest.saved != saved)
+            annotationRequest.saved = std::move(saved);
+        savedMarkupReady = true;
+        savedMarkupGeneration = generation;
+        savedMarkupEditingId = editingId;
+        savedMarkupInColor = inColor;
     }
-    if (!annotationDraft->range().start.isEmpty()) {
-        request.draftStart = annotationDraft->range().start;
-        request.draftEnd = annotationDraft->end();
-    }
-    annotationRequest = std::move(request);
+    annotationRequest.draftStart = start;
+    annotationRequest.draftEnd = end;
     session->setMarkup(annotationRequest);
     if (auto *preview = appearanceEdit.preview()) {
         preview->setMarkup(annotationRequest);

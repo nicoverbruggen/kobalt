@@ -334,7 +334,7 @@ public:
     // Stores an immutable source snapshot without rendering or queuing work.
     // At most 2000 saved ranges and 4096 characters per anchor are accepted.
     // Invalid requests leave the prior snapshot and generation unchanged.
-    quint64 setMarkup(ReaderMarkupRequest request);
+    quint64 setMarkup(const ReaderMarkupRequest &request);
 
     quint64 markupGeneration() const { return markupGeneration_; }
 

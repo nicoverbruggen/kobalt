@@ -339,6 +339,10 @@ private:
 
     AnnotationDrag annotationDrag;
     ReaderMarkupRequest annotationRequest;
+    quint64 savedMarkupGeneration = 0;
+    QString savedMarkupEditingId;
+    bool savedMarkupReady = false;
+    bool savedMarkupInColor = false;
     qint64 annotationImageKey = 0;
     bool annotationPresentationCapture = false;
     std::function<void(bool)> annotationPresentationReady;

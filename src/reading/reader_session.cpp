@@ -2380,7 +2380,7 @@ void ReaderSession::completeFrameMarkup(ReaderFrame result, quint64 job,
             Qt::QueuedConnection);
 }
 
-quint64 ReaderSession::setMarkup(ReaderMarkupRequest request)
+quint64 ReaderSession::setMarkup(const ReaderMarkupRequest &request)
 {
     if (request.saved.size() > 2000) {
         return markupGeneration_;
@@ -2388,17 +2388,21 @@ quint64 ReaderSession::setMarkup(ReaderMarkupRequest request)
     const auto valid = [](const QString &anchor) {
         return !anchor.isEmpty() && anchor.size() <= 4096;
     };
-    for (const auto &range : request.saved) {
-        if (!valid(range.start) || !valid(range.end)) {
-            return markupGeneration_;
+    // Draft moves share the already validated saved ranges.
+    const bool savedChanged = request.saved != markupRequest_.saved;
+    if (savedChanged) {
+        for (const auto &range : request.saved) {
+            if (!valid(range.start) || !valid(range.end))
+                return markupGeneration_;
         }
     }
     if ((!request.draftStart.isEmpty() || !request.draftEnd.isEmpty())
         && (!valid(request.draftStart) || !valid(request.draftEnd))) {
         return markupGeneration_;
     }
-    if (!(request == markupRequest_)) {
-        markupRequest_ = std::move(request);
+    if (savedChanged || request.draftStart != markupRequest_.draftStart
+        || request.draftEnd != markupRequest_.draftEnd) {
+        markupRequest_ = request;
         ++markupGeneration_;
     }
     return markupGeneration_;

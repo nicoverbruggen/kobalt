@@ -27,6 +27,7 @@
 #include <QCloseEvent>
 #include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QPushButton>
@@ -41,6 +42,11 @@
 using namespace kobalt;
 
 namespace {
+// Some devices keep a system bar visible in immersive mode. Once the first page
+// is ready, wait this long for both bars to hide, then open with the geometry
+// the reader has.
+constexpr qint64 openingGeometryLimitMs = 1500;
+
 class Window : public QWidget
 {
 public:
@@ -168,8 +174,15 @@ public:
                 return;
             }
             sizeCanvas();
-            if (!android::readingGeometryReady() || !reader->readyForPresentation())
+            if (!reader->readyForPresentation())
                 return;
+            if (!android::readingGeometryReady()) {
+                if (!openingWait.isValid())
+                    openingWait.start();
+                if (!openingWait.hasExpired(openingGeometryLimitMs))
+                    return;
+                qWarning() << "Kobalt system bars still visible; opening with current geometry";
+            }
             // Discard any proxy pixels prepared while the canvas was covered.
             QCoreApplication::sendPostedEvents(reader, QEvent::UpdateLater);
             QCoreApplication::sendPostedEvents(reader, QEvent::UpdateRequest);
@@ -257,6 +270,7 @@ public:
             reader->show();
             surfaceHandoff.present(true);
             setUpdatesEnabled(true);
+            openingWait.invalidate();
             openingHandoff.start();
             QSettings settings;
             settings.remove("lastBook");
@@ -363,6 +377,7 @@ private:
     }
 
     QTimer openingHandoff;
+    QElapsedTimer openingWait;
     bool closing = false, layoutRepairPending = false, failedOpening = false;
 
     QSize pixels() const

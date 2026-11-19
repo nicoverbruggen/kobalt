@@ -226,6 +226,7 @@ public:
     // and counts as nothing here.
     bool fullDocumentReady() const override;
     int preparedSpreadTurn(int direction) const override;
+    void prepareFullDocumentTurn(const std::function<bool()> &current = {}) override;
     bool fullDocumentStarted() const override;
 
     bool fullDocumentFailed() const override { return !fullFailed_.isEmpty(); }
@@ -744,9 +745,21 @@ private:
     bool refreshImages();
     // Changed rectangle between two cached page images, by sorted cache keys.
     QMap<QPair<qint64, qint64>, QRect> damage_;
+
+    // In the document of the whole book: the changed rectangle from the
+    // chapter page on screen, `from`, to the page of this document that the
+    // turn that adopts it shows, `to`. prepareFullDocumentTurn() makes it.
+    // trim() keeps it, because the chapter image is not in `cache_`.
+    struct AdoptionDamage
+    {
+        qint64 from = 0, to = 0;
+        QRect rect;
+    } adoptionDamage_;
+
     // The last input of estimateKey() and its key.
     mutable QJsonObject estimateKeyInput_;
     mutable QString estimateKeyValue_;
+
     bool openSource(std::shared_ptr<ReaderSource> source, QSize size, const QJsonObject &saved,
                     QString *error, OpeningProgress progress = {}, OpeningResult *result = nullptr,
                     std::function<void()> coverReady = {}, QSet<QString> skippedFonts = {},

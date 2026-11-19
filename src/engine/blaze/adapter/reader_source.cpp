@@ -14,6 +14,7 @@
 #include "document_cache.h"
 #include "engine/engine_activity.h"
 #include "publication/publication.h"
+#include "render/image_damage.h"
 #include <atomic>
 #include <lvdocview.h>
 #include <lvrend.h>
@@ -1578,6 +1579,55 @@ int EngineDocument::preparedSpreadTurn(int direction) const
             ? physical > firstInSpread
             : physical + 1 < firstInSpread + whole.columnCount(spread);
     return sameSpread ? spread : full_->turnTarget(spread, direction);
+}
+
+void EngineDocument::prepareFullDocumentTurn(const std::function<bool()> &current)
+{
+    const auto stopped = [&current] { return current && !current(); };
+    if (!fullDocumentReady() || stopped())
+        return;
+    auto &whole = *full_;
+    // adoptLayout() keeps the place on screen. A document that is there
+    // already does not move at the turn.
+    const auto place = position();
+    if (whole.position() != place && (!whole.hasPageAt(place) || !whole.goTo(place)))
+        return;
+    if (stopped())
+        return;
+    // The page that the forward turn shows in the whole book. image()
+    // keeps it, because it is next to the page of `place`.
+    const int spread = preparedSpreadTurn(1);
+    const int target = spread >= 0 ? spread : whole.turnTarget(whole.page(), 1);
+    if (target != whole.page()) {
+        const auto next = whole.image(target);
+        const auto shown = cache_.value(page());
+        auto &damage = whole.adoptionDamage_;
+        if (!next.isNull() && !shown.isNull() && !stopped()
+            && (damage.from != shown.cacheKey() || damage.to != next.cacheKey())) {
+            damage.rect = render::imageDamage(shown, next);
+            damage.from = shown.cacheKey();
+            damage.to = next.cacheKey();
+        }
+        // The links of that page lay out the blocks that they point to.
+        // The turn then finds them laid out.
+        if (!stopped() && whole.go(target)) {
+            whole.pageLinks();
+            if (!whole.goTo(place))
+                return;
+        }
+    }
+    if (stopped())
+        return;
+    // The lists that setChapterMode() gives the document, so that the
+    // turn finds their pages ready.
+    if (externalChapters_) {
+        whole.setChapters(contents_, graph_);
+        whole.externalChapters_ = true;
+    }
+    whole.chapters();
+    if (stopped())
+        return;
+    whole.chapterGraph();
 }
 
 bool EngineDocument::fullDocumentStarted() const

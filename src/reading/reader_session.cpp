@@ -450,6 +450,17 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                             guard->showFullDocument(job);
                     },
                     Qt::QueuedConnection);
+            // The turn that shows the whole book would draw its page and
+            // find its place in the contents. Idle time does that now, in
+            // steps that stop when other work waits. The turn does the rest.
+            {
+                BackgroundDiagnostic diagnostic("Whole-book turn", *engine, wanted);
+                EngineSlowdownScope slowdown(true, [&wanted] { return !wanted(); });
+                engineActivity().checkpoint();
+                engine->prepareFullDocumentTurn(wanted);
+            }
+            if (current() && !wanted())
+                resumeAfterWork();
             return;
         }
     }
@@ -3008,6 +3019,8 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                 // The panel needs far longer to draw a page than the engine does. Hand
                 // the frame over first and prepare the neighbour pages after it.
                 QJsonObject captureTimes;
+                // Whether idle time drew the page that this render shows.
+                const bool imageCached = timing && engine->cachedImageKey(engine->page()) != 0;
                 result = capture(*engine, positions, false, markup, markupGeneration,
                                  timing ? &captureTimes : nullptr);
                 const double capturedMs = timing ? timer.nsecsElapsed() / 1e6 - movedMs : 0;
@@ -3035,6 +3048,8 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                                  { "move_ms", movedMs },
                                  { "capture_ms", capturedMs },
                                  { "capture", captureTimes },
+                                 { "image_cached", imageCached },
+                                 { "damage_prepared", result.damageFrom != 0 },
                                  { "elapsed_ms", double(timer.elapsed()) },
                                  { "failed", !result.error.isEmpty() } },
                                result.error.isEmpty() ? DiagnosticSeverity::Activity

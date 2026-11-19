@@ -9814,7 +9814,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
 
     // The six-inch reader in the light theme, at 100% and at 150% interface
     // text. The "-large" tag makes the Fixture pick 150%.
-    // Checks that Hybrid rendering builds the whole book in a quiet moment and switches on a page turn.
+    // Checks that Hybrid rendering builds the whole book in a quiet moment and switches on a page turn that idle time prepared.
     void hybridCountsPages()
     {
         using namespace headerfooter;
@@ -9869,13 +9869,29 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             if (mode == 2) {
                 // The build starts only after a quiet moment. Quick page
                 // turns do not start it: the reader stays in the chapter.
-                bool ready = false;
+                // The engine worker sends some of these events.
+                std::atomic_bool ready{ false };
+                std::atomic_int preparedTurns{ 0 };
+                QMutex swapMutex;
+                QJsonObject swapRender;
                 QTemporaryDir logs;
                 QVERIFY(logs.isValid());
                 initializeDiagnostics(logs.path());
                 pauseDiagnostics(false);
                 setDiagnosticObserver([&](const QJsonObject &event) {
-                    ready = ready || event.value("event") == QLatin1String("full-document-ready");
+                    const auto name = event.value("event").toString();
+                    if (name == QLatin1String("full-document-ready"))
+                        ready = true;
+                    if (name == QLatin1String("engine-work-end")
+                        && event.value("work") == QLatin1String("Whole-book turn")
+                        && event.value("completed").toBool())
+                        ++preparedTurns;
+                    if (name == QLatin1String("render-end")
+                        && event.value("book_fraction").toDouble() < 0) {
+                        QMutexLocker lock(&swapMutex);
+                        if (swapRender.isEmpty())
+                            swapRender = event;
+                    }
                 });
                 const auto quietLog = qScopeGuard([] {
                     setDiagnosticObserver({});
@@ -9904,13 +9920,24 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 QVERIFY(fixture.state().contains("book_fraction"));
                 // The turn that is already on its way when the document
                 // becomes ready stays in the chapter; the one after it
-                // switches.
+                // switches. Idle time prepares the switch before each turn.
                 bool whole = false;
                 for (int turn = 0; turn < 3 && !whole; ++turn) {
+                    QTRY_VERIFY_WITH_TIMEOUT(preparedTurns > turn, 10000);
                     QVERIFY(turnOne());
                     whole = !fixture.state().contains("book_fraction");
                 }
                 QVERIFY(whole);
+                {
+                    // The switch drew no page and found the changed
+                    // rectangle that idle time prepared.
+                    QMutexLocker lock(&swapMutex);
+                    QVERIFY(!swapRender.isEmpty());
+                    QVERIFY2(swapRender.value("image_cached").toBool(),
+                             QJsonDocument(swapRender).toJson().constData());
+                    QVERIFY2(swapRender.value("damage_prepared").toBool(),
+                             QJsonDocument(swapRender).toJson().constData());
+                }
                 QTRY_VERIFY2(!estimated(), qPrintable(page->slotContents[2].text));
                 QVERIFY(!fixture.state().value("rough_pages_estimated").toBool());
                 QVERIFY(!page->slotContents[5].text.contains('~'));

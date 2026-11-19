@@ -1655,9 +1655,14 @@ void EngineDocument::setPageFormat(QImage::Format format)
 bool EngineDocument::preparedDamage(qint64 fromKey, qint64 toKey, QRect *damage) const
 {
     const auto found = damage_.constFind(qMakePair(qMin(fromKey, toKey), qMax(fromKey, toKey)));
-    if (found == damage_.cend())
+    if (found != damage_.cend()) {
+        *damage = found.value();
+        return true;
+    }
+    // The turn that adopted this document leaves a chapter page.
+    if (!fromKey || fromKey != adoptionDamage_.from || toKey != adoptionDamage_.to)
         return false;
-    *damage = found.value();
+    *damage = adoptionDamage_.rect;
     return true;
 }
 

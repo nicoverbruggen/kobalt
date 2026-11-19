@@ -335,6 +335,19 @@ public:
     // A negative result uses the usual turn from the adopted reading position.
     virtual int preparedSpreadTurn(int) const { return -1; }
 
+    // Prepares the forward turn that shows the document from
+    // prepareFullDocument(): that document goes to the page on screen and
+    // draws the page after it, with the changed rectangle against the page
+    // on screen, the targets of its links and its place in the contents.
+    // Only the hidden document changes. Nothing is drawn on screen and the
+    // page on screen stays the same. A turn in the chapter moves the page
+    // on screen; the next call prepares again from there. Stops between its
+    // steps when `current` is false. The turn does what is left.
+    virtual void prepareFullDocumentTurn(const std::function<bool()> &current = {})
+    {
+        Q_UNUSED(current);
+    }
+
     // True once the build of that document has started.
     virtual bool fullDocumentStarted() const { return false; }
 

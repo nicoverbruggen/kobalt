@@ -35,6 +35,7 @@ public:
 
     explicit AppearancePreview(QWidget *parent);
     void setContent(Content next);
+    void setStrips(const QImage &header, const QImage &footer);
     void clear();
 
     bool showsText() const { return content.text; }

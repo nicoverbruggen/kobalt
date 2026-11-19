@@ -78,13 +78,6 @@ QStringList fallbackFontDefaults(const QStringList &families)
                                                       : QString("IBM Plex Sans"),
              QString(monospaceFontFace) };
 }
-
-bool batteryField(headerfooter::Field field)
-{
-    using headerfooter::Field;
-    return field == Field::Battery || field == Field::BatteryPercent
-            || field == Field::BatteryPercentOnly || field == Field::BatteryWarning;
-}
 } // namespace
 
 kobalt::headerfooter::Values Reader::chromeValues(ChromeFields fields)
@@ -398,6 +391,7 @@ void Reader::closeFieldChooser()
         return;
     fieldChooser->hide();
     headerFooterView->show();
+    syncChromeControls();
     headerFooterView->raise();
     refresh();
 }

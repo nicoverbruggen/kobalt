@@ -332,8 +332,15 @@ void Reader::showChapterText()
     for (int slot = 0; slot < kobalt::headerfooter::slotCount; ++slot)
         page->slotContents[slot] = kobalt::headerfooter::content(
                 page->chrome.slotFields[slot], values, page->chrome.uppercase[slot]);
-    const auto text = page->headerText();
-    header->setText(text.isEmpty() ? values.chapter : text);
+    updateHeaderText(values.chapter);
+}
+
+void Reader::updateHeaderText(const QString &chapter)
+{
+    auto text = page->headerText();
+    if (text.isEmpty())
+        text = chapter.isEmpty() ? strings::get("reader.reading") : chapter;
+    header->setText(text);
     header->setAccessibleName(header->text());
 }
 
@@ -876,6 +883,50 @@ void Reader::updateGraph()
                               session->bookPages(),
                               session->bookPages() > 0 ? -1 : session->progressFraction(),
                               session->bookPagesEstimated());
+}
+
+void Reader::updateBatteryIndicators(const BatteryStatus &battery)
+{
+    if (!isVisible() || lifecycleHidden || closing || services.suspended() || hideNativeStatus())
+        return;
+    if (topControls->isVisible()) {
+        menuBattery->setStatus(battery.percent, battery.charging);
+        navigation->updateBatteryVisibility();
+    }
+
+    headerfooter::Values values;
+    values.battery = battery.percent;
+    values.charging = battery.charging;
+    if (fieldChooser && fieldChooser->isVisible()) {
+        const int pixels = headerfooter::footerSlot(fieldChooser->slot())
+                ? page->footerTextPixels()
+                : page->headerTextPixels();
+        fieldChooser->updateBattery(values, pixels);
+    } else if (slotMap && slotMap->isVisible()) {
+        slotMap->updateBattery(values);
+    }
+
+    const bool headerShown = page->showHeader();
+    const bool footerShown = page->notice.isEmpty() && page->showFooter();
+    bool headerChanged = false, footerChanged = false;
+    for (int slot = 0; slot < headerfooter::slotCount; ++slot) {
+        const bool footer = headerfooter::footerSlot(slot);
+        const auto field = page->chrome.slotFields[slot];
+        if (!(footer ? footerShown : headerShown) || !headerfooter::batteryField(field))
+            continue;
+        const auto content = headerfooter::content(field, values, page->chrome.uppercase[slot]);
+        if (content == page->slotContents[slot])
+            continue;
+        page->slotContents[slot] = content;
+        (footer ? footerChanged : headerChanged) = true;
+    }
+    if (headerChanged)
+        updateHeaderText(session->chapterTitle());
+    if (!headerChanged && !footerChanged)
+        return;
+    page->refreshStrips();
+    if (appearancePreview && appearancePreview->isVisible() && !appearancePreview->showsText())
+        appearancePreview->setStrips(page->headerImage(), page->footerImage());
 }
 
 void Reader::updateMenuStatus(bool refreshDevice)

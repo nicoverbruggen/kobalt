@@ -62,6 +62,13 @@ inline constexpr bool debugField(Field field)
     return field == Field::PageTurnTime || field == Field::ChapterLoadTime
             || field == Field::BookStatus;
 }
+
+inline constexpr bool batteryField(Field field)
+{
+    return field == Field::Battery || field == Field::BatteryPercent
+            || field == Field::BatteryPercentOnly || field == Field::BatteryWarning;
+}
+
 // What the field list shows for the page turn time before the first turn.
 inline constexpr qint64 samplePageTurnMilliseconds = 12;
 // Battery warning shows the battery only below this percentage.

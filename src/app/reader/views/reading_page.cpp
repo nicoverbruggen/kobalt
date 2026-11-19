@@ -806,6 +806,45 @@ PageRefreshRegions ReadingPage::refreshRegions(const QImage &source)
     return regionCache[0].regions;
 }
 
+QRegion ReadingPage::renderStrips(bool geometryChanged, qint64 paletteKey)
+{
+    const int weight = kobalt::ui::interfaceWeight() + kobalt::ui::headerFooterAddedWeight();
+    const HeaderState nextHeader{
+        stripSlots(false),  stripFields(false), showHeader(), panelBelowHeader, width(),
+        headerTextPixels(), paletteKey,         weight,       font().family()
+    };
+    const FooterState nextFooter{ stripSlots(true), stripFields(true),  notice,
+                                  showFooter(),     showProgress(),     progressFraction,
+                                  width(),          footerTextPixels(), paletteKey,
+                                  weight,           font().family() };
+    QRegion dirty;
+    if (geometryChanged || nextHeader != headerState) {
+        auto next = renderStrip(topHeight(), [this](QPainter &p) { paintHeader(p); });
+        dirty += kobalt::render::imageDamage(headerPixels, next);
+        headerPixels = next;
+        headerState = nextHeader;
+    }
+    if (geometryChanged || nextFooter != footerState) {
+        auto next = renderStrip(bottomHeight(), [this](QPainter &p) { paintFooter(p); });
+        dirty += kobalt::render::imageDamage(footerPixels, next)
+                         .translated(0, height() - bottomHeight());
+        footerPixels = next;
+        footerState = nextFooter;
+    }
+    return dirty;
+}
+
+void ReadingPage::refreshStrips()
+{
+    // Covered strips still need current pixels when the overlay closes.
+    auto dirty = renderStrips(false, palette().cacheKey());
+    if (stripsHidden())
+        return;
+    dirty &= visibleRegion();
+    if (!dirty.isEmpty())
+        update(dirty);
+}
+
 void ReadingPage::refreshContent(bool reading, bool now)
 {
     const auto colors = palette();
@@ -820,15 +859,6 @@ void ReadingPage::refreshContent(bool reading, bool now)
         || (!animatedTurn
             && (renderedBody.cacheKey() != image.cacheKey() || !annotationFrameDamage.isEmpty())))
         stopPageAnimation();
-    const int weight = kobalt::ui::interfaceWeight() + kobalt::ui::headerFooterAddedWeight();
-    const HeaderState nextHeader{
-        stripSlots(false),  stripFields(false), showHeader(), panelBelowHeader, width(),
-        headerTextPixels(), colors.cacheKey(),  weight,       font().family()
-    };
-    const FooterState nextFooter{ stripSlots(true), stripFields(true),  notice,
-                                  showFooter(),     showProgress(),     progressFraction,
-                                  width(),          footerTextPixels(), colors.cacheKey(),
-                                  weight,           font().family() };
     kobalt::platform::pageRefresh(this, false,
                                   reading && !geometryChanged
                                           && renderedPalette == colors.cacheKey()
@@ -855,19 +885,7 @@ void ReadingPage::refreshContent(bool reading, bool now)
     window()->setProperty("reader_colour_regions",
                           !annotationColorRegion.isEmpty() || pageHasColour(image));
     renderedBody = image;
-    if (geometryChanged || nextHeader != headerState) {
-        auto next = renderStrip(topHeight(), [this](QPainter &p) { paintHeader(p); });
-        dirty += kobalt::render::imageDamage(headerPixels, next);
-        headerPixels = next;
-        headerState = nextHeader;
-    }
-    if (geometryChanged || nextFooter != footerState) {
-        auto next = renderStrip(bottomHeight(), [this](QPainter &p) { paintFooter(p); });
-        dirty += kobalt::render::imageDamage(footerPixels, next)
-                         .translated(0, height() - bottomHeight());
-        footerPixels = next;
-        footerState = nextFooter;
-    }
+    dirty += renderStrips(geometryChanged, colors.cacheKey());
     const QRect ribbon = bookmarked ? ribbonRect() : QRect();
     if (ribbon != renderedRibbon) {
         dirty += ribbon;

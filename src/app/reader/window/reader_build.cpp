@@ -479,6 +479,7 @@ void Reader::startDeviceObservers()
             lowBattery = !battery.charging && !battery.fullyCharged && battery.percent >= 0
                     && battery.percent <= 5;
             updateSleepBattery(battery);
+            updateBatteryIndicators(battery);
         });
     }
     // Android can suspend the app without hiding the embedded reader widget.

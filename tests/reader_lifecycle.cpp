@@ -8653,6 +8653,152 @@ private slots:
         QCOMPARE(clockReads, stripReads);
     }
 
+    void liveBatteryIndicators_data()
+    {
+        QTest::addColumn<bool>("zen");
+        QTest::newRow("normal-menu") << false;
+        QTest::newRow("zen-menu") << true;
+    }
+
+    void liveBatteryIndicators()
+    {
+        QFETCH(bool, zen);
+        const auto paths = testPaths();
+        QVERIFY(storage::writePreferences(
+                paths.preferences(),
+                QJsonObject{ { "zen_mode", zen },
+                             { "header_footer", "custom" },
+                             { "header_footer_custom",
+                               QJsonObject{ { "top_left", "nothing" },
+                                            { "top_right", "battery_percent" } } } }));
+        BatteryStatus status{ 21, false, false };
+        int reads = 0;
+        std::function<void()> changed;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.localDateTime = [] { return testLocalTime(7 * 3600000); };
+            services.battery = [&] {
+                ++reads;
+                return status;
+            };
+            services.observeBattery = [&](QObject *, std::function<void()> notify) {
+                changed = std::move(notify);
+            };
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        // The shorter viewport puts the battery choices on a later chooser page.
+        const QSize viewport = zen ? nativeSize : QSize(900, 1200);
+        host.open(textBook, viewport);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), viewport);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        auto *page = dynamic_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
+        auto *menu = host.window()->findChild<QWidget *>("rrControlsTop");
+        auto *indicator = dynamic_cast<ui::BatteryIndicator *>(
+                host.window()->findChild<QWidget *>("rrMenuBattery"));
+        QVERIFY(page && menu && indicator && changed);
+        QVERIFY(!menu->isVisible());
+        const int startingPage = host.session()->page();
+        const auto notify = [&](int percent, bool charging) {
+            status = { percent, charging, false };
+            const int before = reads;
+            // The notification is synchronous. Opening Layout can also queue
+            // an independent preview completion that refreshes the reader.
+            changed();
+            QCOMPARE(reads, before + 1);
+        };
+        const auto &field = page->slotContents[2];
+        QVERIFY(field.batteryIcon && !field.charging);
+        QCOMPARE(field.battery, 21);
+        const auto unplugged = page->headerImage();
+        notify(21, true);
+        QVERIFY(field.charging);
+        const auto plugged = page->headerImage();
+        QVERIFY(plugged != unplugged);
+        notify(21, false);
+        QVERIFY(!field.charging);
+        QCOMPARE(page->headerImage(), unplugged);
+        if (!zen) {
+            auto *viewer = dynamic_cast<ImageViewer *>(
+                    host.window()->findChild<QWidget *>("rrImageViewer"));
+            QVERIFY(viewer);
+            viewer->setGeometry(host.window()->rect());
+            viewer->open();
+            QVERIFY(viewer->isVisible());
+            QVERIFY(!page->visibleRegion().intersects(page->headerTextRect()));
+            notify(21, true);
+            viewer->closeImage();
+            QVERIFY(!viewer->isVisible());
+            QCOMPARE(page->headerImage(), plugged);
+            notify(21, false);
+            QCOMPARE(page->headerImage(), unplugged);
+        }
+
+        QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
+        QTRY_VERIFY(menu->isVisible());
+        QCOMPARE(indicator->isVisible(), !zen);
+        notify(20, true);
+        QVERIFY(indicator->isVisible());
+        QCOMPARE(indicator->level(), 20);
+        QVERIFY(indicator->accessibleName().contains(strings::get("components.charging")));
+        notify(20, false);
+        QVERIFY(indicator->isVisible());
+        QVERIFY(!indicator->accessibleName().contains(strings::get("components.charging")));
+        notify(21, false);
+        QCOMPARE(indicator->isVisible(), !zen);
+        if (!zen) {
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrNavLayout")));
+            auto *preview = host.window()->findChild<QWidget *>("rrAppearancePreview");
+            QVERIFY(preview && preview->isVisible());
+            const auto layoutUnplugged = preview->grab().toImage();
+            notify(21, true);
+            QVERIFY(preview->grab().toImage() != layoutUnplugged);
+            notify(21, false);
+            QCOMPARE(preview->grab().toImage(), layoutUnplugged);
+            QVERIFY(click(canvas, host.window()->findChild<QWidget *>("rrHeaderFooter")));
+            auto *slot = host.window()->findChild<QPushButton *>("rrHeaderFooterSlot2");
+            QVERIFY(slot && slot->isVisible());
+            notify(46, false);
+            QVERIFY(slot->accessibleName().contains(strings::get("common.percent").arg(46)));
+            const auto slotUnplugged = slot->grab().toImage();
+            notify(46, true);
+            QVERIFY(slot->grab().toImage() != slotUnplugged);
+            notify(46, false);
+            QCOMPARE(slot->grab().toImage(), slotUnplugged);
+
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrHeaderFooterSlot0")));
+            auto *counter = host.window()->findChild<QLabel *>("rrHeaderFooterFieldsPage");
+            auto *title = host.window()->findChild<QLabel *>("rrHeaderFooterChooserTitle");
+            auto *selected =
+                    host.window()->findChild<QAbstractButton *>("rrHeaderFooterField_nothing");
+            auto *sample = host.window()->findChild<QAbstractButton *>(
+                    "rrHeaderFooterField_battery_percent");
+            QVERIFY(counter && title && selected && sample && selected->isChecked());
+            const auto firstPage = counter->text();
+            const auto selectedSlot = title->text();
+            auto *next = host.window()->findChild<QPushButton *>("rrHeaderFooterFieldsNext");
+            for (int i = 0; !sample->isVisible() && i < 10; ++i)
+                QVERIFY(click(canvas, next));
+            QVERIFY(sample->isVisible());
+            const auto samplePage = counter->text();
+            QVERIFY(samplePage != firstPage);
+            const auto sampleUnplugged = sample->grab().toImage();
+            notify(46, true);
+            QVERIFY(sample->isVisible());
+            QCOMPARE(counter->text(), samplePage);
+            QCOMPARE(title->text(), selectedSlot);
+            QVERIFY(selected->isChecked());
+            QVERIFY(sample->grab().toImage() != sampleUnplugged);
+            notify(46, false);
+            QCOMPARE(sample->grab().toImage(), sampleUnplugged);
+        }
+        QCOMPARE(host.session()->page(), startingPage);
+    }
+
     // Checks that a page turn with the menu hidden leaves the menu's controls alone, and that opening the menu brings them up to date.
     void turnSkipsHiddenControls()
     {

@@ -18,6 +18,14 @@ QSize deviceSize(QSize logical, qreal ratio)
 {
     return { qMax(1, qRound(logical.width() * ratio)), qMax(1, qRound(logical.height() * ratio)) };
 }
+
+QRect stripBounds(const QRect &page, qreal scale, const QImage &image, bool footer)
+{
+    if (image.isNull())
+        return {};
+    const int height = qRound(image.height() / image.devicePixelRatio() * scale);
+    return { page.left(), footer ? page.bottom() + 1 - height : page.top(), page.width(), height };
+}
 } // namespace
 
 AppearancePreview::AppearancePreview(QWidget *parent) : QWidget(parent)
@@ -65,6 +73,25 @@ void AppearancePreview::setContent(Content next)
         textHeader->setVisible(content.text);
     if (!unchanged)
         update();
+}
+
+void AppearancePreview::setStrips(const QImage &header, const QImage &footer)
+{
+    const auto bounds = pageBounds();
+    const auto factor = scale();
+    QRegion dirty;
+    const auto replace = [&](QImage &current, const QImage &next, bool bottom) {
+        if (current.cacheKey() == next.cacheKey())
+            return;
+        dirty += stripBounds(bounds, factor, current, bottom);
+        current = next;
+        dirty += stripBounds(bounds, factor, current, bottom);
+    };
+    replace(content.header, header, false);
+    replace(content.footer, footer, true);
+    dirty &= visibleRegion();
+    if (!dirty.isEmpty())
+        update(dirty);
 }
 
 void AppearancePreview::followPanel(QWidget *watched, std::function<void()> changed)
@@ -220,12 +247,9 @@ void AppearancePreview::paintEvent(QPaintEvent *)
     paintCaption(painter, bounds.left());
     painter.setClipRect(bounds);
 
-    const auto logicalHeight = [factor](const QImage &image) {
-        return qRound(image.height() / image.devicePixelRatio() * factor);
-    };
     if (!content.header.isNull()) {
-        const QSize target(bounds.width(), logicalHeight(content.header));
-        painter.drawImage(bounds.topLeft(), scaled(scaledHeader, content.header, target));
+        const auto strip = stripBounds(bounds, factor, content.header, false);
+        painter.drawImage(strip.topLeft(), scaled(scaledHeader, content.header, strip.size()));
     }
     const int bodyTop = bounds.top() + qRound(content.bodyTop * factor);
     const QRect body(bounds.left(), bodyTop, bounds.width(), qRound(content.bodyHeight * factor));
@@ -233,9 +257,8 @@ void AppearancePreview::paintEvent(QPaintEvent *)
         painter.drawImage(body.topLeft(), scaled(scaledBody, content.body, body.size()));
     }
     if (!content.footer.isNull()) {
-        const QSize target(bounds.width(), logicalHeight(content.footer));
-        painter.drawImage(QPoint(bounds.left(), bounds.bottom() + 1 - target.height()),
-                          scaled(scaledFooter, content.footer, target));
+        const auto strip = stripBounds(bounds, factor, content.footer, true);
+        painter.drawImage(strip.topLeft(), scaled(scaledFooter, content.footer, strip.size()));
     }
     painter.setClipping(false);
 

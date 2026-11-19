@@ -27,6 +27,7 @@ class SlotMap final : public QWidget
 public:
     SlotMap(QWidget *parent, bool editable);
     void setSlots(const headerfooter::Layout &layout, const SlotContents &contents);
+    void updateBattery(const headerfooter::Values &values);
     QPushButton *cell(int slot) const;
     std::function<void(int)> chosen;
     QSize sizeHint() const override;
@@ -39,6 +40,7 @@ protected:
 
 private:
     class Cell;
+    void setSlot(int slot, const headerfooter::Content &content);
     std::array<Cell *, headerfooter::slotCount> cells{};
     headerfooter::Layout layout;
     bool editable;
@@ -115,6 +117,7 @@ public:
     explicit FieldChooser(QWidget *parent);
     void open(int slot, headerfooter::Field current, const headerfooter::Values &values,
               bool uppercase, int textPixels = 0);
+    void updateBattery(const headerfooter::Values &values, int textPixels);
 
     int slot() const { return currentSlot; }
 

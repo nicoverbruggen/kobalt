@@ -160,6 +160,7 @@ public:
     QImage stripSnapshot(bool footer) const;
     void cleanRefresh(bool clean);
     void refreshContent(bool reading = false, bool now = false);
+    void refreshStrips();
     // Set before refreshContent when the engine prepared the changed rectangle
     // from the image with this cache key to `image`. 0 means not prepared.
     QRect preparedDamage;
@@ -213,6 +214,7 @@ private:
     int renderedTop = -1, renderedBottom = -1;
     QRect renderedRibbon;
     QImage renderStrip(int height, const std::function<void(QPainter &)> &draw);
+    QRegion renderStrips(bool geometryChanged, qint64 paletteKey);
     void paintHeader(QPainter &painter, bool sleeping = false) const;
     void paintFooter(QPainter &painter, bool sleeping = false) const;
     QColor pagePaper() const;

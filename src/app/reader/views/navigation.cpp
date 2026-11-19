@@ -1063,8 +1063,7 @@ void Navigation::placeZenToolbar(QSize size, const QVector<QWidget *> &actions,
     zenMark->move(left + margin, markTop);
     clock->setVisible(statusVisible);
     zenMark->setVisible(statusVisible);
-    const int level = battery->level();
-    battery->setVisible(statusVisible && level >= 0 && level <= 20);
+    updateBatteryVisibility();
     // The icon's ink ends before the indicator's right edge.
     const int batteryInk = battery->width() - int(ui::metrics::panel::batteryIconSize) + 1
             + qCeil(ui::batteryWidth(ui::metrics::panel::batteryBodyHeight));
@@ -1110,7 +1109,7 @@ void Navigation::placeToolbar(QSize size, const QVector<QWidget *> &actions, boo
         rules->update();
     }
     clock->setVisible(statusVisible);
-    battery->setVisible(statusVisible);
+    updateBatteryVisibility();
     // Zen mode hides the minutes-open count, also under Chapters and Bookmarks.
     session->setVisible(statusVisible && !zen && !session->text().isEmpty());
     settings->setFixedWidth(chrome::cellWidth);
@@ -1320,6 +1319,12 @@ void Navigation::update(QSize size, const NavigationState &state)
     } else {
         zenViewBase->hide();
     }
+}
+
+void Navigation::updateBatteryVisibility()
+{
+    const int level = battery->level();
+    battery->setVisible(statusVisible && (!zenTop || (level >= 0 && level <= 20)));
 }
 
 void Navigation::updateSessionGeometry()

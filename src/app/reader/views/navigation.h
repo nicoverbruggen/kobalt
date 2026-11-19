@@ -148,6 +148,8 @@ public:
 
     void setStatusVisible(bool visible) { statusVisible = visible; }
 
+    void updateBatteryVisibility();
+
     void setTextFace(const QString &face) { bar->setTextFace(face); }
 
     // A camera band at the top holds the status line when it is tall enough.

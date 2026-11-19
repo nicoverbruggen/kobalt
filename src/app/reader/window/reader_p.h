@@ -476,6 +476,7 @@ private:
     void finishAppearanceApply();
     bool syncFontPicker();
     void showChapterText();
+    void updateHeaderText(const QString &chapter);
     void showPageImage(const QImage &nextImage);
     void sampleReflowText();
     QRect appearancePreviewSpace() const;
@@ -866,6 +867,7 @@ private:
     QDateTime localDateTime() const;
     QString clockText();
     void updateMenuStatus(bool refreshDevice = false);
+    void updateBatteryIndicators(const BatteryStatus &battery);
     void updateReadingStats();
     void configureNavigation();
     void activateNavigation(kobalt::NavigationDestination destination);

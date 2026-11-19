@@ -246,15 +246,28 @@ void SlotMap::setSlots(const Layout &next, const SlotContents &contents)
 {
     const bool repaint = layout != next;
     layout = next;
-    for (int slot = 0; slot < headerfooter::slotCount; ++slot) {
-        const bool footer = headerfooter::footerSlot(slot);
-        const auto &size = footer ? layout.footerSize : layout.headerSize;
-        cells[slot]->show(layout.slotFields[slot], contents[slot],
-                          footer ? layout.footerEnabled : layout.headerEnabled, layout.progressBar,
-                          metrics::reading::textPixels(size, footer));
-    }
+    for (int slot = 0; slot < headerfooter::slotCount; ++slot)
+        setSlot(slot, contents[slot]);
     if (repaint)
         update();
+}
+
+void SlotMap::setSlot(int slot, const Content &content)
+{
+    const bool footer = headerfooter::footerSlot(slot);
+    const int size = footer ? layout.footerSize : layout.headerSize;
+    cells[slot]->show(layout.slotFields[slot], content,
+                      footer ? layout.footerEnabled : layout.headerEnabled, layout.progressBar,
+                      metrics::reading::textPixels(size, footer));
+}
+
+void SlotMap::updateBattery(const headerfooter::Values &values)
+{
+    for (int slot = 0; slot < headerfooter::slotCount; ++slot) {
+        const auto field = layout.slotFields[slot];
+        if (headerfooter::batteryField(field))
+            setSlot(slot, headerfooter::content(field, values, layout.uppercase[slot]));
+    }
 }
 
 QSize SlotMap::sizeHint() const
@@ -652,6 +665,43 @@ FieldChooser::FieldChooser(QWidget *parent) : ui::Panel(parent)
     hide();
 }
 
+namespace {
+void setFieldValue(ui::DescribedOption *row, Field field, const headerfooter::Values &values,
+                   bool uppercase, int textPixels)
+{
+    auto shown = headerfooter::content(field, values, uppercase);
+    // Before the first turn the page turn time shows a typical value.
+    if (field == Field::PageTurnTime && values.pageTurnMilliseconds < 0) {
+        auto sample = values;
+        sample.pageTurnMilliseconds = headerfooter::samplePageTurnMilliseconds;
+        shown = headerfooter::content(field, sample, uppercase);
+    }
+    // Each row shows what the slot would: text, a battery, or both.
+    if (shown.text.isEmpty() && !shown.batteryIcon)
+        shown.text = strings::get("header_footer.unavailable");
+    ui::DescribedOption::ValueStyle style;
+    style.battery = shown.batteryIcon;
+    style.percent = shown.battery;
+    style.charging = shown.charging;
+    style.halfSpaces = headerfooter::pageCount(field);
+    if (textPixels > 0) {
+        style.sampleFont = ui::headerFooterFont(textPixels);
+        style.sampleWeight = ui::interfaceWeight() + ui::headerFooterAddedWeight();
+    }
+    row->setValue(shown.text, style);
+}
+} // namespace
+
+void FieldChooser::updateBattery(const headerfooter::Values &values, int textPixels)
+{
+    const auto &rows = list->options();
+    for (int index = 0; index < rows.size(); ++index) {
+        const auto field = headerfooter::choosableFields[index];
+        if (headerfooter::batteryField(field))
+            setFieldValue(rows[index], field, values, uppercase->isChecked(), textPixels);
+    }
+}
+
 void FieldChooser::open(int slot, Field current, const headerfooter::Values &values, bool uppercase,
                         int textPixels)
 {
@@ -661,26 +711,7 @@ void FieldChooser::open(int slot, Field current, const headerfooter::Values &val
     for (int index = 0; index < rows.size(); ++index) {
         const auto field = headerfooter::choosableFields[index];
         list->setLeftOut(index, headerfooter::debugField(field) && !debug && field != current);
-        auto shown = headerfooter::content(field, values, uppercase);
-        // Before the first turn the page turn time shows a typical value.
-        if (field == Field::PageTurnTime && values.pageTurnMilliseconds < 0) {
-            auto sample = values;
-            sample.pageTurnMilliseconds = headerfooter::samplePageTurnMilliseconds;
-            shown = headerfooter::content(field, sample, uppercase);
-        }
-        // Each row shows what the slot would: text, a battery, or both.
-        if (shown.text.isEmpty() && !shown.batteryIcon)
-            shown.text = strings::get("header_footer.unavailable");
-        ui::DescribedOption::ValueStyle style;
-        style.battery = shown.batteryIcon;
-        style.percent = shown.battery;
-        style.charging = shown.charging;
-        style.halfSpaces = headerfooter::pageCount(field);
-        if (textPixels > 0) {
-            style.sampleFont = ui::headerFooterFont(textPixels);
-            style.sampleWeight = ui::interfaceWeight() + ui::headerFooterAddedWeight();
-        }
-        rows[index]->setValue(shown.text, style);
+        setFieldValue(rows[index], field, values, uppercase, textPixels);
         if (field == current)
             list->setCurrent(index);
     }

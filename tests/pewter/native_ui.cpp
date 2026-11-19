@@ -5,6 +5,8 @@
 #include <QApplication>
 #include <QWidget>
 #include <cstdio>
+#include <cstring>
+#include <dlfcn.h>
 
 extern "C" void nh_log(const char *, ...) { }
 
@@ -14,10 +16,119 @@ extern "C" void *nh_dlhook(void *, const char *, void *)
     return nullptr;
 }
 
-// Checks native cover lookup, sleep capability and local partial cover refresh flags.
+// These stand-ins put the exported level method in a firmware-specific slot.
+struct HardwareInterface
+{
+    void **vtable = nullptr;
+    int percent = 0, state = 0;
+    bool isCharging();
+};
+
+bool HardwareInterface::isCharging()
+{
+    return state != 0;
+}
+
+struct MTK : HardwareInterface
+{
+    int getBatteryLevel() const;
+    int chargingState();
+};
+
+int MTK::getBatteryLevel() const
+{
+    return percent;
+}
+
+int MTK::chargingState()
+{
+    return state;
+}
+
+struct iMX508 : HardwareInterface
+{
+    int getBatteryLevel() const; // This model exercises the missing chargingState fallback.
+};
+
+int iMX508::getBatteryLevel() const
+{
+    return percent;
+}
+
+static HardwareInterface *currentHardware;
+
+struct HardwareFactory
+{
+    static HardwareInterface *sharedInstance();
+};
+
+HardwareInterface *HardwareFactory::sharedInstance()
+{
+    return currentHardware;
+}
+
+static int batteryLookups;
+extern "C" void *__real_dlsym(void *, const char *);
+
+extern "C" void *__wrap_dlsym(void *handle, const char *name)
+{
+    if (std::strstr(name, "getBatteryLevel") || std::strstr(name, "chargingState"))
+        ++batteryLookups;
+    return __real_dlsym(handle, name);
+}
+
+static void checkBattery()
+{
+    auto check = [](int percent, bool charging, bool full) {
+        const auto status = kobalt::nativeReaderBattery();
+        require(status.percent == percent && status.charging == charging
+                        && status.fullyCharged == full,
+                "native battery must read the current device and charge state");
+    };
+    check(-1, false, false);
+    MTK mtk;
+    iMX508 imx;
+    void *mtkTable[0xa0 / sizeof(void *)]{}, *imxTable[0xa0 / sizeof(void *)]{};
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    const int mtkSlot = 0x84, imxSlot = 0x90;
+#else
+    const int mtkSlot = 0x9c, imxSlot = 0x9c;
+#endif
+    auto setLevel = [](void **table, int offset, const char *name) {
+        table[offset / sizeof(void *)] = __real_dlsym(RTLD_DEFAULT, name);
+        require(table[offset / sizeof(void *)], "Pewter battery implementation must be exported");
+    };
+    setLevel(mtkTable, mtkSlot, "_ZNK3MTK15getBatteryLevelEv");
+    setLevel(imxTable, imxSlot, "_ZNK6iMX50815getBatteryLevelEv");
+    mtk.vtable = mtkTable;
+    currentHardware = &mtk;
+    mtk.percent = 34;
+    check(34, false, false);
+    const auto firstLookups = batteryLookups;
+    require(firstLookups > 0, "first battery reading must look up a hardware implementation");
+    mtk.percent = 100;
+    mtk.state = 2;
+    check(100, true, true);
+    currentHardware = &imx;
+    imx.vtable = imxTable;
+    imx.percent = 86;
+    imx.state = 1;
+    check(86, true, false);
+    imx.percent = 101;
+    check(-1, true, false);
+    imxTable[imxSlot / sizeof(void *)] =
+            __real_dlsym(RTLD_DEFAULT, "_ZN17HardwareInterface10isChargingEv");
+    check(-1, false, false);
+    currentHardware = nullptr;
+    check(-1, false, false);
+    require(batteryLookups == firstLookups,
+            "repeated battery readings resolved hardware symbols again");
+}
+
 int main(int argc, char **argv)
 {
     QApplication application(argc, argv);
+    checkBattery();
     QWidget opening;
     QWidget cover(&opening);
     for (bool dark : { false, true }) {
@@ -75,6 +186,6 @@ int main(int argc, char **argv)
                     QStringLiteral("N3_FULL"), "cover lookup requests the full-size image");
         volume.data->values.clear();
     }
-    std::puts("PASS native UI sleep and covers");
+    std::puts("PASS native UI sleep, covers and battery");
     return 0;
 }

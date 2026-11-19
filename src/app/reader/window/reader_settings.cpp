@@ -78,9 +78,16 @@ QStringList fallbackFontDefaults(const QStringList &families)
                                                       : QString("IBM Plex Sans"),
              QString(monospaceFontFace) };
 }
+
+bool batteryField(headerfooter::Field field)
+{
+    using headerfooter::Field;
+    return field == Field::Battery || field == Field::BatteryPercent
+            || field == Field::BatteryPercentOnly || field == Field::BatteryWarning;
+}
 } // namespace
 
-kobalt::headerfooter::Values Reader::chromeValues()
+kobalt::headerfooter::Values Reader::chromeValues(ChromeFields fields)
 {
     kobalt::headerfooter::Values values;
     values.title = session->title();
@@ -113,10 +120,25 @@ kobalt::headerfooter::Values Reader::chromeValues()
                     int(1000LL * qBound(1, state.value("rough_item_page").toInt(), itemPages)
                         / itemPages);
     }
-    const auto battery = services.battery();
-    values.battery = battery.percent;
-    values.charging = battery.charging;
     values.deviceStatus = !hideNativeStatus();
+    if (values.deviceStatus) {
+        // The chooser previews every field. The slot map also previews assigned
+        // fields in disabled strips, which it draws dimmed.
+        bool needsBattery = fields == ChromeFields::Chooser;
+        const auto &layout = page->chrome;
+        for (int slot = 0; !needsBattery && slot < headerfooter::slotCount; ++slot) {
+            const bool shown = headerfooter::footerSlot(slot)
+                    ? layout.footerEnabled && page->notice.isEmpty()
+                    : layout.headerEnabled;
+            needsBattery = (shown || fields == ChromeFields::SlotMap)
+                    && batteryField(layout.slotFields[slot]);
+        }
+        if (needsBattery) {
+            const auto battery = services.battery();
+            values.battery = battery.percent;
+            values.charging = battery.charging;
+        }
+    }
     const auto estimates = book->estimates();
     values.chapterMilliseconds = estimates.chapterMilliseconds;
     values.bookMilliseconds = estimates.bookMilliseconds;
@@ -164,11 +186,15 @@ bool Reader::customModified() const
 bool Reader::chromeTicks() const
 {
     using kobalt::headerfooter::Field;
-    for (const auto field : page->chrome.slotFields)
-        if (field == Field::Time || field == Field::Battery || field == Field::BatteryPercent
-            || field == Field::BatteryPercentOnly || field == Field::BatteryWarning
-            || field == Field::ChapterTimeLeft || field == Field::BookTimeLeft)
+    for (int slot = 0; slot < headerfooter::slotCount; ++slot) {
+        const auto field = page->chrome.slotFields[slot];
+        if (field == Field::Time || field == Field::ChapterTimeLeft || field == Field::BookTimeLeft)
             return true;
+        if (batteryField(field) && !hideNativeStatus()
+            && (headerfooter::footerSlot(slot) ? page->chrome.footerEnabled
+                                               : page->chrome.headerEnabled))
+            return true;
+    }
     return false;
 }
 
@@ -271,16 +297,23 @@ void Reader::syncChromeControls()
     // The Header and footer rows follow the layout once they exist.
     if (!appearanceBuilt)
         return;
-    const auto values = chromeValues();
-    const auto contents = [&values](const Layout &layout) {
-        kobalt::reader::SlotContents result;
-        for (int slot = 0; slot < slotCount; ++slot)
-            result[slot] = content(layout.slotFields[slot], values, layout.uppercase[slot]);
-        return result;
-    };
     // The view shows and edits the layout in force.
     const auto &current = page->chrome;
-    slotMap->setSlots(current, contents(current));
+    if (auto *view = chromeView()) {
+        const auto values =
+                chromeValues(view == fieldChooser ? ChromeFields::Chooser : ChromeFields::SlotMap);
+        kobalt::reader::SlotContents contents;
+        for (int slot = 0; slot < slotCount; ++slot)
+            contents[slot] = content(current.slotFields[slot], values, current.uppercase[slot]);
+        slotMap->setSlots(current, contents);
+        if (view == fieldChooser) {
+            fieldChooser->debug = features::debugMode(preferences);
+            const int slot = fieldChooser->slot();
+            fieldChooser->open(slot, current.slotFields[slot], values, current.uppercase[slot],
+                               footerSlot(slot) ? page->footerTextPixels()
+                                                : page->headerTextPixels());
+        }
+    }
     const auto custom = customChrome();
     const bool modified = customModified();
     for (auto *card : presetCards) {
@@ -307,13 +340,6 @@ void Reader::syncChromeControls()
                          starred ? strings::get("header_footer.preset.modified_name")
                                            .arg(presetLabel(chromePreset))
                                  : presetLabel(chromePreset)));
-    if (fieldChooser && fieldChooser->isVisible()) {
-        fieldChooser->debug = features::debugMode(preferences);
-        fieldChooser->open(fieldChooser->slot(), current.slotFields[fieldChooser->slot()], values,
-                           current.uppercase[fieldChooser->slot()],
-                           fieldChooser->slot() < 3 ? page->headerTextPixels()
-                                                    : page->footerTextPixels());
-    }
 }
 
 QWidget *Reader::chromeView() const
@@ -331,8 +357,8 @@ void Reader::openHeaderFooterView()
         return;
     if (fieldChooser)
         fieldChooser->hide();
-    syncChromeControls();
     headerFooterView->show();
+    syncChromeControls();
     headerFooterView->raise();
     refresh();
 }
@@ -354,7 +380,8 @@ void Reader::openFieldChooser(int slot)
     const auto &current = page->chrome;
     auto *chooser = ensureFieldChooser();
     chooser->debug = features::debugMode(preferences);
-    chooser->open(slot, current.slotFields[slot], chromeValues(), current.uppercase[slot],
+    chooser->open(slot, current.slotFields[slot], chromeValues(ChromeFields::Chooser),
+                  current.uppercase[slot],
                   slot < 3 ? page->headerTextPixels() : page->footerTextPixels());
     headerFooterView->hide();
     chooser->show();
@@ -396,6 +423,8 @@ void Reader::refreshHostPresentation()
         settings->showPowerManagement(wifiPowerSaverVisible());
     }
     updateKosyncFeatures();
+    if (topControls->isVisible())
+        updateMenuBattery();
     updateMenuStatus();
     resizeEvent(nullptr);
     refresh();

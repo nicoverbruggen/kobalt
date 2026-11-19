@@ -686,7 +686,8 @@ private:
     QWidget *chromeView() const;
     void openHeaderFooterView();
     void closeChromeViews();
-    kobalt::headerfooter::Values chromeValues();
+    enum class ChromeFields { Reading, SlotMap, Chooser };
+    kobalt::headerfooter::Values chromeValues(ChromeFields fields);
     kobalt::headerfooter::Layout customChrome() const;
     // Custom has a saved layout that differs from Kobalt's.
     bool customModified() const;
@@ -857,6 +858,7 @@ private:
     void startClock();
     void startClock(int now);
     int millisecondsOfDay() const;
+    void updateMenuBattery();
     void updateMenuStatus();
     void updateReadingStats();
     void configureNavigation();
@@ -896,7 +898,7 @@ private:
     sleep::Snapshot privateSleepSnapshot(bool poweredOff = false);
     sleep::Details sleepDetails();
     void loadTodayReading();
-    void updateSleepBattery();
+    void updateSleepBattery(const BatteryStatus &battery);
     void showSleepScreen();
     void openSleepScreen();
     void loadGalleryCover();

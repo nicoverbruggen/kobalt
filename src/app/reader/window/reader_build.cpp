@@ -478,7 +478,7 @@ void Reader::startDeviceObservers()
             const auto battery = services.battery();
             lowBattery = !battery.charging && !battery.fullyCharged && battery.percent >= 0
                     && battery.percent <= 5;
-            updateSleepBattery();
+            updateSleepBattery(battery);
         });
     }
     // Android can suspend the app without hiding the embedded reader widget.
@@ -695,6 +695,7 @@ void Reader::startClockTimer()
         if (minuteTicked)
             minuteTicked();
         if (topControls->isVisible()) {
+            updateMenuBattery();
             updateMenuStatus();
             return;
         }

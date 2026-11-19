@@ -36,6 +36,8 @@ The tests run under `qemu-arm` with the Qt libraries of each image: firmware 4's
 
 `pewter.native-ui` checks that both Kobo and Tolino offer sleep screens and resolve full-size native covers. It also checks that loading-cover refresh attributes select partial mode and clear cleanup flags in both themes. Missing volumes, empty image IDs and default covers still return no cover. These checks use synthetic device and cover APIs; they do not establish firmware compatibility.
 
+The battery check changes the reported percentage and charge state, replaces the current hardware and supplies an unknown battery method. It checks both Qt5 firmware offsets and the Qt6 offset, the fallback when a model has no charge-state method, and that repeated readings reuse the resolved symbols.
+
 `pewter.tile-cover` checks the native tile cover capture in both SDKs. Synthetic native accessors supply book and image identities. The check covers shared image ownership after tile destruction, hidden and ambiguous tiles, edition and image changes, null and generated covers, native invalidation, unchanged content refreshes, missing hooks, nested assignments, nested defaults and deletion during native callbacks. It does not establish when firmware delivers a real tile image. See [Native tile cover capture](diagnostics.md#native-tile-cover-capture) for the runtime evidence.
 
 `pewter.event-history` checks the native page-history hook in both SDKs. It covers the trigger and retained session boundary, oversized sessions, malformed and ambiguous histories, preservation of other fields, and pass-through on the GUI thread and unrelated workers. Firmware persistence, restart recovery and sync payloads require separate runtime checks.

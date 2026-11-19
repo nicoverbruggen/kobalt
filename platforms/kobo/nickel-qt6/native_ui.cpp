@@ -152,43 +152,6 @@ QString nativeReaderCoverPath(const void *volume)
     return fileName(device, volume, QStringLiteral("N3_FULL"));
 }
 
-NativeBatteryStatus nativeReaderBattery()
-{
-    static const auto hardware = symbol<void *(*)()>("_ZN15HardwareFactory14sharedInstanceEv");
-    static const auto charging = symbol<bool (*)(void *)>("_ZN17HardwareInterface10isChargingEv");
-    if (!hardware || !charging)
-        return {};
-    void *device = hardware();
-    if (!device)
-        return {};
-    // N3BatteryStatusLabel::updateBatteryLevelNow dispatches this virtual slot
-    // in firmware 5.18. Call only an exported hardware implementation we know,
-    // not HardwareInterface's base implementation, which always returns 40.
-    const auto level = reinterpret_cast<int (*)(const void *)>(
-            (*static_cast<void ***>(device))[0x9c / sizeof(void *)]);
-
-    struct Implementation
-    {
-        const char *level, *charge;
-    };
-
-    for (const auto &implementation :
-         { Implementation{ "_ZNK3MTK15getBatteryLevelEv", "_ZN3MTK13chargingStateEv" },
-           Implementation{ "_ZNK6iMX50815getBatteryLevelEv", "_ZN6iMX50813chargingStateEv" },
-           Implementation{ "_ZNK9AllWinner15getBatteryLevelEv",
-                           "_ZN9AllWinner13chargingStateEv" } }) {
-        if (level && level == symbol<int (*)(const void *)>(implementation.level)) {
-            const int percent = level(device);
-            // Nickel uses 0 for battery power, 1 for charging and 2 for charged.
-            const auto chargeState = symbol<int (*)(void *)>(implementation.charge);
-            const int state = chargeState ? chargeState(device) : (charging(device) ? 1 : 0);
-            return { percent >= 0 && percent <= 100 ? percent : -1, state == 1 || state == 2,
-                     state == 2 };
-        }
-    }
-    return {};
-}
-
 QString nativeReaderClock()
 {
     return nativeReaderTime(QTime::currentTime());

@@ -796,12 +796,11 @@ void Reader::prepareWake()
         presentation->pauseBackground(true);
 }
 
-void Reader::updateSleepBattery()
+void Reader::updateSleepBattery(const BatteryStatus &battery)
 {
     if (!lifecycleHidden || sleepImage.isNull()) {
         return;
     }
-    const auto battery = services.battery();
     if (battery.charging == sleepBattery.charging
         && battery.fullyCharged == sleepBattery.fullyCharged
         && ((!battery.charging && !battery.fullyCharged)
@@ -1162,6 +1161,7 @@ bool Reader::eventFilter(QObject *watched, QEvent *event)
         if (!clockTimer->isActive())
             startClock();
         book->minuteTick();
+        updateMenuBattery();
     }
     // The sheet and the chooser are built separately, on first use. Either
     // can exist without the other.

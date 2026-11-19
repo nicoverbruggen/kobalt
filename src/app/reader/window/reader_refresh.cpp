@@ -328,7 +328,7 @@ void Reader::showChapterText()
 {
     page->cleanRefresh(false);
     page->notice = !session->error().isEmpty() ? session->error() : session->imageWarning();
-    const auto values = chromeValues();
+    const auto values = chromeValues(ChromeFields::Reading);
     for (int slot = 0; slot < kobalt::headerfooter::slotCount; ++slot)
         page->slotContents[slot] = kobalt::headerfooter::content(
                 page->chrome.slotFields[slot], values, page->chrome.uppercase[slot]);
@@ -878,14 +878,22 @@ void Reader::updateGraph()
                               session->bookPagesEstimated());
 }
 
+void Reader::updateMenuBattery()
+{
+    // Even a hidden Zen battery needs its level checked when the menu opens
+    // and on the minute tick. It becomes visible at 20 percent.
+    if (hideNativeStatus())
+        return;
+    const auto battery = services.battery();
+    menuBattery->setStatus(battery.percent, battery.charging);
+}
+
 void Reader::updateMenuStatus()
 {
     const auto time = services.clock();
     const bool clockChanged = menuClock->text() != time;
     if (clockChanged)
         menuClock->setText(time);
-    const auto battery = services.battery();
-    menuBattery->setStatus(battery.percent, battery.charging);
     const auto reading = book->sessionReadingMilliseconds();
     const auto session = features::enabled(preferences, features::Stats) && reading > 300000
             ? strings::get("reader.session_minutes").arg(reading / 60000)

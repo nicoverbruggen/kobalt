@@ -20,6 +20,7 @@
 #include "app/reader/settings/sleep_gallery.h"
 #include "app/reader_window.h"
 #include "ui/controls/page_scrubber.h"
+#include "ui/controls/panels.h"
 #include <QtGui/private/qeventpoint_p.h>
 #include "ui/dialogs/modals.h"
 #include "ui/style/fonts.h"
@@ -4777,8 +4778,9 @@ private slots:
         QVERIFY(changed);
         changed();
         QCOMPARE(state->updated, 0);
-        host.window()->sleepReader();
+        // Sleep must sample charging even if the host has not sent a notification.
         battery = { 67, true, false };
+        host.window()->sleepReader();
         changed();
         QCOMPARE(state->updated, 0);
         host.window()->sleepViewReady();
@@ -4791,6 +4793,8 @@ private slots:
             return;
         }
         QCOMPARE(state->presented, 1);
+        changed();
+        QCOMPARE(state->updated, 0);
         const auto initial = state->image;
         QVERIFY(!initial.isNull());
         // A point on the page that the selected tile does not cover.
@@ -8592,7 +8596,21 @@ private slots:
     // Checks that a page turn with the menu hidden leaves the menu's controls alone, and that opening the menu brings them up to date.
     void turnSkipsHiddenControls()
     {
-        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        const auto paths = testPaths();
+        QVERIFY(storage::writePreferences(
+                paths.preferences(),
+                QJsonObject{ { "header_footer", "custom" },
+                             { "header_footer_custom",
+                               QJsonObject{ { "header_size", "off" },
+                                            { "top_right", "battery_percent_only" } } } }));
+        int batteryReads = 0, percent = 73;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.battery = [&] {
+                ++batteryReads;
+                return BatteryStatus{ percent, false, false };
+            };
+        };
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);
         host.open(textBook, nativeSize);
@@ -8609,6 +8627,7 @@ private slots:
         QVERIFY(page && menu && scrubber);
         // Opening syncs the controls once, hidden.
         QCoreApplication::processEvents();
+        batteryReads = 0;
         const int start = host.session()->page();
         const int shown = scrubber->slider()->value();
         test::skipPageTurnWindow();
@@ -8620,16 +8639,28 @@ private slots:
         QCoreApplication::processEvents();
         QCOMPARE(scrubber->slider()->value(), shown);
         QVERIFY(!menu->isVisible());
+        QCOMPARE(batteryReads, 0);
+        percent = 64;
         // The menu opens with the page that is shown now.
         QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
         QTRY_VERIFY(menu->isVisible());
         QVERIFY(scrubber->slider()->value() != shown);
+        const auto *indicator = dynamic_cast<ui::BatteryIndicator *>(
+                host.window()->findChild<QWidget *>("rrMenuBattery"));
+        QVERIFY(indicator && indicator->isVisible());
+        QCOMPARE(indicator->level(), percent);
         const int open = scrubber->slider()->value();
         // With the menu open, a page button turn updates the controls at once.
         test::skipPageTurnWindow();
         host.window()->pageButton(1);
         QTRY_COMPARE(host.session()->page(), start + 2);
         QTRY_VERIFY(scrubber->slider()->value() != open);
+        percent = 39;
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrNavLayout")));
+        QVERIFY(click(canvas, host.window()->findChild<QWidget *>("rrHeaderFooter")));
+        auto *slot = host.window()->findChild<QPushButton *>("rrHeaderFooterSlot2");
+        QVERIFY(slot && slot->isVisible());
+        QVERIFY(slot->accessibleName().contains(strings::get("common.percent").arg(percent)));
     }
 
     // A preview of the same book preempts estimates without abandoning their

@@ -94,6 +94,20 @@ public:
     using QWidget::QWidget;
 };
 
+class PaintCounter : public QObject
+{
+public:
+    int count = 0;
+
+protected:
+    bool eventFilter(QObject *, QEvent *event) override
+    {
+        if (event->type() == QEvent::Paint)
+            ++count;
+        return false;
+    }
+};
+
 class PaintProbe : public QWidget
 {
 public:
@@ -757,10 +771,34 @@ private slots:
             QVERIFY(frame);
             QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
                      expected(kobalt::reader::SleepStatus::Charging, 67));
-            kobalt::battery = { 88, false, false };
+            QCoreApplication::processEvents();
+            PaintCounter paints;
+            frame->installEventFilter(&paints);
+            kobalt::batteryChanged();
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::UpdateRequest);
+            QCOMPARE(paints.count, 0);
+
+            kobalt::battery.percent = 68;
+            kobalt::batteryChanged();
+            QTRY_VERIFY(paints.count > 0);
+            QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
+                     expected(kobalt::reader::SleepStatus::Charging, 68));
+            kobalt::battery = { 68, false, false };
             kobalt::batteryChanged();
             QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
-                     expected(kobalt::reader::SleepStatus::Sleeping, 88));
+                     expected(kobalt::reader::SleepStatus::Sleeping, 68));
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::UpdateRequest);
+            paints.count = 0;
+            kobalt::battery = { 67, false, false };
+            kobalt::batteryChanged();
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::UpdateRequest);
+            QCOMPARE(paints.count, 0);
+            QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
+                     expected(kobalt::reader::SleepStatus::Sleeping, 67));
+            kobalt::battery = { 100, true, false };
+            kobalt::batteryChanged();
+            QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
+                     expected(kobalt::reader::SleepStatus::Charging, 100));
             kobalt::battery = { 100, true, true };
             kobalt::batteryChanged();
             QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),

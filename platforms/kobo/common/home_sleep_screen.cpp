@@ -529,6 +529,7 @@ void HomeSleepScreen::compose()
         return;
     reader::portraitSleepSnapshot(snapshot);
     const auto battery = nativeReaderBattery();
+    paintedBattery = battery;
     const auto status = poweredOff ? reader::SleepStatus::PoweredOff
             : battery.fullyCharged ? reader::SleepStatus::Charged
             : battery.charging     ? reader::SleepStatus::Charging
@@ -559,6 +560,13 @@ void HomeSleepScreen::updateBattery()
     if (snapshot.image.isNull() || poweredOff)
         return;
     const auto battery = nativeReaderBattery();
+    // The sleep screen only shows the percentage while charging or fully charged.
+    if (battery.charging == paintedBattery.charging
+        && battery.fullyCharged == paintedBattery.fullyCharged
+        && ((!battery.charging && !battery.fullyCharged)
+            || battery.percent == paintedBattery.percent))
+        return;
+    paintedBattery = battery;
     const auto status = battery.fullyCharged ? reader::SleepStatus::Charged
             : battery.charging               ? reader::SleepStatus::Charging
                                              : reader::SleepStatus::Sleeping;

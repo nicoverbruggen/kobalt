@@ -1,4 +1,5 @@
 #pragma once
+#include "native_ui.h"
 #include <QVector>
 #include "storage/reader_storage.h"
 #include "reading/sleep_screen.h"
@@ -45,6 +46,7 @@ private:
     sleep::Snapshot snapshot, shutdownBackdrop, fontBackdrop;
     // What lies under the status, so a battery change repaints only that.
     QVector<QImage> underlay;
+    NativeBatteryStatus paintedBattery;
     void save(const sleep::Snapshot &, const QString &identity);
     bool poweredOff = false, invalidated = false;
     std::function<bool()> prepareFonts;

@@ -99,7 +99,8 @@ PrivateText renderPrivateText(const QString &text, const QFont &font, int weight
                               Qt::LayoutDirection direction = Qt::LayoutDirectionAuto,
                               const QVector<PrivateTextStyle> &styles = {});
 // Paints the source coverage with this ink and shares the result across repaints.
-QImage tintedPrivateText(const QImage &image, const QColor &color);
+// When requested, inkBounds encloses its nontransparent pixels in image coordinates.
+QImage tintedPrivateText(const QImage &image, const QColor &color, QRect *inkBounds = nullptr);
 int measurePrivateText(const QString &text, const QFont &font,
                        const QVector<QPair<int, int>> &boldRanges = {},
                        PrivateTextEmphasis emphasis = PrivateTextEmphasis::Synthetic,

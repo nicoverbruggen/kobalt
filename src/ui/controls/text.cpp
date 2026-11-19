@@ -665,6 +665,7 @@ void WholeLineLabel::paintEvent(QPaintEvent *)
         }
         QPainter painter(this);
         painter.setClipRect(rect());
+        const auto ink = palette().color(QPalette::WindowText);
         if (alignment() & Qt::AlignVCenter) {
             painter.translate(0, (height() - bottom) / 2);
         }
@@ -672,19 +673,15 @@ void WholeLineLabel::paintEvent(QPaintEvent *)
             if (line.top + line.height > bottom) {
                 break;
             }
-            auto rendered = renderPrivateText(line.text, font(), 0, line.bold, line.underline,
-                                              PrivateTextEmphasis::FontFace, line.direction);
+            const auto rendered = renderPrivateText(line.text, font(), 0, line.bold, line.underline,
+                                                    PrivateTextEmphasis::FontFace, line.direction);
             if (rendered.image.isNull()) {
                 continue;
             }
-            QPainter color(&rendered.image);
-            color.setCompositionMode(QPainter::CompositionMode_SourceIn);
-            color.fillRect(rendered.image.rect(), palette().color(QPalette::WindowText));
-            color.end();
             const int x = line.direction == Qt::RightToLeft ? width() - line.advance : 0;
             painter.drawImage(
                     QPointF(x + rendered.origin.x(), line.top + line.ascent + rendered.origin.y()),
-                    rendered.image);
+                    tintedPrivateText(rendered.image, ink));
         }
         return;
     }

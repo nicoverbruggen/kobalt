@@ -305,6 +305,25 @@ QString referenceSearchExcerpt(QString before, const QString &match, QString aft
     return html();
 }
 
+QImage referenceTint(QImage mask, const QColor &ink)
+{
+    QPainter painter(&mask);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    painter.fillRect(mask.rect(), ink);
+    painter.end();
+    return mask;
+}
+
+QRect visibleInk(const QImage &image)
+{
+    QRect ink;
+    for (int y = 0; y < image.height(); ++y)
+        for (int x = 0; x < image.width(); ++x)
+            if (qAlpha(image.pixel(x, y)))
+                ink |= QRect(x, y, 1, 1);
+    return ink;
+}
+
 void checkWrappedLineTint()
 {
     using namespace kobalt::ui;
@@ -314,20 +333,12 @@ void checkWrappedLineTint()
     const auto line = renderPrivateText(text, font);
     require(!line.image.isNull(), "Private label produced no coverage mask");
 
-    // Reproduce the old per-paint tint without changing the cached coverage mask.
-    const auto reference = [](QImage mask, const QColor &ink) {
-        QPainter painter(&mask);
-        painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-        painter.fillRect(mask.rect(), ink);
-        painter.end();
-        return mask;
-    };
     const QColor darkInk = themeColors(true).secondaryInk;
     const QColor lightInk = themeColors(false).secondaryInk;
     const auto first = tintedPrivateText(line.image, darkInk);
     for (const auto &ink :
          { darkInk, lightInk, QColor(53, 81, 127, 1), QColor(53, 81, 127, 128) }) {
-        const auto expected = reference(line.image, ink);
+        const auto expected = referenceTint(line.image, ink);
         require(tintedPrivateText(line.image, ink) == expected, "Cached tint changed glyph pixels");
 
         QImage frame(230, 75, QImage::Format_ARGB32_Premultiplied);
@@ -350,17 +361,121 @@ void checkWrappedLineTint()
     auto differentMask = line.image.copy();
     differentMask.fill(Qt::transparent);
     differentMask.setPixelColor(0, 0, Qt::black);
-    require(tintedPrivateText(differentMask, darkInk) == reference(differentMask, darkInk),
+    require(tintedPrivateText(differentMask, darkInk) == referenceTint(differentMask, darkInk),
             "Another mask of the same size reused the previous line's ink");
 
     QImage oversized(2049, 256, QImage::Format_ARGB32_Premultiplied);
     oversized.fill(Qt::black);
     const auto large = tintedPrivateText(oversized, darkInk);
-    require(large == reference(oversized, darkInk), "Oversized tint changed glyph pixels");
+    require(large == referenceTint(oversized, darkInk), "Oversized tint changed glyph pixels");
     require(large.constBits() != tintedPrivateText(oversized, darkInk).constBits(),
             "Tint larger than the private layout cache was retained");
     require(first.constBits() == tintedPrivateText(line.image, darkInk).constBits(),
             "Oversized tint evicted the cached label");
+}
+
+void checkPrivateTextDrawing()
+{
+    using namespace kobalt::ui;
+    const auto font = interfaceFont(32);
+    const QString text = QStringLiteral("Glyphs");
+    const auto line = renderPrivateText(text, font);
+    const auto raw = visibleInk(line.image);
+    const int baseline = -line.origin.y();
+    require(!raw.isEmpty() && raw.bottom() >= baseline + qMax(1, (baseline - raw.top()) / 10),
+            "Optical drawing fixture needs a descender");
+    require(interfaceInkBounds(text, font) == raw.translated(line.origin),
+            "Private ink bounds lost the glyph origin");
+    const QRect area(9, 7, 165, 68);
+    const QRect clip(3, 4, 163, 80);
+    const auto alignment = Qt::AlignRight | Qt::AlignBottom;
+    for (int alpha : { 255, 1, 0, 128, 1 }) {
+        const QColor color(45, 95, 127, alpha);
+        const auto tinted = referenceTint(line.image, color);
+        const QRect ink = visibleInk(tinted);
+        QRect cached;
+        const auto shared = tintedPrivateText(line.image, color);
+        require(tintedPrivateText(line.image, color, &cached).constBits() == shared.constBits()
+                        && cached == ink,
+                "Requesting optical bounds missed the cached tint or measured the raw mask");
+
+        enum Placement { LineBox, Optical, SharedBaseline };
+
+        for (const auto mode : { LineBox, Optical, SharedBaseline }) {
+            QImage expected(190, 86, QImage::Format_ARGB32_Premultiplied);
+            expected.fill(Qt::transparent);
+            QImage actual = expected;
+            int y = area.bottom() + 1 - line.image.height();
+            if (mode != LineBox && !ink.isEmpty()) {
+                int last = ink.bottom();
+                if (mode == SharedBaseline && baseline > ink.top()
+                    && last >= baseline + qMax(1, (baseline - ink.top()) / 10))
+                    last = baseline - 1;
+                y = qRound(area.top() + area.height() / 2.0 - (ink.top() + last + 1) / 2.0);
+            }
+            {
+                QPainter painter(&expected);
+                painter.setClipRect(clip.intersected(area));
+                painter.drawImage(QPoint(area.right() + 1 - line.advance, y), tinted);
+            }
+            {
+                QPainter painter(&actual);
+                painter.setFont(font);
+                painter.setPen(color);
+                painter.setClipRect(clip);
+                if (mode == LineBox)
+                    drawInterfaceText(painter, area, text, alignment);
+                else if (mode == Optical)
+                    drawOpticalPrivateText(painter, area, text, alignment);
+                else
+                    drawSegmentPrivateText(painter, area, text, alignment);
+            }
+            require(actual == expected,
+                    qPrintable(QString("Private label differs at alpha %1, mode %2")
+                                       .arg(alpha)
+                                       .arg(mode)));
+        }
+    }
+
+    // A thin antialiased edge can disappear at low opacity. Whole-mask
+    // bounds cannot stand in for the bounds of the paint-ready image.
+    QImage sparse(6, 5, QImage::Format_ARGB32_Premultiplied);
+    sparse.fill(Qt::transparent);
+    sparse.setPixelColor(0, 0, QColor(0, 0, 0, 1));
+    sparse.setPixelColor(3, 2, Qt::black);
+    QRect bounds;
+    tintedPrivateText(sparse, QColor(25, 50, 75, 1), &bounds);
+    require(bounds == QRect(3, 2, 1, 1), "An invisible edge moved the optical center");
+
+    WholeLineLabel excerpt;
+    const QString rtl = QStringLiteral("עברית");
+    excerpt.setFont(font);
+    excerpt.setText(QStringLiteral("<div><b><u>%1</u></b><br>second</div>").arg(rtl));
+    excerpt.setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    const QVector<QPair<int, int>> emphasis{ { 0, int(rtl.size()) } };
+    const auto metrics = measurePrivateTextLayout(rtl, font, emphasis,
+                                                  PrivateTextEmphasis::FontFace, Qt::RightToLeft);
+    const auto rendered = renderPrivateText(rtl, font, 0, emphasis, emphasis,
+                                            PrivateTextEmphasis::FontFace, Qt::RightToLeft);
+    excerpt.resize(220, metrics.lineHeight + 9);
+    const QColor ink(63, 84, 129, 91);
+    auto palette = excerpt.palette();
+    palette.setColor(QPalette::Window, Qt::white);
+    palette.setColor(QPalette::WindowText, ink);
+    excerpt.setPalette(palette);
+    excerpt.setAutoFillBackground(true);
+    QImage expected(excerpt.size(), QImage::Format_ARGB32_Premultiplied);
+    expected.fill(Qt::white);
+    QImage actual = expected;
+    excerpt.render(&actual);
+    QPainter painter(&expected);
+    painter.translate(0, (excerpt.height() - metrics.lineHeight) / 2.0);
+    painter.drawImage(QPointF(excerpt.width() - metrics.advance + rendered.origin.x(),
+                              metrics.lineAscent + rendered.origin.y()),
+                      referenceTint(rendered.image, ink));
+    painter.end();
+    require(actual == expected,
+            "Whole-line excerpt changed RTL placement, baseline, tint or last complete line");
 }
 
 void checkSearchExcerptFit(bool privateText)
@@ -560,6 +675,7 @@ int main(int argc, char **argv)
     dismissedContent();
     checkSearchExcerptFit(true);
     checkWrappedLineTint();
+    checkPrivateTextDrawing();
     {
         int loads = 0;
         kobalt::setDiagnosticObserver([&](const QJsonObject &event) {

@@ -70,6 +70,46 @@ struct GlyphMask
     bool drawn = false;
 };
 
+struct CachedText : PrivateText
+{
+    QRect ink;
+    bool inkMeasured = false;
+
+    void measureInk(QRect *bounds)
+    {
+        if (!bounds)
+            return;
+        if (!inkMeasured) {
+            int left = image.width(), right = -1, top = image.height(), bottom = -1;
+            for (int y = 0; y < image.height(); ++y) {
+                // Private text uses ARGB32 premultiplied. Preserve the same
+                // alpha test for other formats passed to tintedPrivateText.
+                const auto *row = image.format() == QImage::Format_ARGB32_Premultiplied
+                        ? reinterpret_cast<const QRgb *>(image.constScanLine(y))
+                        : nullptr;
+                const auto visible = [&](int x) {
+                    return qAlpha(row ? row[x] : image.pixel(x, y));
+                };
+                int first = 0;
+                while (first < image.width() && !visible(first))
+                    ++first;
+                if (first == image.width())
+                    continue;
+                int last = image.width() - 1;
+                while (last > first && !visible(last))
+                    --last;
+                left = qMin(left, first);
+                right = qMax(right, last);
+                top = qMin(top, y);
+                bottom = y;
+            }
+            ink = right >= left ? QRect(QPoint(left, top), QPoint(right, bottom)) : QRect();
+            inkMeasured = true;
+        }
+        *bounds = ink;
+    }
+};
+
 struct RegisteredFace
 {
     QString file;
@@ -192,7 +232,7 @@ struct Fonts
     QMap<QString, std::shared_ptr<Face>> faces;
     QHash<FT_Face, Face *> owners;
     // Costs are in 256-byte units, so small measurements do not each take a kilobyte of the budget.
-    QCache<QString, PrivateText> layouts{ 8192 };
+    QCache<QString, CachedText> layouts{ 8192 };
     // Resolved primary faces and font descriptions, used for every measurement.
     QHash<QString, FT_Face> primaries;
     // Rendered glyphs by face, size, glyph and synthetic emboldening or slant.
@@ -327,7 +367,15 @@ struct Fonts
         if (descriptions.size() >= 16) {
             descriptions.removeLast();
         }
-        descriptions.prepend({ font, font.toString() });
+        // Qt 5.2's font description leaves out case and spacing. Record the
+        // attributes the private renderer reads, once per recently used font.
+        QByteArray data;
+        QDataStream key(&data, QIODevice::WriteOnly);
+        key << font.family() << qint32(font.pixelSize()) << qint32(font.weight()) << font.italic()
+            << font.underline() << font.strikeOut() << qint32(font.stretch()) << font.kerning()
+            << qint32(font.capitalization()) << qint32(font.letterSpacingType())
+            << double(font.letterSpacing()) << double(font.wordSpacing());
+        descriptions.prepend({ font, QString::fromLatin1(data.toHex()) });
         return descriptions.first().second;
     }
 };
@@ -347,13 +395,13 @@ Fonts &fonts()
     return value;
 }
 
-void cacheLayout(const QString &key, const PrivateText &text)
+void cacheLayout(const QString &key, const CachedText &text)
 {
     const int cost = cacheCost(qint64(text.image.bytesPerLine()) * text.image.height()
-                               + qint64(key.size()) * 2 + qint64(sizeof(PrivateText)));
+                               + qint64(key.size()) * 2 + qint64(sizeof(CachedText)));
     auto &cache = fonts().layouts;
     if (cost <= cache.maxCost())
-        cache.insert(key, new PrivateText(text), cost);
+        cache.insert(key, new CachedText(text), cost);
 }
 
 // The same glyph at the same size renders the same mask on every line, so
@@ -889,14 +937,8 @@ QString privateLayoutKey(const QFont &font)
     if (previewFonts || !fonts().library)
         return {};
     auto &state = fonts();
-    // Qt 5.2's font description leaves out the case and spacing fields.
     return QString::number(state.layoutGeneration) + ':' + state.description(font) + ':'
-            + QString::number(defaultWeightSteps(font)) + ':'
-            + QString::number(font.capitalization()) + ':'
-            + QString::number(font.letterSpacingType()) + ':'
-            + QString::number(font.letterSpacing(), 'g', 16) + ':'
-            + QString::number(font.wordSpacing(), 'g', 16) + ':' + QString::number(font.stretch())
-            + ':' + QString::number(font.kerning());
+            + QString::number(defaultWeightSteps(font));
 }
 
 static PrivateText layoutPrivateText(const QString &input, const QFont &font, int weight,
@@ -904,7 +946,8 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
                                      const QVector<QPair<int, int>> &underlineRanges = {},
                                      PrivateTextEmphasis emphasis = PrivateTextEmphasis::Synthetic,
                                      Qt::LayoutDirection direction = Qt::LayoutDirectionAuto,
-                                     const QVector<PrivateTextStyle> &styles = {})
+                                     const QVector<PrivateTextStyle> &styles = {},
+                                     QRect *inkBounds = nullptr)
 {
     struct Rendering
     {
@@ -925,35 +968,36 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
     } else if (font.capitalization() == QFont::AllLowercase) {
         text = text.toLower();
     }
-    PrivateText result;
+    CachedText result;
     if (text.isEmpty() || !fonts().library) {
         return result;
     }
     const int steps = weight < 0 ? defaultWeightSteps(font) : qBound(0, weight, 12);
-    QString cacheKey = fonts().description(font) + ':' + QString::number(steps) + ':'
-            + QString::number(rasterize) + ':' + QString::number(font.capitalization()) + ':'
-            + QString::number(font.letterSpacingType()) + ':'
-            + QString::number(font.letterSpacing(), 'g', 16) + ':'
-            + QString::number(font.wordSpacing(), 'g', 16) + ':' + QString::number(font.stretch())
-            + ':' + QString::number(font.kerning());
-    for (const auto &range : boldRanges) {
-        cacheKey += ':' + QString::number(range.first) + ',' + QString::number(range.second);
+    const auto fontKey = fonts().description(font);
+    QString cacheKey;
+    cacheKey.reserve(fontKey.size() + 6 + text.size());
+    cacheKey += fontKey;
+    cacheKey += ':';
+    cacheKey += QChar(steps);
+    cacheKey += QChar(int(rasterize));
+    cacheKey += QChar(int(emphasis));
+    cacheKey += QChar(int(direction));
+    // Plain labels need no serialized ranges. Hex keeps rich run data
+    // separate from any colons in the text.
+    if (!boldRanges.isEmpty() || !underlineRanges.isEmpty() || !styles.isEmpty()) {
+        QByteArray data;
+        QDataStream key(&data, QIODevice::WriteOnly);
+        key << boldRanges << underlineRanges;
+        for (const auto &style : styles)
+            key << qint32(style.start) << qint32(style.length) << fonts().description(style.font)
+                << style.color << qint32(style.baselineShift) << style.image.cacheKey()
+                << style.background;
+        cacheKey += QString::fromLatin1(data.toHex());
     }
-    cacheKey +=
-            ":underline:" + QString::number(int(emphasis)) + ':' + QString::number(int(direction));
-    for (const auto &range : underlineRanges) {
-        cacheKey += ':' + QString::number(range.first) + ',' + QString::number(range.second);
-    }
-    for (const auto &style : styles) {
-        cacheKey += ":style:" + QString::number(style.start) + ',' + QString::number(style.length)
-                + ':' + fonts().description(style.font) + ':' + style.color.name(QColor::HexArgb)
-                + ':' + QString::number(style.baselineShift) + ':'
-                + QString::number(style.image.cacheKey());
-        if (style.background.isValid())
-            cacheKey += ":background:" + style.background.name(QColor::HexArgb);
-    }
-    cacheKey += ':' + text;
-    if (const auto *cached = fonts().layouts.object(cacheKey)) {
+    cacheKey += ':';
+    cacheKey += text;
+    if (auto *cached = fonts().layouts.object(cacheKey)) {
+        cached->measureInk(inkBounds);
         return *cached;
     }
     const auto characters = text.toUcs4();
@@ -1331,29 +1375,36 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
         painter.fillRect(underline.first.translated(-bounds.topLeft()), underline.second);
     }
     painter.end();
+    result.measureInk(inkBounds);
     cacheLayout(cacheKey, result);
     return result;
 }
 
-QImage tintedPrivateText(const QImage &image, const QColor &color)
+QImage tintedPrivateText(const QImage &image, const QColor &color, QRect *inkBounds)
 {
-    if (image.isNull())
+    if (image.isNull()) {
+        if (inkBounds)
+            *inkBounds = {};
         return {};
+    }
     // Keep the full QColor precision, including alpha. Hex keys cannot collide
     // with shaped layout keys, which always contain colon separators.
     QByteArray bytes;
     QDataStream stream(&bytes, QIODevice::WriteOnly);
     stream << image.cacheKey() << color;
     const auto key = QString::fromLatin1(bytes.toHex());
-    if (const auto *cached = fonts().layouts.object(key))
+    if (auto *cached = fonts().layouts.object(key)) {
+        cached->measureInk(inkBounds);
         return cached->image;
+    }
 
-    PrivateText result;
+    CachedText result;
     result.image = image;
     QPainter painter(&result.image);
     painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
     painter.fillRect(result.image.rect(), color);
     painter.end();
+    result.measureInk(inkBounds);
     cacheLayout(key, result);
     return result.image;
 }
@@ -1641,12 +1692,10 @@ QRect interfaceInkBounds(const QString &text, const QFont &font)
 {
     if (!needsPrivateText(text, font))
         return QFontMetrics(font).tightBoundingRect(text);
-    const auto rendered = renderPrivateText(text, font);
     QRect bounds;
-    for (int y = 0; y < rendered.image.height(); ++y)
-        for (int x = 0; x < rendered.image.width(); ++x)
-            if (qAlpha(rendered.image.pixel(x, y)))
-                bounds |= QRect(x, y, 1, 1);
+    const auto rendered =
+            layoutPrivateText(text, font, -1, {}, true, {}, PrivateTextEmphasis::Synthetic,
+                              Qt::LayoutDirectionAuto, {}, &bounds);
     return bounds.translated(rendered.origin);
 }
 
@@ -1682,14 +1731,13 @@ void drawPrivateText(QPainter &painter, const QRect &area, const QString &text,
                      const QVector<QPair<int, int>> &boldRanges, bool optical,
                      bool shareBaseline = false)
 {
-    auto rendered = renderPrivateText(text, painter.font(), weight, boldRanges);
+    const auto rendered = renderPrivateText(text, painter.font(), weight, boldRanges);
     if (rendered.image.isNull()) {
         return;
     }
-    QPainter color(&rendered.image);
-    color.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    color.fillRect(rendered.image.rect(), painter.pen().color());
-    color.end();
+    QRect ink;
+    const auto image =
+            tintedPrivateText(rendered.image, painter.pen().color(), optical ? &ink : nullptr);
     const int x = alignment.testFlag(Qt::AlignRight) ? area.right() + 1 - rendered.advance
             : alignment.testFlag(Qt::AlignHCenter)
             ? area.left() + (area.width() - rendered.advance) / 2
@@ -1698,35 +1746,24 @@ void drawPrivateText(QPainter &painter, const QRect &area, const QString &text,
             : alignment.testFlag(Qt::AlignVCenter)
             ? area.top() + (area.height() - rendered.image.height()) / 2
             : area.top();
-    if (optical) {
+    if (!ink.isEmpty()) {
         // Center the rows that hold ink, as Qt's tight bounds do for native
         // text, so a line without descenders does not sit high.
-        int first = -1, last = -1;
-        for (int row = 0; row < rendered.image.height(); ++row) {
-            const auto *pixels = reinterpret_cast<const QRgb *>(rendered.image.constScanLine(row));
-            for (int column = 0; column < rendered.image.width(); ++column)
-                if (qAlpha(pixels[column])) {
-                    if (first < 0)
-                        first = row;
-                    last = row;
-                    break;
-                }
-        }
-        if (first >= 0) {
-            // Labels side by side share a baseline, so a descender must not
-            // lift one of them. The image starts at origin.y() above the
-            // baseline. Round letters overshoot it slightly; only a descender,
-            // a tenth of the height above the baseline or more, is left out.
-            const int baseline = -rendered.origin.y();
-            const int overshoot = qMax(1, (baseline - first) / 10);
-            if (shareBaseline && baseline > first && last >= baseline + overshoot)
-                last = baseline - 1;
-            y = qRound(area.top() + area.height() / 2.0 - (first + last + 1) / 2.0);
-        }
+        const int first = ink.top();
+        int last = ink.bottom();
+        // Labels side by side share a baseline, so a descender must not
+        // lift one of them. The image starts at origin.y() above the
+        // baseline. Round letters overshoot it slightly; only a descender,
+        // a tenth of the height above the baseline or more, is left out.
+        const int baseline = -rendered.origin.y();
+        const int overshoot = qMax(1, (baseline - first) / 10);
+        if (shareBaseline && baseline > first && last >= baseline + overshoot)
+            last = baseline - 1;
+        y = qRound(area.top() + area.height() / 2.0 - (first + last + 1) / 2.0);
     }
     painter.save();
     painter.setClipRect(area, Qt::IntersectClip);
-    painter.drawImage(QPoint(x, y), rendered.image);
+    painter.drawImage(QPoint(x, y), image);
     painter.restore();
 }
 } // namespace

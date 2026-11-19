@@ -2946,13 +2946,19 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                 // The prepared document can be gone, after a change that
                 // this render does not know. Loading the whole book here
                 // would make the page turn wait: keep the chapter then.
-                const bool swap = swapToFull && oldSize == size
+                // In two columns the whole book can pair the columns otherwise
+                // than the chapter. A turn there stays in the chapter; idle
+                // time offers the switch again after it.
+                const bool readyToSwap = swapToFull && oldSize == size
                         && appearance::same(before, requested) && engine->fullDocumentReady();
+                bool continues = true;
+                const int spreadTurn =
+                        readyToSwap && delta ? engine->preparedSpreadTurn(delta, &continues) : -1;
+                const bool swap = readyToSwap && continues;
                 // A numbered jump addresses the displayed chapter. Move there
                 // before adoption so the whole book restores that passage.
                 if (swap && target >= 0)
                     engine->go(target);
-                const int spreadTurn = swap && delta ? engine->preparedSpreadTurn(delta) : -1;
                 const int mode = swap ? 0 : chapterMode;
                 const bool modeChanged = mode >= 0 && engine->partOfBook() != (mode > 0);
                 const bool unchanged =

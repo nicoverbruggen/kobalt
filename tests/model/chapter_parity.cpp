@@ -113,6 +113,80 @@ void verticalOrnamentTurns()
     }
 }
 
+// Two-column screens pair the columns of their own document. A chapter pairs
+// them from its start and the whole book from the start of the book, so an
+// odd number of columns before the chapter puts the pairs one column apart.
+// A turn that switched to the whole book there showed a column again. The
+// switch waits for a turn where the pairs agree.
+void twoColumnSwapPairs()
+{
+    for (const int before : { 3, 4 }) {
+        const auto columns = [](const QByteArray &name, int count) {
+            QByteArray body;
+            for (int column = 0; column < count; ++column)
+                body += "<p style='page-break-before:always'>" + name + ' '
+                        + QByteArray::number(column) + ". "
+                        + QByteArray("A short column. ").repeated(3) + "</p>";
+            return test::publisherHtml(body);
+        };
+        Book book;
+        book.files = test::publisherPackage(
+                "en", "Column pairs",
+                { { "first.xhtml", columns("First", before) },
+                  { "second.xhtml", columns("Second", 8) } },
+                "<itemref idref='first.xhtml'/><itemref idref='second.xhtml'/>");
+        auto options = settings;
+        options["two_columns_landscape"] = true;
+        auto window = options;
+        window["koblaze_first_spine_item"] = 1;
+        window["koblaze_last_spine_item"] = 1;
+        EngineDocument whole(test::readerFonts()), chapter(test::readerFonts());
+        QString error;
+        setChapterModeOverride(0);
+        require(book.open(whole, options, &error), qPrintable(error));
+        setChapterModeOverride(-1);
+        chapter.setChapterSlices(25);
+        require(book.open(chapter, window, &error), qPrintable(error));
+        const QSize landscape(1072, 758);
+        require(chapter.applyAppearance({}, landscape) && whole.applyAppearance({}, landscape),
+                "Cannot lay out the column pairs");
+        require(chapter.prepareFullDocument({}) == Engine::FullDocument::Ready,
+                "Cannot prepare the whole book of column pairs");
+        // The first screen of the chapter is a whole-book screen only when
+        // an even number of columns comes before it.
+        int same = -1;
+        for (int page = 0; page < whole.pages() && same < 0; ++page)
+            if (whole.image(page) == chapter.image(0))
+                same = page;
+        require((same >= 0) == (before % 2 == 0),
+                qPrintable(QString("%1 columns before the chapter: whole-book screen %2")
+                                   .arg(before)
+                                   .arg(same)));
+        for (;;) {
+            const int page = chapter.page();
+            // The last screen of the book has no turn forward.
+            for (const int direction : { 1, -1 }) {
+                bool continues;
+                chapter.preparedSpreadTurn(direction, &continues);
+                require((direction > 0 && page + 1 == chapter.pages())
+                                || continues == (before % 2 == 0),
+                        qPrintable(QString("%1 columns before the chapter: a turn %2 from "
+                                           "screen %3 switches with shifted pairs")
+                                           .arg(before)
+                                           .arg(direction)
+                                           .arg(page)));
+            }
+            if (before % 2 == 0 && whole.go(same + page)) {
+                const int target = whole.turnTarget(whole.page(), 1);
+                require(target == whole.page() || chapter.preparedSpreadTurn(1) == target,
+                        "The switch did not continue on the next whole-book screen");
+            }
+            if (!chapter.turnInWindow(1) || chapter.page() == page)
+                break;
+        }
+    }
+}
+
 void nonLinearTurns(bool hide, int slicePages)
 {
     Book book;
@@ -1639,6 +1713,8 @@ int main(int argc, char **argv)
     }
     if (only.isEmpty() || only == QLatin1String("vertical ornaments"))
         verticalOrnamentTurns();
+    if (only.isEmpty() || only == QLatin1String("column pairs"))
+        twoColumnSwapPairs();
     if (only.isEmpty() || only == QLatin1String("unopened search"))
         searchUnopenedChapter();
     const auto other = qEnvironmentVariable("KOBALT_PARITY_BOOK");

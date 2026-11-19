@@ -229,6 +229,8 @@ static void hybridFontEdits(const QString &path, quint16 port)
     renderingMode::setOverride(-1);
 }
 
+// Trevelyan's cover is one column. The whole book pairs it with the title,
+// the chapter shows it alone.
 static void mixedSpreadHandoff()
 {
     const QString path =
@@ -297,17 +299,28 @@ static void mixedSpreadHandoff()
                                        frame.quit();
                                    });
         frame.exec();
-        require(bookmarked
-                        && thumbnail
-                                == coverAndTitle.scaled(bounds, Qt::KeepAspectRatio,
-                                                        Qt::SmoothTransformation),
-                "Navigate showed a chapter thumbnail for the prepared full-book turn");
+        // The chapter shows the cover alone, the whole book shows it with the
+        // title. Switching on this turn would show the cover or the title a
+        // second time, so the turn stays in the chapter. Navigate shows the
+        // page of that turn.
+        const auto shown = hybrid.image();
         require(hybrid.turn(direction), "Cannot turn across the prepared two-column handoff");
         frame.exec();
-        require(!hybrid.state().contains("book_fraction") && hybrid.image() == coverAndTitle
-                        && hybrid.chapterTitle() == whole.chapterTitle()
+        require(hybrid.state().contains("book_fraction") && hybrid.image() != shown
                         && hybrid.turnDirection() == direction,
-                "The handoff must show the cover and title together before turning beyond them");
+                "A turn with shifted column pairs must stay in the chapter");
+        require(bookmarked == (direction < 0), "Navigate showed the wrong bookmark at the handoff");
+        require(thumbnail
+                        == hybrid.image().scaled(bounds, Qt::KeepAspectRatio,
+                                                 Qt::SmoothTransformation),
+                "Navigate showed another page than the turn at the handoff");
+        // A jump has no screens to continue, so it adopts the whole book.
+        ReaderLocationProbe::offer(hybrid, ReaderLocationProbe::revision(hybrid));
+        require(hybrid.goTo(coverPosition), "Cannot jump to the cover");
+        frame.exec();
+        require(!hybrid.state().contains("book_fraction") && hybrid.image() == coverAndTitle
+                        && hybrid.chapterTitle() == whole.chapterTitle(),
+                "A jump must adopt the whole book with the cover and title together");
         require(hybrid.turn(1) && whole.turn(1), "Cannot turn beyond the mixed cover spread");
         while (hybrid.busy() || whole.busy())
             frame.exec();

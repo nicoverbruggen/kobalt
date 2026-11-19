@@ -331,9 +331,15 @@ public:
     // True while a document from prepareFullDocument() waits to be shown.
     virtual bool fullDocumentReady() const { return false; }
 
-    // Resolve an adopting turn from the edge column of the screen being left.
-    // A negative result uses the usual turn from the adopted reading position.
-    virtual int preparedSpreadTurn(int) const { return -1; }
+    // The whole-book screen for an adopting turn. -1 uses the ordinary turn
+    // from the adopted position. Set *continues to false if a switch would
+    // repeat or skip a column and the turn must stay in the chapter.
+    virtual int preparedSpreadTurn(int, bool *continues = nullptr) const
+    {
+        if (continues)
+            *continues = true;
+        return -1;
+    }
 
     // Prepares the forward turn that shows the document from
     // prepareFullDocument(): that document goes to the page on screen and

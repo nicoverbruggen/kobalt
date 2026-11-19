@@ -297,7 +297,9 @@ QVector<int> EngineDocument::pagesOf(const QStringList &positions, bool rangeEnd
             if (exclusive && !pointer.isNull())
                 pointer.prevVisibleChar(false);
             bool inSlice = true;
-            if (slices() && !pointer.isNull()) {
+            // An image-only spine item fits in one slice. Its bookmark has
+            // page coordinates but no character offset inside a text range.
+            if (slices() && !pointer.isNull() && spineItemText() > 0) {
                 const int before = textBefore(qstring(pointer.toString()));
                 inSlice = before >= sliceFirst_ && before < sliceEnd_;
             }

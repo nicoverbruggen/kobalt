@@ -225,7 +225,7 @@ public:
     // a build for other settings is dropped by the next prepareFullDocument()
     // and counts as nothing here.
     bool fullDocumentReady() const override;
-    int preparedSpreadTurn(int direction) const override;
+    int preparedSpreadTurn(int direction, bool *continues = nullptr) const override;
     void prepareFullDocumentTurn(const std::function<bool()> &current = {}) override;
     bool fullDocumentStarted() const override;
 

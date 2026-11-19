@@ -9995,6 +9995,114 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
     }
 
+    // Checks that every two-column turn in Hybrid shows the next two columns,
+    // also where the whole book pairs the columns otherwise than the chapter.
+    void hybridColumnPairs_data()
+    {
+        QTest::addColumn<int>("before");
+        QTest::newRow("odd") << 3;
+        QTest::newRow("even") << 4;
+    }
+
+    void hybridColumnPairs()
+    {
+        QFETCH(int, before);
+        Fixture fixture(false);
+        QVERIFY(fixture.prepared);
+        // One paragraph is one column. The second chapter is large enough to
+        // be loaded by itself, so it pairs its columns from its own start.
+        const auto columns = [](const QByteArray &name, int count, const QByteArray &padding) {
+            QByteArray body;
+            for (int column = 0; column < count; ++column)
+                body += "<p style='page-break-before:always'>" + name + ' '
+                        + QByteArray::number(column) + ". "
+                        + QByteArray("A short column. ").repeated(3) + "</p>";
+            return test::publisherHtml(body + padding);
+        };
+        const auto files = test::publisherPackage(
+                "en", "Column pairs",
+                { { "first.xhtml", columns("First", before, {}) },
+                  { "second.xhtml",
+                    columns("Second", 16,
+                            "<!--" + QByteArray("padding ").repeated(40000) + "-->") } },
+                "<itemref idref='first.xhtml'/><itemref idref='second.xhtml'/>");
+        QVERIFY(writeBook(fixture.directory.path(), "column-pairs.epub", files));
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences["two_columns_landscape"] = true;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        renderingMode::setOverride(2);
+        const int quiet = renderingMode::buildQuietMilliseconds();
+        renderingMode::setBuildQuietMilliseconds(400);
+        const auto restore = qScopeGuard([quiet] {
+            renderingMode::setOverride(-1);
+            renderingMode::setBuildQuietMilliseconds(quiet);
+        });
+        fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(2);
+        auto *rotate = fixture.window.findChild<QAction *>("desktopRotateDevice");
+        QVERIFY(rotate);
+        rotate->trigger();
+        std::atomic_bool ready{ false };
+        QTemporaryDir logs;
+        QVERIFY(logs.isValid());
+        initializeDiagnostics(logs.path());
+        pauseDiagnostics(false);
+        setDiagnosticObserver([&](const QJsonObject &event) {
+            if (event.value("event") == QLatin1String("full-document-ready"))
+                ready = true;
+        });
+        const auto quietLog = qScopeGuard([] {
+            setDiagnosticObserver({});
+            pauseDiagnostics(true);
+        });
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(fixture.directory.path() + "/column-pairs.epub");
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        QTRY_COMPARE(fixture.state().value("columns").toInt(), 2);
+        // The paragraph that starts the screen, counted in the second chapter.
+        const auto column = [&] {
+            const auto position = fixture.state().value("position").toString();
+            const auto match = QRegularExpression(R"(DocFragment\[2\]/body(?:\[1\])?/p\[(\d+)\])")
+                                       .match(position);
+            return match.hasMatch() ? match.captured(1).toInt() : -1;
+        };
+        const auto turn = [&] {
+            const auto previous = fixture.state().value("position").toString();
+            test::skipPageTurnWindow();
+            fixture.window.readerWindow()->pageButton(1);
+            return QTest::qWaitFor(
+                    [&] {
+                        return !fixture.state().value("busy").toBool()
+                                && fixture.state().value("position").toString() != previous;
+                    },
+                    5000);
+        };
+        for (int screen = 0; screen < 8 && column() != 1; ++screen)
+            QVERIFY(turn());
+        QVERIFY2(column() == 1, qPrintable(fixture.state().value("position").toString()));
+        // The whole book is built for a reader who turned three pages.
+        QVERIFY(turn());
+        QCOMPARE(column(), 3);
+        QVERIFY(fixture.state().contains("book_fraction"));
+        // Left alone, the reader builds the whole book. Each turn after that
+        // must show the next two columns, whether it switches or not.
+        QTRY_VERIFY_WITH_TIMEOUT(ready, 15000);
+        bool whole = false;
+        for (int screen = 0; screen < 5; ++screen) {
+            const int first = column();
+            QVERIFY(turn());
+            QVERIFY2(column() == first + 2,
+                     qPrintable(QString("turn %1 went from paragraph %2 to %3, chapter mode %4")
+                                        .arg(screen)
+                                        .arg(first)
+                                        .arg(column())
+                                        .arg(fixture.state().contains("book_fraction"))));
+            whole = whole || !fixture.state().contains("book_fraction");
+        }
+        // With matching pairs the switch takes place on one of these turns.
+        QCOMPARE(whole, before % 2 == 0);
+    }
+
     void hybridReopensCounted_data()
     {
         QTest::addColumn<int>("slicePages");

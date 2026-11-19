@@ -1555,8 +1555,10 @@ bool EngineDocument::fullDocumentReady() const
     return full_ && fullSize_ == size_ && fullKey_ == fullDocumentKey(settingsState());
 }
 
-int EngineDocument::preparedSpreadTurn(int direction) const
+int EngineDocument::preparedSpreadTurn(int direction, bool *continues) const
 {
+    if (continues)
+        *continues = true;
     if ((direction != 1 && direction != -1) || columns_ != 2 || !fullDocumentReady())
         return -1;
     const int screen = page();
@@ -1577,12 +1579,14 @@ int EngineDocument::preparedSpreadTurn(int direction) const
         return -1;
     const int spread = whole.screenOfColumn(physical);
     const int firstInSpread = whole.firstColumn(spread);
-    // The adjoining column may already be on this whole-book screen.
-    // Showing that screen repeats one column instead of skipping the other.
-    const bool sameSpread = direction < 0
-            ? physical > firstInSpread
-            : physical + 1 < firstInSpread + whole.columnCount(spread);
-    return sameSpread ? spread : full_->turnTarget(spread, direction);
+    // The whole book pairs columns from the start of the book, a chapter
+    // from its own start. The turn continues the text exactly only when the
+    // column on the edge also ends its whole-book screen.
+    const bool exact = direction < 0 ? physical == firstInSpread
+                                     : physical + 1 == firstInSpread + whole.columnCount(spread);
+    if (continues)
+        *continues = exact;
+    return exact ? full_->turnTarget(spread, direction) : -1;
 }
 
 void EngineDocument::prepareFullDocumentTurn(const std::function<bool()> &current)
@@ -1599,10 +1603,12 @@ void EngineDocument::prepareFullDocumentTurn(const std::function<bool()> &curren
     if (stopped())
         return;
     // The page that the forward turn shows in the whole book. image()
-    // keeps it, because it is next to the page of `place`.
-    const int spread = preparedSpreadTurn(1);
+    // keeps it, because it is next to the page of `place`. A turn with
+    // shifted column pairs does not switch, and gets nothing.
+    bool continues;
+    const int spread = preparedSpreadTurn(1, &continues);
     const int target = spread >= 0 ? spread : whole.turnTarget(whole.page(), 1);
-    if (target != whole.page()) {
+    if (continues && target != whole.page()) {
         const auto next = whole.image(target);
         const auto shown = cache_.value(page());
         auto &damage = whole.adoptionDamage_;

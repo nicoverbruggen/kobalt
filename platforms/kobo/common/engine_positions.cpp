@@ -8,9 +8,13 @@
 #include <QXmlStreamReader>
 #include <QUrl>
 #include <algorithm>
+#include <atomic>
 
 namespace kobalt::nickel {
 namespace {
+// The chapter files that the codec parsed, for tests.
+std::atomic<int> chapterReads{ 0 };
+
 QString qstring(const lString32 &s)
 {
     return QString::fromUtf8(UnicodeToUtf8(s).c_str());
@@ -113,8 +117,9 @@ bool readSource(ldomDocument *doc, const QString &path, Source &source)
 
 // The parsed source of the chapter file that was read last. The reader asks
 // for the place of every page, mostly in the same chapter, and the file does
-// not change while its book is open. `identity` is the ReaderSource identity
-// of the book, which no other book gets.
+// not change while its book is open. `identity` is the open book
+// (ReaderSource::fontIdentity), which no other book gets. The documents of
+// one book share it, so the whole book that Hybrid adopts keeps the file.
 struct SourceCache
 {
     quint64 identity = 0;
@@ -128,6 +133,7 @@ const Source *chapterSource(SourceCache &cached, quint64 identity, ldomDocument 
 {
     if (!identity || cached.identity != identity || cached.path != path) {
         cached = SourceCache();
+        ++chapterReads;
         cached.valid = readSource(doc, path, cached.source);
         // A file that could not be read is read again at the next call.
         cached.identity = cached.valid ? identity : 0;
@@ -491,6 +497,7 @@ ChapterIds *chapterIds(IdsCache &cached, quint64 identity, ldomDocument *doc, co
     if (identity && cached.identity == identity && cached.path == path)
         return &cached.ids;
     cached = IdsCache();
+    ++chapterReads;
     cached.identity = identity;
     cached.path = path;
     auto &ids = cached.ids;
@@ -652,10 +659,10 @@ public:
     static QString decode(const Engine &engine, const QString &location, QString *error);
     static QString encode(const Engine &engine, QString *error);
 
-    // The book of `engine`, for chapterSource(); 0 keeps nothing.
+    // The open book of `engine`, for chapterSource(); 0 keeps nothing.
     static quint64 sourceIdentity(const EngineDocument &engine)
     {
-        return engine.source_ ? engine.source_->identity : 0;
+        return engine.source_ ? engine.source_->fontIdentity : 0;
     }
 
     static NativePositionCache &cache(const EngineDocument &engine)
@@ -935,6 +942,11 @@ int NickelPositionCodec::keptText(const Engine &other)
 int keptNativeText(const Engine &engine)
 {
     return NickelPositionCodec::keptText(engine);
+}
+
+int nativeChapterReads()
+{
+    return chapterReads.load();
 }
 
 PositionCodec positionCodec()

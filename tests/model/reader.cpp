@@ -135,6 +135,39 @@ static void checkCachedNativeSources()
     }
 }
 
+// Hybrid shows a chapter, then adopts the whole book. The chapter file that
+// the Nickel position codec parsed for the chapter belongs to the book: the
+// whole book must not parse it again at the turn that adopts it.
+static void checkNativeSourcesAcrossWholeBook()
+{
+    const auto codec = kobalt::nickel::positionCodec();
+    QFile file(QStringLiteral(KOBALT_TEST_FIXTURES) + "/trevelyans-type-tester.kepub.epub");
+    require(file.open(QIODevice::ReadOnly), "Cannot open the type tester fixture");
+    const auto bytes = file.readAll();
+    QString error;
+    kobalt::EngineDocument model(kobalt::test::readerFonts());
+    const QJsonObject window{ { "koblaze_first_spine_item", 1 }, { "koblaze_last_spine_item", 1 } };
+    // Hybrid lays out chapters in slices; only then is there a whole book to build.
+    model.setChapterSlices(25);
+    require(model.open(bytes, QSize(1072, 1448), window, &error), qPrintable(error));
+    require(model.bookFraction() >= 0, "The fixture did not open as a chapter");
+    require(model.go(qMin(1, model.pages() - 1)), "Cannot go into the chapter");
+    const auto chapter = model.platformPosition(codec, &error);
+    require(!chapter.isEmpty() && error.isEmpty(), qPrintable("No chapter position: " + error));
+    const int reads = kobalt::nickel::nativeChapterReads();
+    require(model.prepareFullDocument({}) == kobalt::Engine::FullDocument::Ready,
+            "Cannot prepare the whole book");
+    require(model.setChapterMode(false, kobalt::appearance::Patch(QJsonObject()), QSize(), {}, {})
+                    && model.bookFraction() < 0,
+            "The whole book was not adopted");
+    const auto whole = model.platformPosition(codec, &error);
+    require(whole == chapter && error.isEmpty(),
+            qPrintable("The whole book moved the position: " + whole + " against " + chapter));
+    require(kobalt::nickel::nativeChapterReads() == reads,
+            qPrintable(QString("The whole book parsed %1 chapter files again")
+                               .arg(kobalt::nickel::nativeChapterReads() - reads)));
+}
+
 static void checkNativeWhitespace()
 {
     const auto codec = kobalt::nickel::positionCodec();
@@ -1458,6 +1491,7 @@ int main(int argc, char **argv)
     checkNativeWhitespace();
     checkNestedNativeIds();
     checkCachedNativeSources();
+    checkNativeSourcesAcrossWholeBook();
     checkChapterArtPositions();
     checkPageFormat();
     checkDeferredPublisherStyles();

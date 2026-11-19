@@ -976,6 +976,10 @@ void EngineDocument::carryTextKnowledge(EngineDocument &next) const
         for (auto it = known.cbegin(); it != known.cend(); ++it)
             into.insert(it.key(), it.value());
     };
+    // The chapter file that the Nickel position codec parsed belongs to the
+    // book, not to this document.
+    if (nativePositions_ && !next.nativePositions_)
+        next.nativePositions_ = nativePositions_;
     merge(to.textFractions, from.textFractions);
     merge(to.textWordPrefixes, from.textWordPrefixes);
     merge(to.linkTargets, from.linkTargets);

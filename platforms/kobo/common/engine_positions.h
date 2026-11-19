@@ -8,4 +8,6 @@ PositionCodec positionCodec();
 // The UTF-16 units of chapter source text that positionCodec() keeps for
 // `engine` until it closes. For tests.
 int keptNativeText(const Engine &engine);
+// How many chapter files positionCodec() has parsed. For tests.
+int nativeChapterReads();
 } // namespace kobalt::nickel

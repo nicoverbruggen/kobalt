@@ -25,6 +25,9 @@ struct ReaderSource
     bool contentContainer = false;
     // A number for this source and no other, also after it is destroyed.
     const quint64 identity = nextIdentity();
+    // The open book. The documents that replace one another while it is
+    // open share it, such as the whole book that Hybrid builds. Embedded
+    // fonts and the Nickel position cache are kept per open book.
     quint64 fontIdentity = identity;
 
     static quint64 nextIdentity()

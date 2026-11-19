@@ -498,6 +498,11 @@ private:
     bool importingProgress = false, comparingProgress = false;
     // A progress check found the reader busy. refresh() repeats it once free.
     bool progressCheckDeferred = false;
+    enum class ExitProgress { Normal, WaitingForSync, LocalOnly };
+    ExitProgress exitProgress = ExitProgress::Normal;
+    void showExitSyncWait();
+    void clearExitSyncWait();
+    bool localStorageSavePending() const;
     bool exitPending = false, exportRunning = false;
     bool lifecycleHidden = false;
     QImage sleepImage, sleepCover, sleepOverlay;

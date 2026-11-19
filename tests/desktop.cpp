@@ -18446,7 +18446,9 @@ private slots:
     {
         QFETCH(int, preset);
         QFETCH(bool, dark);
-        Fixture fixture(dark);
+        Fixture fixture(dark, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.nickelSyncing = [] { return true; };
+        });
         QVERIFY(fixture.prepared);
         selectPreview(fixture, preset);
         const auto name = screenshotVariant(preset, dark);
@@ -18457,6 +18459,14 @@ private slots:
         openPrologueBody(fixture);
         auto *reader = fixture.window.readerWindow();
         QTRY_VERIFY(reader->readyForPresentation());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrReturn"));
+        QTRY_VERIFY(fixture.visible("rrExitWaitForSync"));
+        QVERIFY(capture(fixture, name + "-exit-during-sync"));
+        QVERIFY(fixture.press("rrExitWaitForSync"));
+        QVERIFY(fixture.visible("rrExitLocalOnly"));
+        QTest::keyClick(QApplication::focusWidget(), Qt::Key_Escape);
+        QTRY_VERIFY(!fixture.visible("rrExitLocalOnly"));
         for (bool retried : { false, true }) {
             auto failure = std::make_unique<SaveErrorView>(reader, QString(), retried);
             failure->setGeometry(reader->rect());

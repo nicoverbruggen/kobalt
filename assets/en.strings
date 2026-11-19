@@ -618,6 +618,11 @@
 "closing.quit_warning" = "Quitting now may lose unsaved progress or annotations.";
 "closing.close_now" = "Close without waiting";
 "closing.close_now_detail" = "Your place in this book is saved. If you close now, Kobo’s reading time and progress might not be updated.";
+"closing.sync_title" = "Your Kobo is syncing";
+"closing.wait_for_sync" = "Wait for sync to complete";
+"closing.waiting_for_sync" = "Waiting for sync to complete…";
+"closing.sync_detail" = "Kobalt will close when sync finishes. If Kobo has a different reading position, you can choose which one to keep. Tap outside this message to keep reading.";
+"closing.local_only" = "Exit without sending progress";
 "closing.return" = "Keep reading";
 
 /* reader */

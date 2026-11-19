@@ -224,12 +224,61 @@ bool Reader::progressBlocked() const
 {
     // The sync prompt is the choice itself, so positionPromptOpen() does not
     // apply here.
-    return bool(debugDialog) || bool(finishDialog) || bool(kosyncDialog)
-            || bool(annotationErrorDialog) || bool(formattingWarningDialog)
+    return exitProgress != ExitProgress::Normal || bool(debugDialog) || bool(finishDialog)
+            || bool(kosyncDialog) || bool(annotationErrorDialog) || bool(formattingWarningDialog)
             || bool(settingsWriteErrorDialog) || book->deviceTransition() || services.suspended()
             || !isVisible() || session->busy() || sheetOpen() || readingToolOpen()
             || appearanceEdit.applying() || imageViewer->isVisible() || annotationMode
             || bookmarkList->isVisible() || topControls->isVisible();
+}
+
+void Reader::clearExitSyncWait()
+{
+    if (exitProgress == ExitProgress::WaitingForSync) {
+        exitProgress = ExitProgress::Normal;
+        dismissProgressChoice();
+    }
+}
+
+void Reader::showExitSyncWait()
+{
+    if (exitProgress == ExitProgress::WaitingForSync)
+        return;
+    dismissProgressChoice();
+    exitProgress = ExitProgress::WaitingForSync;
+    auto *choice = new ui::ChoiceModal(
+            this, { strings::get("closing.sync_detail"), strings::get("closing.sync_title"), {} },
+            { strings::get("closing.local_only"), "rrExitLocalOnly" },
+            { strings::get("closing.wait_for_sync"), "rrExitWaitForSync" });
+    syncDialog = choice;
+    choice->setGeometry(rect());
+    choice->dismissed = [this] { cancelExit(); };
+    auto *wait = choice->primaryButton();
+    connect(wait, &QPushButton::clicked, choice, [choice, wait] {
+        wait->setText(strings::get("closing.waiting_for_sync"));
+        wait->setEnabled(false);
+        choice->setFocus();
+    });
+    connect(choice->secondaryButton(), &QPushButton::clicked, this, [this] {
+        clearExitSyncWait();
+        exitProgress = ExitProgress::LocalOnly;
+        finishExit();
+    });
+    // Some firmware versions do not signal the end of every sync.
+    auto *poll = new QTimer(choice);
+    connect(poll, &QTimer::timeout, this, [this, choice] {
+        if (syncDialog == choice)
+            finishExit();
+    });
+    poll->start(1000);
+    choice->card()->fitToWidth(
+            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
+    choice->centerCard();
+    for (auto *widget : choice->findChildren<QWidget *>())
+        textRefresh(widget);
+    choice->show();
+    choice->raise();
+    choice->primaryButton()->setFocus();
 }
 
 void Reader::dismissProgressChoice()

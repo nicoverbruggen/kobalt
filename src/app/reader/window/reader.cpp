@@ -216,6 +216,7 @@ void Reader::prepareTransition(std::function<void()> finished, bool usb)
     if (imageViewer && imageViewer->isVisible())
         imageViewer->closeImage();
     book->retryFailedReadingSave();
+    clearExitSyncWait();
     const auto request = ++closeRequest;
     setProperty("reader_transition_save_failed", false);
     if (closeSaveError) {
@@ -934,7 +935,7 @@ void Reader::saveNativeProgress()
 
 void Reader::progressTick()
 {
-    if (closing || exportRunning)
+    if (closing || exportRunning || exitProgress != ExitProgress::Normal)
         return;
     if (services.suspended() || book->deviceTransition() || !isVisible()) {
         if (syncDialog)
@@ -1686,7 +1687,7 @@ void Reader::closeEvent(QCloseEvent *event)
         book->stopReading(true);
         closingTimes.add("session", stopping);
         diagnostic("exit-session-stopped", { { "elapsed_ms", double(stopping.elapsed()) } });
-        if (appearanceEdit.panelOpen() || settingsVisible())
+        if (topControls->isVisible() || appearanceEdit.panelOpen() || settingsVisible())
             dismissControls();
         finishExit();
         return;
@@ -1718,7 +1719,7 @@ void Reader::closeEvent(QCloseEvent *event)
     setProperty("reader_preparing_handoff", false);
     QElapsedTimer step;
     step.start();
-    book->releaseNative(!closeWithoutSaving);
+    book->releaseNative(!closeWithoutSaving && exitProgress != ExitProgress::LocalOnly);
     closingTimes.add("session", step);
     session->updated = {};
     session->renderProgressChanged = {};
@@ -3040,14 +3041,20 @@ void Reader::finishExit()
         return;
     if (finishDialog || annotationErrorDialog || settingsWriteErrorDialog)
         return;
-    if (!book->deviceTransition()) {
+    if (exitProgress != ExitProgress::LocalOnly && services.nickelSyncing
+        && !book->deviceTransition() && services.nickelSyncing()) {
+        showExitSyncWait();
+        return;
+    }
+    clearExitSyncWait();
+    if (exitProgress != ExitProgress::LocalOnly && !book->deviceTransition()) {
         book->observeProgress();
         if (book->pendingProgress()) {
             showProgressChoice();
             return;
         }
     }
-    if (!finishChoiceResolved && book->offerFinish()) {
+    if (exitProgress != ExitProgress::LocalOnly && !finishChoiceResolved && book->offerFinish()) {
         showFinishChoice();
         return;
     }
@@ -3114,6 +3121,12 @@ void Reader::saveExit(quint64 request)
             failExit(request);
             return;
         }
+        if (exitProgress == ExitProgress::LocalOnly) {
+            save(true, true, false);
+            flushKosync([this, request] { finishExitSaved(request); },
+                        kosyncClient->schedule().onClose);
+            return;
+        }
         diagnostic("exit-native-queued");
         session->nativePosition([this, request](const QString &location, const QString &error) {
             finishExitNative(request, location, error);
@@ -3125,6 +3138,13 @@ void Reader::finishExitNative(quint64 request, const QString &location, const QS
 {
     if (request != closeRequest || !exportRunning || lifecycleHidden)
         return;
+    if (services.nickelSyncing && !book->deviceTransition() && services.nickelSyncing()) {
+        ++closeRequest;
+        exportRunning = false;
+        setEnabled(true);
+        showExitSyncWait();
+        return;
+    }
     closingTimes.add("native", closeStage);
     closeStage.restart();
     const QPointer<Reader> guard(this);
@@ -3180,7 +3200,8 @@ void Reader::finishExitSaved(quint64 request)
 {
     if (request != closeRequest || !exportRunning || lifecycleHidden)
         return;
-    if (pendingStorageSave()) {
+    if (localStorageSavePending()
+        || (exitProgress != ExitProgress::LocalOnly && book->readingSavePending())) {
         saveWait.after([this, request] { finishExitSaved(request); });
         return;
     }
@@ -3230,6 +3251,7 @@ void Reader::failExit(quint64 request, const QString &error, SaveErrorView::Caus
 {
     if (request != closeRequest || lifecycleHidden)
         return;
+    clearExitSyncWait();
     ++closeRequest;
     exportRunning = false;
     setEnabled(true);
@@ -3237,10 +3259,12 @@ void Reader::failExit(quint64 request, const QString &error, SaveErrorView::Caus
         return;
     // A close that only waits for the host's records can end without them:
     // Kobalt has saved the place in the book.
-    const bool savedLocally = cause == SaveErrorView::Cause::TimedOut && !book->savesPending()
-            && !annotationSaving && !bookmarks->saving() && !highlights->saving();
+    const bool savedLocally = exitProgress != ExitProgress::LocalOnly
+            && cause == SaveErrorView::Cause::TimedOut && !book->savesPending() && !annotationSaving
+            && !bookmarks->saving() && !highlights->saving();
     auto *notice = new SaveErrorView(this, error,
-                                     closeSaveRetried && cause == SaveErrorView::Cause::Failed,
+                                     exitProgress != ExitProgress::LocalOnly && closeSaveRetried
+                                             && cause == SaveErrorView::Cause::Failed,
                                      cause, savedLocally);
     closeSaveError = notice;
     notice->setObjectName("rrCloseSaveError");
@@ -3342,6 +3366,8 @@ void Reader::recoverSleepSave()
 
 void Reader::clearPendingExit()
 {
+    clearExitSyncWait();
+    exitProgress = ExitProgress::Normal;
     // An abandoned close keeps the cache. The next Return asks nothing.
     cacheEviction = 0;
     if (finishDialog && finishChoiceForExit) {
@@ -3371,10 +3397,14 @@ void Reader::cancelExit()
 
 bool Reader::pendingStorageSave() const
 {
+    return localStorageSavePending() || book->readingSavePending();
+}
+
+bool Reader::localStorageSavePending() const
+{
     return (annotationExporter && annotationExporter->writing()) || savingButtonControls
-            || savingDenseGraph || book->savesPending() || book->readingSavePending()
-            || bookmarks->saving() || highlights->saving() || annotationSaving
-            || (reportWriter && !reportWriter->idle());
+            || savingDenseGraph || book->savesPending() || bookmarks->saving()
+            || highlights->saving() || annotationSaving || (reportWriter && !reportWriter->idle());
 }
 
 void Reader::finishStorageSave(std::function<void(bool)> finished, bool nativeAllowed)
@@ -3492,7 +3522,9 @@ bool Reader::flushBeforeStandby()
     if (services.readerStandbySupported && preferences.value(disableReaderStandbyKey).toBool(false)
         && isVisible() && !lifecycleHidden && !closing && !exportRunning && !services.suspended())
         return false;
-    // Standby pauses Qt timers. Let the visible confirmation dismiss first.
+    // Standby pauses Qt timers, including the check that resumes a waiting exit.
+    if (exitProgress == ExitProgress::WaitingForSync && exitPending && !lifecycleHidden)
+        return false;
     auto *notice = dynamic_cast<KosyncNotice *>(kosyncDialog.data());
     if (!lifecycleHidden && notice && notice->completing())
         return false;

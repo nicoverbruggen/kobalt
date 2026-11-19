@@ -28,6 +28,7 @@ public:
     explicit NativeProgress(QString book);
     ~NativeProgress() override;
     static bool available();
+    static std::function<bool()> syncQuery();
     ReadingProgress read(QString *error = nullptr) const;
     NativeSaveResult write(const ReadingProgress &expected, const QString &location, double percent,
                            bool finished, const ReadingEstimates *estimates = nullptr,

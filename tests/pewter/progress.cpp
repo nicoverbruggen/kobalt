@@ -463,6 +463,12 @@ int main(int argc, char **argv)
     pewter::start(directory.path());
     addBook();
     require(NativeProgress::available(), "the adapter resolves every Nickel function it requires");
+    const auto syncing = NativeProgress::syncQuery();
+    require(syncing && !syncing(), "the adapter can read an idle sync manager");
+    pewter::options().syncing = true;
+    require(syncing(), "the adapter observes an active sync");
+    pewter::options().syncing = false;
+    require(!syncing(), "the adapter observes the end of sync");
     NativeProgress progress(book);
     markReading(progress);
     recoverStaleCache(progress);

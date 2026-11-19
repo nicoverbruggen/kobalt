@@ -158,6 +158,7 @@ struct ReaderHostServices
     std::function<std::unique_ptr<DictionaryService>()> dictionary;
     KeyboardFactory keyboard;
     // Optional on hosts whose operating system already supplies connectivity.
+    std::function<bool()> nickelSyncing;
     SyncNetworkFactory syncNetwork;
     // Optional durable handoff after a successful local checkpoint on app pause.
     std::function<void(const QJsonObject &)> deferKosync;

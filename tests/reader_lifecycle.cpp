@@ -9820,11 +9820,23 @@ private slots:
         QCOMPARE(host.progress->writeAttemptsAtFinish, host.progress->writeAttempts);
     }
 
+    void quitAfterFailedLocalSaveRetry_data()
+    {
+        QTest::addColumn<bool>("localOnly");
+        QTest::newRow("regular-exit") << false;
+        QTest::newRow("exit-during-sync") << true;
+    }
+
     void quitAfterFailedLocalSaveRetry()
     {
+        QFETCH(bool, localOnly);
         const auto paths = testPaths();
         ReaderFixture host(paths, testFonts, testPlaceholder);
         CloseHost cleanup{ host };
+        if (localOnly)
+            host.configureServices = [](ReaderHostServices &services) {
+                services.nickelSyncing = [] { return true; };
+            };
         const auto identity =
                 QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
         QSignalSpy opened(&host, &ReaderFixture::opened), closed(&host, &ReaderFixture::closed);
@@ -9859,15 +9871,106 @@ private slots:
         QTRY_VERIFY(!host.session()->busy());
         QVERIFY(host.session()->state().value("position") != saved.value("position"));
         host.window()->close();
+        if (localOnly)
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrExitLocalOnly")));
         QTRY_VERIFY(host.window()->findChild<QPushButton *>("rrCloseSaveRetry"));
         QVERIFY(!host.window()->findChild<QPushButton *>("rrCloseSaveQuit"));
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrCloseSaveRetry")));
+        if (localOnly) {
+            // A failed local-only exit must keep the book open for another save.
+            QTRY_VERIFY(
+                    host.window()->findChild<QPushButton *>("rrCloseSaveReturn")
+                    && host.window()->findChild<QPushButton *>("rrCloseSaveReturn")->isVisible());
+            QVERIFY(!host.window()->findChild<QPushButton *>("rrCloseSaveQuit"));
+            QCOMPARE(closed.count(), 0);
+            QVERIFY(changeSql("DROP TRIGGER refuse_quit_checkpoint"));
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrCloseSaveRetry")));
+            const auto position = host.session()->state().value("position");
+            QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 10000);
+            QCOMPARE(storage::readBookState(paths, identity).object.value("position"), position);
+            return;
+        }
         QTRY_VERIFY(host.window()->findChild<QPushButton *>("rrCloseSaveQuit"));
         QCOMPARE(closed.count(), 0);
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrCloseSaveQuit")));
         QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 10000);
         QCOMPARE(storage::readBookState(paths, identity).object.value("position"),
                  saved.value("position"));
+    }
+
+    void progressExitDuringSync_data()
+    {
+        QTest::addColumn<QString>("action");
+        for (const auto *action : { "wait", "conflict", "cancel", "local" })
+            QTest::newRow(action) << QString::fromLatin1(action);
+    }
+
+    void progressExitDuringSync()
+    {
+        QFETCH(QString, action);
+        bool syncing = true;
+        const auto paths = testPaths();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.nickelSyncing = [&] { return syncing; };
+        };
+        host.progress = std::make_shared<test::HostProgress>();
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+        host.positions = nickel::positionCodec();
+        QSignalSpy opened(&host, &ReaderFixture::opened), closed(&host, &ReaderFixture::closed);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(host.session()->go(1));
+        QTRY_VERIFY(!host.session()->busy());
+        const auto position = host.session()->state().value("position");
+        QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
+        auto *exit = host.window()->findChild<QPushButton *>("rrReturn");
+        QVERIFY(exit && exit->isVisible());
+        QVERIFY(click(canvas, exit));
+        auto *wait = host.window()->findChild<QPushButton *>("rrExitWaitForSync");
+        QVERIFY(wait && wait->isVisible());
+        QVERIFY(!exit->isVisible());
+        QVERIFY(!host.window()->flushBeforeStandby());
+        host.window()->close();
+        QCOMPARE(host.window()->findChildren<QPushButton *>("rrExitWaitForSync").size(), 1);
+        const int writes = host.progress->writes;
+        if (action != "conflict") {
+            QVERIFY(click(canvas, wait));
+            QVERIFY(!wait->isEnabled());
+            QCOMPARE(wait->text(), strings::get("closing.waiting_for_sync"));
+        }
+        if (action == "local") {
+            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrExitLocalOnly")));
+        } else if (action == "cancel") {
+            QVERIFY(clickAt(canvas, QPoint(12, 12)));
+            syncing = false;
+            host.window()->pageButton(1);
+            QTRY_VERIFY(host.session()->state().value("position") != position);
+            QCOMPARE(closed.count(), 0);
+            return;
+        } else {
+            if (action == "conflict")
+                host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true });
+            syncing = false;
+            if (action == "conflict") {
+                QPushButton *here = nullptr;
+                QTRY_VERIFY((here = host.window()->findChild<QPushButton *>("rrKeepPosition"))
+                            && here->isVisible());
+                QCOMPARE(host.progress->writes, writes);
+                QVERIFY(click(canvas, here));
+            }
+        }
+        QTRY_COMPARE_WITH_TIMEOUT(closed.count(), 1, 10000);
+        QCOMPARE(storage::readBookState(paths, identity).object.value("position"), position);
+        QCOMPARE(host.progress->writes, writes + (action == "local" ? 0 : 1));
     }
 
     void slowCloseSave_data()

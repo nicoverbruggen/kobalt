@@ -30,6 +30,7 @@ struct Options
     bool beginFails = false; // DatabaseAdapter::beginTransaction refuses
     bool updateFails = false; // VolumeManager::updateFields refuses
     bool commitFails = false; // DatabaseAdapter::endTransaction(commit) rolls back
+    bool syncing = false; // SyncManagerBase::isSyncing
     bool syncEligible = true; // BookmarkSyncManagerBase::syncReadingState
     QVariantMap cachedVolume; // getById returns this stale row until refreshCache
     bool refreshClearsCache = true;

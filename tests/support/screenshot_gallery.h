@@ -202,6 +202,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "word-other-book", "A saved word from another book" },
         { "embedded-fonts", "Publisher font picker" },
         { "embedded-reading", "Reading with a publisher font" },
+        { "exit-during-sync", "Exit while Kobo is syncing" },
         { "finish-book", "Finish reading confirmation" },
         { "fonts", "Font picker" },
         { "fonts-kf-variants", "Font picker with KF variants" },

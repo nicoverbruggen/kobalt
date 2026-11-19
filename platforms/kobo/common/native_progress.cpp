@@ -45,6 +45,18 @@ NativeProgress::NativeProgress(QString identity)
     signalled = usbSignalled && syncSignalled;
 }
 
+std::function<bool()> NativeProgress::syncQuery()
+{
+    const auto manager = symbol<QObject *(*)()>("_ZN13N3SyncManager14sharedInstanceEv");
+    const auto syncing = symbol<bool (*)(const QObject *)>("_ZNK15SyncManagerBase9isSyncingEv");
+    if (!manager || !syncing)
+        return {};
+    return [manager, syncing] {
+        const auto *current = manager();
+        return current && syncing(current);
+    };
+}
+
 NativeProgress::~NativeProgress()
 {
     if (active == this)

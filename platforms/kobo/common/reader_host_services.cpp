@@ -29,7 +29,7 @@ namespace {
 // setting nor its Wi-Fi control, and the saved choice is kept as it is.
 constexpr bool wifiPowerSaverReleased = false;
 
-NativeWifiPowerBindings wifiPowerBindings()
+NativeWifiPowerBindings wifiPowerBindings(const std::function<bool()> &nickelSyncing)
 {
     const auto wireless = reinterpret_cast<QObject *(*)()>(
             dlsym(RTLD_DEFAULT, "_ZN15WirelessManager14sharedInstanceEv"));
@@ -41,21 +41,14 @@ NativeWifiPowerBindings wifiPowerBindings()
     // It honors the developer setting that keeps Wi-Fi on.
     const auto turnOff = reinterpret_cast<void (*)(QObject *)>(
             dlsym(RTLD_DEFAULT, "_ZN23WirelessWorkflowManager11turnWifiOffEv"));
-    const auto syncManager = reinterpret_cast<void *(*)()>(
-            dlsym(RTLD_DEFAULT, "_ZN13N3SyncManager14sharedInstanceEv"));
-    const auto syncing = reinterpret_cast<bool (*)(const void *)>(
-            dlsym(RTLD_DEFAULT, "_ZNK15SyncManagerBase9isSyncingEv"));
-    if (!wireless || !up || !workflow || !turnOff || !syncManager || !syncing)
+    if (!wireless || !up || !workflow || !turnOff || !nickelSyncing)
         return {};
     NativeWifiPowerBindings result;
     result.wifiOn = [wireless, up] {
         auto *manager = wireless();
         return manager && up(manager);
     };
-    result.nickelSyncing = [syncManager, syncing] {
-        const auto *manager = syncManager();
-        return manager && syncing(manager);
-    };
+    result.nickelSyncing = nickelSyncing;
     result.bluetooth = queryNativeBluetoothPower;
     result.turnOff = [workflow, turnOff] {
         if (auto *manager = workflow())
@@ -295,7 +288,9 @@ ReaderHostServices readerHostServices()
     // The hook is optional. Without it Nickel's background requests pass.
     if (wifiPowerSaverReleased && nativeConnectWirelessSilently)
         result.holdWifiOff = holdNativeWifiOff;
-    if (const auto bindings = wifiPowerBindings(); wifiPowerSaverReleased && bindings.valid())
+    result.nickelSyncing = NativeProgress::syncQuery();
+    if (const auto bindings = wifiPowerBindings(result.nickelSyncing);
+        wifiPowerSaverReleased && bindings.valid())
         result.turnOffWifi = [bindings](QObject *context, const char *reason,
                                         std::function<void(bool)> done) {
             saveNativeWifiPower(context, bindings, reason, std::move(done));

@@ -11757,9 +11757,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     {
         QTemporaryDir fonts;
         QVERIFY(fonts.isValid());
+        const auto path = fonts.filePath("KF_Bitter.ttf");
+        QVERIFY(!ui::registerPrivateInterfaceFont(path, "KF Bitter"));
         QVERIFY(test::renamedFontFixture(assets->file("fonts/ebook-core/NV_Bitter-Regular.ttf"),
-                                         fonts.filePath("KF_Bitter.ttf"), "NV Bitter",
-                                         "KF Bitter"));
+                                         path, "NV Bitter", "KF Bitter"));
+        QVERIFY(!ui::registerPrivateInterfaceFont(path, "KF Bitter"));
         Fixture fixture(false, false, false, true, false, false, {}, fonts.path());
         QVERIFY(fixture.prepared);
         auto preferences = storage::readJson(fixture.paths.preferences());
@@ -11777,6 +11779,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrNavText"));
         QVERIFY(fixture.press("rrFont"));
         QTRY_VERIFY(fixture.visible("rrChoices"));
+        QVERIFY(!ui::nativeEditorFontData(QFont("KF Bitter")).isEmpty());
         auto *picker = fixture.widget("rrChoices");
         bool selected = false;
         for (auto *button : picker->findChildren<QAbstractButton *>())

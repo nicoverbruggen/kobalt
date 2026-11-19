@@ -200,6 +200,7 @@ struct Fonts
     QMap<QString, QVector<RegisteredFace>> registered;
     // Registrations already made, by path and expected family.
     QSet<QString> registrations;
+    QSet<QString> failedRegistrationPaths;
     // Changes whenever shaped text is cleared, so layouts that callers keep
     // can tell that the faces behind them changed.
     quint64 layoutGeneration = 0;
@@ -640,6 +641,7 @@ bool initializePrivateInterfaceText(const AssetBundle &assets, bool opening,
     state.clearFaces();
     state.registered.clear();
     state.registrations.clear();
+    state.failedRegistrationPaths.clear();
     state.sources.clear();
     state.sizes.clear();
     state.bundledPaths.clear();
@@ -714,25 +716,31 @@ bool registerPrivateInterfaceFont(const QString &path, const QString &expectedFa
     if (state.registrations.contains(registrationKey)) {
         return true;
     }
+    if (state.failedRegistrationPaths.contains(path))
+        return false;
+    const auto failed = [&state, &path] {
+        state.failedRegistrationPaths.insert(path);
+        return false;
+    };
     QString key = state.bundledPaths.value(QFileInfo(path).absoluteFilePath());
     if (key.isEmpty())
         key = "reading:" + path;
     const auto size = QFileInfo(path).size();
     if (size <= 0 || size > privateInterfaceFontBudget)
-        return false;
+        return failed();
     // Inspect one face at a time. Keep metadata, not buffers for every style.
     QVector<QPair<QString, RegisteredFace>> pending;
     FT_Face first = nullptr;
     if (FT_New_Face(state.library, QFile::encodeName(path).constData(), 0, &first))
-        return false;
+        return failed();
     const auto count = first->num_faces;
     FT_Done_Face(first);
     if (count <= 0 || count > 256)
-        return false;
+        return failed();
     for (int index = 0; index < count; ++index) {
         FT_Face face = nullptr;
         if (FT_New_Face(state.library, QFile::encodeName(path).constData(), index, &face))
-            return false;
+            return failed();
         const QString family = QString::fromUtf8(face->family_name);
         const RegisteredFace entry{ key, index, bool(face->style_flags & FT_STYLE_FLAG_BOLD),
                                     bool(face->style_flags & FT_STYLE_FLAG_ITALIC) };
@@ -771,10 +779,21 @@ bool registerPrivateInterfaceFont(const QString &path, const QString &expectedFa
     return true;
 }
 
+void retryFailedPrivateInterfaceFonts()
+{
+    fonts().failedRegistrationPaths.clear();
+}
+
 void forgetPrivateInterfaceFonts(const QString &directory)
 {
     auto &state = fonts();
     const auto prefix = QDir(directory).absolutePath() + '/';
+    for (auto it = state.failedRegistrationPaths.begin();
+         it != state.failedRegistrationPaths.end();)
+        if (QFileInfo(*it).absoluteFilePath().startsWith(prefix))
+            it = state.failedRegistrationPaths.erase(it);
+        else
+            ++it;
     const auto sourcePrefix = "reading:" + prefix;
     QSet<QString> removed;
     for (auto it = state.pending.cbegin(); it != state.pending.cend(); ++it)

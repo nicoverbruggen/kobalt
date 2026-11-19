@@ -3516,6 +3516,31 @@ int main(int argc, char **argv)
                         "Font refresh retained cached glyphs or shaped text");
             forgetPrivateInterfaceFonts(folder.path());
         }
+        // The imported folder can contain only a damaged font, with no registered faces.
+        {
+            QTemporaryDir folder;
+            require(folder.isValid(), "Cannot create failed font fixture");
+            const auto path = folder.filePath("Repaired.ttf");
+            const auto family = QStringLiteral("Repaired folder font");
+            QFile damaged(path);
+            require(damaged.open(QIODevice::WriteOnly) && damaged.write("bad font", 8) == 8,
+                    "Cannot create damaged font");
+            damaged.close();
+            require(!registerPrivateInterfaceFont(path, family), "Registered a damaged font");
+            require(damaged.remove()
+                            && QFile::copy(kobalt::test::readerAssets().file(
+                                                   "fonts/ebook-core/NV_Bitter-Regular.ttf"),
+                                           path),
+                    "Cannot install the repaired font");
+            forgetPrivateInterfaceFonts(folder.filePath("other"));
+            require(!registerPrivateInterfaceFont(path, family),
+                    "An unrelated folder refresh retried a failed font");
+            forgetPrivateInterfaceFonts(folder.path());
+            require(registerPrivateInterfaceFont(path, family)
+                            && !nativeEditorFontData(QFont(family)).isEmpty(),
+                    "The refreshed folder did not register its repaired font");
+            forgetPrivateInterfaceFonts(folder.path());
+        }
         const auto alias = QStringLiteral("Dictionary private-only canary");
         require(registerPrivateInterfaceFont(
                         kobalt::test::readerAssets().file("fonts/NotoSansMath-Regular.ttf"), alias),

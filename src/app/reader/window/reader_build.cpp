@@ -219,6 +219,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
       orientation(orientation)
 {
     Q_ASSERT(services.complete());
+    ui::retryFailedPrivateInterfaceFonts();
     annotationDraft = std::make_unique<AnnotationDraft>(
             *session, [this] { return !lifecycleHidden && !services.suspended(); });
     if (services.annotationExporter)

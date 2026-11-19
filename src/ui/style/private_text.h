@@ -36,8 +36,10 @@ qint64 privateInterfaceFontBytes();
 void warmTextShaping(const QByteArray &font, const QString &text);
 // Registers metadata only. Each style's bytes load when first rendered and
 // may be evicted between layouts. Qt's font loader never sees them.
-// Returns whether the file could be registered.
+// Remember unreadable files until the next book or a refresh of their folder.
 bool registerPrivateInterfaceFont(const QString &path, const QString &expectedFamily);
+// A new reader may have a new font catalog, including files replaced over USB.
+void retryFailedPrivateInterfaceFonts();
 // GUI-thread only, between readers. Forget a replaced host folder and text derived from its faces.
 void forgetPrivateInterfaceFonts(const QString &directory);
 // A native editor needs a Qt face. Only single-face TrueType files are safe

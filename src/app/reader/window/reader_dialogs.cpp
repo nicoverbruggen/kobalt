@@ -668,6 +668,7 @@ void Reader::openBookmarks()
         refresh();
         return;
     }
+    bookmarkList->setExcerptFont(bookFace());
     if (annotationsEnabled
         && (!bookmarksEnabled
             || (bookmarks->bookmarks().isEmpty() && !highlights->highlights().isEmpty()))) {

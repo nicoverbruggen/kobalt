@@ -27,6 +27,7 @@
 #include "ui/style/metrics.h"
 #include "ui/style/scale.h"
 #include "app/reader/views/reading_page.h"
+#include "app/reader/panels/bookmark_list.h"
 #include "app/reader/views/appearance_preview.h"
 #include "app/reader/settings/settings_panel.h"
 #include "app/reader/views/kosync_notice.h"
@@ -8803,9 +8804,11 @@ private slots:
     void turnSkipsHiddenControls()
     {
         const auto paths = testPaths();
+        const auto readingFace = test::alternateReadingFace();
         QVERIFY(storage::writePreferences(
                 paths.preferences(),
-                QJsonObject{ { "header_footer", "custom" },
+                QJsonObject{ { "default_font_face", readingFace },
+                             { "header_footer", "custom" },
                              { "header_footer_custom",
                                QJsonObject{ { "header_size", "off" },
                                             { "top_left", "time" },
@@ -8841,6 +8844,12 @@ private slots:
         QVERIFY(page && menu && scrubber);
         // Opening syncs the controls once, hidden.
         QCoreApplication::processEvents();
+        auto *marks =
+                dynamic_cast<BookmarkList *>(host.window()->findChild<QWidget *>("rrBookmarkList"));
+        QVERIFY(marks && !marks->isVisible());
+        QCOMPARE(host.session()->fontFace(), readingFace);
+        const QString hiddenFace = QStringLiteral("IBM Plex Mono");
+        marks->setExcerptFont(hiddenFace);
         batteryReads = 0;
         clockReads = 0;
         local = local.addSecs(60);
@@ -8854,6 +8863,7 @@ private slots:
         QCoreApplication::processEvents();
         QCoreApplication::processEvents();
         QCOMPARE(scrubber->slider()->value(), shown);
+        QCOMPARE(marks->excerptFont().family(), hiddenFace);
         QVERIFY(!menu->isVisible());
         QCOMPARE(batteryReads, 0);
         QCOMPARE(clockReads, 0);
@@ -8867,6 +8877,12 @@ private slots:
         QVERIFY(indicator && indicator->isVisible());
         QCOMPARE(indicator->level(), percent);
         QCOMPARE(clockReads, 1);
+        QCOMPARE(marks->excerptFont().family(), hiddenFace);
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrBookmarks")));
+        QTRY_VERIFY(marks->isVisible());
+        QCOMPARE(marks->excerptFont().family(), readingFace);
+        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrBookmarkListClose")));
+        QTRY_VERIFY(!marks->isVisible());
         const int open = scrubber->slider()->value();
         // With the menu open, a page button turn updates the controls at once.
         test::skipPageTurnWindow();

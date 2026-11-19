@@ -134,7 +134,6 @@ void Reader::refresh()
     showPageImage(nextImage);
     syncAppearancePreview();
     syncLinkDiscovery();
-    bookmarkList->setExcerptFont(bookFace());
     syncAnnotations();
     // The panel needs far longer to draw a page than this function needs
     // for the rest of its work. On a plain page turn, paint now and let the

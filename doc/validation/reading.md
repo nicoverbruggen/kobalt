@@ -40,6 +40,10 @@ The Hybrid session test delivers an old pagination result after two font changes
 
 The chapter-parity reverse-group check records the source anchor and pixels of forward turns, then retraces them after neighboring chapters have been prepared and old documents evicted. It covers one and two columns.
 
+`engine.chapter-parity` uses chapters with an even or odd number of text columns before the next chapter. It checks bookmarks, exclusive highlight ends, search results, contents and chapter lengths against the known column order. With three columns before an eight-column chapter, the second chapter starts on book page 2 and touches five whole-book spreads. Fast pairs its eight columns into four chapter spreads. Once Hybrid has prepared the whole book, its list labels use the whole-book pages while its marks still follow the chapter layout. The optional-chapter check reads the words painted in each column during forward and backward turns and after a direct jump, with the optional chapter shown and hidden.
+
+`session.bookmark-session` reopens saved bookmarks and a highlight from SQLite. It checks their source anchors, local marks and book-page labels as the whole-book layout becomes ready. It also adds a bookmark on the last chapter spread and merges two bookmarks there whose anchors lie on different whole-book spreads.
+
 Search scopes use the next page in the displayed layout, including the page beyond an exposed slice. Hybrid prepares the whole book on the first submitted query. Selecting a result keeps the displayed layout. A later page turn can adopt the prepared book. Fast scans the chapter windows in batches. A batch keeps its original spine range and returns each distinct source range once, including matches in ligatures and reordered combining marks.
 
 The page estimate check enlarges the text after Hybrid finishes a background layout. It checks the displayed count before and after the new layout finishes against an independent opening at the larger text size.

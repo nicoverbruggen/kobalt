@@ -1264,17 +1264,31 @@ QVector<int> EngineDocument::bookPages(const QStringList &positions,
                                        const std::function<bool()> &current,
                                        bool rangeEndpoints) const
 {
-    QVector<int> result(positions.size(), -1);
     if (!engine_)
-        return result;
+        return QVector<int>(positions.size(), -1);
     if (windowFirst_ < 0) {
-        const auto pages = pagesOf(positions, rangeEndpoints, nullptr, current);
-        if (pages.size() != positions.size())
-            return {};
-        for (int i = 0; i < pages.size(); ++i)
-            result[i] = pages[i] >= 0 ? pages[i] + 1 : -1;
-        return result;
+        auto pages = pagesOf(positions, rangeEndpoints, nullptr, current);
+        for (int &page : pages)
+            if (page >= 0)
+                ++page;
+        return pages;
     }
+    if (columns_ == 2 && fullDocumentReady()) {
+        auto exact = full_->bookPages(positions, current, rangeEndpoints);
+        if (!exact.contains(-1))
+            return exact;
+        // Publisher CSS can hide a chapter passage in the whole document.
+        return chapterBookPages(positions, current, rangeEndpoints, std::move(exact));
+    }
+    return chapterBookPages(positions, current, rangeEndpoints);
+}
+
+QVector<int> EngineDocument::chapterBookPages(const QStringList &positions,
+                                              const std::function<bool()> &current,
+                                              bool rangeEndpoints, QVector<int> result) const
+{
+    if (result.isEmpty())
+        result.fill(-1, positions.size());
     if (spineItemCount_ <= 0 || !source_ || pages() <= 0)
         return result;
     auto &map = pageMap();
@@ -1297,6 +1311,8 @@ QVector<int> EngineDocument::bookPages(const QStringList &positions,
     for (int i = 0; i < positions.size(); ++i) {
         if (current && !current())
             return {};
+        if (result[i] >= 0)
+            continue;
         QString position = positions[i];
         int item = spineItemIndex(position);
         if (item < 0 || item >= spineItemCount_)
@@ -1448,13 +1464,19 @@ void EngineDocument::estimateChapterPages(const QVector<ChapterLink> &links,
     QStringList positions{ anchor_, links[result.current].position };
     if (result.next >= 0)
         positions.append(links[result.next].position);
-    const auto pages = bookPages(positions);
+    // Chapter progress counts the spreads of the chapter on screen, even
+    // when a prepared whole book pairs those columns differently.
+    const auto pages = chapterBookPages(positions);
     if (pages.size() != positions.size() || pages[0] <= 0 || pages[1] <= 0)
         return;
     const int first = qMin(pages[0], pages[1]);
-    const int last = result.next < 0
-            ? qMax(first, qRound(pageMap().total()))
-            : qMax(first, (pages[2] > 0 ? pages[2] : pages[0] + 1) - 1);
+    int last = qRound(pageMap().total());
+    if (result.next >= 0) {
+        const auto &next = links[result.next];
+        const bool shared = columns_ == 2 && next.page >= 0 && chapterEndPage(next) > next.page;
+        last = pages[2] > 0 ? pages[2] - (shared ? 0 : 1) : pages[0];
+    }
+    last = qMax(first, last);
     result.pages = last - first + 1;
     result.page = qBound(1, pages[0] - first + 1, result.pages);
 }

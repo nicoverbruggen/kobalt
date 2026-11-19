@@ -1,5 +1,6 @@
 #include "book_fixtures.h"
 #include "check.h"
+#include "column_pairs_book.h"
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
 #include "engine/blaze/adapter/engine_document.h"
@@ -123,20 +124,8 @@ void twoColumnSwapPairs()
 {
     for (const auto &counts : { qMakePair(3, 8), qMakePair(4, 8), qMakePair(3, 3) }) {
         const int before = counts.first, after = counts.second;
-        const auto columns = [](const QByteArray &name, int count) {
-            QByteArray body;
-            for (int column = 0; column < count; ++column)
-                body += "<p style='page-break-before:always'>" + name + ' '
-                        + QByteArray::number(column) + ". "
-                        + QByteArray("A short column. ").repeated(3) + "</p>";
-            return test::publisherHtml(body);
-        };
         Book book;
-        book.files = test::publisherPackage(
-                "en", "Column pairs",
-                { { "first.xhtml", columns("First", before) },
-                  { "second.xhtml", columns("Second", after) } },
-                "<itemref idref='first.xhtml'/><itemref idref='second.xhtml'/>");
+        book.files = test::columnPairsBook(before, after);
         auto options = settings;
         options["two_columns_landscape"] = true;
         auto window = options;
@@ -241,6 +230,127 @@ void twoColumnSwapPairs()
     }
 }
 
+void twoColumnLabels()
+{
+    const QSize landscape(1072, 758);
+    for (const int before : { 4, 3 }) {
+        const int after = 8;
+        Book book;
+        book.files = test::columnPairsBook(before, after);
+        auto options = settings;
+        options["two_columns_landscape"] = true;
+        for (const auto &mode : { QStringLiteral("Accurate"), QStringLiteral("Fast"),
+                                  QStringLiteral("Hybrid ready") }) {
+            const bool chapter = mode != QLatin1String("Accurate");
+            auto saved = options;
+            if (chapter) {
+                saved["koblaze_first_spine_item"] = 0;
+                saved["koblaze_last_spine_item"] = 0;
+            }
+            QString error;
+            EngineDocument reader(test::readerFonts());
+            reader.setChapterSlices(chapter ? 25 : 0);
+            setChapterModeOverride(chapter ? -1 : 0);
+            require(book.open(reader, saved, &error, landscape), qPrintable(error));
+            setChapterModeOverride(-1);
+            if (chapter) {
+                require(reader.showSpineItems(1, 1, &error), qPrintable(error));
+                while (reader.refinePageEstimate()) { }
+                if (mode == QLatin1String("Hybrid ready"))
+                    require(reader.prepareFullDocument({}) == Engine::FullDocument::Ready,
+                            "Cannot prepare the whole book for list labels");
+            }
+            const auto expect = [&](int actual, int expected, const QString &what) {
+                require(actual == expected,
+                        qPrintable(QString("%1+8 %2, %3: got %4, expected %5")
+                                           .arg(before)
+                                           .arg(mode, what)
+                                           .arg(actual)
+                                           .arg(expected)));
+            };
+            const auto position = [](int column) {
+                return QString("/body[1]/DocFragment[2]/body[1]/p[%1]/text()[1].0").arg(column + 1);
+            };
+            // A chapter starts a new pair. When the first item has three
+            // columns, the whole book shares its second spread with the next
+            // chapter and the chapter occupies five whole-book spreads.
+            const bool estimated = mode == QLatin1String("Fast");
+            const auto bookPage = [&](int column) {
+                return estimated ? (before + 1) / 2 + column / 2 : (before + column) / 2;
+            };
+            const auto localPage = [&](int column) {
+                return chapter ? column / 2 : bookPage(column);
+            };
+            QStringList positions;
+            for (int column = 0; column < after; ++column)
+                positions.append(position(column));
+            const auto bookmarks = captureBookmarkLocations(reader, positions, false, false);
+            // Each end excludes the first character of the next paragraph.
+            // Test ends at both the first and second column of a spread.
+            QStringList ranges;
+            for (int column = 1; column < after; ++column)
+                ranges << position(column - 1) << position(column);
+            ranges << position(1) << position(6);
+            const auto highlights = captureBookmarkLocations(reader, ranges, true, false);
+            for (int column = 0; column < after; ++column) {
+                const auto label = QString("Second %1").arg(column);
+                expect(bookmarks.pages.value(column, -1), localPage(column),
+                       label + " local bookmark");
+                expect(bookmarks.bookPages.value(column, -1), bookPage(column),
+                       label + " bookmark");
+                if (column > 0) {
+                    const int end = 2 * column - 1;
+                    expect(highlights.bookPages.value(end - 1, -1), bookPage(column - 1),
+                           label + " highlight start");
+                    expect(highlights.bookPages.value(end, -1), bookPage(column - 1),
+                           label + " highlight end");
+                    expect(highlights.pages.value(end, -1), localPage(column - 1),
+                           label + " local highlight end");
+                }
+            }
+            expect(highlights.bookPages.value(ranges.size() - 2, -1), bookPage(1),
+                   "multi-spread highlight start");
+            expect(highlights.bookPages.value(ranges.size() - 1, -1), bookPage(5),
+                   "multi-spread exclusive end");
+            SearchBatch batch;
+            batch.cursor.prepareWholeBook = mode == QLatin1String("Hybrid ready");
+            QVector<SearchHit> hits;
+            for (int attempt = 0; attempt < 100 && !batch.done; ++attempt) {
+                batch = reader.searchText("Second", batch.cursor, 3, SearchScope::Book, {}, false);
+                hits += batch.hits;
+            }
+            require(batch.done, "Cannot finish the two-column search");
+            hits = reader.searchDetails(hits, SearchScope::Book, {});
+            expect(hits.size(), after, "search hit count");
+            for (int column = 0; column < after; ++column) {
+                require(hits[column].start == position(column) && hits[column].text == "Second",
+                        qPrintable(QString("Unexpected search result %1: %2")
+                                           .arg(column)
+                                           .arg(hits[column].start)));
+                expect(hits[column].page, bookPage(column),
+                       QString("Second %1 search").arg(column));
+            }
+            require(reader.goTo(position(after - 1)), "Cannot open the last text column");
+            ReaderFrame frame;
+            captureChapters(frame, reader);
+            expect(frame.chapters.size(), 2, "contents rows");
+            require(frame.chapters[0].title == "First" && frame.chapters[1].title == "Second",
+                    "Missing published chapter titles");
+            expect(frame.chapters[0].page, 0, "first contents page");
+            expect(frame.chapters[1].page, bookPage(0), "second contents page");
+            const int chapterSpreads =
+                    chapter ? after / 2 : (before + after - 1) / 2 - before / 2 + 1;
+            expect(frame.state.value("chapter_pages").toInt(), chapterSpreads, "chapter total");
+            expect(frame.state.value("chapter_page").toInt(), chapterSpreads, "last chapter page");
+            require(reader.goTo("/body/DocFragment[1]/body/p[1]/text().0"),
+                    "Cannot return to the first chapter");
+            const auto first = reader.chapterProgress();
+            expect(first.page, 1, "first chapter page");
+            expect(first.pages, (before + 1) / 2, "first chapter total");
+        }
+    }
+}
+
 void nonLinearTurns(bool hide, int slicePages)
 {
     Book book;
@@ -304,6 +414,97 @@ void nonLinearTurns(bool hide, int slicePages)
     require(whole.goTo(firstNote) && chapters.goTo(firstNote), "Cannot open the hidden chapter");
     while (whole.spineItemOf(whole.position()) != 4)
         require(turn(1), "Cannot leave a hidden chapter after reading it");
+}
+
+// Each physical column contains one word. Read it from the painted page, so
+// an incorrect page number or source anchor cannot hide a repeated column.
+void nonLinearColumnPairs()
+{
+    const auto columns = [](const QList<QByteArray> &words) {
+        QByteArray body;
+        for (const auto &word : words)
+            body += "<p style='page-break-before:always'>" + word + "</p>";
+        return test::publisherHtml(body);
+    };
+    Book book;
+    book.files = test::publisherPackage(
+            "en", "Non-linear column pairs",
+            { { "a.xhtml", columns({ "Ash", "Birch" }) },
+              { "hidden.xhtml", columns({ "Note" }) },
+              { "b.xhtml", columns({ "Cedar", "Elm", "Fir", "Maple" }) } },
+            "<itemref idref='a.xhtml'/><itemref idref='hidden.xhtml' linear='no'/>"
+            "<itemref idref='b.xhtml'/>");
+    const QSize landscape(1072, 758);
+    const auto checkSpread = [](EngineDocument &reader, const QString &expected) {
+        const auto image = reader.image(reader.page());
+        QStringList words;
+        for (int side = 0; side < 2; ++side) {
+            const int left = side * image.width() / 2, right = (side + 1) * image.width() / 2;
+            QString word;
+            for (int y = 0; y < image.height() && word.isEmpty(); ++y)
+                for (int x = left; x < right && word.isEmpty(); ++x)
+                    if (qGray(image.pixel(x, y)) < 128)
+                        word = reader.wordAt({ x, y }).text;
+            words.append(word);
+        }
+        require(words.join('/') == expected,
+                qPrintable(QString("Non-linear column pair %1 should be %2")
+                                   .arg(words.join('/'), expected)));
+    };
+    for (bool hide : { false, true }) {
+        auto options = settings;
+        options["two_columns_landscape"] = true;
+        options["hide_nonlinear_fragments"] = hide;
+        EngineDocument whole(test::readerFonts()), chapter(test::readerFonts());
+        QString error;
+        setChapterModeOverride(0);
+        require(book.open(whole, options, &error, landscape), qPrintable(error));
+        setChapterModeOverride(-1);
+        const QStringList visible = hide
+                ? QStringList{ "Ash/Birch", "Cedar/Elm", "Fir/Maple" }
+                : QStringList{ "Ash/Birch", "Note/Cedar", "Elm/Fir", "Maple/" };
+        checkSpread(whole, visible.first());
+        for (int direction : { 1, -1 }) {
+            for (int step = 1; step < visible.size(); ++step) {
+                require(whole.turnInWindow(direction), "A column pair was skipped");
+                checkSpread(whole, visible[direction > 0 ? step : visible.size() - 1 - step]);
+            }
+            require(!whole.turnInWindow(direction), "The book repeated an end column");
+        }
+
+        Location optional;
+        optional.href = "hidden.xhtml";
+        const auto note = whole.positionOf(optional);
+        for (int direction : { 1, -1 }) {
+            require(whole.goTo(note), "Cannot explicitly open the optional spine item");
+            checkSpread(whole, hide ? "Note/" : "Note/Cedar");
+            require(whole.turnInWindow(direction), "Cannot leave the optional spine item");
+            checkSpread(whole, direction < 0 ? "Ash/Birch" : hide ? "Cedar/Elm" : "Elm/Fir");
+        }
+
+        options["koblaze_first_spine_item"] = 2;
+        options["koblaze_last_spine_item"] = 2;
+        chapter.setChapterSlices(25);
+        require(book.open(chapter, options, &error, landscape), qPrintable(error));
+        require(chapter.prepareFullDocument({}) == Engine::FullDocument::Ready,
+                "Cannot prepare the full book of non-linear column pairs");
+        checkSpread(chapter, "Cedar/Elm");
+        for (int direction : { 1, -1 }) {
+            bool continues = false;
+            const int target = chapter.preparedSpreadTurn(direction, &continues);
+            require(continues == hide, "The prepared turn used the wrong flow's column parity");
+            if (hide) {
+                require(whole.go(target), "A prepared turn lost its spread");
+                checkSpread(whole, direction > 0 ? "Fir/Maple" : "Ash/Birch");
+            } else {
+                require(target < 0, "A prepared turn would shift the chapter's column pair");
+            }
+        }
+        require(chapter.turnInWindow(1), "Cannot reach the last chapter column pair");
+        checkSpread(chapter, "Fir/Maple");
+        require(chapter.turnInWindow(-1), "Cannot return to the chapter's first column pair");
+        checkSpread(chapter, "Cedar/Elm");
+    }
 }
 
 // A pair of short chapters shares a unit between two long, sliced chapters.
@@ -1764,6 +1965,7 @@ int main(int argc, char **argv)
     if (only.isEmpty() || only == QLatin1String("reverse groups"))
         reversePreparedGroups();
     if (only.isEmpty() || only == QLatin1String("non-linear")) {
+        nonLinearColumnPairs();
         groupedNonLinearTurns();
         nonLinearTurns(true, 2);
         nonLinearTurns(true, 18);
@@ -1773,6 +1975,8 @@ int main(int argc, char **argv)
         verticalOrnamentTurns();
     if (only.isEmpty() || only == QLatin1String("column pairs"))
         twoColumnSwapPairs();
+    if (only.isEmpty() || only == QLatin1String("column labels"))
+        twoColumnLabels();
     if (only.isEmpty() || only == QLatin1String("unopened search"))
         searchUnopenedChapter();
     const auto other = qEnvironmentVariable("KOBALT_PARITY_BOOK");

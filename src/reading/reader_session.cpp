@@ -70,6 +70,7 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
     if (const double fraction = engine.bookFraction(); fraction >= 0) {
         result.state["book_fraction"] = fraction;
         result.state["whole_book_failed"] = engine.fullDocumentFailed();
+        result.state["whole_book_ready"] = engine.fullDocumentReady();
         result.state["slice_start"] = engine.pageStart(0);
         const auto rough = engine.roughPages();
         result.state["rough_page"] = rough.page;
@@ -239,6 +240,89 @@ void ReaderSession::notifySettled(QPointer<ReaderSession> guard,
             Qt::QueuedConnection);
 }
 
+// Capture the chapter and book labels on the engine worker. The GUI can apply
+// them without changing the displayed page.
+bool ReaderSession::publishPageEstimate(Engine &engine, const std::function<bool()> &wanted,
+                                        QPointer<ReaderSession> guard, quint64 job,
+                                        const std::shared_ptr<SourceLease> &lease)
+{
+    {
+        DiagnosticOperation words("page-estimate-words", [&wanted] { return !wanted(); });
+        engine.wordCounts(wanted);
+    }
+    if (!wanted())
+        return false;
+    ReaderFrame estimate;
+    {
+        DiagnosticOperation chapters("page-estimate-chapters", [&wanted] { return !wanted(); });
+        captureChapters(estimate, engine, wanted);
+    }
+    if (!wanted())
+        return false;
+    estimate.state["page_estimate"] = engine.state().value("page_estimate");
+    if (engine.partOfBook())
+        estimate.state["whole_book_failed"] = engine.fullDocumentFailed();
+    kobalt::qt::invoke(
+            qApp,
+            [guard, job, lease, estimate] {
+                if (!guard || guard->running || guard->revision != job || guard->lease_ != lease
+                    || !lease || lease->revoked())
+                    return;
+                auto &frame = guard->frame;
+                const bool newBookPages = frame.state.value("columns").toInt() == 2
+                        && estimate.state.value("whole_book_ready").toBool()
+                        && !frame.state.value("whole_book_ready").toBool();
+                const int shownCounts = [&frame] {
+                    if (frame.state.value("rough_pages").toInt() <= 0
+                        || frame.state.value("rough_item_pages").toInt() <= 0)
+                        return 0;
+                    return frame.state.value("rough_pages_estimated").toBool()
+                                    || frame.state.value("rough_item_pages_estimated").toBool()
+                            ? 1
+                            : 2;
+                }();
+                // Most rounds of a long measurement change nothing that the
+                // reader shows. Those do not refresh it. The record of the
+                // estimate goes with the next save.
+                bool changed = frame.chapters != estimate.chapters
+                        || frame.chapterGraph != estimate.chapterGraph
+                        || frame.totalWords != estimate.totalWords
+                        || frame.contentsSelection != estimate.contentsSelection
+                        || frame.graphSelection != estimate.graphSelection;
+                for (auto it = estimate.state.begin(); it != estimate.state.end(); ++it) {
+                    changed = changed
+                            || (it.key() != QLatin1String("page_estimate")
+                                && frame.state.value(it.key()) != it.value());
+                    frame.state[it.key()] = it.value();
+                }
+                frame.chapters = estimate.chapters;
+                frame.chapterGraph = estimate.chapterGraph;
+                frame.totalWords = estimate.totalWords;
+                frame.contentsSelection = estimate.contentsSelection;
+                frame.graphSelection = estimate.graphSelection;
+                // Refresh for the first count, the exact count, or new spread labels.
+                // Intermediate estimates wait for the next page turn.
+                const auto counts = [](const QJsonObject &state) {
+                    if (state.value("rough_pages").toInt() <= 0
+                        || state.value("rough_item_pages").toInt() <= 0)
+                        return 0;
+                    return state.value("rough_pages_estimated").toBool()
+                                    || state.value("rough_item_pages_estimated").toBool()
+                            ? 1
+                            : 2;
+                };
+                const int after = counts(frame.state);
+                const bool step = after > shownCounts;
+                if (estimate.state.value("whole_book_ready").toBool())
+                    guard->showFullDocument(job);
+                // Saved locations can move to another spread even if both totals are the same.
+                if (changed && (shownCounts == 0 || step || newBookPages) && guard->updated)
+                    guard->updated();
+            },
+            Qt::QueuedConnection);
+    return true;
+}
+
 // Publish background estimates without drawing the page again.
 void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                                        const std::function<bool()> &current,
@@ -271,85 +355,11 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                 },
                 Qt::QueuedConnection);
     };
-    // Publishes the page estimate and the chapter pages without drawing the
-    // page again.
     enum class Publish { Done, Gone, Interrupted };
     const auto publish = [&]() -> Publish {
-        {
-            DiagnosticOperation words("page-estimate-words", [&wanted] { return !wanted(); });
-            engine->wordCounts(wanted);
-        }
-        if (!current())
-            return Publish::Gone;
-        if (!wanted())
-            return Publish::Interrupted;
-        ReaderFrame estimate;
-        {
-            DiagnosticOperation chapters("page-estimate-chapters", [&wanted] { return !wanted(); });
-            captureChapters(estimate, *engine, wanted);
-        }
-        if (!current())
-            return Publish::Gone;
-        if (!wanted())
-            return Publish::Interrupted;
-        estimate.state["page_estimate"] = engine->state().value("page_estimate");
-        if (engine->partOfBook())
-            estimate.state["whole_book_failed"] = engine->fullDocumentFailed();
-        kobalt::qt::invoke(
-                qApp,
-                [guard, job, lease, estimate] {
-                    if (!guard || guard->running || guard->revision != job || guard->lease_ != lease
-                        || !lease || lease->revoked())
-                        return;
-                    auto &frame = guard->frame;
-                    const int shownCounts = [&frame] {
-                        if (frame.state.value("rough_pages").toInt() <= 0
-                            || frame.state.value("rough_item_pages").toInt() <= 0)
-                            return 0;
-                        return frame.state.value("rough_pages_estimated").toBool()
-                                        || frame.state.value("rough_item_pages_estimated").toBool()
-                                ? 1
-                                : 2;
-                    }();
-                    // Most rounds of a long measurement change nothing that the
-                    // reader shows. Those do not refresh it. The record of the
-                    // estimate goes with the next save.
-                    bool changed = frame.chapters != estimate.chapters
-                            || frame.chapterGraph != estimate.chapterGraph
-                            || frame.totalWords != estimate.totalWords
-                            || frame.contentsSelection != estimate.contentsSelection
-                            || frame.graphSelection != estimate.graphSelection;
-                    for (auto it = estimate.state.begin(); it != estimate.state.end(); ++it) {
-                        changed = changed
-                                || (it.key() != QLatin1String("page_estimate")
-                                    && frame.state.value(it.key()) != it.value());
-                        frame.state[it.key()] = it.value();
-                    }
-                    frame.chapters = estimate.chapters;
-                    frame.chapterGraph = estimate.chapterGraph;
-                    frame.totalWords = estimate.totalWords;
-                    frame.contentsSelection = estimate.contentsSelection;
-                    frame.graphSelection = estimate.graphSelection;
-                    // Once the page fields show numbers, the shown page refreshes
-                    // for two steps only: the first count, then the exact count.
-                    // Other rounds wait for the next page turn, so the screen does
-                    // not refresh for every round of a long count.
-                    const auto counts = [](const QJsonObject &state) {
-                        if (state.value("rough_pages").toInt() <= 0
-                            || state.value("rough_item_pages").toInt() <= 0)
-                            return 0;
-                        return state.value("rough_pages_estimated").toBool()
-                                        || state.value("rough_item_pages_estimated").toBool()
-                                ? 1
-                                : 2;
-                    };
-                    const int after = counts(frame.state);
-                    const bool step = after > shownCounts;
-                    if (changed && (shownCounts == 0 || step) && guard->updated)
-                        guard->updated();
-                },
-                Qt::QueuedConnection);
-        return Publish::Done;
+        if (publishPageEstimate(*engine, wanted, guard, job, lease))
+            return Publish::Done;
+        return current() ? Publish::Interrupted : Publish::Gone;
     };
     if (engine->bookFraction() < 0) {
         // The whole book is shown. Its parsed-book cache is written in short
@@ -443,13 +453,6 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                 resumeAfterWork();
             if (publication != Publish::Done)
                 return;
-            kobalt::qt::invoke(
-                    qApp,
-                    [guard, lease, job] {
-                        if (guard && guard->lease_ == lease)
-                            guard->showFullDocument(job);
-                    },
-                    Qt::QueuedConnection);
             // The turn that shows the whole book would draw its page and
             // find its place in the contents. Idle time does that now, in
             // steps that stop when other work waits. The turn does the rest.
@@ -1678,6 +1681,15 @@ void ReaderSession::displayedText(int page, std::function<void(QString)> finishe
 
 void ReaderSession::pageSummary(int page, std::function<void(QString, QString)> finished)
 {
+    pageSummary(page, [finished = std::move(finished)](const PageSummary &summary) {
+        finished(summary.start, summary.excerpt);
+    });
+}
+
+void ReaderSession::pageSummary(int page, std::function<void(PageSummary)> finished)
+{
+    const bool pairedWindow =
+            frame.state.contains("book_fraction") && frame.state.value("columns").toInt() == 2;
     const auto shown = page == this->page() ? frame.pageStart : QString();
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
@@ -1687,25 +1699,29 @@ void ReaderSession::pageSummary(int page, std::function<void(QString, QString)> 
     const bool ready = layoutReady_;
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, page, finished, job, latest, lease, ready, shown] {
+            [engine, guard, page, finished, job, latest, lease, ready, shown, pairedWindow] {
                 EngineJob activity;
-                QString start, excerpt;
+                PageSummary summary;
                 if (ready && latest->load() == job && lease && !lease->revoked()) {
                     const int local =
                             shown.isEmpty() ? page : engine->pagesOf({ shown }).value(0, -1);
                     if (local >= 0) {
-                        start = shown.isEmpty() ? engine->pageStart(local) : shown;
-                        excerpt = engine->pageExcerpt(local);
+                        summary.start = shown.isEmpty() ? engine->pageStart(local) : shown;
+                        summary.excerpt = engine->pageExcerpt(local);
+                        summary.chapter = engine->chapterTitle(summary.start);
+                        if (pairedWindow && engine->fullDocumentReady() && !summary.start.isEmpty())
+                            summary.bookPage =
+                                    qMax(-1, engine->bookPages({ summary.start }).value(0) - 1);
                     }
                 }
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, start, excerpt, finished, job, lease] {
+                        [guard, summary, finished, job, lease] {
                             if (!guard)
                                 return;
                             const bool current = guard->layoutRevision() == job
                                     && guard->lease_ == lease && lease && !lease->revoked();
-                            finished(current ? start : QString(), current ? excerpt : QString());
+                            finished(current ? summary : PageSummary{});
                         },
                         Qt::QueuedConnection);
             },
@@ -2288,11 +2304,14 @@ void ReaderSession::searchNext(QString query, SearchCursor cursor, int count, qu
     const auto scope = searchScope;
     const bool details = searchWithDetails;
     const auto origin = searchOrigin;
+    const auto latest = newest;
+    const bool needsBookPages = cursor.prepareWholeBook && frame.state.contains("book_fraction")
+            && !frame.state.value("whole_book_ready").toBool();
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
             engineWorker(),
             [engine, guard, query, cursor, count, job, cancelled, finished, reset, lease, scope,
-             origin, details] {
+             origin, details, latest, needsBookPages] {
                 if (cancelled->load() || !lease || lease->revoked())
                     return;
                 EngineJob activity;
@@ -2301,6 +2320,13 @@ void ReaderSession::searchNext(QString query, SearchCursor cursor, int count, qu
                 auto result = engine->searchText(
                         query, cursor, count ? (details ? 32 : 512) : 1, scope, origin, details,
                         [cancelled, lease] { return !cancelled->load() && !lease->revoked(); });
+                // Dismissing the search discards hits, but the prepared pagination
+                // still belongs to this book and layout until its revision changes.
+                const auto currentFrame = [lease, latest, job] {
+                    return !lease->revoked() && latest->load() == job;
+                };
+                if (needsBookPages && currentFrame() && engine->fullDocumentReady())
+                    publishPageEstimate(*engine, currentFrame, guard, job, lease);
                 result.reset = reset;
                 kobalt::qt::invoke(
                         qApp,

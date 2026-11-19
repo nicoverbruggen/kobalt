@@ -13,6 +13,13 @@
 #include <memory>
 
 namespace kobalt {
+struct PageSummary
+{
+    QString start, excerpt, chapter;
+    // Whole-book spread index for a prepared two-column chapter, or -1.
+    int bookPage = -1;
+};
+
 struct BookmarkLocations
 {
     QVector<int> pages, order;
@@ -249,6 +256,7 @@ public:
     void bookmarkPages(QStringList positions, std::function<void(QVector<int>)> finished,
                        bool rangeEndpoints = false);
     void pageSummary(int page, std::function<void(QString position, QString excerpt)> finished);
+    void pageSummary(int page, std::function<void(PageSummary)> finished);
     // The start of the text on `page` in the layout shown now. A layout that
     // is requested after this call does not discard the answer, because the
     // engine thread reads the text before it starts that layout. Call it only
@@ -518,6 +526,9 @@ private:
     // can adopt it after checking the requested layout and reading position.
     void showFullDocument(quint64 job);
     bool currentSourceFrame(quint64 job) const;
+    static bool publishPageEstimate(Engine &engine, const std::function<bool()> &wanted,
+                                    QPointer<ReaderSession> guard, quint64 job,
+                                    const std::shared_ptr<SourceLease> &lease);
     // `requests` is engineWorkRequests() from when this step was queued:
     // work that was announced after that is in the queue behind this step,
     // or will be, and goes first.

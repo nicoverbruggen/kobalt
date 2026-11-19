@@ -641,6 +641,9 @@ private:
     // The page in its chapter and the pages of the chapter from the
     // estimate of the pages, when only a part of the book has a layout.
     void estimateChapterPages(const QVector<ChapterLink> &links, ChapterSelection &result) const;
+    QVector<int> chapterBookPages(const QStringList &positions,
+                                  const std::function<bool()> &current = {},
+                                  bool rangeEndpoints = false, QVector<int> result = {}) const;
     // True when the document was loaded without the fonts that the book
     // embeds: a reading font replaces them on every element, so they are
     // never drawn. Only for a part of a book, which loads again quickly

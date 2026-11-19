@@ -975,6 +975,7 @@ QJsonObject ReadingBook::persistedCheckpoint(const QJsonObject &state) const
                              "continues_before",
                              "continues_after",
                              "book_fraction",
+                             "whole_book_ready",
                              "slice_start",
                              "rough_page",
                              "rough_pages",

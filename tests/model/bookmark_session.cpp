@@ -1,6 +1,8 @@
 #include "reader_inputs.h"
 #include "engine_fixtures.h"
 #include "book_fixtures.h"
+#include "column_pairs_book.h"
+#include "reading/highlight_session.h"
 #include "reading/rendering_mode.h"
 #include "publication/local_resources.h"
 #include "annotation_session_checks.h"
@@ -27,7 +29,8 @@
 using namespace kobalt;
 
 namespace {
-void waitUntil(const std::function<bool()> &ready)
+void waitUntil(const std::function<bool()> &ready,
+               const char *message = "BookmarkSession check timed out")
 {
     if (ready())
         return;
@@ -37,8 +40,7 @@ void waitUntil(const std::function<bool()> &ready)
         if (ready())
             loop.quit();
     });
-    QObject::connect(&timeout, &QTimer::timeout, &loop,
-                     [] { require(false, "BookmarkSession check timed out"); });
+    QObject::connect(&timeout, &QTimer::timeout, &loop, [message] { require(false, message); });
     poll.start(1);
     timeout.start(60000);
     loop.exec();
@@ -104,6 +106,174 @@ void bookmarkLayoutKeyInputs(const QJsonObject &state, int pages, QSize area)
     const auto resizedWhole = key();
     frame["top_margin_pixels"] = state.value("top_margin_pixels").toInt() + 1;
     require(key() != resizedWhole, "A new margin reused the bookmark key at the same page count");
+}
+
+void twoColumnAnnotationPages()
+{
+    QTemporaryDir directory;
+    require(directory.isValid()
+                    && test::writeBook(directory.path(), "pairs.epub", test::columnPairsBook(3, 8)),
+            "Cannot write two-column annotation book");
+    const auto path = directory.filePath("pairs.epub");
+    const auto identity = QUrl::fromLocalFile(path).toString();
+    const QSize landscape(1072, 758);
+    const auto open = [&](ReaderSession &reader, QJsonObject saved) {
+        auto lease = std::make_shared<SourceLease>();
+        OpenRequest request{ identity, path, landscape, saved,
+                             {},       {},   lease,     localResourceFactory(path, lease) };
+        request.appearanceDefaults = { { "two_columns_landscape", true }, { "font_pixels", 28 } };
+        bool ready = false;
+        reader.open(std::move(request), [&](OpeningResult result) {
+            require(result.ready(), "Cannot open two-column annotation book");
+            ready = true;
+        });
+        waitUntil([&] { return ready && !reader.busy() && !reader.preparingNeighbours(); });
+    };
+    ReaderSession reader(test::readerFonts(), test::readerPlaceholder());
+    open(reader, {});
+    require(reader.state().value("columns").toInt() == 2
+                    && !reader.state().contains("book_fraction"),
+            "Annotation fixture needs whole-book two-column pagination");
+    const auto root = directory.filePath("annotations");
+    const auto fingerprint = reader.sourceHash();
+    const QString chapter = "/body/DocFragment[2]/body/";
+    const auto start = chapter + "p[1]/text().0", end = chapter + "p[4]/text().0",
+               last = chapter + "p[7]/text().0";
+    {
+        BookmarkStore bookmark(root, identity, fingerprint, reader.title());
+        HighlightStore highlight(root, identity, fingerprint, reader.title());
+        require(bookmark.load() && highlight.load(), "Cannot load new annotation stores");
+        const auto now = QDateTime::currentDateTimeUtc();
+        bookmark.setBookmarks(
+                { { start, "Second", "Second 0", now }, { last, "Second", "Second 6", now } });
+        highlight.setHighlights(
+                { { "paired", start, end, "Second 0 through Second 2", "Second", now } });
+        require(bookmark.save() && highlight.save(), "Cannot save two-column annotations");
+    }
+
+    const auto layout = [&] {
+        return bookmarkLayoutKey(reader.pages(), reader.state(), landscape);
+    };
+    BookmarkSession bookmarks(reader, layout, root, identity, fingerprint, reader.title());
+    HighlightSession highlights(reader, layout, root, identity, fingerprint, reader.title());
+    waitUntil([&] { return bookmarks.sync() && highlights.sync(); });
+    require(bookmarks.bookmarks().size() == 2 && bookmarks.bookmarks().first().position == start
+                    && bookmarks.bookmarks().last().position == last
+                    && highlights.highlights().size() == 1
+                    && highlights.highlights().first().start == start
+                    && highlights.highlights().first().end == end,
+            "Reopened annotation sessions lost their source anchors");
+    // Three First columns precede Second. Numbered from zero, Second 0 is
+    // on spread 1, Second 2 is on spread 2 and Second 3 starts spread 3.
+    require(bookmarks.marked(1) && bookmarks.bookPage(0) == 1 && bookmarks.bookPage(1) == 4,
+            "A saved right-column bookmark names the wrong book spread");
+    require(highlights.page(0) == 1 && highlights.endPage(0) == 2
+                    && highlights.locations().bookPages == (QVector<int>{ 1, 2 }),
+            "The highlight list counted its exclusive end on the next spread");
+
+    // The left column on spread 2 still belongs to First. Second starts on its right.
+    {
+        const auto mergeRoot = directory.filePath("shared-spread");
+        BookmarkStore seed(mergeRoot, identity, fingerprint, reader.title());
+        const QString paragraph = "/body/DocFragment[1]/body/p[3]/text().";
+        const auto now = QDateTime::currentDateTimeUtc();
+        require(seed.load(), "Cannot load shared-spread fixture");
+        seed.setBookmarks({ { paragraph + "1", "First", "First 2", now },
+                            { paragraph + "7", "First", "A short column", now } });
+        require(seed.save(), "Cannot save bookmarks from First's final column");
+        BookmarkSession merged(reader, layout, mergeRoot, identity, fingerprint, reader.title());
+        waitUntil([&] { return merged.sync() && merged.bookmarks().size() == 1; });
+        require(merged.bookPage(0) == 1, "Merged bookmark must remain on the shared spread");
+        merged.flush();
+        BookmarkStore reopened(mergeRoot, identity, fingerprint, reader.title());
+        require(reopened.load() && reopened.bookmarks().size() == 1,
+                "Cannot reload the merged shared-spread bookmark");
+        const auto &replacement = reopened.bookmarks().first();
+        require(replacement.position == "/body[1]/DocFragment[1]/body[1]/p[3]/text()[1].0"
+                        && replacement.excerpt.startsWith("First 2")
+                        && replacement.chapter == "First",
+                qPrintable(QString("Merged bookmark at %1 starts with %2 and names chapter %3")
+                                   .arg(replacement.position, replacement.excerpt,
+                                        replacement.chapter)));
+    }
+
+    // Keep the Second chapter's pairs on screen while the whole book is prepared.
+    renderingMode::setOverride(2);
+    QJsonObject saved{ { "fingerprint", QString::fromLatin1(fingerprint) } };
+    {
+        // Read First so its actual two spreads are part of the saved chapter estimate.
+        ReaderSession first(test::readerFonts(), test::readerPlaceholder());
+        open(first, saved);
+        require(first.pages() == 2, "First must occupy two chapter spreads");
+        waitUntil([&] { return first.state().value("rough_pages").toInt() > 0; },
+                  "Missing first chapter estimate");
+        saved["page_estimate"] = first.state().value("page_estimate");
+    }
+    saved["position"] = last;
+    ReaderSession hybrid(test::readerFonts(), test::readerPlaceholder());
+    open(hybrid, saved);
+    require(hybrid.state().contains("book_fraction") && hybrid.page() == 3 && hybrid.pages() == 4,
+            "Hybrid must show Second as four chapter-local spreads");
+    BookmarkLayoutKeyCache cache;
+    const auto hybridLayout = [&] { return cache.key(hybrid.pages(), hybrid.state(), landscape); };
+    BookmarkSession marks(hybrid, hybridLayout, root, identity, fingerprint, hybrid.title());
+    HighlightSession ranges(hybrid, hybridLayout, root, identity, fingerprint, hybrid.title());
+    waitUntil([&] {
+        return hybrid.state().value("rough_pages").toInt() > 0 && marks.sync() && ranges.sync();
+    });
+    const auto estimatedKey = hybridLayout();
+    const int estimatedTotal = hybrid.bookPages();
+    require(marks.bookPage(0) == 2 && ranges.locations().bookPages.first() == 2,
+            qPrintable(QString("Estimated Second 0 bookmark %1, highlight %2, total %3")
+                               .arg(marks.bookPage(0))
+                               .arg(ranges.locations().bookPages.value(0))
+                               .arg(estimatedTotal)));
+    // Dismiss the completed search without moving the reader. Its whole-book
+    // layout must update the contents and saved labels on this chapter frame.
+    bool done = false;
+    hybrid.search(
+            "Second 6", [&](SearchBatch batch) { done = batch.done; }, SearchScope::Book,
+            hybrid.state().value("position").toString(), false);
+    waitUntil([&] { return done; }, "Cannot prepare search in the two-column book");
+    hybrid.cancelSearch();
+    require(hybrid.state().value("whole_book_ready").toBool(),
+            "Dismissing search kept the estimated pages after preparing the whole book");
+    require(hybrid.chapters().size() == 2 && hybrid.chapters().last().page == 1,
+            "Dismissing search kept the estimated first spread in Contents");
+    require(hybrid.bookPages() == estimatedTotal && hybridLayout() != estimatedKey,
+            "Preparing an equal-sized whole book must invalidate annotation page labels");
+    waitUntil([&] { return marks.sync() && ranges.sync(); });
+    require(hybrid.page() == 3 && marks.marked(3) && marks.bookPage(0) == 1
+                    && marks.bookPage(1) == 4,
+            "A saved bookmark kept a chapter estimate or used the current spread's progress label");
+    require(ranges.page(0) == 0 && ranges.endPage(0) == 1
+                    && ranges.locations().bookPages == (QVector<int>{ 1, 2 }),
+            "Preparing the whole book changed the highlight's local spread or left its book label stale");
+    require(marks.toggle(3) == BookmarkSession::Toggle::Removed
+                    && marks.toggle(3) == BookmarkSession::Toggle::Adding,
+            "Cannot replace the current bookmark");
+    waitUntil([&] { return marks.bookmarks().size() == 2; });
+    require(marks.bookPage(1) == 4,
+            "A new bookmark used the progress label of the last chapter spread");
+    marks.flush();
+
+    // Second 6 and 7 share a chapter spread but sit on separate whole-book spreads.
+    auto together = marks.bookmarks();
+    auto right = together.last();
+    right.position = chapter + "p[8]/text().0";
+    together.append(right);
+    const auto mergeRoot = directory.filePath("merge");
+    BookmarkStore seed(mergeRoot, identity, fingerprint, hybrid.title());
+    require(seed.load(), "Cannot load bookmark merge fixture");
+    seed.setBookmarks(together);
+    require(seed.save(), "Cannot seed both columns of a chapter spread");
+    BookmarkSession merged(hybrid, hybridLayout, mergeRoot, identity, fingerprint, hybrid.title());
+    waitUntil([&] { return merged.sync() && merged.bookmarks().size() == 2; });
+    const int index = merged.pages().indexOf(3);
+    require(index >= 0 && merged.bookPage(index) == 4,
+            "Merged bookmark inherited the right column's book page");
+    merged.flush();
+    renderingMode::setOverride(0);
 }
 
 void bookmarkAfterPreparation()
@@ -232,6 +402,8 @@ int main(int argc, char **argv)
     // application does.
     qt::later(0, &app, [&] {
         bookmarkAfterPreparation();
+        if (sqlite)
+            twoColumnAnnotationPages();
         auto owned =
                 std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
         auto &model = *owned;

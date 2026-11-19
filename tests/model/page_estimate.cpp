@@ -2129,6 +2129,13 @@ void hiddenHeadingAtHandoff(QSize viewport)
             // The heading is hidden in the whole book, but its first paragraph is on screen.
             const int first =
                     whole.pagesOf({ "/body/DocFragment[4]/body/p[1]/span/text().0" }).value(0, -1);
+            if (viewport.width() > viewport.height()) {
+                require(model.bookPages({ heading, cover, next })
+                                == QVector<int>({ first + 1, 1, page + 1 }),
+                        "A heading hidden in the whole book must keep its chapter's label");
+                require(model.bookPages({ heading, next }, [] { return false; }).isEmpty(),
+                        "Cancelled two-column labels returned a partial batch");
+            }
             const auto count = model.roughPages();
             require(first > 0 && count.page == first + 1 && count.pages == whole.pages()
                             && !count.pagesEstimated,

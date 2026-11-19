@@ -340,7 +340,7 @@ void PopupCard::fitToWidth(int width)
     updateListDividers();
 }
 
-void PopupCard::fitToHeight(int height)
+void PopupCard::fitToHeight(int height, int fallbackWidth)
 {
     const auto &previousRows = pagedRows;
     for (const auto &row : previousRows)
@@ -392,17 +392,25 @@ void PopupCard::fitToHeight(int height)
         return row->hasHeightForWidth() ? row->heightForWidth(textWidth) : row->sizeHint().height();
     };
     QVector<QWidget *> rows;
-    int pagedHeight = 0;
+    int pagedHeight = 0, tallest = 0;
     for (int index = 1; index < contentRows->count(); ++index) {
         auto *row = contentRows->itemAt(index)->widget();
         if (!row || row == rowPager || row->isHidden())
             continue;
         rows.append(row);
-        pagedHeight += rowHeight(row) + contentRows->spacing();
+        const int needed = rowHeight(row) + contentRows->spacing();
+        pagedHeight += needed;
+        tallest = qMax(tallest, needed);
     }
     const int room = qMax(1,
                           height - (natural - pagedHeight) - int(metrics::chrome::actionHeight)
                                   - contentRows->spacing());
+    if (fallbackWidth > width() && (rows.isEmpty() || tallest > room)) {
+        rowPager->hide();
+        fitToWidth(fallbackWidth);
+        fitToHeight(height);
+        return;
+    }
     int used = 0;
     for (auto *row : rows) {
         const int needed = rowHeight(row) + contentRows->spacing();
@@ -620,13 +628,14 @@ void ModalOverlay::centerCard()
         // Long wrapped descriptions can exceed one page. Use spare landscape
         // width before paging rows, since a single row cannot be split.
         const int availableWidth = width() - 2 * int(metrics::notice::sideClearance);
-        if (!fitChoiceContents && cardArea.isEmpty() && room > 0 && content->height() > room
-            && width() > height() && content->width() < availableWidth)
+        if (!pageBeforeWidening && !fitChoiceContents && cardArea.isEmpty() && room > 0
+            && content->height() > room && width() > height() && content->width() < availableWidth)
             content->fitToWidth(availableWidth);
         if (!fitChoiceContents && cardArea.isEmpty() && room > 0
             && (content->height() > room || content->property("card_paged").toBool())) {
             content->setProperty("card_paged", true);
-            content->fitToHeight(room);
+            content->fitToHeight(room,
+                                 pageBeforeWidening && width() > height() ? availableWidth : 0);
         }
         pointer->hide();
         content->move((cardArea.isEmpty() ? rect() : cardArea).center() - content->rect().center());

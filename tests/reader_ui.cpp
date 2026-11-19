@@ -2852,6 +2852,22 @@ private slots:
         notice.fitCard();
         QVERIFY(body->height() < wrappedHeight);
         QVERIFY(card->rect().contains(notice.primaryButton()->mapTo(card, QPoint())));
+        // A single wrapped row can need more width even on a card that prefers paging.
+        const int wide = 2 * int(ui::metrics::notice::cardWidth);
+        const int clearance = 2 * int(ui::metrics::notice::sideClearance);
+        host.resize(wide + clearance, wide * 2);
+        notice.preferPagingToWidening();
+        body->setText(
+                QStringLiteral("A translated explanation must stay on one page. ").repeated(18));
+        card->fitToWidth(wide);
+        const int room = card->height();
+        card->fitToWidth(ui::metrics::notice::cardWidth);
+        QVERIFY(card->height() > room);
+        host.resize(wide + clearance, room + clearance);
+        QTRY_COMPARE(card->width(), wide);
+        QVERIFY(card->height() <= room);
+        QVERIFY(body->isVisible());
+        QVERIFY(card->rect().contains(notice.primaryButton()->mapTo(card, QPoint())));
         notice.hide();
 
         ui::ModalOverlay custom(&host);

@@ -218,6 +218,7 @@ void BookmarkList::showPinErrors()
             { strings::get("common.ok"), "rrPinErrorsClose" });
     pinHelp = notice;
     notice->setObjectName("rrPinErrorsPopup");
+    notice->preferPagingToWidening();
     notice->setGeometry(parentWidget()->rect());
     auto *card = notice->card();
     const auto message = [card](const QString &text, const QString &name = QString()) {

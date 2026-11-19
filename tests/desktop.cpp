@@ -3852,13 +3852,29 @@ void checkCustomPinnedBookmarks(int preset, bool dark)
     QCOMPARE(warning->geometry().topRight(), QPoint(warning->parentWidget()->width() - 1, 0));
     QVERIFY(fixture.press("rrPinErrors"));
     QTRY_VERIFY(fixture.visible("rrPinErrorsPopup"));
-    auto *errors = fixture.widget("rrPinErrorsPopup");
-    for (int i = 0; i < 5; ++i) {
-        auto *label = errors->findChild<QLabel *>(QString("rrPinFailedFile%1").arg(i));
-        QVERIFY(label);
-        QCOMPARE(label->text(), QString("unsupported-export-%1.svg").arg(i));
-    }
-    capturePages(fixture, name + "-pinned-bookmark-custom-errors", "rrPinErrorsPopup");
+    auto *errors = static_cast<ui::ModalOverlay *>(fixture.widget("rrPinErrorsPopup"));
+    QCOMPARE(errors->card()->width(),
+             qMin<int>(ui::metrics::notice::cardWidth,
+                       errors->width() - 2 * ui::metrics::notice::sideClearance));
+    auto *counter = errors->findChild<QLabel *>("rrPinErrorsPopupPage");
+    auto *rows = errors->card()->rows();
+    QSet<QString> checkedPages;
+    QStringList shownFiles, expectedFiles;
+    for (int i = 0; i < 5; ++i)
+        expectedFiles.append(QString("unsupported-export-%1.svg").arg(i));
+    capturePages(fixture, name + "-pinned-bookmark-custom-errors", "rrPinErrorsPopup", 20, [&] {
+        const auto page = counter ? counter->text() : QString();
+        if (!checkedPages.contains(page)) {
+            checkedPages.insert(page);
+            for (int i = 0; i < rows->count(); ++i) {
+                auto *row = dynamic_cast<ui::ListRow *>(rows->itemAt(i)->widget());
+                if (row && row->titleLabel()->isVisible())
+                    shownFiles.append(row->titleLabel()->text());
+            }
+        }
+        return true;
+    });
+    QCOMPARE(shownFiles, expectedFiles);
     QVERIFY(fixture.press("rrPinErrorsClose"));
     QTRY_VERIFY(!fixture.visible("rrPinErrorsPopup"));
     QCOMPARE(input->text(), QString("Cat"));

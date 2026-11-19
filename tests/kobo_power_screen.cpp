@@ -188,6 +188,78 @@ private slots:
         QCOMPARE(called.count("cancelled"), 0);
     }
 
+    void openingRechecksFontsAfterFailedRead()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        QVERIFY(!kobalt::test::copyOpeningFontFixture(QStringLiteral(KOBALT_TEST_ASSET_ROOT),
+                                                      root.path())
+                         .isEmpty());
+        kobalt::nickel::ReaderEnvironment environment(root.path());
+        QList<bool> verified;
+        environment.verifyAssets(this, "startup", [&](bool valid) { verified.append(valid); });
+        QTRY_COMPARE(verified.size(), 1);
+        QVERIFY(verified.first());
+        QVERIFY(kobalt::ui::openingFontsPrepared(environment.assets));
+        // The worker verified the bundle, then could not read its fonts.
+        kobalt::ui::setPreparedOpeningFonts(environment.assets, {});
+        QVERIFY(environment.assetsAvailable());
+        QVERIFY(!kobalt::ui::openingFontsPrepared(environment.assets));
+        // The opening waits for a new read on the worker instead of failing.
+        bool resumed = false;
+        environment.whenOpeningFontsReady([&] { resumed = true; });
+        QVERIFY(!resumed);
+        QTRY_VERIFY(resumed);
+        QVERIFY(environment.assetsAvailable());
+        QVERIFY(kobalt::ui::openingFontsPrepared(environment.assets));
+        QCOMPARE(verified.size(), 1);
+    }
+
+    void openingFontReadSeesStorageChange_data()
+    {
+        QTest::addColumn<quint64>("nextPermit");
+        QTest::newRow("exported") << quint64(0);
+        QTest::newRow("remounted") << quint64(2);
+    }
+
+    void openingFontReadSeesStorageChange()
+    {
+        QFETCH(quint64, nextPermit);
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        QVERIFY(!kobalt::test::copyOpeningFontFixture(QStringLiteral(KOBALT_TEST_ASSET_ROOT),
+                                                      root.path())
+                         .isEmpty());
+        kobalt::nickel::ReaderEnvironment environment(root.path());
+        std::atomic<quint64> permit{ 1 };
+        QList<bool> verified;
+        environment.verifyAssets(
+                this, "startup", [&](bool valid) { verified.append(valid); },
+                [&] { return permit.load(); });
+        QTRY_COMPARE(verified.size(), 1);
+        QVERIFY(verified.first());
+        kobalt::ui::setPreparedOpeningFonts(environment.assets, {});
+        int resumed = 0;
+        environment.whenOpeningFontsReady([&] { ++resumed; });
+        QSemaphore read;
+        kobalt::qt::invoke(kobalt::engineWorker(), [&] { read.release(); }, Qt::QueuedConnection);
+        read.acquire();
+        // Nickel took storage after the read but before its queued GUI delivery.
+        permit.store(nextPermit);
+        const bool mounted = nextPermit != 0;
+        if (mounted) {
+            // Remounted files are checked again before the opening resumes.
+            QTRY_COMPARE(resumed, 1);
+            QVERIFY(environment.assetsAvailable());
+            QVERIFY(kobalt::ui::openingFontsPrepared(environment.assets));
+        } else {
+            QTRY_VERIFY(!environment.assetsAvailable());
+            QCoreApplication::processEvents();
+            QCOMPARE(resumed, 0);
+        }
+        QCOMPARE(verified.size(), 1);
+    }
+
     void homeSleepReceivesPreparedFonts_data()
     {
         QTest::addColumn<bool>("shown");

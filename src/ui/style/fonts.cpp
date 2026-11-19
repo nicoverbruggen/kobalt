@@ -219,6 +219,18 @@ OpeningFonts readFaces(const AssetBundle &assets, bool opening,
     return faces->generation == assets.generation() ? faces : OpeningFonts();
 }
 
+// The faces of the bundle's current verification that need no file read.
+OpeningFonts preparedFaces(const AssetBundle &assets)
+{
+    const auto generation = assets.generation();
+    const auto &current = registration();
+    if (current.prepared && current.prepared->generation == generation)
+        return current.prepared;
+    if (current.active && current.active->generation == generation)
+        return current.active;
+    return {};
+}
+
 OpeningFonts interfaceFaces(const AssetBundle &assets, bool opening)
 {
     const bool explicitBundle = assets.verification() == AssetBundle::Verification::Explicit;
@@ -230,13 +242,8 @@ OpeningFonts interfaceFaces(const AssetBundle &assets, bool opening)
     const auto &current = registration();
     // Explicit bundles change generation with every verification. Their worker
     // read against that generation's digests before it published these bytes.
-    if (explicitBundle) {
-        if (current.prepared && current.prepared->generation == generation)
-            return current.prepared;
-        if (current.active && current.active->generation == generation)
-            return current.active;
-        return {};
-    }
+    if (explicitBundle)
+        return preparedFaces(assets);
     const auto verified = assets.verifiedFontDigests();
     const auto matches = [&](const OpeningFonts &faces) {
         if (!faces || faces->generation != generation)
@@ -267,6 +274,11 @@ OpeningFonts readOpeningFonts(const AssetBundle &assets, const std::function<boo
         return {};
     warmTextShaping(faces->sources.value("InstrumentSerif-Regular.ttf"), QStringLiteral("Kobalt"));
     return current && !current() ? OpeningFonts() : faces;
+}
+
+bool openingFontsPrepared(const AssetBundle &assets)
+{
+    return bool(preparedFaces(assets));
 }
 
 void setPreparedOpeningFonts(const AssetBundle &assets, OpeningFonts faces)

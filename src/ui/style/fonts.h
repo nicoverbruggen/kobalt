@@ -31,6 +31,9 @@ using OpeningFonts = std::shared_ptr<const OpeningFontData>;
 OpeningFonts readOpeningFonts(const AssetBundle &assets, const std::function<bool()> &current = {});
 // On the GUI thread, stage the result for this bundle. An empty result releases it.
 void setPreparedOpeningFonts(const AssetBundle &assets, OpeningFonts fonts);
+// Whether the bundle's current verification has interface faces that need no
+// file read: staged by the worker or already registered.
+bool openingFontsPrepared(const AssetBundle &assets);
 // Register bundled faces; never change Nickel's application font.
 QFont interfaceFont(int pixels = -1);
 // Empty families restore the bundled interface and strip defaults.

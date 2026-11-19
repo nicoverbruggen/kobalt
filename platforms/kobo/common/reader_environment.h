@@ -94,6 +94,11 @@ struct ReaderEnvironment
     // being prepared. Only the active loading surface needs this continuation.
     void whenOpeningFontsReady(std::function<void()> ready)
     {
+        // The worker can verify the bundle and then fail to read its fonts.
+        // Read them again on the worker instead of refusing every opening
+        // until the next USB session or restart.
+        if (!preparingOpeningFonts && assetsAvailable() && !ui::openingFontsPrepared(assets))
+            readOpeningFontsAgain();
         if (preparingOpeningFonts)
             openingFontsReady = std::move(ready);
         else
@@ -216,6 +221,63 @@ private:
     {
         static std::mutex mutex;
         return mutex;
+    }
+
+    // Reads the interface fonts of the current verification again, under the
+    // same storage permit. A changed generation means that USB or a new
+    // verification took over the opening's wait.
+    void readOpeningFontsAgain()
+    {
+        preparingOpeningFonts = true;
+        const auto generation = assetGeneration.load();
+        const auto storageGeneration = stockStorage;
+        const auto permit = requestedStorage;
+        const auto current = [this, generation, storageGeneration, permit] {
+            return generation == assetGeneration.load() && permit
+                    && (!storageGeneration || storageGeneration() == permit);
+        };
+        qt::invoke(
+                engineWorker(),
+                [this, generation, current, storageGeneration, permit] {
+                    // The same lock as verification, so that USB waits for this read.
+                    std::lock_guard<std::mutex> reading(assetWork());
+                    if (generation != assetGeneration.load())
+                        return;
+                    auto fonts =
+                            current() ? ui::readOpeningFonts(assets, current) : ui::OpeningFonts{};
+                    qt::invoke(
+                            qApp,
+                            [this, generation, fonts, storageGeneration, permit] {
+                                if (generation != assetGeneration.load())
+                                    return;
+                                // Stock USB can take the storage before this result arrives.
+                                // As after a verification, check remounted files first.
+                                const auto storage =
+                                        storageGeneration ? storageGeneration() : permit;
+                                if (!storage || storage != permit) {
+                                    if (storage) {
+                                        auto resume = std::move(openingFontsReady);
+                                        verifyAssets(qApp, "opening-fonts", {}, storageGeneration);
+                                        openingFontsReady = std::move(resume);
+                                    } else {
+                                        invalidateAssets();
+                                    }
+                                    return;
+                                }
+                                diagnostic("opening-fonts-read", { { "ready", bool(fonts) } },
+                                           fonts ? DiagnosticSeverity::Activity
+                                                 : DiagnosticSeverity::Warning);
+                                ui::setPreparedOpeningFonts(assets, fonts);
+                                preparingOpeningFonts = false;
+                                finishHomeFontWait(bool(fonts));
+                                auto resume = std::move(openingFontsReady);
+                                openingFontsReady = {};
+                                if (resume)
+                                    resume();
+                            },
+                            Qt::QueuedConnection);
+                },
+                Qt::QueuedConnection);
     }
 
     std::function<quint64()> stockStorage;

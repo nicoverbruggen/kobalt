@@ -63,6 +63,9 @@ public:
     virtual bool OnLineDecoded( LVImageSource * obj, int y, lUInt32 * __restrict data ) = 0;
     virtual void OnEndDecode( LVImageSource * obj, bool errors ) = 0;
     virtual bool GetTargetSize(int & width, int & height) const { return false; };
+    // Blaze: only clients which accept reduced raster rows opt into JPEG IDCT scaling.
+    virtual bool GetRasterTargetSize(int &, int &) const { return false; }
+    virtual void OnStartRasterDecode(LVImageSource *image, int, int) { OnStartDecode(image); }
 };
 
 struct CR9PatchInfo {

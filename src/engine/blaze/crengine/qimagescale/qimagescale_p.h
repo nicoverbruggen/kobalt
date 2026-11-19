@@ -50,9 +50,29 @@
 // We mean it.
 //
 
+#include <memory>
+#include <vector>
+
 namespace CRe {
 
 unsigned char* qSmoothScaleImage(const unsigned char* __restrict src, int sw, int sh, bool ignore_alpha, int dw, int dh);
+
+// Blaze: downscale ordered source rows using the filters and rounding of qSmoothScaleImage.
+class SmoothRowScaler {
+public:
+    SmoothRowScaler(int sw, int sh, int dw, int dh);
+    void addRow(int y, const unsigned int *pixels);
+    unsigned int *result() { return outputRow == height ? output.data() : nullptr; }
+    SmoothRowScaler(const SmoothRowScaler &) = delete;
+    SmoothRowScaler &operator=(const SmoothRowScaler &) = delete;
+
+private:
+    int sourceWidth, width, height;
+    long long step;
+    int firstRow = 0, outputRow = 0;
+    std::unique_ptr<int[]> xpoints, xweights, yweights;
+    std::vector<unsigned int> rows, output;
+};
 
 namespace QImageScale {
     struct QImageScaleInfo {

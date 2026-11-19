@@ -756,14 +756,11 @@ public:
         /* Now we can initialize the JPEG decompression object. */
         jpeg_create_decompress(&cinfo);
 
-        lUInt8 * buffer = NULL;
-
         if (setjmp(jerr.setjmp_buffer)) {
         	CRLog::error("JPEG setjmp error handling");
 	    /* If we get here, the JPEG code has signaled an error.
 	     * We need to clean up the JPEG object, close the input file, and return.
 	     */
-            delete[] buffer;
         	CRLog::debug("JPEG decoder cleanup");
             cr_jpeg_src_free (&cinfo);
             jpeg_destroy_decompress(&cinfo);
@@ -788,7 +785,20 @@ public:
 
             if ( callback )
             {
-                callback->OnStartDecode(this);
+                int targetWidth, targetHeight;
+                const unsigned mcuWidth = DCTSIZE * cinfo.max_h_samp_factor;
+                const unsigned mcuHeight = DCTSIZE * cinfo.max_v_samp_factor;
+                // Blaze: partial MCUs can bleed padding into the last reduced row or column.
+                if (callback->GetRasterTargetSize(targetWidth, targetHeight) && targetWidth > 0 && targetHeight > 0
+                        && mcuWidth && mcuHeight && _width % mcuWidth == 0 && _height % mcuHeight == 0) {
+                    for (int divisor : {8, 4, 2}) {
+                        if (_width / divisor >= targetWidth && _height / divisor >= targetHeight) {
+                            cinfo.scale_num = 1;
+                            cinfo.scale_denom = divisor;
+                            break;
+                        }
+                    }
+                }
                 /* Step 4: set parameters for decompression */
 
                 /* In this example, we don't need to change any of the defaults set by
@@ -800,11 +810,13 @@ public:
                 /* Step 5: Start decompressor */
 
                 (void) jpeg_start_decompress(&cinfo);
+                callback->OnStartRasterDecode(this, cinfo.output_width, cinfo.output_height);
                 /* We can ignore the return value since suspension is not possible
                  * with the stdio data source.
                  */
                 // NOTE: We know that cinfo.output_components is 4, given the out_color_space we chose.
-                buffer = new lUInt8 [ cinfo.output_width << 2U ];
+                JSAMPARRAY rows = (*cinfo.mem->alloc_sarray)(reinterpret_cast<j_common_ptr>(&cinfo),
+                                                            JPOOL_IMAGE, cinfo.output_width * 4, 1);
                 /* Step 6: while (scan lines remain to be read) */
                 /*           jpeg_read_scanlines(...); */
 
@@ -817,21 +829,18 @@ public:
                      * Here the array is only one element long, but you could ask for
                      * more than one scanline at a time if that's more convenient.
                      */
-                    (void) jpeg_read_scanlines(&cinfo, &buffer, 1);
+                    (void) jpeg_read_scanlines(&cinfo, rows, 1);
+                    JSAMPROW buffer = rows[0];
 
                     // CRe wants inverted alpha, but libjpeg-turbo doesn't guarantee that the alpha byte will be zero...
-                    const unsigned char* const end = buffer + (cinfo.output_width << 2U);
-                    // Start at the first alpha byte, then loop over each subsequent alpha byte, pixel-by-pixel
-                    for (unsigned char* p = buffer + 3U; p <= end; p += 4U) {
-                        *p = 0x00;
-                    }
+                    for (JDIMENSION x = 0; x < cinfo.output_width; ++x)
+                        buffer[4U * x + 3U] = 0;
                     callback->OnLineDecoded( this, y, reinterpret_cast<lUInt32 *>(buffer) );
 
                 }
                 callback->OnEndDecode(this, false);
             }
 
-        delete[] buffer;
         cr_jpeg_src_free (&cinfo);
         jpeg_destroy_decompress(&cinfo);
         return true;
@@ -908,7 +917,7 @@ bool LVPngImageSource::Decode( LVImageDecoderCallback * callback )
 
     if ( callback )
     {
-        callback->OnStartDecode(this);
+        callback->OnStartRasterDecode(this, width, height);
 
         //int png_transforms = PNG_TRANSFORM_STRIP_16 | PNG_TRANSFORM_INVERT_ALPHA;
             //PNG_TRANSFORM_PACKING|

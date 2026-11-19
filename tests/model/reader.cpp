@@ -736,7 +736,42 @@ static QByteArray leadingPages(kobalt::EngineDocument &model)
     return result;
 }
 
-static void checkJpeg(bool progressive)
+class JpegRows final : public LVImageDecoderCallback
+{
+public:
+    explicit JpegRows(QSize target) : target(target) { }
+
+    bool GetRasterTargetSize(int &width, int &height) const override
+    {
+        width = target.width();
+        height = target.height();
+        return true;
+    }
+
+    void OnStartDecode(LVImageSource *) override { }
+
+    void OnStartRasterDecode(LVImageSource *, int width, int height) override
+    {
+        decoded = QSize(width, height);
+    }
+
+    bool OnLineDecoded(LVImageSource *, int y, lUInt32 *) override
+    {
+        require(y == rows, "JPEG rows arrived out of order");
+        ++rows;
+        return true;
+    }
+
+    void OnEndDecode(LVImageSource *, bool errors) override
+    {
+        require(!errors, "JPEG decode failed");
+    }
+
+    QSize target, decoded;
+    int rows = 0;
+};
+
+static void checkJpeg(bool progressive, int height = 64)
 {
     jpeg_compress_struct codec{};
     jpeg_error_mgr errors{};
@@ -745,7 +780,8 @@ static void checkJpeg(bool progressive)
     unsigned char *data = nullptr;
     unsigned long length = 0;
     jpeg_mem_dest(&codec, &data, &length);
-    codec.image_width = codec.image_height = 64;
+    codec.image_width = 64;
+    codec.image_height = height;
     codec.input_components = 3;
     codec.in_color_space = JCS_RGB;
     jpeg_set_defaults(&codec);
@@ -766,7 +802,7 @@ static void checkJpeg(bool progressive)
     jpeg_destroy_compress(&codec);
     std::free(data);
     auto image = LVCreateStreamImageSource(stream);
-    require(!image.isNull() && image->GetWidth() == 64 && image->GetHeight() == 64,
+    require(!image.isNull() && image->GetWidth() == 64 && image->GetHeight() == height,
             "CREngine rejected JPEG dimensions");
     LVColorDrawBuf pixels(64, 64, 32);
     pixels.Clear(0xffffff);
@@ -775,6 +811,88 @@ static void checkJpeg(bool progressive)
     require(qRed(red) > 224 && qGreen(red) < 32 && qBlue(red) < 32 && qBlue(blue) > 224
                     && qGreen(blue) < 32 && qRed(blue) < 32,
             "CREngine did not preserve JPEG colors");
+    for (int size : { 8, 13, 16, 32, 64 }) {
+        JpegRows probe(QSize(size, size));
+        const int divisor = height == 64 ? (size <= 8            ? 8
+                                                    : size <= 16 ? 4
+                                                    : size <= 32 ? 2
+                                                                 : 1)
+                                         : 1;
+        require(image->Decode(&probe) && probe.decoded == QSize(64 / divisor, height / divisor)
+                        && probe.rows == probe.decoded.height(),
+                "JPEG decoded with unexpected dimensions or row count");
+        LVColorDrawBuf reduced(size, size, 32);
+        reduced.Clear(0xffffff);
+        reduced.setSmoothScalingImages(true);
+        reduced.Draw(image, 0, 0, size, size, false);
+        require(qRed(reduced.GetPixel(size / 4, size / 2)) > 220
+                        && qBlue(reduced.GetPixel(3 * size / 4, size / 2)) > 220
+                        && image->GetWidth() == 64 && image->GetHeight() == height,
+                "Scaled JPEG lost color, extent or intrinsic dimensions");
+    }
+}
+
+static void compareScaledPng(QByteArray bytes)
+{
+    auto source = LVCreateStreamImageSource(
+            LVCreateMemoryStream(bytes.data(), bytes.size(), false, LVOM_READ));
+    require(!source.isNull() && source->GetWidth() == 97 && source->GetHeight() == 83,
+            "Cannot decode test PNG");
+    LVColorDrawBuf empty(4, 4, 32);
+    empty.Clear(0x123456);
+    empty.setSmoothScalingImages(true);
+    empty.Draw(source, 0, 0, 0, 3, false);
+    empty.Draw(source, 0, 0, 3, 0, false);
+    require((empty.GetPixel(0, 0) & 0xffffff) == 0x123456, "Empty draw changed the image");
+
+    // The unpacked source supplies full-size pixels to the original smooth scaler.
+    auto full = LVCreateUnpackedImageSource(source, 97 * 83 * 4, false);
+    for (auto size :
+         { QSize(97, 82), QSize(81, 82), QSize(53, 41), QSize(19, 7), QSize(3, 2), QSize(1, 1) }) {
+        LVColorDrawBuf rows(size.width(), size.height(), 32),
+                reference(size.width(), size.height(), 32);
+        for (auto *target : { &rows, &reference }) {
+            target->Clear(0xb1c1d1);
+            target->setSmoothScalingImages(true);
+            target->Draw(target == &rows ? source : full, 0, 0, size.width(), size.height(), false);
+        }
+        require((reference.GetPixel(0, 0) & 0xffffff) != 0xb1c1d1
+                        || (reference.GetPixel(size.width() / 2, size.height() / 2) & 0xffffff)
+                                != 0xb1c1d1,
+                "PNG reference contains no visible ink at sampled pixels");
+        for (int y = 0; y < size.height(); ++y)
+            require(!memcmp(rows.GetScanLine(y), reference.GetScanLine(y), size.width() * 4),
+                    "Streaming PNG downscale changed a pixel");
+    }
+}
+
+static void checkScaledPng()
+{
+    QImage fixture(97, 83, QImage::Format_ARGB32);
+    for (int y = 0; y < fixture.height(); ++y)
+        for (int x = 0; x < fixture.width(); ++x)
+            fixture.setPixel(x, y,
+                             qRgba(3 * x & 255, 5 * y & 255, x * y & 255, (19 * x + 7 * y) & 255));
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    require(buffer.open(QIODevice::WriteOnly) && fixture.save(&buffer, "PNG"),
+            "Cannot encode test PNG");
+    compareScaledPng(bytes);
+    // 97 by 83 Adam7 PNG with a two-color palette and partial transparency.
+    compareScaledPng(QByteArray::fromBase64(
+            "iVBORw0KGgoAAAANSUhEUgAAAGEAAABTAQMAAAHCfcvQAAAABlBMVEXAFCot1RA/DS3uAAAAAnRS"
+            "TlNAwB2OQI0AAAB+SURBVHjaYwhZwbA6AISADAhC43pNYNiaAEJABgShcY1STjYgEWdnmzFACJwSaj4zw"
+            "fjm5jQUmhIxPhmLgoeHGxg+Pj7eL2fDAOfjEh8odXI2FUAhNOrh4XagPIwaVcLA+If9g/yBejDVgMb7x/"
+            "yD/4F9A5hiwMsbNWVEmgIAgPUKJ84EP2gAAAAASUVORK5CYII="));
+}
+
+static void checkRasterScaling()
+{
+    checkScaledPng();
+    for (bool progressive : { false, true }) {
+        checkJpeg(progressive);
+        checkJpeg(progressive, 63);
+    }
 }
 
 static void checkDrawPalette()
@@ -803,8 +921,8 @@ static void checkDrawPalette()
     require(ink.GetBackgroundColor() == 0xffffffU && ink.GetTextColor() == 0,
             "Ink measurement did not restore the default palette");
     lvRect bounds;
-    require(ink.getInkArea(bounds) && bounds.left == 2 && bounds.top == 3
-                    && bounds.right == 6 && bounds.bottom == 9,
+    require(ink.getInkArea(bounds) && bounds.left == 2 && bounds.top == 3 && bounds.right == 6
+                    && bounds.bottom == 9,
             "Palette handling changed the measured ink bounds");
 }
 
@@ -1662,8 +1780,7 @@ int main(int argc, char **argv)
                 "Legacy font alias changed");
     }
     checkDrawPalette();
-    checkJpeg(false);
-    checkJpeg(true);
+    checkRasterScaling();
     checkGif();
     checkSvg();
     checkKoboStyleHacks();

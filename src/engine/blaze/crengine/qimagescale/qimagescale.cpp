@@ -43,6 +43,7 @@
 
 #include <stdlib.h>
 #include <iostream>
+#include <cstring>
 
 #ifndef FBINK_QIS_NO_SIMD
 #if defined(__ARM_NEON__)
@@ -754,6 +755,43 @@ static void qt_qimageScaleAARGB_down_xy(QImageScaleInfo *isi, unsigned int * __r
 }
 
 #endif
+
+SmoothRowScaler::SmoothRowScaler(int sw, int sh, int dw, int dh)
+    : sourceWidth(sw), width(dw), height(dh), step((qint64(sh) << 16) / dh),
+      xpoints(qimageCalcXPoints(sw, dw)), xweights(qimageCalcApoints(sw, dw, dw >= sw)),
+      yweights(qimageCalcApoints(sh, dh, false)),
+      rows(size_t((sh - 1) / dh + 3) * sw), output(size_t(dw) * dh)
+{
+}
+
+void SmoothRowScaler::addRow(int y, const unsigned int *pixels)
+{
+    if (outputRow == height || y < firstRow)
+        return;
+    const size_t rowBytes = size_t(sourceWidth) * sizeof(*pixels);
+    std::memcpy(rows.data() + size_t(y - firstRow) * sourceWidth, pixels, rowBytes);
+    int weight = yweights[outputRow];
+    const int perRow = weight >> 16;
+    // The existing area filter gives the first row a fractional weight. Each
+    // following row supplies up to perRow of the remaining 14-bit weight.
+    const int remaining = (1 << 14) - (weight & 0xffff);
+    if (y < firstRow + (remaining + perRow - 1) / perRow)
+        return;
+    const unsigned int *first = rows.data();
+    QImageScaleInfo info;
+    info.xpoints = xpoints.get();
+    info.xapoints = xweights.get();
+    info.ypoints = &first;
+    info.yapoints = &weight;
+    info.xup_yup = width >= sourceWidth ? 1 : 0;
+    qt_qimageScaleAARGBA(&info, output.data() + size_t(outputRow) * width, width, 1, width, sourceWidth);
+    ++outputRow;
+    const int next = int((outputRow * step) >> 16);
+    if (next <= y)
+        std::memmove(rows.data(), rows.data() + size_t(next - firstRow) * sourceWidth,
+                     size_t(y - next + 1) * rowBytes);
+    firstRow = next;
+}
 
 unsigned char* qSmoothScaleImage(const unsigned char* __restrict src, int sw, int sh, bool ignore_alpha, int dw, int dh)
 {

@@ -47,6 +47,17 @@ using ui::makeButton;
 using ui::readerStyle;
 
 namespace {
+
+// A retained confirmation might have a new font. If Qt has a resize to
+// deliver on show, that resize already fits it with the current font.
+void showConfirmation(ui::ChoiceModal *dialog)
+{
+    if (!dialog->testAttribute(Qt::WA_PendingResizeEvent))
+        dialog->fitCard();
+    dialog->show();
+    dialog->raise();
+}
+
 ui::DescribedOption *settingsOption(QWidget *parent, const QString &name, const QString &label,
                                     const QString &description, bool first = false,
                                     bool leading = false)
@@ -904,9 +915,7 @@ void SettingsPanel::buildDefaults(QWidget *defaultsPage)
                                strings::get("reader.restore_appearance_defaults"), [this] {
                                    settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
                                    auto *dialog = restoreConfirmation();
-                                   dialog->fitCard();
-                                   dialog->show();
-                                   dialog->raise();
+                                   showConfirmation(dialog);
                                    dialog->setFocus();
                                });
     resetDefaults->setCaption(strings::get("settings.asks_first"));
@@ -920,9 +929,7 @@ void SettingsPanel::buildDefaults(QWidget *defaultsPage)
                               strings::get("text_presets.restore"), [this] {
                                   settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
                                   auto *dialog = restorePresetsConfirmation();
-                                  dialog->fitCard();
-                                  dialog->show();
-                                  dialog->raise();
+                                  showConfirmation(dialog);
                                   dialog->setFocus();
                               });
     resetPresets->setCaption(strings::get("settings.asks_first"));
@@ -1034,9 +1041,7 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
             // An unanswered confirmation must never turn the choice off.
             automaticOpeningOption->setChecked(true);
             auto *dialog = automaticOpeningConfirmation();
-            dialog->fitCard();
-            dialog->show();
-            dialog->raise();
+            showConfirmation(dialog);
             dialog->secondaryButton()->setFocus();
         });
     }
@@ -1073,9 +1078,7 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
             // An unanswered confirmation must never enable the preference.
             disableStandbyOption->setChecked(false);
             auto *dialog = standbyConfirmation();
-            dialog->fitCard();
-            dialog->show();
-            dialog->raise();
+            showConfirmation(dialog);
             dialog->secondaryButton()->setFocus();
         });
     }

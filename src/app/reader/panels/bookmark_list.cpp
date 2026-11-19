@@ -203,7 +203,6 @@ void BookmarkList::showPinHelp()
     notice->dismissed = [this] { closePinHelp(); };
     notice->show();
     notice->raise();
-    notice->fitCard();
 }
 
 void BookmarkList::showPinErrors()
@@ -256,7 +255,6 @@ void BookmarkList::showPinErrors()
     notice->dismissed = [this] { closePinHelp(); };
     notice->show();
     notice->raise();
-    notice->fitCard();
 }
 
 void BookmarkList::closePinHelp()

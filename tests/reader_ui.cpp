@@ -2690,8 +2690,7 @@ private slots:
             modal.card()->rows()->insertWidget(modal.card()->rows()->count() - 1, row);
             rows.append(row);
         }
-        modal.setGeometry(host.rect());
-        modal.fitCard();
+        QCOMPARE(modal.card()->maximumWidth(), QWIDGETSIZE_MAX);
         modal.show();
         QCoreApplication::processEvents();
         const auto divider = ui::dividerColor(modal.card());
@@ -2804,6 +2803,67 @@ private slots:
             QCOMPARE(wrapped->height(), wrapped->heightForWidth(wrapped->width()));
             QCOMPARE(filled.primaryButton()->grab().toImage().pixelColor(x, 0), paper);
         }
+    }
+
+    // The first visible frame fits the contents added after construction.
+    void modalFitsCompletedContentsOnShow()
+    {
+        QWidget host;
+        host.resize(ui::px(540), ui::px(1100));
+        host.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&host));
+        QImage image(40, 20, QImage::Format_RGB32);
+        image.fill(Qt::gray);
+        ui::NoticeModal notice(&host, { {}, "Font options", image }, { "Done", "close" });
+        auto *card = notice.card();
+        auto *art = card->rows()->itemAt(0)->widget();
+        auto *artwork = qobject_cast<QLabel *>(art);
+        QVERIFY(artwork);
+        // Fitting scales the artwork. No copy is needed until the full contents exist.
+        QVERIFY(artwork->pixmap().isNull());
+        auto *body = card->message("Choose a font for the labels shown in the header and footer. "
+                                   "The preview uses the selected font at the current text size.");
+        ui::readerStyle(body, ui::styles::font(ui::px(28)));
+        card->rows()->removeWidget(body);
+        card->rows()->insertWidget(card->rows()->count() - 1, body);
+        notice.show();
+        const auto expectedWidth = [&] {
+            return qMin<int>(ui::metrics::notice::cardWidth,
+                             host.width() - 2 * ui::metrics::notice::sideClearance);
+        };
+        QCOMPARE(card->width(), expectedWidth());
+        QVERIFY(!artwork->pixmap().isNull());
+        QVERIFY(body->height() >= body->heightForWidth(body->width()));
+        QVERIFY(body->geometry().bottom() < notice.primaryButton()->mapTo(card, QPoint()).y());
+        QCOMPARE(card->geometry().center(), notice.rect().center());
+        const auto geometry = card->geometry();
+        const auto pixels = artwork->pixmap().cacheKey();
+        QCoreApplication::processEvents();
+        QCOMPARE(card->geometry(), geometry);
+        QCOMPARE(artwork->pixmap().cacheKey(), pixels);
+
+        const int narrowHeight = body->height();
+        host.resize(ui::px(1100), ui::px(700));
+        QTRY_COMPARE(card->width(), expectedWidth());
+        QVERIFY(body->height() < narrowHeight);
+        QCOMPARE(card->geometry().center(), notice.rect().center());
+        const int wrappedHeight = body->height();
+        body->setText("Updated");
+        notice.fitCard();
+        QVERIFY(body->height() < wrappedHeight);
+        QVERIFY(card->rect().contains(notice.primaryButton()->mapTo(card, QPoint())));
+        notice.hide();
+
+        ui::ModalOverlay custom(&host);
+        custom.card()->message("Narrow notice");
+        const int customWidth = ui::px(400);
+        custom.card()->fitToWidth(customWidth);
+        custom.show();
+        QCOMPARE(custom.card()->width(), customWidth);
+        host.resize(ui::px(700), ui::px(1100));
+        QTRY_COMPARE(custom.size(), host.size());
+        QCOMPARE(custom.card()->width(), customWidth);
+        QCOMPARE(custom.card()->geometry().center(), custom.rect().center());
     }
 
     void connectedModalFooter_data() { variants(); }

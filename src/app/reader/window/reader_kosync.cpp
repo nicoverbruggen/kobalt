@@ -376,7 +376,6 @@ void Reader::requestManualKosync()
     });
     dialog->show();
     dialog->raise();
-    dialog->fitCard();
     refresh();
 }
 
@@ -566,7 +565,6 @@ void Reader::showKosyncOpening()
     };
     dialog->show();
     dialog->raise();
-    dialog->fitCard();
     refresh();
 }
 
@@ -703,7 +701,6 @@ void Reader::showKosyncChoice()
     dialog->setGeometry(rect());
     dialog->show();
     dialog->raise();
-    dialog->fitCard();
     const auto epoch = kosyncChoiceEpoch;
     dialog->primaryButton()->setEnabled(false);
     QPointer<ui::ChoiceModal> guard(dialog);

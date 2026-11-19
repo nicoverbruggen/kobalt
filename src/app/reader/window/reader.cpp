@@ -3243,7 +3243,6 @@ void Reader::transitionSaveError(std::function<void()> retry, std::function<void
         dismiss();
         discard();
     });
-    notice->fitCard();
     show();
     notice->show();
     notice->raise();
@@ -3304,7 +3303,6 @@ void Reader::failExit(quint64 request, const QString &error, SaveErrorView::Caus
         dismiss();
         cancelExit();
     };
-    notice->fitCard();
     notice->show();
     notice->raise();
     notice->primaryButton()->setFocus();

@@ -167,9 +167,6 @@ void Reader::finishMarksExport(AnnotationExportFormat format, bool saved, const 
     };
     notice->dismissed = done;
     connect(notice->primaryButton(), &QPushButton::clicked, this, done);
-    notice->card()->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    notice->centerCard();
     notice->show();
     notice->raise();
 }
@@ -1758,9 +1755,6 @@ void Reader::removeAnnotation(const QString &id)
     };
     connect(choice->secondaryButton(), &QPushButton::clicked, this, [finish] { finish(false); });
     connect(choice->primaryButton(), &QPushButton::clicked, this, [finish] { finish(true); });
-    choice->card()->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    choice->centerCard();
     choice->show();
     choice->raise();
 }

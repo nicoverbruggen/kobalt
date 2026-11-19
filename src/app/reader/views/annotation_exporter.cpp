@@ -5,7 +5,6 @@
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "ui/dialogs/modals.h"
-#include "ui/style/metrics.h"
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileDialog>
@@ -143,10 +142,6 @@ private:
             else
                 save(QUrl::fromLocalFile(path), bytes, replace);
         });
-        namespace metrics = ui::metrics;
-        dialog->card()->fitToWidth(qMin<int>(metrics::notice::cardWidth,
-                                             reader->width() - 2 * metrics::notice::sideClearance));
-        dialog->centerCard();
         dialog->show();
         dialog->raise();
     }

@@ -550,6 +550,7 @@ if(BUILD_TESTING)
             canvasInputRespectsModalBarrier
             modalClosesOnBackdropOnly
             choiceSheetListFillsCard
+            modalFitsCompletedContentsOnShow
             connectedModalFooter
             modalListDividers
             libraryActionButtons
@@ -817,7 +818,7 @@ if(BUILD_TESTING)
         "sleep:^(lifecycle\\.(sleep.*|readerStandbySetting|readerUsesSelectedSleepScreen|closedReaderDoesNotSaveSleepScreen|usb.*|persistedSleepScreen.*|homeSleepScreen.*|pageTurnsResumeWhenReaderIsShownAfterSleep|shutdownFinalSaveTimesOut|teardownRemovesApplicationFilter)|platform\\.(shutdown|sleep-persistence|kobo-power-screen|usb-removal|native-lifecycle)|desktop\\.deviceEmulation|model\\.engine-activity)$"
         "diagnostics:^(model\\.(diagnostics|crash-reports)|desktop\\.(engineMonitor|engineMonitorSlowdown|engineMonitorReading|fastConsecutiveChapterJumps|diagnostics|storageDiagnostics|settingChangesLogged)|lifecycle\\.developmentStateReports|platform\\.standby-(input|diagnostics))$"
         "kobo:^(platform\\.(startup-recovery|native-startup-wait|screensaver-loader|native-dialog-overlay|nickel-.*)|lifecycle\\.nativeOpeningStatus|model\\.qt-compat)$"
-        "settings:^(desktop\\.(settings.*|backgroundStyleSamplesYieldToReader|lightDarkModeShortcut|themeChanges)|lifecycle\\.(settingsTeardownReleasesConfirmation|settingsChoiceSheetReusesRows|settingsFontSheetReusesRows|settingsChoiceFitsAfterResize|appearance.*|textPresetsWithoutOpeningWait|panelsAfterBackgroundWork|uneditedPanelTransitions|overflowClosesCurrentPanel|turnSkipsHiddenControls)|model\\.(appearance-settings|text-presets|style-sample-cache|preview-store)|component\\.(ui|acknowledgments)|ui\\.(openingCoverDisabled|regularIconWeight|connectedModalFooter|modalListDividers|modalClosesOnBackdropOnly|choiceSheetListFillsCard))$"
+        "settings:^(desktop\\.(settings.*|backgroundStyleSamplesYieldToReader|lightDarkModeShortcut|themeChanges)|lifecycle\\.(settingsTeardownReleasesConfirmation|settingsChoiceSheetReusesRows|settingsFontSheetReusesRows|settingsChoiceFitsAfterResize|appearance.*|textPresetsWithoutOpeningWait|panelsAfterBackgroundWork|uneditedPanelTransitions|overflowClosesCurrentPanel|turnSkipsHiddenControls)|model\\.(appearance-settings|text-presets|style-sample-cache|preview-store)|component\\.(ui|acknowledgments)|ui\\.(openingCoverDisabled|regularIconWeight|connectedModalFooter|modalFitsCompletedContentsOnShow|modalListDividers|modalClosesOnBackdropOnly|choiceSheetListFillsCard))$"
         "layout:^(engine\\..*|corpus\\..*|desktop\\.(columns|globalLayout|advancedText|verticalJustification|stylesheet)|model\\.layout-(cache|compatibility))$"
         "reading:^(desktop\\.(startup|reading|openingProgressStages|standaloneOpeningPassageFollowsRequest|errors|formattingWarning|features)|lifecycle\\.preloadedBookOpensWithFreshHost|ui\\.openingCover(Layout|Upgrade|Disabled)|session\\.reader-session|model\\.(local-resources|zip-resource|resource-cache|plain-archive))$"
         "build:^build\\..*$")

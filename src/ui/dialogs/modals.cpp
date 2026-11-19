@@ -1,5 +1,6 @@
 #include "ui/controls/text.h"
 #include "modals.h"
+#include "platform/api/kobo_refresh.h"
 #include "ui/style/metrics.h"
 #include "ui/style/styles.h"
 #include "ui/style/fonts.h"
@@ -363,7 +364,11 @@ void PopupCard::fitToHeight(int height)
     if (!rowPager) {
         const auto owner = parentWidget() ? parentWidget()->objectName() : QString();
         rowPager = new PagerBar(this, owner.isEmpty() ? QStringLiteral("rrCard") : owner);
-        rowPager->setFixedHeight(metrics::chrome::actionHeight);
+        // Paging can first become necessary on show or rotation, after the
+        // caller has prepared the dialog's existing widgets for e-ink.
+        platform::textRefresh(rowPager);
+        for (auto *widget : rowPager->findChildren<QWidget *>())
+            platform::textRefresh(widget);
         const auto turn = [this](int direction) {
             showRowPage(rowPager->turnTarget(direction));
             if (auto *overlay = dynamic_cast<ModalOverlay *>(parentWidget()))
@@ -731,12 +736,15 @@ void ModalOverlay::setDelayedProgress(bool active, qint64 elapsedMilliseconds, i
 
 void ModalOverlay::resizeEvent(QResizeEvent *)
 {
-    if (fitChoiceContents)
+    if (fitChoiceContents) {
         fitChoiceContents(true);
-    else if (property("reader_standard_modal").toBool())
+    } else if (property("reader_standard_modal").toBool()) {
+        // Qt delivers the first resize before showing the dialog, after its
+        // caller has finished adding rows, setting styles and choosing actions.
         fitCard();
-    else
+    } else {
         centerCard();
+    }
 }
 
 void ModalOverlay::keyPressEvent(QKeyEvent *event)
@@ -799,7 +807,6 @@ NoticeModal::NoticeModal(QWidget *parent, const ModalContent &content, const Mod
     primary = makeModalButton(card(), action, true);
     card()->adaptiveActions({ primary });
     setProperty("reader_standard_modal", true);
-    fitCard();
 }
 
 ChoiceModal::ChoiceModal(QWidget *parent, const ModalContent &content,
@@ -814,7 +821,6 @@ ChoiceModal::ChoiceModal(QWidget *parent, const ModalContent &content,
     primary = makeModalButton(card(), primaryAction, true);
     card()->adaptiveActions({ secondary, primary });
     setProperty("reader_standard_modal", true);
-    fitCard();
 }
 
 PopupWindow::PopupWindow(QWidget *source, bool dark)

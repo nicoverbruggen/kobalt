@@ -1105,7 +1105,6 @@ void LibraryView::showNotice(const QString &title, const QString &message)
     notice->dismissed = [this] { closeOverlay(); };
     setDark(dark);
     notice->setGeometry(rect());
-    notice->fitCard();
     notice->show();
     notice->raise();
     notice->setFocus();
@@ -1456,7 +1455,6 @@ void LibraryView::confirmRemove(const QString &key)
     setDark(dark);
     modal->setGeometry(rect());
     modal->setDimmed(true);
-    modal->fitCard();
     modal->show();
     modal->raise();
     modal->setFocus();
@@ -1566,7 +1564,6 @@ void LibraryView::showResourceFolders()
     modal->dismissed = [this] { closeOverlay(); };
     setDark(dark);
     modal->setGeometry(rect());
-    modal->fitCard();
     modal->show();
     modal->raise();
     modal->setFocus();

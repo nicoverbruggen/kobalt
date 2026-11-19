@@ -6,7 +6,6 @@
 #include "storage/reader_storage.h"
 #include "support/diagnostics.h"
 #include "support/strings.h"
-#include "ui/style/metrics.h"
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -17,7 +16,6 @@
 
 namespace kobalt::reader {
 using kobalt::platform::textRefresh;
-namespace metrics = ui::metrics;
 
 namespace {
 QString bytesText(qint64 value)
@@ -182,9 +180,6 @@ void Reader::askCacheEviction(bool allBooks)
     choice->dismissed = [finish] { finish(false); };
     connect(choice->secondaryButton(), &QPushButton::clicked, this, [finish] { finish(false); });
     connect(choice->primaryButton(), &QPushButton::clicked, this, [finish] { finish(true); });
-    choice->card()->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    evictionDialog->centerCard();
     for (auto *widget : evictionDialog->findChildren<QWidget *>())
         textRefresh(widget);
     textRefresh(evictionDialog);

@@ -77,9 +77,6 @@ void Reader::confirmCustomReplace(const std::function<void()> &proceed,
     connect(choice->primaryButton(), &QPushButton::clicked, this, [finish] { finish(true); });
     // A tap outside the card keeps the layout, as Cancel does.
     choice->dismissed = [finish] { finish(false); };
-    choice->card()->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    customReplaceDialog->centerCard();
     for (auto *widget : customReplaceDialog->findChildren<QWidget *>())
         textRefresh(widget);
     textRefresh(customReplaceDialog);
@@ -175,9 +172,6 @@ void Reader::showFontDefaultDialog(const QString &face, bool instructions)
     for (auto *button : card->findChildren<QPushButton *>()) {
         button->setFocusPolicy(Qt::StrongFocus);
     }
-    card->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    dialog->centerCard();
     dialog->show();
     dialog->raise();
     confirm->setFocus();
@@ -208,9 +202,6 @@ void Reader::showFormattingWarning()
     };
     notice->dismissed = dismiss;
     connect(notice->primaryButton(), &QPushButton::clicked, this, dismiss);
-    notice->card()->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    notice->centerCard();
     notice->show();
     notice->raise();
     notice->primaryButton()->setFocus();
@@ -271,9 +262,6 @@ void Reader::showExitSyncWait()
             finishExit();
     });
     poll->start(1000);
-    choice->card()->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    choice->centerCard();
     for (auto *widget : choice->findChildren<QWidget *>())
         textRefresh(widget);
     choice->show();
@@ -392,9 +380,6 @@ void Reader::buildProgressChoice(const kobalt::ReadingProgress &shown, int direc
             save(false, true);
         });
     });
-    card->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    syncDialog->centerCard();
     for (auto *widget : syncDialog->findChildren<QWidget *>())
         textRefresh(widget);
     textRefresh(syncDialog);
@@ -518,9 +503,6 @@ void Reader::showFinishChoice()
     };
     connect(choice->secondaryButton(), &QPushButton::clicked, this, [choose] { choose(false); });
     connect(choice->primaryButton(), &QPushButton::clicked, this, [choose] { choose(true); });
-    card->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    finishDialog->centerCard();
     for (auto *widget : finishDialog->findChildren<QWidget *>())
         textRefresh(widget);
     textRefresh(finishDialog);
@@ -599,7 +581,6 @@ void Reader::askRemoveBookmark(const QString &position)
             { strings::get("bookmarks.remove"), "rrConfirmRemoveBookmark" });
     removeDialog = choice;
     removeDialog->setObjectName("rrRemoveBookmark");
-    auto *card = choice->card();
     auto *text = choice->descriptionLabel();
     text->setObjectName("rrRemoveBookmarkDetail");
     auto finish = [this, position](bool remove) {
@@ -618,9 +599,6 @@ void Reader::askRemoveBookmark(const QString &position)
     };
     connect(choice->secondaryButton(), &QPushButton::clicked, this, [finish] { finish(false); });
     connect(choice->primaryButton(), &QPushButton::clicked, this, [finish] { finish(true); });
-    card->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    removeDialog->centerCard();
     for (auto *widget : removeDialog->findChildren<QWidget *>())
         textRefresh(widget);
     textRefresh(removeDialog);
@@ -704,9 +682,6 @@ void Reader::showSettingsWriteError()
     };
     notice->dismissed = dismiss;
     connect(notice->primaryButton(), &QPushButton::clicked, this, dismiss);
-    notice->card()->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    notice->centerCard();
     notice->show();
     notice->raise();
     notice->primaryButton()->setFocus();
@@ -762,9 +737,6 @@ void Reader::showAnnotationError(const QString &message, const QString &title, c
     };
     notice->dismissed = dismiss;
     connect(notice->primaryButton(), &QPushButton::clicked, this, dismiss);
-    notice->card()->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    notice->centerCard();
     notice->show();
     notice->raise();
     notice->primaryButton()->setFocus();
@@ -1407,7 +1379,6 @@ void Reader::editSleepGreeting()
     greetingKeyboard->submitted = submit;
     dialog->show();
     dialog->raise();
-    dialog->fitCard();
     editor->setFocus();
     greetingKeyboard->show();
     // Keep the card above the keyboard.
@@ -1455,9 +1426,6 @@ void Reader::showSleepOverlayHelp()
     notice->dismissed = [this] { closePopup(sleepPopup); };
     connect(notice->primaryButton(), &QPushButton::clicked, this,
             [this] { closePopup(sleepPopup); });
-    notice->card()->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    notice->centerCard();
     for (auto *widget : notice->findChildren<QWidget *>())
         textRefresh(widget);
     textRefresh(notice);
@@ -1483,9 +1451,6 @@ void Reader::showSleepWallpaperHelp()
     notice->dismissed = [this] { closePopup(sleepPopup); };
     connect(notice->primaryButton(), &QPushButton::clicked, this,
             [this] { closePopup(sleepPopup); });
-    notice->card()->fitToWidth(
-            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
-    notice->centerCard();
     for (auto *widget : notice->findChildren<QWidget *>())
         textRefresh(widget);
     textRefresh(notice);

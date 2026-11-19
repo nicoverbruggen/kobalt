@@ -486,7 +486,6 @@ void KosyncPage::edit(int field)
     editorDialog->installEventFilter(this);
     editorDialog->show();
     editorDialog->raise();
-    editorDialog->fitCard();
     editor->setFocus();
     keyboard_->show();
     placeEditor();
@@ -547,7 +546,6 @@ void KosyncPage::showMatchingChoices()
     dialog->dismissed = [this] { dismissMatchingChoices(); };
     dialog->show();
     dialog->raise();
-    dialog->fitCard();
 }
 
 void KosyncPage::dismissMatchingChoices()
@@ -576,7 +574,6 @@ void KosyncPage::showSyncHelp()
     dialog->dismissed = [this] { dismissSyncHelp(); };
     dialog->show();
     dialog->raise();
-    dialog->fitCard();
 }
 
 void KosyncPage::dismissSyncHelp()

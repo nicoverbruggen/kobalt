@@ -45,9 +45,6 @@ void confirmWordRemoval(QWidget *host, const SavedWord &word, std::function<void
     QObject::connect(choice->primaryButton(), &QPushButton::clicked, choice,
                      [finish] { finish(true); });
     choice->dismissed = [finish] { finish(false); };
-    choice->card()->fitToWidth(qMin<int>(ui::metrics::notice::cardWidth,
-                                         host->width() - 2 * ui::metrics::notice::sideClearance));
-    choice->centerCard();
     choice->show();
     choice->raise();
 }

@@ -345,7 +345,6 @@ public:
         } else {
             auto *dialog = failure();
             dialog->show();
-            dialog->fitCard();
             dialog->raise();
             dialog->setFocus();
         }
@@ -775,7 +774,6 @@ SaveErrorView::SaveErrorView(QWidget *parent, const QString &error, bool retried
         quit->setFixedHeight(ui::metrics::chrome::actionHeight);
         card()->rows()->addWidget(quit);
     }
-    fitCard();
 }
 
 } // namespace kobalt

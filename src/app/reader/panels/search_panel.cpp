@@ -379,7 +379,6 @@ void SearchPanel::choosePage()
     connect(number, &QLineEdit::textChanged, dialog, [dialog, number] {
         dialog->primaryButton()->setEnabled(number->hasAcceptableInput());
     });
-    dialog->fitCard();
     dialog->show();
     dialog->raise();
     number->setFocus();

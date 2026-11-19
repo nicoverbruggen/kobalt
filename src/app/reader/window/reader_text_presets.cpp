@@ -332,7 +332,6 @@ void Reader::saveNewTextPreset()
                 { strings::get("common.ok"), "rrTextPresetLimitOk" });
         notice->setObjectName("rrTextPresetLimit");
         notice->setDimmed(true);
-        notice->setProperty("reader_standard_modal", true);
         notice->setGeometry(rect());
         const auto close = [notice] {
             notice->hide();
@@ -340,7 +339,6 @@ void Reader::saveNewTextPreset()
         };
         connect(notice->primaryButton(), &QPushButton::clicked, notice, close);
         notice->dismissed = close;
-        notice->fitCard();
         notice->show();
         notice->raise();
         return;
@@ -464,8 +462,6 @@ void Reader::editTextPresetName(const QString &id)
     }
     dialog->show();
     dialog->raise();
-    dialog->fitCard();
-    dialog->fitCard();
     editor->setFocus();
     if (textPresetKeyboard)
         textPresetKeyboard->show();
@@ -578,7 +574,6 @@ void Reader::confirmDeleteTextPreset(const QString &id)
             { strings::get("text_presets.delete"), "rrTextPresetDeleteConfirm" });
     dialog->setObjectName("rrTextPresetDeleteDialog");
     dialog->setDimmed(true);
-    dialog->setProperty("reader_standard_modal", true);
     dialog->setGeometry(rect());
     const auto close = [dialog] {
         dialog->hide();
@@ -601,7 +596,6 @@ void Reader::confirmDeleteTextPreset(const QString &id)
         saveTextPresets(next, list);
     });
     dialog->dismissed = close;
-    dialog->fitCard();
     dialog->show();
     dialog->raise();
 }

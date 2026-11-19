@@ -133,9 +133,6 @@ void Reader::deleteActivityBook(const QString &key, const QString &title)
     connect(choice->secondaryButton(), &QPushButton::clicked, choice, [finish] { finish(false); });
     connect(choice->primaryButton(), &QPushButton::clicked, choice, [finish] { finish(true); });
     choice->dismissed = [finish] { finish(false); };
-    choice->card()->fitToWidth(qMin<int>(ui::metrics::notice::cardWidth,
-                                         width() - 2 * ui::metrics::notice::sideClearance));
-    choice->centerCard();
     prepareRefresh(choice);
     choice->show();
     choice->raise();
@@ -207,9 +204,6 @@ void Reader::showActivityWelcome()
     notice->dismissed = [this] { closePopup(activityWelcome); };
     connect(notice->primaryButton(), &QPushButton::clicked, this,
             [this] { closePopup(activityWelcome); });
-    notice->card()->fitToWidth(qMin<int>(ui::metrics::notice::cardWidth,
-                                         width() - 2 * ui::metrics::notice::sideClearance));
-    notice->centerCard();
     prepareRefresh(notice);
     notice->show();
     notice->raise();

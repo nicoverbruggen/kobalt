@@ -655,4 +655,49 @@ void KosyncScheduleSheet::dismissIntervals()
     intervals_->deleteLater();
     intervals_ = nullptr;
 }
+
+KosyncScheduleEditor::~KosyncScheduleEditor()
+{
+    dismiss();
+}
+
+void KosyncScheduleEditor::open(QWidget *parent, bool automatic, const kosync::Schedule &schedule,
+                                KosyncScheduleSheet::Features features)
+{
+    if (sheet_)
+        return;
+    auto *sheet = new KosyncScheduleSheet(parent, automatic, schedule, features);
+    sheet_ = sheet;
+    features_ = features;
+    sheet->closed = [this] { dismiss(); };
+    sheet->automaticChanged = automaticChanged;
+    sheet->scheduleChanged = scheduleChanged;
+    sheet->show();
+    sheet->raise();
+    sheet->fit();
+}
+
+void KosyncScheduleEditor::setChoices(bool automatic, const kosync::Schedule &schedule)
+{
+    if (sheet_)
+        sheet_->setChoices(automatic, schedule);
+}
+
+void KosyncScheduleEditor::setFeatures(KosyncScheduleSheet::Features features)
+{
+    if (sheet_ && (features.sleepWake != features_.sleepWake || features.wifi != features_.wifi))
+        dismiss();
+}
+
+void KosyncScheduleEditor::dismiss()
+{
+    if (!sheet_)
+        return;
+    auto *sheet = sheet_.data();
+    sheet_ = nullptr;
+    sheet->dismissIntervals();
+    sheet->hide();
+    sheet->deleteLater();
+}
+
 } // namespace kobalt::reader

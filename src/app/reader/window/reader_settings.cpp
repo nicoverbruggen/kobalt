@@ -382,8 +382,8 @@ void Reader::refreshHostPresentation()
             for (auto *card : presetCards)
                 if (card->preset() == headerfooter::Preset::Phone)
                     card->setVisible(phone);
-            if (hideTabLabelsOption)
-                hideTabLabelsOption->setVisible(!phone);
+            if (hideTabLabelsOption.widget)
+                hideTabLabelsOption.widget->setVisible(!phone);
             loadChrome();
             if (choices->isVisible() && choosingTypography)
                 showFontPicker();
@@ -412,15 +412,9 @@ void Reader::openSettings()
         return;
     kobalt::ui::PanelTiming timing("settings");
     ensureSettings();
+    auto *panel = static_cast<SettingsPanel *>(general);
     timing.stage("build");
     openingSettings = true;
-    kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(),
-                           kosyncClient->signedIn(), kosyncClient->automatic());
-    kosyncPage->setLastSync(kosyncClient->lastSync());
-    kosyncPage->setFilenameMatching(kosyncClient->filenameMatching());
-    kosyncPage->setSendMetadata(kosyncClient->sendMetadata());
-    kosyncPage->setDeviceName(kosyncClient->customDeviceName(), kosyncClient->defaultDeviceName());
-    kosyncPage->setStatus(kosyncMessage, syncCoordinator->busy());
     session->cancelPendingTurn();
     hideRevealedLinks(false);
     dismissLookup();
@@ -448,30 +442,22 @@ void Reader::openSettings()
             remainingTime::approximate(preferences) ? "approximate" : "detailed";
     settingsPercentageFormat = headerfooter::decimalPercentages(preferences) ? "decimal" : "whole";
     settingsRenderingMode = renderingMode::value(renderingMode::fromPreferences(preferences));
-    static_cast<SettingsPanel *>(general)->selectTheme(interfaceTheme(), themeDraft);
-    hideTabLabelsOption->setChecked(preferences.value("hide_tab_labels").toBool(false));
-    saveWordsOption->setChecked(preferences.value("save_looked_up_words").toBool(true));
-    zenModeOption->setChecked(preferences.value("zen_mode").toBool(false));
-    static_cast<SettingsPanel *>(general)->hideBookOnSleepOption->setChecked(
-            book->hideBookOnSleepScreen());
-    if (wifiPowerSaverOption)
-        wifiPowerSaverOption->setChecked(preferences.value(wifiPowerSaverKey).toBool(false));
-    if (disableStandbyOption)
-        disableStandbyOption->setChecked(preferences.value(disableReaderStandbyKey).toBool(false));
+    panel->selectTheme(interfaceTheme(), themeDraft);
+    hideTabLabelsOption.set(preferences.value("hide_tab_labels").toBool(false));
+    saveWordsOption.set(preferences.value("save_looked_up_words").toBool(true));
+    zenModeOption.set(preferences.value("zen_mode").toBool(false));
+    hideBookOnSleepOption.set(book->hideBookOnSleepScreen());
+    if (services.turnOffWifi)
+        wifiPowerSaverOption.set(preferences.value(wifiPowerSaverKey).toBool(false));
+    if (services.readerStandbySupported)
+        disableStandbyOption.set(preferences.value(disableReaderStandbyKey).toBool(false));
     for (auto *face : { &themeDraft.mainFace, &settingsMonoFace, &settingsStripFace,
                         &settingsDictionaryFontFace })
         if (!session->fontFaces().contains(*face))
             face->clear();
-    showDebugSettings();
+    debugModeOption.set(features::debugMode(preferences));
+    panel->showDebug(debugModeOption.checked());
     timing.stage("prepare");
-    showSettingsFonts();
-    timing.stage("fonts");
-    settingsPages->setCurrentIndex(int(SettingsPage::Display));
-    resetDefaults->setText(strings::get("reader.restore_appearance_defaults"));
-    resetDefaults->setEnabled(true);
-    auto *resetPresets = static_cast<SettingsPanel *>(general)->resetPresets;
-    resetPresets->setText(strings::get("text_presets.restore"));
-    resetPresets->setEnabled(true);
     // Keep the typography draft until Settings is applied.
     menu->hide();
     const bool showingTopControls = !topControls->isVisible();
@@ -482,28 +468,19 @@ void Reader::openSettings()
     choices->hide();
     settingsError->clear();
     settingsError->hide();
-    darkOption->setChecked(session->state().value("dark_mode").toBool(false));
-    static_cast<SettingsPanel *>(general)->openingCoverOption->setChecked(
-            !preferences.value("show_opening_cover").toBool(true));
-    static_cast<SettingsPanel *>(general)->featurePreferences = preferences;
-    static_cast<SettingsPanel *>(general)->updateFeatureOptions();
-    showTextPresetSettings();
-    inpageFootnotesOption->setChecked(session->state().value("inpage_footnotes").toBool(false));
-    hideNonlinearOption->setChecked(
-            session->state().value("hide_nonlinear_fragments").toBool(false));
-    auto *displaySettings = static_cast<SettingsPanel *>(general);
+    darkOption.set(session->state().value("dark_mode").toBool(false));
+    openingCoverOption.set(!preferences.value("show_opening_cover").toBool(true));
+    panel->featurePreferences = preferences;
+    panel->updateFeatureOptions();
+    inpageFootnotesOption.set(session->state().value("inpage_footnotes").toBool(false));
+    hideNonlinearOption.set(session->state().value("hide_nonlinear_fragments").toBool(false));
     settingsVerticalSpacing =
             appearance::verticalSpacingMode(session->state().value("vertical_justification"));
     settingsVerticalSpacingScope =
             appearance::verticalSpacingScope(session->state().value("vertical_spacing_scope"));
-    displaySettings->landscapeColumnsOption->setChecked(
-            preferences.value("two_columns_landscape").toBool(false));
+    landscapeColumnsOption.set(preferences.value("two_columns_landscape").toBool(false));
     settingsColumnSpacing =
             preferences.value("column_spacing_percent").toInt(defaultColumnSpacingPercent);
-    displaySettings->columnSpacingButton->setEnabled(
-            displaySettings->landscapeColumnsOption->isChecked());
-    displaySettings->columnSpacingButton->setCaption(
-            SettingsPanel::columnSpacingLabel(settingsColumnSpacing));
     settingsWordSpacing = session->state().value("word_spacing").toInt(100);
     settingsParagraphSpacing = appearance::paragraphSpacing(preferences.value("paragraph_spacing"));
     settingsParagraphIndent = appearance::paragraphIndent(preferences.value("paragraph_indent"));
@@ -513,32 +490,28 @@ void Reader::openSettings()
     settingsTracking = session->state().value("justification_tracking").toInt(0);
     settingsHangingPunctuation = session->state().value("hanging_punctuation").toBool(false);
     settingsWidowsOrphans = session->state().value("widows_orphans").toString("publisher");
-    showAdvancedText();
-    animationOption->setChecked(services.softwarePageAnimations
-                                        ? pageTurn::selected(preferences) == pageTurn::Style::Sweep
-                                        : preferences.value("page_animations").toBool(false));
-    bionicOption->setChecked(session->state().value("bold_reading").toString("off") == "bold");
-    edgeLightOption->setChecked(preferences.value("edge_light_gestures").toBool(true));
-    lightGestureFeedbackOption->setChecked(
-            preferences.value("show_light_gesture_feedback").toBool(true));
-    denseGraphOption->setChecked(preferences.value("dense_stats_chart").toBool(false));
-    showSleepScreen();
-    showPageNavigation();
-    showTapZones();
-    showTappableLinks();
-    showAnnotationInteraction();
-    minimalAnnotationOption->setChecked(minimalAnnotationMode());
-    showNavigationBarButtons();
-    showChapterGroups();
-    showMenuView();
+    animationOption.set(services.softwarePageAnimations
+                                ? pageTurn::selected(preferences) == pageTurn::Style::Sweep
+                                : preferences.value("page_animations").toBool(false));
+    bionicOption.set(session->state().value("bold_reading").toString("off") == "bold");
+    edgeLightOption.set(preferences.value("edge_light_gestures").toBool(true));
+    lightGestureFeedbackOption.set(preferences.value("show_light_gesture_feedback").toBool(true));
+    denseGraphOption.set(preferences.value("dense_stats_chart").toBool(false));
+    minimalAnnotationOption.set(minimalAnnotationMode());
     if (services.automaticBookOpening)
-        automaticOpeningOption->setChecked(services.automaticBookOpening());
+        automaticOpeningOption.set(services.automaticBookOpening());
     screenRefreshMode = kobalt::screenRefresh(preferences.value("screen_refresh").toString());
-    showScreenRefresh();
-    static_cast<SettingsPanel *>(general)->setZenLayout(zenMode());
+    for (int index = 0; index < settingsPages->count(); ++index) {
+        const auto section = SettingsPage(index);
+        if (panel->pageIsBuilt(section))
+            showSettingsPage(section);
+    }
+    panel->setZenLayout(zenMode());
+    if (!zenMode())
+        settingsPages->setCurrentIndex(int(SettingsPage::Display));
     timing.stage("controls");
+    fitSettings(true);
     openingSettings = false;
-    fitSettings();
     general->show();
     general->raise();
     // A panel that was never shown measures its word-wrapped rows too tall,
@@ -554,9 +527,74 @@ void Reader::openSettings()
     timing.finish(general);
 }
 
+void Reader::showSettingsPage(SettingsPage section)
+{
+    auto *panel = static_cast<SettingsPanel *>(general);
+    switch (section) {
+    case SettingsPage::Display:
+        panel->columnSpacingButton->setEnabled(landscapeColumnsOption.checked());
+        panel->columnSpacingButton->setCaption(
+                SettingsPanel::columnSpacingLabel(settingsColumnSpacing));
+        showScreenRefresh();
+        break;
+    case SettingsPage::Controls:
+        showPageNavigation();
+        showTapZones();
+        showTappableLinks();
+        showAnnotationInteraction();
+        showNavigationBarButtons();
+        showChapterGroups();
+        showMenuView();
+        break;
+    case SettingsPage::Defaults: {
+        resetDefaults->setText(strings::get("reader.restore_appearance_defaults"));
+        resetDefaults->setEnabled(true);
+        auto *resetPresets = static_cast<SettingsPanel *>(general)->resetPresets;
+        resetPresets->setText(strings::get("text_presets.restore"));
+        resetPresets->setEnabled(true);
+        showTextPresetSettings();
+        showSettingsFonts(section);
+        break;
+    }
+    case SettingsPage::Styling:
+        showAdvancedText();
+        break;
+    case SettingsPage::System:
+        showSleepScreen();
+        panel->updateFeatureOptions();
+        showSettingsFonts(section);
+        break;
+    case SettingsPage::Theming:
+        panel->selectTheme(panel->selectedTheme, themeDraft);
+        showSettingsFonts(section);
+        break;
+    case SettingsPage::Kosync:
+        kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(),
+                               kosyncClient->signedIn(), kosyncClient->automatic());
+        kosyncPage->setLastSync(kosyncClient->lastSync());
+        kosyncPage->setFilenameMatching(kosyncClient->filenameMatching());
+        kosyncPage->setSendMetadata(kosyncClient->sendMetadata());
+        kosyncPage->setDeviceName(kosyncClient->customDeviceName(),
+                                  kosyncClient->defaultDeviceName());
+        kosyncPage->setStatus(kosyncMessage, syncCoordinator->busy());
+        break;
+    case SettingsPage::Debug:
+        showDebugSettings();
+        break;
+    case SettingsPage::Zen:
+        showZenSettings();
+        break;
+    case SettingsPage::Dictionaries:
+    case SettingsPage::About:
+        break;
+    }
+}
+
 void Reader::showAdvancedText(int changed)
 {
     auto *panel = static_cast<SettingsPanel *>(general);
+    if (!panel->beautifierButton)
+        return;
     const auto preset = appearance::normalizationPreset(settingsBeautifier);
     panel->beautifierButton->setCaption(
             strings::get(("settings.normalization_" + preset).toUtf8().constData()).toUpper());
@@ -628,7 +666,7 @@ void Reader::renderStylingSamples(int requested)
     // The sample uses the book's typography with the Styling choices made so
     // far, which are applied to the book only when Settings closes.
     auto settings = styleSampleSettings(session->state());
-    settings["dark_mode"] = darkOption->isChecked();
+    settings["dark_mode"] = darkOption.checked();
     settings["word_spacing"] = settingsWordSpacing;
     settings["paragraph_spacing"] = settingsParagraphSpacing;
     settings["paragraph_indent"] = settingsParagraphIndent;
@@ -765,11 +803,13 @@ void Reader::renderStylingSamples(int requested)
     }
 }
 
-void Reader::fitSettings()
+void Reader::fitSettings(bool opening)
 {
-    if (!general)
+    if (!general || (!opening && !settingsVisible()))
         return;
-    const int top = navigation ? navigation->statusHeight()
+    // Settings uses the regular status bar even when opened from the Zen menu.
+    // The menu still owns navigation during the first fit, before the panel shows.
+    const int top = navigation ? navigation->statusHeight(false)
                                : int(metrics::panel::toolbarHeight - metrics::chrome::actionHeight);
     const int panelHeight =
             static_cast<SettingsPanel *>(general)->fitContent(QSize(width(), height() - top));
@@ -890,33 +930,30 @@ void Reader::applySettings()
     next.remove("ui_colorful_icons");
     next["ui_theme"] = static_cast<SettingsPanel *>(general)->selectedTheme;
     next.remove("playful_theme");
-    next["hide_tab_labels"] = hideTabLabelsOption->isChecked();
-    next[features::debugModeKey] =
-            static_cast<SettingsPanel *>(general)->debugModeOption->isChecked();
-    next["save_looked_up_words"] = saveWordsOption->isChecked();
-    next["zen_mode"] = zenModeOption->isChecked();
-    if (wifiPowerSaverOption)
-        next[wifiPowerSaverKey] = wifiPowerSaverOption->isChecked();
-    if (disableStandbyOption)
-        next[disableReaderStandbyKey] = disableStandbyOption->isChecked();
+    next["hide_tab_labels"] = hideTabLabelsOption.checked();
+    next[features::debugModeKey] = debugModeOption.checked();
+    next["save_looked_up_words"] = saveWordsOption.checked();
+    next["zen_mode"] = zenModeOption.checked();
+    if (services.turnOffWifi)
+        next[wifiPowerSaverKey] = wifiPowerSaverOption.checked();
+    if (services.readerStandbySupported)
+        next[disableReaderStandbyKey] = disableStandbyOption.checked();
     next[remainingTime::preferenceKey] = settingsTimeRemainingFormat;
     next[headerfooter::percentageFormatKey] = settingsPercentageFormat;
     next[renderingMode::preferenceKey] = settingsRenderingMode;
     for (const auto *key : appearance::fallbackFontKeys)
         next[key] = settingsFontFaces.value(key).toString();
-    next["bold_reading"] =
-            bionicOption->isChecked() ? QStringLiteral("bold") : QStringLiteral("off");
-    next["dark_mode"] = darkOption->isChecked();
+    next["bold_reading"] = bionicOption.checked() ? QStringLiteral("bold") : QStringLiteral("off");
+    next["dark_mode"] = darkOption.checked();
     for (const auto *key : features::keys)
         next[key] =
                 static_cast<SettingsPanel *>(general)->featurePreferences.value(key).toBool(false);
-    next["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
-    next["inpage_footnotes"] = inpageFootnotesOption->isChecked();
+    next["hide_nonlinear_fragments"] = hideNonlinearOption.checked();
+    next["inpage_footnotes"] = inpageFootnotesOption.checked();
     next["vertical_justification"] = settingsVerticalSpacing;
     next["vertical_spacing_scope"] = settingsVerticalSpacingScope;
     next.remove("columns");
-    next["two_columns_landscape"] =
-            static_cast<SettingsPanel *>(general)->landscapeColumnsOption->isChecked();
+    next["two_columns_landscape"] = landscapeColumnsOption.checked();
     next["column_spacing_percent"] = settingsColumnSpacing;
     next["word_spacing"] = settingsWordSpacing;
     next["paragraph_spacing"] = settingsParagraphSpacing;
@@ -930,16 +967,15 @@ void Reader::applySettings()
     next["widows_orphans"] = settingsWidowsOrphans;
     if (services.softwarePageAnimations)
         next[pageTurn::preferenceKey] = pageTurn::value(
-                animationOption->isChecked() ? pageTurn::Style::Sweep : pageTurn::Style::Off);
+                animationOption.checked() ? pageTurn::Style::Sweep : pageTurn::Style::Off);
     else
-        next["page_animations"] = animationOption->isChecked();
-    next["edge_light_gestures"] = edgeLightOption->isChecked();
-    next["show_light_gesture_feedback"] = lightGestureFeedbackOption->isChecked();
-    next["show_opening_cover"] =
-            !static_cast<SettingsPanel *>(general)->openingCoverOption->isChecked();
-    next["dense_stats_chart"] = denseGraphOption->isChecked();
+        next["page_animations"] = animationOption.checked();
+    next["edge_light_gestures"] = edgeLightOption.checked();
+    next["show_light_gesture_feedback"] = lightGestureFeedbackOption.checked();
+    next["show_opening_cover"] = !openingCoverOption.checked();
+    next["dense_stats_chart"] = denseGraphOption.checked();
     next.remove(pageNavigation::barVisibleKey);
-    next["minimal_annotation_mode"] = minimalAnnotationOption->isChecked();
+    next["minimal_annotation_mode"] = minimalAnnotationOption.checked();
     next["screen_refresh"] = kobalt::screenRefreshValue(screenRefreshMode);
     if (restoringPresets)
         textpresets::store(next, textpresets::restoreExamples(textpresets::load(next)));
@@ -957,10 +993,10 @@ void Reader::applySettings()
         next[it.key()] = it.value();
     next = appearance::cleanPreferences(next);
     if (!writePreferences(next)) {
-        bionicOption->setChecked(
+        bionicOption.set(
                 session->requestedAppearance().fields().value("bold_reading").toString("off")
                 == "bold");
-        minimalAnnotationOption->setChecked(minimalAnnotationMode());
+        minimalAnnotationOption.set(minimalAnnotationMode());
         settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
         settingsError->show();
         appearanceEdit.cancelNavigation();
@@ -970,7 +1006,7 @@ void Reader::applySettings()
     if (zenMode() != next.value("zen_mode").toBool(false))
         flashAfterZenSwitch = true;
     preferences = next;
-    const bool hideBook = static_cast<SettingsPanel *>(general)->hideBookOnSleepOption->isChecked();
+    const bool hideBook = hideBookOnSleepOption.checked();
     if (hideBook != book->hideBookOnSleepScreen()) {
         book->setHideBookOnSleepScreen(hideBook);
         QJsonObject snapshot;
@@ -1011,9 +1047,9 @@ void Reader::applySettings()
             settingsDefaultFontFace.isEmpty() ? QString(defaultFontFace) : settingsDefaultFontFace;
     for (const auto *key : appearance::fallbackFontKeys)
         settings[key] = preferences.value(key).toString();
-    settings["dark_mode"] = darkOption->isChecked();
-    settings["hide_nonlinear_fragments"] = hideNonlinearOption->isChecked();
-    settings["inpage_footnotes"] = inpageFootnotesOption->isChecked();
+    settings["dark_mode"] = darkOption.checked();
+    settings["hide_nonlinear_fragments"] = hideNonlinearOption.checked();
+    settings["inpage_footnotes"] = inpageFootnotesOption.checked();
     settings["vertical_justification"] = preferences.value("vertical_justification");
     settings["vertical_spacing_scope"] = preferences.value("vertical_spacing_scope");
     settings["columns"] = 1;
@@ -1028,7 +1064,7 @@ void Reader::applySettings()
     settings["hanging_punctuation"] = settingsHangingPunctuation;
     settings["widows_orphans"] = settingsWidowsOrphans;
     settings["bold_reading"] =
-            bionicOption->isChecked() ? QStringLiteral("bold") : QStringLiteral("off");
+            bionicOption.checked() ? QStringLiteral("bold") : QStringLiteral("off");
     if (restoringDefaults) {
         const auto defaults = kobalt::appearance::typographyDefaults();
         for (auto it = defaults.begin(); it != defaults.end(); ++it)
@@ -1079,8 +1115,7 @@ void Reader::setDenseGraph(bool dense)
                                            saves::settled();
                                            if (saved) {
                                                guard->preferences["dense_stats_chart"] = dense;
-                                               if (guard->denseGraphOption)
-                                                   guard->denseGraphOption->setChecked(dense);
+                                               guard->denseGraphOption.set(dense);
                                            } else {
                                                guard->chapterGraph->setDense(
                                                        guard->preferences.value("dense_stats_chart")
@@ -1189,7 +1224,7 @@ void Reader::applyBoldReading(bool enabled)
     auto next = preferences;
     next["bold_reading"] = mode;
     if (!writePreferences(next)) {
-        bionicOption->setChecked(
+        bionicOption.set(
                 session->requestedAppearance().fields().value("bold_reading").toString("off")
                 == "bold");
         return;
@@ -1213,7 +1248,7 @@ void Reader::applyAutomaticOpening(bool enabled)
     if (!services.automaticBookOpening || !services.setAutomaticBookOpening)
         return;
     const bool saved = services.setAutomaticBookOpening(enabled);
-    automaticOpeningOption->setChecked(services.automaticBookOpening());
+    automaticOpeningOption.set(services.automaticBookOpening());
     if (!saved) {
         settingsError->setText(strings::get("native_ui.could_not_save_reader_preference"));
         settingsError->show();
@@ -1223,13 +1258,13 @@ void Reader::applyAutomaticOpening(bool enabled)
     settingsError->hide();
 }
 
-void Reader::themeWidget(QWidget *widget, const QPalette &colors)
+void Reader::themeWidget(QWidget *widget, const QPalette &colors, bool builtInTheme)
 {
     // Native controls manage their own source colors and cached icons.
     for (auto *ancestor = widget; ancestor && ancestor != this; ancestor = ancestor->parentWidget())
         if (ancestor->property("reader_native_colors").toBool())
             return;
-    ui::applyReaderPalette(widget, colors);
+    ui::applyReaderPalette(widget, colors, builtInTheme);
     textRefresh(widget);
     if (auto *button = qobject_cast<QPushButton *>(widget))
         kobalt::ui::refreshButtonIcon(button);
@@ -1619,69 +1654,87 @@ void Reader::applyInterfaceFonts()
 void Reader::showSettingsFonts()
 {
     auto *panel = static_cast<SettingsPanel *>(general);
-    panel->percentageFormatButton->setCaption(
-            SettingsPanel::percentageFormatLabel(settingsPercentageFormat).toUpper());
-    panel->timeRemainingFormatButton->setCaption(
-            SettingsPanel::timeRemainingFormatLabel(settingsTimeRemainingFormat).toUpper());
-    panel->renderingButton->setCaption(
-            SettingsPanel::renderingModeLabel(settingsRenderingMode).toUpper());
-    panel->headerFooterWeightButton->setCaption(
-            (settingsStripWeight ? strings::get("settings.header_footer_weight_heavier")
-                                           .arg(settingsStripWeight)
-                                 : strings::get("settings.header_footer_weight_lighter"))
-                    .toUpper());
-    panel->uiFontButton->setCaption(
-            (themeDraft.mainFace.isEmpty()
-                     ? strings::get("settings.font_default_value").arg("IBM Plex Sans")
-                     : fontDisplayName(themeDraft.mainFace))
-                    .toUpper());
-    panel->uiMonoFontButton->setCaption(
-            (settingsMonoFace.isEmpty()
-                     ? strings::get("settings.font_default_value").arg("IBM Plex Mono")
-                     : fontDisplayName(settingsMonoFace))
-                    .toUpper());
-    panel->headerFooterFontButton->setCaption(
-            (settingsStripFace.isEmpty()
-                     ? strings::get("settings.font_default_value").arg("IBM Plex Mono")
-                     : fontDisplayName(settingsStripFace))
-                    .toUpper());
+    for (const auto section :
+         { SettingsPage::System, SettingsPage::Theming, SettingsPage::Defaults })
+        if (panel->pageIsBuilt(section))
+            showSettingsFonts(section);
+}
+
+void Reader::showSettingsFonts(SettingsPage section)
+{
+    auto *panel = static_cast<SettingsPanel *>(general);
     const auto sample = [this](ui::CaptionButton *button, const QString &family) {
         if (button->typefacePreview() != family)
             registerPickerFonts(family);
         button->setTypefacePreview(family);
     };
-    sample(panel->uiFontButton,
-           themeDraft.mainFace.isEmpty() ? QStringLiteral("IBM Plex Sans") : themeDraft.mainFace);
-    sample(panel->uiMonoFontButton,
-           settingsMonoFace.isEmpty() ? QStringLiteral("IBM Plex Mono") : settingsMonoFace);
-    sample(panel->headerFooterFontButton,
-           settingsStripFace.isEmpty() ? QStringLiteral("IBM Plex Mono") : settingsStripFace);
-    const auto dictionaryDefault = bookFace();
-    const auto dictionaryFace =
-            settingsDictionaryFontFace.isEmpty() ? dictionaryDefault : settingsDictionaryFontFace;
-    panel->dictionaryFontButton->setCaption(
-            (settingsDictionaryFontFace.isEmpty() ? strings::get("settings.font_default_value")
-                                                            .arg(fontDisplayName(dictionaryDefault))
-                                                  : fontDisplayName(settingsDictionaryFontFace))
-                    .toUpper());
-    sample(panel->dictionaryFontButton, dictionaryFace);
-    panel->dictionaryFontSizeButton->setCaption(
-            SettingsPanel::dictionaryFontSizeLabel(settingsDictionaryFontSize).toUpper());
-    sample(panel->defaultFontButton, settingsDefaultFontFace);
-    panel->defaultFontButton->setCaption((settingsDefaultFontFace.isEmpty()
-                                                  ? strings::get("reader.publisher_fonts")
-                                                  : fontDisplayName(settingsDefaultFontFace))
-                                                 .toUpper());
-    const auto defaults = fallbackFontDefaults(session->fontFaces());
-    int index = 0;
-    for (auto *button : { panel->serifFontButton, panel->sansFontButton, panel->monoFontButton }) {
-        const auto family = settingsFontFaces.value(appearance::fallbackFontKeys[index]).toString();
-        button->setCaption((family.isEmpty() ? strings::get("settings.font_default_value")
-                                                       .arg(fontDisplayName(defaults[index]))
-                                             : fontDisplayName(family))
-                                   .toUpper());
-        sample(button, family.isEmpty() ? defaults[index] : family);
-        ++index;
+    if (section == SettingsPage::System) {
+        panel->percentageFormatButton->setCaption(
+                SettingsPanel::percentageFormatLabel(settingsPercentageFormat).toUpper());
+        panel->timeRemainingFormatButton->setCaption(
+                SettingsPanel::timeRemainingFormatLabel(settingsTimeRemainingFormat).toUpper());
+        panel->renderingButton->setCaption(
+                SettingsPanel::renderingModeLabel(settingsRenderingMode).toUpper());
+        const auto dictionaryDefault = bookFace();
+        const auto dictionaryFace = settingsDictionaryFontFace.isEmpty()
+                ? dictionaryDefault
+                : settingsDictionaryFontFace;
+        panel->dictionaryFontButton->setCaption(
+                (settingsDictionaryFontFace.isEmpty()
+                         ? strings::get("settings.font_default_value")
+                                   .arg(fontDisplayName(dictionaryDefault))
+                         : fontDisplayName(settingsDictionaryFontFace))
+                        .toUpper());
+        sample(panel->dictionaryFontButton, dictionaryFace);
+        panel->dictionaryFontSizeButton->setCaption(
+                SettingsPanel::dictionaryFontSizeLabel(settingsDictionaryFontSize).toUpper());
+    } else if (section == SettingsPage::Theming) {
+        panel->headerFooterWeightButton->setCaption(
+                (settingsStripWeight ? strings::get("settings.header_footer_weight_heavier")
+                                               .arg(settingsStripWeight)
+                                     : strings::get("settings.header_footer_weight_lighter"))
+                        .toUpper());
+        panel->uiFontButton->setCaption(
+                (themeDraft.mainFace.isEmpty()
+                         ? strings::get("settings.font_default_value").arg("IBM Plex Sans")
+                         : fontDisplayName(themeDraft.mainFace))
+                        .toUpper());
+        panel->uiMonoFontButton->setCaption(
+                (settingsMonoFace.isEmpty()
+                         ? strings::get("settings.font_default_value").arg("IBM Plex Mono")
+                         : fontDisplayName(settingsMonoFace))
+                        .toUpper());
+        panel->headerFooterFontButton->setCaption(
+                (settingsStripFace.isEmpty()
+                         ? strings::get("settings.font_default_value").arg("IBM Plex Mono")
+                         : fontDisplayName(settingsStripFace))
+                        .toUpper());
+        sample(panel->uiFontButton,
+               themeDraft.mainFace.isEmpty() ? QStringLiteral("IBM Plex Sans")
+                                             : themeDraft.mainFace);
+        sample(panel->uiMonoFontButton,
+               settingsMonoFace.isEmpty() ? QStringLiteral("IBM Plex Mono") : settingsMonoFace);
+        sample(panel->headerFooterFontButton,
+               settingsStripFace.isEmpty() ? QStringLiteral("IBM Plex Mono") : settingsStripFace);
+    } else if (section == SettingsPage::Defaults) {
+        sample(panel->defaultFontButton, settingsDefaultFontFace);
+        panel->defaultFontButton->setCaption((settingsDefaultFontFace.isEmpty()
+                                                      ? strings::get("reader.publisher_fonts")
+                                                      : fontDisplayName(settingsDefaultFontFace))
+                                                     .toUpper());
+        const auto defaults = fallbackFontDefaults(session->fontFaces());
+        int index = 0;
+        for (auto *button :
+             { panel->serifFontButton, panel->sansFontButton, panel->monoFontButton }) {
+            const auto family =
+                    settingsFontFaces.value(appearance::fallbackFontKeys[index]).toString();
+            button->setCaption((family.isEmpty() ? strings::get("settings.font_default_value")
+                                                           .arg(fontDisplayName(defaults[index]))
+                                                 : fontDisplayName(family))
+                                       .toUpper());
+            sample(button, family.isEmpty() ? defaults[index] : family);
+            ++index;
+        }
     }
 }
 

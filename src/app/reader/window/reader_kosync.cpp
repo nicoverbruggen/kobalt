@@ -1,4 +1,5 @@
 #include "reader_p.h"
+#include "app/reader/settings/settings_panel.h"
 #include "support/strings.h"
 #include "support/diagnostics.h"
 #include <QTimer>
@@ -27,6 +28,7 @@ void Reader::kosyncStatus(const QString &message)
         kosyncPage->setLastSync(kosyncClient->lastSync());
         kosyncPage->setStatus(message, syncCoordinator->busy());
     }
+    showZenSettings();
     updateKosyncToolbar();
     if (settingsVisible() && !lifecycleHidden && !closing && !exportRunning) {
         fitSettings();
@@ -123,10 +125,37 @@ void Reader::buildKosync()
     });
 }
 
-void Reader::buildKosyncPage()
+void Reader::connectKosyncSchedule(SettingsPanel &settings)
 {
-    kosyncPage->setNativeCloudSync(book->nativeSyncPolicy());
-    const auto account = [this] {
+    settings.kosyncSchedule.automaticChanged = [this](bool enabled) {
+        if (!kosyncClient->setAutomatic(enabled))
+            kosyncStatus(strings::get("kosync.storage_error"));
+        refreshKosyncAccount();
+        if (enabled)
+            restartKosync();
+        kosyncStatus(kosyncMessage);
+    };
+    settings.kosyncSchedule.scheduleChanged = [this](const kosync::Schedule &schedule) {
+        if (!kosyncClient->setSchedule(schedule))
+            kosyncStatus(strings::get("kosync.storage_error"));
+        syncCoordinator->resetBackgroundFailures();
+        refreshKosyncAccount();
+        kosyncStatus(kosyncMessage);
+    };
+    settings.zenScheduleRequested = [this, &settings] {
+        if (!kosyncClient->signedIn() || book->nativeSyncPolicy().enabled
+            || syncCoordinator->busy())
+            return;
+        const bool preview = kosyncEreaderPreview();
+        settings.kosyncSchedule.open(
+                this, kosyncClient->automatic(), kosyncClient->schedule(),
+                { services.kosyncSleepWake || preview, services.kosyncWifiControl || preview });
+    };
+}
+
+void Reader::refreshKosyncAccount()
+{
+    if (kosyncPage) {
         kosyncPage->setFilenameMatching(kosyncClient->filenameMatching());
         kosyncPage->setSendMetadata(kosyncClient->sendMetadata());
         kosyncPage->setDeviceName(kosyncClient->customDeviceName(),
@@ -134,9 +163,29 @@ void Reader::buildKosyncPage()
         kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(),
                                kosyncClient->signedIn(), kosyncClient->automatic());
         kosyncPage->setSchedule(kosyncClient->schedule());
-        updateKosyncToolbar();
-    };
-    account();
+    } else if (general) {
+        auto &schedule = static_cast<SettingsPanel *>(general)->kosyncSchedule;
+        if (kosyncClient->signedIn())
+            schedule.setChoices(kosyncClient->automatic(), kosyncClient->schedule());
+        else
+            schedule.dismiss();
+    }
+    updateKosyncToolbar();
+}
+
+void Reader::dismissKosyncEditors()
+{
+    if (kosyncPage)
+        kosyncPage->dismissEditor();
+    else if (general)
+        static_cast<SettingsPanel *>(general)->kosyncSchedule.dismiss();
+}
+
+void Reader::buildKosyncPage()
+{
+    kosyncPage->stateChanged = [this] { showZenSettings(); };
+    kosyncPage->setNativeCloudSync(book->nativeSyncPolicy());
+    refreshKosyncAccount();
     kosyncPage->filenameMatchingChanged = [this](bool enabled) {
         if (enabled == kosyncClient->filenameMatching())
             return;
@@ -166,7 +215,7 @@ void Reader::buildKosyncPage()
                                   kosyncClient->defaultDeviceName());
         kosyncStatus(strings::get(saved ? "kosync.device_name_saved" : "kosync.storage_error"));
     };
-    kosyncPage->loginRequested = [this, account] {
+    kosyncPage->loginRequested = [this] {
         if (syncCoordinator->busy())
             return;
         const auto server = kosyncPage->server(), username = kosyncPage->username();
@@ -176,19 +225,19 @@ void Reader::buildKosyncPage()
             kosyncStatus(error);
             return;
         }
-        syncCoordinator->login(server, username, password, [this, account](const QString &error) {
+        syncCoordinator->login(server, username, password, [this](const QString &error) {
             if (error.isEmpty()) {
                 kosyncPage->clearPassword();
                 ++kosyncChoiceEpoch;
                 kosyncPositionFailed = false;
                 kosyncPromptDeferred = false;
                 restartKosync();
-                account();
+                refreshKosyncAccount();
             }
             kosyncStatus(error.isEmpty() ? strings::get("kosync.signed_in") : error);
         });
     };
-    kosyncPage->logoutRequested = [this, account] {
+    kosyncPage->logoutRequested = [this] {
         cancelKosync();
         if (kosyncClient->logout()) {
             kosyncPage->clearPassword();
@@ -196,25 +245,10 @@ void Reader::buildKosyncPage()
             kosyncPositionFailed = false;
             kosyncPromptDeferred = false;
             restartKosync();
-            account();
+            refreshKosyncAccount();
             kosyncStatus(strings::get("kosync.signed_out"));
         } else
             kosyncStatus(strings::get("kosync.storage_error"));
-    };
-    kosyncPage->automaticChanged = [this, account](bool enabled) {
-        if (!kosyncClient->setAutomatic(enabled))
-            kosyncStatus(strings::get("kosync.storage_error"));
-        account();
-        if (enabled)
-            restartKosync();
-        kosyncStatus(kosyncMessage);
-    };
-    kosyncPage->scheduleChanged = [this, account](const kosync::Schedule &schedule) {
-        if (!kosyncClient->setSchedule(schedule))
-            kosyncStatus(strings::get("kosync.storage_error"));
-        syncCoordinator->resetBackgroundFailures();
-        account();
-        kosyncStatus(kosyncMessage);
     };
     kosyncPage->syncRequested = [this] { synchronizeKosync(true); };
     updateKosyncFeatures();
@@ -251,16 +285,43 @@ qint64 Reader::kosyncClock() const
     return kosyncIntervalClock.elapsed();
 }
 
+bool Reader::kosyncEreaderPreview() const
+{
+    return services.devicePreview && services.devicePreview() && !services.phoneLayout;
+}
+
 void Reader::updateKosyncFeatures()
 {
-    if (!kosyncPage)
+    // A desktop e-reader preview shows what a Kobo offers.
+    if (general) {
+        const bool preview = kosyncEreaderPreview();
+        const bool sleepWake = services.kosyncSleepWake || preview;
+        const bool wifi = services.kosyncWifiControl || preview;
+        if (kosyncPage)
+            kosyncPage->setScheduleFeatures(sleepWake, wifi);
+        else
+            static_cast<SettingsPanel *>(general)->kosyncSchedule.setFeatures({ sleepWake, wifi });
+    }
+    showZenSettings();
+}
+
+void Reader::showZenSettings()
+{
+    auto *panel = static_cast<SettingsPanel *>(general);
+    if (!panel || !panel->zenDarkOption)
         return;
-    // A desktop e-reader preview shows what a Kobo offers. A desktop window
-    // or a phone layout offers only what its host supports.
-    const bool ereaderPreview =
-            services.devicePreview && services.devicePreview() && !services.phoneLayout;
-    kosyncPage->setScheduleFeatures(services.kosyncSleepWake || ereaderPreview,
-                                    services.kosyncWifiControl || ereaderPreview);
+    panel->setZenLightAvailable(services.lightAvailable() && !edgeLightOption.checked());
+    if (kosyncPage) {
+        panel->setZenSync(kosyncPage->syncReady(), kosyncPage->syncEnabled(),
+                          kosyncPage->lastSyncText(), kosyncPage->automaticCaption());
+    } else {
+        const bool ready = kosyncClient->signedIn() && !book->nativeSyncPolicy().enabled;
+        panel->setZenSync(
+                ready, ready && !syncCoordinator->busy(),
+                KosyncPage::lastSyncText(kosyncClient->lastSync()),
+                KosyncPage::automaticCaption(kosyncClient->automatic(), kosyncClient->schedule(),
+                                             services.kosyncWifiControl || kosyncEreaderPreview()));
+    }
 }
 
 void Reader::updateKosyncToolbar()
@@ -539,6 +600,7 @@ void Reader::finishKosync(const QString &message, bool finishing)
     kosyncMessage = message;
     if (kosyncPage)
         kosyncPage->setStatus(message, false);
+    showZenSettings();
     updateKosyncToolbar();
     if (!finishing && !closing && !lifecycleHidden && !exportRunning) {
         // A failure can need more lines than the preceding Syncing message.

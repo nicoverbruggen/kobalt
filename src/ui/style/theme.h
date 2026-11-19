@@ -40,5 +40,5 @@ void readerStyle(QWidget *widget, const QString &source);
 QPalette readerPalette(QPalette base, bool dark, const QString &palette = {});
 // Sets the palette, then replays the widget's reader style sheet. Qt can replace
 // gray roles while applying QSS, so restore the fixed theme roles afterwards.
-void applyReaderPalette(QWidget *widget, const QPalette &colors);
+void applyReaderPalette(QWidget *widget, const QPalette &colors, bool builtInTheme = false);
 } // namespace kobalt::ui

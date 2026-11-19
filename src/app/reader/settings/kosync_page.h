@@ -9,12 +9,13 @@
 #include <QDateTime>
 
 namespace kobalt::reader {
-class KosyncScheduleSheet;
+class KosyncScheduleEditor;
 
 class KosyncPage final : public QWidget
 {
 public:
-    KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory keyboard);
+    KosyncPage(QWidget *parent, QWidget *overlayParent, KeyboardFactory keyboard,
+               KosyncScheduleEditor &scheduleEditor);
     ~KosyncPage() override;
     void setAccount(const QString &server, const QString &username, bool signedIn, bool automatic);
     void setSchedule(const kosync::Schedule &schedule);
@@ -44,16 +45,14 @@ public:
     bool syncReady() const { return signedIn_ && !nativeCloudSync_ && !accountEdited_; }
 
     bool syncEnabled() const;
+    static QString lastSyncText(const QDateTime &time);
     QString lastSyncText() const;
+    static QString automaticCaption(bool automatic, const kosync::Schedule &schedule, bool wifi);
     QString automaticCaption() const;
     void syncNow();
 
-    void openSchedule() { showSchedule(); }
-
     // Called after the account, schedule, last sync or status changes.
     std::function<void()> stateChanged;
-    std::function<void(bool)> automaticChanged;
-    std::function<void(const kosync::Schedule &)> scheduleChanged;
     std::function<void(const QString &)> deviceNameChanged;
     std::function<void(bool)> filenameMatchingChanged;
     std::function<void(bool)> sendMetadataChanged;
@@ -72,11 +71,10 @@ private:
     void showMatchingChoices();
     void dismissMatchingChoices();
     void showSchedule();
-    void dismissSchedule();
     void updateAutomaticCaption();
     QPointer<ui::NoticeModal> syncHelp_;
     QPointer<ui::NoticeModal> matchingDialog_;
-    QPointer<KosyncScheduleSheet> scheduleSheet_;
+    QPointer<KosyncScheduleEditor> scheduleEditor_;
     QWidget *overlayParent_;
     KeyboardFactory makeKeyboard_;
     std::unique_ptr<KeyboardController> keyboard_;

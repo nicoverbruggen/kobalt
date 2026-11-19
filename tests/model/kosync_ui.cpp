@@ -70,7 +70,8 @@ void checkKeyboardInputStaysInEditor()
             host.setFont(ui::interfaceFont());
             ui::applyReaderPalette(&host, ui::readerPalette(host.palette(), dark));
             ui::readerStyle(&host, ui::styles::reader());
-            reader::KosyncPage page(&host, &host, ui::makeWidgetKeyboard);
+            reader::KosyncScheduleEditor schedule;
+            reader::KosyncPage page(&host, &host, ui::makeWidgetKeyboard, schedule);
             page.resize(host.size());
             host.show();
             page.show();
@@ -371,9 +372,13 @@ int main(int argc, char **argv)
                 ui::applyReaderPalette(&host, ui::readerPalette(host.palette(), dark));
                 ui::readerStyle(&host, ui::styles::reader());
                 int destroyed = 0;
-                reader::KosyncPage page(&host, &host, [&](QWidget *parent, QWidget *) {
-                    return std::make_unique<Keyboard>(destroyed, parent);
-                });
+                reader::KosyncScheduleEditor schedule;
+                reader::KosyncPage page(
+                        &host, &host,
+                        [&](QWidget *parent, QWidget *) {
+                            return std::make_unique<Keyboard>(destroyed, parent);
+                        },
+                        schedule);
                 host.resize(ui::px(800), ui::px(2000));
                 page.resize(host.size());
                 host.show();
@@ -464,11 +469,12 @@ int main(int argc, char **argv)
     reader::SettingsPanel panel(&window, inputs);
     panel.resize(window.size());
     auto *tab = panel.findChild<QPushButton *>("rrSettingsKosync");
-    require(tab && panel.settingsPages->widget(int(reader::SettingsPage::Kosync)) == panel.kosync,
-            "Sync has its own Settings tab on desktop");
+    require(tab, "Sync has a Settings tab on desktop");
     panel.show();
     window.show();
     tab->click();
+    require(panel.kosync && panel.settingsPages->currentWidget() == panel.kosync,
+            "Sync has its own Settings page on desktop");
     panel.fitContent(window.size());
     QApplication::processEvents();
     // A narrow panel lists its sections without a selection; the rail checks the open one.
@@ -846,8 +852,8 @@ int main(int argc, char **argv)
     bool autoChanged = false;
     kosync::Schedule chosenSchedule;
     int scheduleChanges = 0;
-    page->automaticChanged = [&](bool value) { autoChanged = !value; };
-    page->scheduleChanged = [&](const kosync::Schedule &schedule) {
+    panel.kosyncSchedule.automaticChanged = [&](bool value) { autoChanged = !value; };
+    panel.kosyncSchedule.scheduleChanged = [&](const kosync::Schedule &schedule) {
         chosenSchedule = schedule;
         ++scheduleChanges;
     };

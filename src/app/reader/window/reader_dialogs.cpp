@@ -1032,7 +1032,7 @@ QString sessionTimeoutLabel(int minutes)
 
 void Reader::showSleepScreen()
 {
-    if (!general)
+    if (!sleepScreenButton)
         return;
     sessionTimeoutButton->setCaption(
             sessionTimeoutLabel(sessionTimeout::minutes(preferences)).toUpper());

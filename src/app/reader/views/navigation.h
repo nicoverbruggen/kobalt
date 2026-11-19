@@ -162,10 +162,10 @@ public:
     // row, between the exit action and the actions on the right.
     void setInlineStatus(bool value) { inlineStatus = value; }
 
-    int statusHeight() const
+    int statusHeight(bool includeZenGroup = true) const
     {
         // Zen mode's top group always keeps the status line above its cells.
-        const int status = statusVisible && (!inlineStatus || zenTop)
+        const int status = statusVisible && (!inlineStatus || (includeZenGroup && zenTop))
                 ? int(ui::metrics::chrome::statusHeight)
                 : 0;
         return safeTop >= status ? safeTop : safeTop + status;

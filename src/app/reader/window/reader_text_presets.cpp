@@ -803,6 +803,8 @@ void Reader::closeTextPresetGallery()
 void Reader::showTextPresetSettings()
 {
     auto *panel = static_cast<SettingsPanel *>(general);
+    if (!panel->textForNewBooksButton)
+        return;
     const auto presets = textpresets::load(preferences);
     const auto choice = textpresets::newBookChoice(preferences);
     const auto *chosen = textpresets::find(presets, choice);

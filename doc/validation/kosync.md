@@ -1,5 +1,7 @@
 # KOSync checks
 
+`desktop.settingsZenPage` opens Automatic sync from Zen before the Sync settings page has been visited. A signed-in account can enable automatic sync and change its schedule. It forces a schedule save to fail, checks that the switch returns to its saved position, and retries. It reads back the stored choices and verifies that the account controls stay unbuilt.
+
 `desktop.fastKosyncChoice` opens a synced passage choice for another chapter while reading in Fast mode. It checks the direction, chapter name and whole-book page graph, and that the current position stays on screen.
 
 Label `kosync`. Build `mac-tests`, then run `ctest --preset mac -L kosync` from `platforms/desktop/`. `ctest --preset mac -N -L kosync` lists its tests.

@@ -194,6 +194,7 @@ void dismissedContent()
 
     reader::SettingsPanel settings(&host, {});
     settings.show();
+    settings.settingsTabButtons[int(reader::SettingsPage::Styling)]->click();
     {
         StyleSample sample;
         sample.spreads = { { image, image } };

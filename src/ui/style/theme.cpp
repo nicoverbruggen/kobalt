@@ -302,11 +302,17 @@ QPalette readerPalette(QPalette colors, bool dark, const QString &palette)
     return colors;
 }
 
-void applyReaderPalette(QWidget *widget, const QPalette &colors)
+void applyReaderPalette(QWidget *widget, const QPalette &colors, bool builtInTheme)
 {
-    widget->setPalette(colors);
-    if (widget->property("reader_style").isValid())
-        readerStyle(widget, widget->property("reader_style").toString());
+    const auto source = widget->property("reader_style");
+    // A new widget inherits the active theme. Its polished style sheet already
+    // owns its caption and disabled text colors. Setting the plain palette now
+    // would replace those colors without changing the sheet to apply them again.
+    if (!builtInTheme || !source.isValid()) {
+        widget->setPalette(colors);
+        if (source.isValid())
+            readerStyle(widget, source.toString());
+    }
     auto styled = widget->palette();
     for (const auto role : {
                  QPalette::Mid,

@@ -1558,35 +1558,23 @@ void Reader::ensureSettings()
 {
     if (general)
         return;
-    // The panel is built as the window built its controls before it had a
-    // theme: without the dark flag, so its style sheets are the light ones.
-    // The theme below replaces them, which polishes each widget with the
-    // theme's colors, as applyTheme did for the window's widgets. The panel
-    // is built straight into the window: moving a built panel there made Qt
-    // resolve the style of every widget again, a third of the build on a Kobo.
-    const auto dark = property("reader_dark");
-    if (themeReady)
-        setProperty("reader_dark", false);
     buildSettings(this);
-    // The first fit picks the list or the rail for this screen and restyles
-    // the panel for it. Do it before the theme, as the window build did.
-    fitSettings();
     general->hide();
-    setProperty("reader_dark", dark);
-    // Polishing applies the style sheets, which replace the gray roles. The
-    // theme restores them, so it comes after, as for the window's widgets.
-    general->ensurePolished();
-    for (auto *widget : general->findChildren<QWidget *>())
+    prepareSettingsWidgets(general);
+}
+
+void Reader::prepareSettingsWidgets(QWidget *root)
+{
+    const auto prepare = [this](QWidget *widget) {
         widget->ensurePolished();
-    if (themeReady) {
-        themeWidget(general, themePalette);
-        for (auto *widget : general->findChildren<QWidget *>())
-            themeWidget(widget, themePalette);
-    } else {
-        textRefresh(general);
-        for (auto *widget : general->findChildren<QWidget *>())
+        if (themeReady)
+            themeWidget(widget, themePalette, true);
+        else
             textRefresh(widget);
-    }
+    };
+    prepare(root);
+    for (auto *widget : root->findChildren<QWidget *>())
+        prepare(widget);
 }
 
 void Reader::buildSettings(QWidget *parent)
@@ -1608,8 +1596,9 @@ void Reader::buildSettings(QWidget *parent)
     settingsInputs.debugProgressAvailable = bool(services.development.simulateProgress);
     auto *settings = new kobalt::reader::SettingsPanel(parent, settingsInputs);
     general = settings;
-    kosyncPage = settings->kosync;
-    buildKosyncPage();
+    connectKosyncSchedule(*settings);
+    settingsPages = settings->settingsPages;
+    settingsError = settings->settingsError;
     settings->refitRequested = [this] {
         fitSettings();
         refresh();
@@ -1623,273 +1612,11 @@ void Reader::buildSettings(QWidget *parent)
     });
     settings->showDictionaries(services.downloadableDictionaries
                                && !(services.devicePreview && services.devicePreview()));
-    if (services.downloadableDictionaries) {
-        auto *manager = static_cast<kobalt::DictionaryManager *>(dictionary.get());
-        auto *dictionarySettings = settings->dictionaries;
-        dictionarySettings->setLanguage(session->state().value("language").toString());
-        const auto catalog = kobalt::DictionaryManager::catalog();
-        dictionarySettings->setCatalog(catalog);
-        auto updateDictionaries = [this, manager, dictionarySettings, catalog,
-                                   previous = QSet<QString>{},
-                                   sizes = QHash<QString, qint64>{}]() mutable {
-            QSet<QString> installed;
-            for (const auto &entry : catalog)
-                if (manager->installed(entry.id))
-                    installed.insert(entry.id);
-            if (installed != previous) {
-                sizes = manager->installedSizes();
-                previous = installed;
-            }
-            dictionarySettings->setStorage(sizes, manager->availableBytes());
-            const auto transfer = manager->transfer();
-            dictionarySettings->setTransfer(transfer.id, transfer.received, transfer.total,
-                                            transfer.installing);
-            dictionarySettings->setState(installed, manager->busy(), manager->status());
-            dictionaryPanel->setChoices(manager->choices());
-        };
-        dictionarySettings->installRequested = [manager](const QString &id) {
-            manager->download(id);
-        };
-        dictionarySettings->removeRequested = [manager, dictionarySettings,
-                                               catalog](const QString &id) {
-            QString error;
-            if (!manager->remove(id, &error)) {
-                QSet<QString> installed;
-                for (const auto &entry : catalog)
-                    if (manager->installed(entry.id))
-                        installed.insert(entry.id);
-                dictionarySettings->setState(installed, manager->busy(), error);
-            }
-        };
-        dictionarySettings->cancelRequested = [manager] { manager->cancel(); };
-        connect(manager, &kobalt::DictionaryManager::changed, this, updateDictionaries);
-        updateDictionaries();
-    }
-    settingsPages = settings->settingsPages;
-    darkOption = settings->darkOption;
-    connect(settings->textForNewBooksButton, &QPushButton::clicked, this,
-            [this] { openNewBookText(); });
-    animationOption = settings->animationOption;
-    edgeLightOption = settings->edgeLightOption;
-    lightGestureFeedbackOption = settings->lightGestureFeedbackOption;
-    denseGraphOption = settings->denseGraphOption;
-    sleepScreenButton = settings->sleepScreenButton;
-    sessionTimeoutButton = settings->sessionTimeoutButton;
-    pageNavigationButton = settings->pageNavigationButton;
-    tapZonesButton = settings->tapZonesButton;
-    tappableLinksButton = settings->tappableLinksButton;
-    annotationInteractionButton = settings->annotationInteractionButton;
-    navigationBarButton = settings->navigationBarButton;
-    chapterGroupsButton = settings->chapterGroupsButton;
-    menuViewButton = settings->menuViewButton;
-    connect(menuViewButton, &QPushButton::clicked, this, [this] { openMenuView(); });
-    minimalAnnotationOption = settings->minimalAnnotationOption;
-    automaticOpeningOption = settings->automaticOpeningOption;
-    hideTabLabelsOption = settings->hideTabLabelsOption;
-    zenModeOption = settings->zenModeOption;
-    wifiPowerSaverOption = settings->wifiPowerSaverOption;
-    disableStandbyOption = settings->disableStandbyOption;
     settings->showPowerManagement(wifiPowerSaverVisible());
-    hideTabLabelsOption->setVisible(!services.phoneLayout);
-    saveWordsOption = settings->saveWordsOption;
-    // Words are kept in the profile database; the JSON diagnostic backend has none.
-    saveWordsOption->setVisible(bool(savedWords));
-    hideNonlinearOption = settings->hideNonlinearOption;
-    inpageFootnotesOption = settings->inpageFootnotesOption;
-    connect(settings->columnSpacingButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showColumnSpacingChoices(settingsColumnSpacing, [this, settings](int percent) {
-            settingsColumnSpacing = percent;
-            settings->columnSpacingButton->setCaption(SettingsPanel::columnSpacingLabel(percent));
-        });
-    });
-    connect(settings->wordSpacingButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showAdvancedTextChoices(
-                SettingsPanel::AdvancedText::WordSpacing,
-                stylingChoice(int(SettingsPanel::AdvancedText::WordSpacing)), [this](int index) {
-                    settingsWordSpacing = 80 + index * 20;
-                    showAdvancedText(int(SettingsPanel::AdvancedText::WordSpacing));
-                });
-    });
-    connect(settings->beautifierButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showBeautifier(settingsBeautifier, [this](QJsonObject value) {
-            settingsBeautifier = std::move(value);
-            showAdvancedText();
-        });
-    });
-    connect(settings->paragraphSpacingButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showParagraphAdjustments(settingsParagraphSpacing, settingsParagraphIndent,
-                                           [this](int percent, int indent) {
-                                               settingsParagraphSpacing = percent;
-                                               settingsParagraphIndent = indent;
-                                               showAdvancedText();
-                                           });
-    });
-    connect(settings->trackingButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showAdvancedTextChoices(
-                SettingsPanel::AdvancedText::Tracking,
-                stylingChoice(int(SettingsPanel::AdvancedText::Tracking)),
-                [this](int index) {
-                    settingsTracking = index == 2 ? 15 : index == 1 ? 5 : 0;
-                    showAdvancedText(int(SettingsPanel::AdvancedText::Tracking));
-                },
-                session->alignment());
-    });
-    connect(settings->hangingPunctuationButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showAdvancedTextChoices(
-                SettingsPanel::AdvancedText::HangingPunctuation, settingsHangingPunctuation ? 1 : 0,
-                [this](int index) {
-                    settingsHangingPunctuation = index != 0;
-                    showAdvancedText(int(SettingsPanel::AdvancedText::HangingPunctuation));
-                });
-    });
-    connect(settings->widowsOrphansButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showAdvancedTextChoices(
-                SettingsPanel::AdvancedText::Pagination,
-                stylingChoice(int(SettingsPanel::AdvancedText::Pagination)), [this](int index) {
-                    settingsWidowsOrphans = index == 2 ? "allow"
-                            : index == 1               ? "avoid"
-                                                       : "publisher";
-                    showAdvancedText(int(SettingsPanel::AdvancedText::Pagination));
-                });
-    });
-    connect(settings->verticalSpacingButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showPageSpacingChoices(
-                stylingChoice(int(SettingsPanel::AdvancedText::VerticalSpacing)),
-                settingsVerticalSpacingScope == "protection" ? 1 : 0, [this](int mode, int scope) {
-                    const QString nextScope = scope ? "protection" : "all";
-                    const bool scopeChanged = settingsVerticalSpacingScope != nextScope;
-                    settingsVerticalSpacing = QStringList{ "off", "center", "expand" }.at(mode);
-                    settingsVerticalSpacingScope = nextScope;
-                    showAdvancedText(
-                            scopeChanged ? -1 : int(SettingsPanel::AdvancedText::VerticalSpacing));
-                });
-    });
-    bionicOption = settings->bionicOption;
-    refreshButton = settings->refreshButton;
-    resetDefaults = settings->resetDefaults;
-    settingsError = settings->settingsError;
-    connect(settings->presetButton, &QPushButton::clicked, this, [this, settings] {
-        for (const auto *id : { "classic", "playful", "notebook" }) {
-            const auto face = themePreset(id).mainFace;
-            registerPickerFonts(face.isEmpty() ? QStringLiteral("IBM Plex Sans") : face);
-        }
-        registerPickerFonts(customTheme.mainFace.isEmpty() ? QStringLiteral("IBM Plex Sans")
-                                                           : customTheme.mainFace);
-        settings->showThemeChoices(SettingsPanel::ThemeChoice::Preset, customTheme,
-                                   [this, settings](const QString &id) {
-                                       themeDraft = themeStyle(id);
-                                       applyInterfaceFonts();
-                                       settings->selectTheme(id, themeDraft);
-                                       showSettingsFonts();
-                                   });
-    });
-    connect(settings->paletteButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showThemeChoices(SettingsPanel::ThemeChoice::Palette, themeDraft,
-                                   [this](const QString &id) {
-                                       if (themeDraft.palette != id) {
-                                           themeDraft.palette = id;
-                                           markThemeCustom();
-                                       }
-                                   });
-    });
-    connect(settings->iconThemeButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showThemeChoices(SettingsPanel::ThemeChoice::Icons, themeDraft,
-                                   [this](const QString &id) {
-                                       const auto icons = ui::iconStyleFromId(id);
-                                       if (themeDraft.icons != icons) {
-                                           themeDraft.icons = icons;
-                                           markThemeCustom();
-                                       }
-                                   });
-    });
-    connect(settings->uiFontButton, &QPushButton::clicked, this,
-            [this] { openSettingsFont("ui_font_face"); });
-    connect(settings->dictionaryFontButton, &QPushButton::clicked, this,
-            [this] { openSettingsFont("dictionary_font_face"); });
-    connect(settings->dictionaryFontSizeButton, &QPushButton::clicked, this, [this, settings] {
-        const auto family =
-                settingsDictionaryFontFace.isEmpty() ? bookFace() : settingsDictionaryFontFace;
-        registerPickerFonts(family);
-        settings->showDictionaryFontSizes(settingsDictionaryFontSize, family,
-                                          !settingsDictionaryFontFace.isEmpty(),
-                                          [this](int percent) {
-                                              settingsDictionaryFontSize = percent;
-                                              showSettingsFonts();
-                                          });
-    });
-    connect(settings->uiMonoFontButton, &QPushButton::clicked, this,
-            [this] { openSettingsFont("ui_mono_font_face"); });
-    connect(settings->headerFooterFontButton, &QPushButton::clicked, this,
-            [this] { openSettingsFont("header_footer_font_face"); });
-    connect(settings->percentageFormatButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showPercentageFormats(settingsPercentageFormat, [this](const QString &format) {
-            settingsPercentageFormat = format;
-            showSettingsFonts();
-        });
-    });
-    connect(settings->timeRemainingFormatButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showTimeRemainingFormats(settingsTimeRemainingFormat,
-                                           [this](const QString &format) {
-                                               settingsTimeRemainingFormat = format;
-                                               showSettingsFonts();
-                                           });
-    });
-    buildDebugSettings();
-    connect(settings->renderingButton, &QPushButton::clicked, this, [this, settings] {
-        settings->showRenderingModes(settingsRenderingMode, [this](const QString &mode) {
-            settingsRenderingMode = mode;
-            showSettingsFonts();
-        });
-    });
-    connect(settings->headerFooterWeightButton, &QPushButton::clicked, this, [this, settings] {
-        auto sampleFont = ui::headerFooterFont(page->headerTextPixels());
-        if (!settingsStripFace.isEmpty())
-            sampleFont.setFamily(settingsStripFace);
-        settings->showHeaderFooterWeights(settingsStripWeight, sampleFont, [this](int steps) {
-            if (settingsStripWeight != steps) {
-                settingsStripWeight = steps;
-                applyInterfaceFonts();
-            }
-            showSettingsFonts();
-            refresh();
-        });
-    });
-    connect(settings->defaultFontButton, &QPushButton::clicked, this,
-            [this] { openSettingsFont("default_font_face"); });
-    int familyIndex = 0;
-    for (auto *button :
-         { settings->serifFontButton, settings->sansFontButton, settings->monoFontButton }) {
-        const int index = familyIndex++;
-        connect(button, &QPushButton::clicked, this,
-                [this, index] { openSettingsFont(appearance::fallbackFontKeys[index]); });
-    }
     settings->stylingRequested = [this](SettingsPanel::AdvancedText feature) {
         renderStylingSamples(int(feature));
     };
     settings->stylingHidden = [this] { cancelStylingSamples(); };
-    connect(darkOption, &QCheckBox::clicked, this,
-            [this](bool enabled) { applyDarkMode(enabled); });
-    connect(bionicOption, &QCheckBox::clicked, this,
-            [this](bool enabled) { applyBoldReading(enabled); });
-    connect(sleepScreenButton, &QPushButton::clicked, this, [this] { openSleepScreen(); });
-    connect(sessionTimeoutButton, &QPushButton::clicked, this, [this] { openSessionTimeout(); });
-    connect(tappableLinksButton, &QPushButton::clicked, this, [this] { openTappableLinks(); });
-    connect(annotationInteractionButton, &QPushButton::clicked, this,
-            [this] { openAnnotationInteraction(); });
-    connect(tapZonesButton, &QPushButton::clicked, this, [this] { openTapZones(); });
-    connect(chapterGroupsButton, &QPushButton::clicked, this, [this] { openChapterGroups(); });
-    connect(navigationBarButton, &QPushButton::clicked, this,
-            [this] { openNavigationBarButtons(); });
-    connect(pageNavigationButton, &QPushButton::clicked, this, [this] { openPageNavigation(); });
-    settings->updateButtonControls(buttonControls(), preferences, false);
-    connect(settings->buttonControlsButton, &QPushButton::clicked, this, [this, settings] {
-        const auto buttons = buttonControls();
-        if (buttons.isEmpty())
-            return;
-        settings->showButtonControls(buttons, preferences, [this](const QJsonObject &actions) {
-            saveButtonControls(actions);
-        });
-    });
     // Every Settings sheet gets the reader's text refresh and stays above
     // the panels; see popups(). The application event filter already sees
     // its input.
@@ -1899,87 +1626,417 @@ void Reader::buildSettings(QWidget *parent)
             textRefresh(widget);
         textRefresh(sheet);
     };
-    settings->automaticOpeningChosen = [this](bool enabled) { applyAutomaticOpening(enabled); };
-    // Zen mode's settings page opens the Light panel as the Light tab would.
-    settings->zenLightRequested = [this] { toggleLight(); };
-    // Leaving Zen mode replaces the whole Settings layout.
-    settings->zenLeft = [this] { requestFlash("zen-leave"); };
-    connect(refreshButton, &QPushButton::clicked, this, [this] { openScreenRefresh(); });
-    connect(settings->openAcknowledgments, &QPushButton::clicked, this, [this] {
-        kobalt::ui::PanelTiming timing("acknowledgments");
-        if (!acknowledgments) {
-            acknowledgments = new kobalt::Acknowledgments(this);
-            acknowledgments->finished = [this] {
-                acknowledgments->hide();
-                general->raise();
-                syncNavigation();
-            };
-        }
-        acknowledgments->setGeometry(searchPanel->geometry());
-        acknowledgments->open();
-        timing.finish(acknowledgments);
-        for (auto *widget : acknowledgments->findChildren<QWidget *>())
-            textRefresh(widget);
-    });
     // A dialog that the panel makes later gets the reader's text, as the
     // widgets built with the window did.
-    settings->widgetCreated = [this](QWidget *widget) {
-        textRefresh(widget);
-        for (auto *child : widget->findChildren<QWidget *>())
-            textRefresh(child);
-    };
-    settings->restoreDefaultsConfirmed = [this] {
-        restoringDefaults = true;
-        inpageFootnotesOption->setChecked(false);
-        customTheme = {};
-        themeDraft = {};
-        settingsMonoFace.clear();
-        settingsStripFace.clear();
-        settingsStripWeight = 2;
-        settingsDictionaryFontFace.clear();
-        settingsDictionaryFontSize = 100;
-        settingsTimeRemainingFormat = "detailed";
-        settingsPercentageFormat = "whole";
-        settingsRenderingMode = renderingMode::value(renderingMode::Mode::Hybrid);
-        static_cast<SettingsPanel *>(general)->selectTheme("classic", themeDraft);
-        hideTabLabelsOption->setChecked(false);
-        zenModeOption->setChecked(false);
-        if (wifiPowerSaverOption)
-            wifiPowerSaverOption->setChecked(false);
-        saveWordsOption->setChecked(true);
-        for (const auto *key : appearance::fallbackFontKeys)
-            settingsFontFaces[key] = QString();
-        showSettingsFonts();
-        darkOption->setChecked(false);
-        animationOption->setChecked(false);
-        bionicOption->setChecked(false);
-        settingsVerticalSpacing = "off";
-        settingsVerticalSpacingScope = "all";
-        settingsParagraphSpacing = -1;
-        settingsParagraphIndent = -1;
-        settingsBeautifier = appearance::normalizationPresetSettings("recommended");
-        showAdvancedText();
-        screenRefreshMode = kobalt::ScreenRefresh::Smart;
-        showScreenRefresh();
-        resetDefaults->setText(strings::get("reader.defaults_selected"));
-        resetDefaults->setEnabled(false);
-        settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
-    };
-    settings->restorePresetsConfirmed = [this, settings] {
-        restoringPresets = true;
-        settings->resetPresets->setText(strings::get("text_presets.restore_selected"));
-        settings->resetPresets->setEnabled(false);
-        settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
-    };
-    if (settings->debugProgress)
-        connect(settings->debugProgress, &QPushButton::clicked, this,
-                [this] { showProgressDebug(); });
+    settings->widgetCreated = [this](QWidget *widget) { prepareSettingsWidgets(widget); };
     connect(settingsPages, &QStackedWidget::currentChanged, this, [this](int) {
         if (openingSettings)
             return;
         fitSettings();
         refresh();
     });
+    settings->pageBuilt = [this](SettingsPage section, QWidget *content) {
+        connectSettingsPage(section);
+        showSettingsPage(section);
+        prepareSettingsWidgets(content);
+    };
+}
+
+void Reader::connectSettingsPage(SettingsPage section)
+{
+    auto *settings = static_cast<SettingsPanel *>(general);
+    switch (section) {
+    case SettingsPage::Display: {
+        landscapeColumnsOption.bind(settings->landscapeColumnsOption);
+        darkOption.bind(settings->darkOption);
+        animationOption.bind(settings->animationOption);
+        denseGraphOption.bind(settings->denseGraphOption);
+        zenModeOption.bind(settings->zenModeOption);
+        bionicOption.bind(settings->bionicOption);
+        refreshButton = settings->refreshButton;
+        connect(settings->columnSpacingButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showColumnSpacingChoices(
+                    settingsColumnSpacing, [this, settings](int percent) {
+                        settingsColumnSpacing = percent;
+                        settings->columnSpacingButton->setCaption(
+                                SettingsPanel::columnSpacingLabel(percent));
+                    });
+        });
+        connect(darkOption.widget, &QCheckBox::clicked, this,
+                [this](bool enabled) { applyDarkMode(enabled); });
+        connect(bionicOption.widget, &QCheckBox::clicked, this,
+                [this](bool enabled) { applyBoldReading(enabled); });
+        connect(refreshButton, &QPushButton::clicked, this, [this] { openScreenRefresh(); });
+        break;
+    }
+    case SettingsPage::Controls: {
+        edgeLightOption.bind(settings->edgeLightOption);
+        lightGestureFeedbackOption.bind(settings->lightGestureFeedbackOption);
+        pageNavigationButton = settings->pageNavigationButton;
+        tapZonesButton = settings->tapZonesButton;
+        tappableLinksButton = settings->tappableLinksButton;
+        annotationInteractionButton = settings->annotationInteractionButton;
+        navigationBarButton = settings->navigationBarButton;
+        chapterGroupsButton = settings->chapterGroupsButton;
+        menuViewButton = settings->menuViewButton;
+        connect(menuViewButton, &QPushButton::clicked, this, [this] { openMenuView(); });
+        minimalAnnotationOption.bind(settings->minimalAnnotationOption);
+        connect(tappableLinksButton, &QPushButton::clicked, this, [this] { openTappableLinks(); });
+        connect(annotationInteractionButton, &QPushButton::clicked, this,
+                [this] { openAnnotationInteraction(); });
+        connect(tapZonesButton, &QPushButton::clicked, this, [this] { openTapZones(); });
+        connect(chapterGroupsButton, &QPushButton::clicked, this, [this] { openChapterGroups(); });
+        connect(navigationBarButton, &QPushButton::clicked, this,
+                [this] { openNavigationBarButtons(); });
+        connect(pageNavigationButton, &QPushButton::clicked, this,
+                [this] { openPageNavigation(); });
+        settings->updateButtonControls(buttonControls(), preferences, false);
+        connect(settings->buttonControlsButton, &QPushButton::clicked, this, [this, settings] {
+            const auto buttons = buttonControls();
+            if (buttons.isEmpty())
+                return;
+            settings->showButtonControls(buttons, preferences, [this](const QJsonObject &actions) {
+                saveButtonControls(actions);
+            });
+        });
+        break;
+    }
+    case SettingsPage::Defaults: {
+        resetDefaults = settings->resetDefaults;
+        connect(settings->textForNewBooksButton, &QPushButton::clicked, this,
+                [this] { openNewBookText(); });
+        connect(settings->defaultFontButton, &QPushButton::clicked, this,
+                [this] { openSettingsFont("default_font_face"); });
+        int familyIndex = 0;
+        for (auto *button :
+             { settings->serifFontButton, settings->sansFontButton, settings->monoFontButton }) {
+            const int index = familyIndex++;
+            connect(button, &QPushButton::clicked, this,
+                    [this, index] { openSettingsFont(appearance::fallbackFontKeys[index]); });
+        }
+        settings->restoreDefaultsConfirmed = [this] {
+            restoringDefaults = true;
+            inpageFootnotesOption.set(false);
+            customTheme = {};
+            themeDraft = {};
+            settingsMonoFace.clear();
+            settingsStripFace.clear();
+            settingsStripWeight = 2;
+            settingsDictionaryFontFace.clear();
+            settingsDictionaryFontSize = 100;
+            settingsTimeRemainingFormat = "detailed";
+            settingsPercentageFormat = "whole";
+            settingsRenderingMode = renderingMode::value(renderingMode::Mode::Hybrid);
+            static_cast<SettingsPanel *>(general)->selectTheme("classic", themeDraft);
+            hideTabLabelsOption.set(false);
+            zenModeOption.set(false);
+            if (services.turnOffWifi)
+                wifiPowerSaverOption.set(false);
+            saveWordsOption.set(true);
+            for (const auto *key : appearance::fallbackFontKeys)
+                settingsFontFaces[key] = QString();
+            showSettingsFonts();
+            darkOption.set(false);
+            animationOption.set(false);
+            bionicOption.set(false);
+            settingsVerticalSpacing = "off";
+            settingsVerticalSpacingScope = "all";
+            settingsParagraphSpacing = -1;
+            settingsParagraphIndent = -1;
+            settingsBeautifier = appearance::normalizationPresetSettings("recommended");
+            showAdvancedText();
+            screenRefreshMode = kobalt::ScreenRefresh::Smart;
+            showScreenRefresh();
+            resetDefaults->setText(strings::get("reader.defaults_selected"));
+            resetDefaults->setEnabled(false);
+            settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
+        };
+        settings->restorePresetsConfirmed = [this, settings] {
+            restoringPresets = true;
+            settings->resetPresets->setText(strings::get("text_presets.restore_selected"));
+            settings->resetPresets->setEnabled(false);
+            settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
+        };
+        break;
+    }
+    case SettingsPage::Styling: {
+        hideNonlinearOption.bind(settings->hideNonlinearOption);
+        inpageFootnotesOption.bind(settings->inpageFootnotesOption);
+        connect(settings->wordSpacingButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showAdvancedTextChoices(
+                    SettingsPanel::AdvancedText::WordSpacing,
+                    stylingChoice(int(SettingsPanel::AdvancedText::WordSpacing)),
+                    [this](int index) {
+                        settingsWordSpacing = 80 + index * 20;
+                        showAdvancedText(int(SettingsPanel::AdvancedText::WordSpacing));
+                    });
+        });
+        connect(settings->beautifierButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showBeautifier(settingsBeautifier, [this](QJsonObject value) {
+                settingsBeautifier = std::move(value);
+                showAdvancedText();
+            });
+        });
+        connect(settings->paragraphSpacingButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showParagraphAdjustments(settingsParagraphSpacing, settingsParagraphIndent,
+                                               [this](int percent, int indent) {
+                                                   settingsParagraphSpacing = percent;
+                                                   settingsParagraphIndent = indent;
+                                                   showAdvancedText();
+                                               });
+        });
+        connect(settings->trackingButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showAdvancedTextChoices(
+                    SettingsPanel::AdvancedText::Tracking,
+                    stylingChoice(int(SettingsPanel::AdvancedText::Tracking)),
+                    [this](int index) {
+                        settingsTracking = index == 2 ? 15 : index == 1 ? 5 : 0;
+                        showAdvancedText(int(SettingsPanel::AdvancedText::Tracking));
+                    },
+                    session->alignment());
+        });
+        connect(settings->hangingPunctuationButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showAdvancedTextChoices(
+                    SettingsPanel::AdvancedText::HangingPunctuation,
+                    settingsHangingPunctuation ? 1 : 0, [this](int index) {
+                        settingsHangingPunctuation = index != 0;
+                        showAdvancedText(int(SettingsPanel::AdvancedText::HangingPunctuation));
+                    });
+        });
+        connect(settings->widowsOrphansButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showAdvancedTextChoices(
+                    SettingsPanel::AdvancedText::Pagination,
+                    stylingChoice(int(SettingsPanel::AdvancedText::Pagination)), [this](int index) {
+                        settingsWidowsOrphans = index == 2 ? "allow"
+                                : index == 1               ? "avoid"
+                                                           : "publisher";
+                        showAdvancedText(int(SettingsPanel::AdvancedText::Pagination));
+                    });
+        });
+        connect(settings->verticalSpacingButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showPageSpacingChoices(
+                    stylingChoice(int(SettingsPanel::AdvancedText::VerticalSpacing)),
+                    settingsVerticalSpacingScope == "protection" ? 1 : 0,
+                    [this](int mode, int scope) {
+                        const QString nextScope = scope ? "protection" : "all";
+                        const bool scopeChanged = settingsVerticalSpacingScope != nextScope;
+                        settingsVerticalSpacing = QStringList{ "off", "center", "expand" }.at(mode);
+                        settingsVerticalSpacingScope = nextScope;
+                        showAdvancedText(
+                                scopeChanged ? -1
+                                             : int(SettingsPanel::AdvancedText::VerticalSpacing));
+                    });
+        });
+        break;
+    }
+    case SettingsPage::Theming: {
+        connect(settings->presetButton, &QPushButton::clicked, this, [this, settings] {
+            for (const auto *id : { "classic", "playful", "notebook" }) {
+                const auto face = themePreset(id).mainFace;
+                registerPickerFonts(face.isEmpty() ? QStringLiteral("IBM Plex Sans") : face);
+            }
+            registerPickerFonts(customTheme.mainFace.isEmpty() ? QStringLiteral("IBM Plex Sans")
+                                                               : customTheme.mainFace);
+            settings->showThemeChoices(SettingsPanel::ThemeChoice::Preset, customTheme,
+                                       [this, settings](const QString &id) {
+                                           themeDraft = themeStyle(id);
+                                           applyInterfaceFonts();
+                                           settings->selectTheme(id, themeDraft);
+                                           showSettingsFonts();
+                                       });
+        });
+        connect(settings->paletteButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showThemeChoices(SettingsPanel::ThemeChoice::Palette, themeDraft,
+                                       [this](const QString &id) {
+                                           if (themeDraft.palette != id) {
+                                               themeDraft.palette = id;
+                                               markThemeCustom();
+                                           }
+                                       });
+        });
+        connect(settings->iconThemeButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showThemeChoices(SettingsPanel::ThemeChoice::Icons, themeDraft,
+                                       [this](const QString &id) {
+                                           const auto icons = ui::iconStyleFromId(id);
+                                           if (themeDraft.icons != icons) {
+                                               themeDraft.icons = icons;
+                                               markThemeCustom();
+                                           }
+                                       });
+        });
+        connect(settings->uiFontButton, &QPushButton::clicked, this,
+                [this] { openSettingsFont("ui_font_face"); });
+        connect(settings->uiMonoFontButton, &QPushButton::clicked, this,
+                [this] { openSettingsFont("ui_mono_font_face"); });
+        connect(settings->headerFooterFontButton, &QPushButton::clicked, this,
+                [this] { openSettingsFont("header_footer_font_face"); });
+        connect(settings->headerFooterWeightButton, &QPushButton::clicked, this, [this, settings] {
+            auto sampleFont = ui::headerFooterFont(page->headerTextPixels());
+            if (!settingsStripFace.isEmpty())
+                sampleFont.setFamily(settingsStripFace);
+            settings->showHeaderFooterWeights(settingsStripWeight, sampleFont, [this](int steps) {
+                if (settingsStripWeight != steps) {
+                    settingsStripWeight = steps;
+                    applyInterfaceFonts();
+                }
+                showSettingsFonts();
+                refresh();
+            });
+        });
+        break;
+    }
+    case SettingsPage::System: {
+        hideBookOnSleepOption.bind(settings->hideBookOnSleepOption);
+        openingCoverOption.bind(settings->openingCoverOption);
+        debugModeOption.bind(settings->debugModeOption);
+        connect(settings->debugModeOption, &QCheckBox::toggled, this, [this](bool on) {
+            if (!on && settingsRenderingMode == QLatin1String("fast")) {
+                settingsRenderingMode = renderingMode::value(renderingMode::Mode::Hybrid);
+                showSettingsFonts();
+            }
+        });
+        sleepScreenButton = settings->sleepScreenButton;
+        sessionTimeoutButton = settings->sessionTimeoutButton;
+        automaticOpeningOption.bind(settings->automaticOpeningOption);
+        hideTabLabelsOption.bind(settings->hideTabLabelsOption);
+        wifiPowerSaverOption.bind(settings->wifiPowerSaverOption);
+        disableStandbyOption.bind(settings->disableStandbyOption);
+        settings->showPowerManagement(wifiPowerSaverVisible());
+        hideTabLabelsOption.widget->setVisible(!services.phoneLayout);
+        saveWordsOption.bind(settings->saveWordsOption);
+        // Words are kept in the profile database; the JSON diagnostic backend has none.
+        saveWordsOption.widget->setVisible(bool(savedWords));
+        connect(settings->dictionaryFontButton, &QPushButton::clicked, this,
+                [this] { openSettingsFont("dictionary_font_face"); });
+        connect(settings->dictionaryFontSizeButton, &QPushButton::clicked, this, [this, settings] {
+            const auto family =
+                    settingsDictionaryFontFace.isEmpty() ? bookFace() : settingsDictionaryFontFace;
+            registerPickerFonts(family);
+            settings->showDictionaryFontSizes(settingsDictionaryFontSize, family,
+                                              !settingsDictionaryFontFace.isEmpty(),
+                                              [this](int percent) {
+                                                  settingsDictionaryFontSize = percent;
+                                                  showSettingsFonts();
+                                              });
+        });
+        connect(settings->percentageFormatButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showPercentageFormats(settingsPercentageFormat,
+                                            [this](const QString &format) {
+                                                settingsPercentageFormat = format;
+                                                showSettingsFonts();
+                                            });
+        });
+        connect(settings->timeRemainingFormatButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showTimeRemainingFormats(settingsTimeRemainingFormat,
+                                               [this](const QString &format) {
+                                                   settingsTimeRemainingFormat = format;
+                                                   showSettingsFonts();
+                                               });
+        });
+        connect(settings->renderingButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showRenderingModes(settingsRenderingMode, [this](const QString &mode) {
+                settingsRenderingMode = mode;
+                showSettingsFonts();
+            });
+        });
+        connect(sleepScreenButton, &QPushButton::clicked, this, [this] { openSleepScreen(); });
+        connect(sessionTimeoutButton, &QPushButton::clicked, this,
+                [this] { openSessionTimeout(); });
+        settings->automaticOpeningChosen = [this](bool enabled) { applyAutomaticOpening(enabled); };
+        break;
+    }
+    case SettingsPage::Dictionaries: {
+        if (services.downloadableDictionaries) {
+            auto *manager = static_cast<kobalt::DictionaryManager *>(dictionary.get());
+            auto *dictionarySettings = settings->dictionaries;
+            dictionarySettings->setLanguage(session->state().value("language").toString());
+            const auto catalog = kobalt::DictionaryManager::catalog();
+            dictionarySettings->setCatalog(catalog);
+            auto updateDictionaries = [this, manager, dictionarySettings, catalog,
+                                       previous = QSet<QString>{},
+                                       sizes = QHash<QString, qint64>{}]() mutable {
+                QSet<QString> installed;
+                for (const auto &entry : catalog)
+                    if (manager->installed(entry.id))
+                        installed.insert(entry.id);
+                if (installed != previous) {
+                    sizes = manager->installedSizes();
+                    previous = installed;
+                }
+                dictionarySettings->setStorage(sizes, manager->availableBytes());
+                const auto transfer = manager->transfer();
+                dictionarySettings->setTransfer(transfer.id, transfer.received, transfer.total,
+                                                transfer.installing);
+                dictionarySettings->setState(installed, manager->busy(), manager->status());
+                dictionaryPanel->setChoices(manager->choices());
+            };
+            dictionarySettings->installRequested = [manager](const QString &id) {
+                manager->download(id);
+            };
+            dictionarySettings->removeRequested = [manager, dictionarySettings,
+                                                   catalog](const QString &id) {
+                QString error;
+                if (!manager->remove(id, &error)) {
+                    QSet<QString> installed;
+                    for (const auto &entry : catalog)
+                        if (manager->installed(entry.id))
+                            installed.insert(entry.id);
+                    dictionarySettings->setState(installed, manager->busy(), error);
+                }
+            };
+            dictionarySettings->cancelRequested = [manager] { manager->cancel(); };
+            connect(manager, &kobalt::DictionaryManager::changed, this, updateDictionaries);
+            updateDictionaries();
+        }
+        break;
+    }
+    case SettingsPage::Kosync: {
+        kosyncPage = settings->kosync;
+        buildKosyncPage();
+        break;
+    }
+    case SettingsPage::Debug: {
+        buildDebugSettings();
+        break;
+    }
+    case SettingsPage::About: {
+        connect(settings->openAcknowledgments, &QPushButton::clicked, this, [this] {
+            kobalt::ui::PanelTiming timing("acknowledgments");
+            if (!acknowledgments) {
+                acknowledgments = new kobalt::Acknowledgments(this);
+                acknowledgments->finished = [this] {
+                    acknowledgments->hide();
+                    general->raise();
+                    syncNavigation();
+                };
+            }
+            acknowledgments->setGeometry(searchPanel->geometry());
+            acknowledgments->open();
+            timing.finish(acknowledgments);
+            for (auto *widget : acknowledgments->findChildren<QWidget *>())
+                textRefresh(widget);
+        });
+        if (settings->debugProgress)
+            connect(settings->debugProgress, &QPushButton::clicked, this,
+                    [this] { showProgressDebug(); });
+        break;
+    }
+    case SettingsPage::Zen: {
+        connect(settings->zenDarkOption, &QCheckBox::clicked, this, [this](bool on) {
+            darkOption.set(on);
+            applyDarkMode(on);
+        });
+        settings->zenSyncRequested = [this] { synchronizeKosync(true); };
+        // Zen mode's settings page opens the Light panel as the Light tab would.
+        settings->zenLightRequested = [this] { toggleLight(); };
+        // Leaving Zen mode replaces the whole Settings layout.
+        settings->zenLeft = [this] {
+            zenModeOption.set(false);
+            requestFlash("zen-leave");
+        };
+        break;
+    }
+    }
 }
 
 void Reader::buildNotices()

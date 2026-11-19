@@ -79,6 +79,8 @@
 class QVBoxLayout;
 
 namespace kobalt::reader {
+enum class SettingsPage;
+class SettingsPanel;
 class SleepGallery;
 class SleepEditor;
 // Global preference for the Wi-Fi power saver. Missing means on.
@@ -367,6 +369,10 @@ private:
     // Until then general, kosyncPage and the Settings controls are null.
     // Builds Settings into `parent`; ensureSettings moves it into the window.
     void buildSettings(QWidget *parent);
+    void connectSettingsPage(SettingsPage section);
+    void prepareSettingsWidgets(QWidget *root);
+    void showZenSettings();
+    void showSettingsPage(SettingsPage section);
     void ensureSettings();
     // Debug mode: the Developer checkbox and the Debug page (reader_debug.cpp).
     void buildDebugSettings();
@@ -379,7 +385,7 @@ private:
     QPointer<kobalt::ui::ModalOverlay> evictionDialog;
     // What applyTheme gives each widget: the reader palette, its text and
     // button icons. Also for widgets built after the theme.
-    void themeWidget(QWidget *widget, const QPalette &colors);
+    void themeWidget(QWidget *widget, const QPalette &colors, bool builtInTheme = false);
     // The palette applyTheme gave the widgets. The window's own palette is
     // already themed, so it is not a base for another one.
     QPalette themePalette;
@@ -400,6 +406,9 @@ private:
     // buildKosyncPage() when Settings is built.
     void buildKosync();
     void buildKosyncPage();
+    void connectKosyncSchedule(SettingsPanel &settings);
+    void refreshKosyncAccount();
+    void dismissKosyncEditors();
     void requestManualKosync();
     void updateKosyncToolbar();
     void synchronizeKosync(bool interactive = false);
@@ -417,6 +426,7 @@ private:
     void finishKosyncPresentation();
     void prepareAnnotationPresentation(std::function<void(bool)> finished);
     void showKosyncChoice();
+    bool kosyncEreaderPreview() const;
     void updateKosyncFeatures();
     void syncKosyncWhileReading();
     qint64 kosyncClock() const;
@@ -559,12 +569,34 @@ private:
     kobalt::ui::Panel *general = nullptr;
     std::unique_ptr<kobalt::LightControls> light;
     kobalt::LightPanel *lightPopup = nullptr;
-    QCheckBox *darkOption = nullptr, *animationOption = nullptr, *edgeLightOption = nullptr,
-              *lightGestureFeedbackOption = nullptr, *denseGraphOption = nullptr;
-    QCheckBox *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr,
-              *hideTabLabelsOption = nullptr, *zenModeOption = nullptr, *saveWordsOption = nullptr;
-    QCheckBox *wifiPowerSaverOption = nullptr;
-    QCheckBox *disableStandbyOption = nullptr;
+
+    // Settings can be applied before a section has ever been visited.
+    struct SettingsCheck
+    {
+        bool checked() const { return widget ? widget->isChecked() : initial; }
+
+        void set(bool value)
+        {
+            initial = value;
+            if (widget)
+                widget->setChecked(value);
+        }
+
+        void bind(QCheckBox *control)
+        {
+            widget = control;
+            set(initial);
+        }
+
+        QCheckBox *widget = nullptr;
+        bool initial = false;
+    };
+
+    SettingsCheck darkOption, animationOption, edgeLightOption, lightGestureFeedbackOption,
+            denseGraphOption, automaticOpeningOption, minimalAnnotationOption, hideTabLabelsOption,
+            zenModeOption, saveWordsOption, wifiPowerSaverOption, disableStandbyOption,
+            hideNonlinearOption, inpageFootnotesOption, bionicOption, hideBookOnSleepOption,
+            openingCoverOption, landscapeColumnsOption, debugModeOption;
     QPushButton *autoRotateOption = nullptr, *lockRotationOption = nullptr;
     bool hideNativeStatus() const;
 
@@ -726,6 +758,7 @@ private:
     void applyThemeFonts();
     void applyInterfaceFonts();
     void showSettingsFonts();
+    void showSettingsFonts(SettingsPage section);
     void openSettingsFont(const QString &key);
     QPushButton *linkReturn = nullptr;
     bool linkReturnAvailable = false;
@@ -757,8 +790,6 @@ private:
     QLabel *linkDiscoveryIcon = nullptr, *linkDiscoveryHint = nullptr;
     QPushButton *linkDiscoveryToggle = nullptr;
     QLabel *linkDiscoveryExit = nullptr;
-    QCheckBox *hideNonlinearOption = nullptr;
-    QCheckBox *inpageFootnotesOption = nullptr;
     bool revealingLinks = false;
     QString revealedPosition;
     void syncLinkDiscovery();
@@ -839,7 +870,7 @@ private:
     // returnToPage is false when another view replaces the menu, such as Search.
     void dismissControls(bool returnToPage = true);
     void toggleLight();
-    void fitSettings();
+    void fitSettings(bool opening = false);
     void openSettings();
     void applyEdgeLight();
     void applyDarkMode(bool enabled);
@@ -1024,7 +1055,6 @@ private:
     // Turns since the last flash, for the Refresh the screen setting.
     int pagesSinceFlash = 0;
     kobalt::ScreenRefresh screenRefreshMode = kobalt::ScreenRefresh::Smart;
-    ui::DescribedOption *bionicOption = nullptr;
     kobalt::ui::CaptionButton *refreshButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> refreshPopup;
     kobalt::ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr;

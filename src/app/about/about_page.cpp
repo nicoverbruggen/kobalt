@@ -17,6 +17,13 @@ namespace chrome = ui::metrics::chrome;
 namespace styles = ui::styles;
 using ui::readerStyle;
 
+QString AboutPage::versionText()
+{
+    const auto release = QStringLiteral(KOBALT_VERSION);
+    const auto displayRelease = release.mid(release.startsWith('v') ? 1 : 0);
+    return strings::get("about.version").arg(displayRelease).arg(QT_VERSION >> 16);
+}
+
 AboutPage::AboutPage(QWidget *parent) : QWidget(parent)
 {
     setObjectName("rrAbout");
@@ -53,10 +60,7 @@ AboutPage::AboutPage(QWidget *parent) : QWidget(parent)
     build->setSpacing(metrics::about::buildGap);
     aboutRows->addLayout(build);
     // "Version 0.4 (Qt6)", then the short commit with "*" for uncommitted changes.
-    const auto release = QStringLiteral(KOBALT_VERSION);
-    const auto displayRelease = release.mid(release.startsWith('v') ? 1 : 0);
-    auto *version = new ui::InterfaceLabel(
-            strings::get("about.version").arg(displayRelease).arg(QT_VERSION >> 16), this);
+    auto *version = new ui::InterfaceLabel(versionText(), this);
     version->setObjectName("rrAboutVersion");
     version->setAlignment(Qt::AlignCenter);
     build->addWidget(version);

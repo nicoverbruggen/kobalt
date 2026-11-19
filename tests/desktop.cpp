@@ -815,8 +815,6 @@ struct Fixture
 
     bool press(const char *name) { return click(widget(name)); }
 
-    // Settings is built when it first opens. Opening and closing it once
-    // makes its controls, such as Sync now, exist while the book is read.
     // The Text and Layout controls are built when Layout first opens.
     // Opening and closing it makes them exist while the book is read.
     bool buildAppearance()
@@ -829,11 +827,12 @@ struct Fixture
                 [&] { return !visible("rrControlsTop") && !state().value("busy").toBool(); });
     }
 
-    bool buildSettings()
+    // Visit Sync and return to the reading page before requesting a sync.
+    bool buildKosyncPage()
     {
         if (!press("rrPage") || !QTest::qWaitFor([&] { return visible("rrSettings"); })
             || !press("rrSettings") || !QTest::qWaitFor([&] { return visible("rrSettingsClose"); })
-            || !press("rrSettingsClose"))
+            || !press("rrSettingsKosync") || !widget("rrKosyncNow") || !press("rrSettingsClose"))
             return false;
         return QTest::qWaitFor(
                 [&] { return !visible("rrControlsTop") && !state().value("busy").toBool(); });
@@ -7360,7 +7359,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         const auto local = fixture.state();
         QVERIFY(local.value("position").toString() != remote);
-        QVERIFY(fixture.buildSettings());
+        QVERIFY(fixture.buildKosyncPage());
         *body = QJsonDocument(QJsonObject{ { "progress", remote },
                                            { "percentage", 0.7 },
                                            { "device", "Other reader" },
@@ -12071,9 +12070,70 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                      QJsonValue(false));
     }
 
-    // Checks Settings in Zen mode: one page with Dark mode, Light without edge swipes, Sync once set up and About, left only by a held press.
+    void settingsLazyPages_data()
+    {
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<bool>("phone");
+        QTest::newRow("light") << false << false;
+        QTest::newRow("dark") << true << false;
+        QTest::newRow("phone-dark") << true << true;
+    }
+
+    void settingsLazyPages()
+    {
+        QFETCH(bool, dark);
+        QFETCH(bool, phone);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, phone ? 3 : 1);
+        auto settings = storage::readJson(fixture.paths.preferences());
+        settings["edge_light_gestures"] = false;
+        settings["default_font_face"] = "NV Bitter";
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), settings));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QTRY_VERIFY(fixture.visible("rrSettingsControls"));
+        QCOMPARE(bool(fixture.widget("rrDarkMode")), !phone);
+        for (const char *name : { "rrEdgeLight", "rrDefaultFont", "rrKosyncLogin",
+                                  "rrDebugClearCaches", "rrThemePreset" })
+            QVERIFY2(!fixture.widget(name), name);
+
+        QVERIFY(fixture.press("rrSettingsControls"));
+        QPointer<QCheckBox> edge = qobject_cast<QCheckBox *>(fixture.widget("rrEdgeLight"));
+        QVERIFY(edge && !edge->isChecked());
+        QCOMPARE(ui::darkTheme(edge), dark);
+        if (phone)
+            QVERIFY(fixture.press("rrSettingsBack"));
+        QVERIFY(fixture.press("rrSettingsDisplay"));
+        auto *darkOption = qobject_cast<QCheckBox *>(fixture.widget("rrDarkMode"));
+        QVERIFY(darkOption);
+        QCOMPARE(darkOption->isChecked(), dark);
+        if (phone)
+            QVERIFY(fixture.press("rrSettingsBack"));
+        QVERIFY(fixture.press("rrSettingsControls"));
+        QVERIFY(edge && fixture.widget("rrEdgeLight") == edge);
+        QVERIFY(!fixture.widget("rrDefaultFont"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        const auto saved = storage::readJson(fixture.paths.preferences());
+        QCOMPARE(saved.value("default_font_face").toString(), QString("NV Bitter"));
+        QCOMPARE(saved.value("edge_light_gestures"), QJsonValue(false));
+    }
+
+    void settingsZenPage_data()
+    {
+        QTest::addColumn<bool>("signedIn");
+        QTest::newRow("signed-out") << false;
+        QTest::newRow("signed-in") << true;
+    }
+
     void settingsZenPage()
     {
+        QFETCH(bool, signedIn);
         auto light = std::make_shared<GestureLightState>();
         Fixture fixture(false, false, false, true, false, false,
                         [light](ReaderHostServices &services) {
@@ -12087,6 +12147,17 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         saved["zen_mode"] = true;
         saved["edge_light_gestures"] = false;
         QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
+        if (signedIn) {
+            QVERIFY(storage::writeJson(fixture.paths.syncAccount(),
+                                       { { "schema", 1 },
+                                         { "server", "https://127.0.0.1" },
+                                         { "username", "reader" },
+                                         { "key", QString(32, 'a') },
+                                         { "device_id", "test-device" },
+                                         { "sync_on_open", false },
+                                         { "sync_on_close", false },
+                                         { "automatic", false } }));
+        }
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
@@ -12106,23 +12177,38 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.visible("rrSettingsClose"));
         for (const char *name : { "rrZenDarkMode", "rrZenAbout", "rrZenLeave" })
             QVERIFY2(fixture.visible(name), name);
-        // Without a sync account there is no Sync section.
-        QVERIFY(!fixture.visible("rrZenSyncSection"));
-        QVERIFY(!fixture.visible("rrZenSyncNow"));
-        // A signed-in account shows Sync now and Automatic sync.
-        auto *kosyncPage = dynamic_cast<reader::KosyncPage *>(fixture.widget("rrKosyncPage"));
-        QVERIFY(kosyncPage);
-        kosyncPage->setAccount("https://sync.example.com", "reader", true, true);
-        QTRY_VERIFY(fixture.visible("rrZenSyncNow"));
-        QVERIFY(fixture.visible("rrZenAutomaticSync"));
-        kosyncPage->setAccount("https://sync.example.com", "reader", false, true);
-        QTRY_VERIFY(!fixture.visible("rrZenSyncNow"));
-        // Dark mode applies at once, as the Display tab's checkbox does.
-        auto *dark = qobject_cast<QCheckBox *>(fixture.widget("rrDarkMode"));
-        QVERIFY(dark && !dark->isChecked());
+        QTRY_COMPARE(fixture.visible("rrZenSyncSection"), signedIn);
+        QCOMPARE(fixture.visible("rrZenSyncNow"), signedIn);
+        QCOMPARE(fixture.visible("rrZenAutomaticSync"), signedIn);
+        for (const char *row : { "rrKosyncLogin", "rrDarkMode", "rrEdgeLight", "rrAboutVersion" })
+            QVERIFY2(!fixture.widget(row), row);
+        if (signedIn) {
+            QVERIFY(fixture.press("rrZenAutomaticSync"));
+            QTRY_VERIFY(fixture.visible("rrKosyncAutomaticPopup"));
+            QVERIFY(!fixture.widget("rrKosyncLogin"));
+            QVERIFY(fixture.press("rrKosyncAutomaticOn"));
+            QVERIFY(storage::readJson(fixture.paths.syncAccount()).value("automatic").toBool());
+            // Fail a save in this temporary profile, then retry the same choice.
+            const auto account = fixture.paths.syncAccount();
+            const auto backup = account + ".saved";
+            QVERIFY(QFile::rename(account, backup));
+            QVERIFY(QDir().mkdir(account));
+            QVERIFY(fixture.press("rrKosyncOnClose"));
+            QVERIFY(!qobject_cast<QAbstractButton *>(fixture.widget("rrKosyncOnClose"))
+                             ->isChecked());
+            QVERIFY(QDir().rmdir(account));
+            QVERIFY(QFile::rename(backup, account));
+            QVERIFY(fixture.press("rrKosyncOnClose"));
+            QVERIFY(storage::readJson(fixture.paths.syncAccount()).value("sync_on_close").toBool());
+            QVERIFY(fixture.press("rrKosyncAutomaticOff"));
+            QVERIFY(fixture.press("rrKosyncAutomaticClose"));
+            QTRY_VERIFY(!fixture.visible("rrKosyncAutomaticPopup"));
+            QVERIFY(!fixture.widget("rrKosyncLogin"));
+        }
+        QVERIFY(!fixture.state().value("dark_mode").toBool());
         QVERIFY(fixture.press("rrZenDarkMode"));
         QTRY_VERIFY(fixture.state().value("dark_mode").toBool());
-        QVERIFY(dark->isChecked());
+        QVERIFY(!fixture.widget("rrDarkMode"));
         QVERIFY(fixture.press("rrZenDarkMode"));
         QTRY_VERIFY(!fixture.state().value("dark_mode").toBool());
         // About opens full width with a back cell, without the hold button.
@@ -12153,7 +12239,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTest::mouseRelease(leave, Qt::LeftButton);
         QCOMPARE(leave->property("reader_hold_step").toInt(), 0);
         QVERIFY(fixture.visible("rrZenSettings"));
-        QVERIFY(qobject_cast<QCheckBox *>(fixture.widget("rrZenMode"))->isChecked());
+        QVERIFY(storage::readJson(fixture.paths.preferences()).value("zen_mode").toBool());
         // A press that ends because Settings is hidden, without a release,
         // keeps Zen mode too: the steps would have finished within the wait.
         leave->setProperty("reader_hold_step_ms", 20);
@@ -12164,7 +12250,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         holder->show();
         QCOMPARE(leave->property("reader_hold_step").toInt(), 0);
         QVERIFY(!leave->isDown());
-        QVERIFY(qobject_cast<QCheckBox *>(fixture.widget("rrZenMode"))->isChecked());
+        QVERIFY(!fixture.widget("rrZenMode"));
         QVERIFY(fixture.visible("rrZenSettings"));
         // Held through all three steps, Zen mode turns off in the draft and
         // all settings return, starting on Display.
@@ -12173,6 +12259,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.visible("rrSettingsRail"));
         QTest::mouseRelease(leave, Qt::LeftButton);
         QVERIFY(fixture.visible("rrDisplayOptions"));
+        QVERIFY(fixture.visible("rrZenMode"));
         QVERIFY(!fixture.visible("rrZenSettings"));
         QVERIFY(!fixture.visible("rrSettingsZenMark"));
         QVERIFY(!qobject_cast<QCheckBox *>(fixture.widget("rrZenMode"))->isChecked());
@@ -14077,8 +14164,14 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         auto *timeFormat =
                 dynamic_cast<ui::CaptionButton *>(fixture.widget("rrTimeRemainingFormat"));
         QVERIFY(timeFormat);
-        QCOMPARE(timeFormat->height(), fixture.widget("rrHeaderFooterWeight")->height());
-        QCOMPARE(timeFormat->font(), fixture.widget("rrHeaderFooterWeight")->font());
+        QVERIFY(revealSettingsOption(fixture, "rrTheming"));
+        QVERIFY(fixture.press("rrTheming"));
+        auto *weight = fixture.widget("rrHeaderFooterWeight");
+        QVERIFY(weight);
+        QCOMPARE(timeFormat->height(), weight->height());
+        QCOMPARE(timeFormat->font(), weight->font());
+        QVERIFY(fixture.press("rrSettingsBack"));
+        QVERIFY(revealSettingsOption(fixture, "rrTimeRemainingFormat"));
         QCOMPARE(timeFormat->caption(), strings::get("settings.time_remaining_detailed").toUpper());
         const auto timeCapture = qEnvironmentVariable("KOBALT_TIME_FORMAT_CAPTURE");
         if (!timeCapture.isEmpty())
@@ -14920,12 +15013,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(advancedHeading->y() < breaksHeading->y()
                 && breaksHeading->y() < normalizationHeading->y()
                 && normalizationHeading->y() < contentHeading->y());
-        // Fallback fonts are font defaults, in the Defaults tab with Default font.
-        auto *defaultsPage = fixture.widget("rrDefaultsOptions");
-        QVERIFY(defaultsPage);
-        for (const auto *name :
-             { "rrFontsFamiliesSection", "rrSerifFont", "rrSansFont", "rrMonoFont" })
-            QVERIFY2(defaultsPage->isAncestorOf(fixture.widget(name)), name);
         QCOMPARE(tracking->caption(),
                  strings::get("settings.justification_tracking_off").toUpper());
         QCOMPARE(widows->caption(), strings::get("settings.widows_orphans_publisher").toUpper());
@@ -14994,6 +15081,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.visible("rrWidowsOrphansPopup"));
         QVERIFY(!storage::readJson(fixture.paths.preferences()).contains("justification_tracking"));
         QVERIFY(!storage::readJson(fixture.paths.preferences()).contains("justification_tracking"));
+        // Fallback fonts are font defaults, in the Defaults tab with Default font.
+        QVERIFY(fixture.press("rrSettingsDefaults"));
+        auto *defaultsPage = fixture.widget("rrDefaultsOptions");
+        QVERIFY(defaultsPage);
+        for (const auto *name :
+             { "rrFontsFamiliesSection", "rrSerifFont", "rrSansFont", "rrMonoFont" })
+            QVERIFY2(defaultsPage->isAncestorOf(fixture.widget(name)), name);
         auto *closeSettings = qobject_cast<QPushButton *>(fixture.widget("rrSettingsClose"));
         QVERIFY(closeSettings);
         QCOMPARE(closeSettings->accessibleName(), strings::get("settings.close"));
@@ -16752,11 +16846,17 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY2(failures.isEmpty(), "Views differ from freshly built ones");
     }
 
-    // In a freshly built light reader, the section captions of every Settings
-    // page have the same ink: plain ink, not the secondary grey.
+    void settingsSectionCaptions_data()
+    {
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("light") << false;
+        QTest::newRow("dark") << true;
+    }
+
     void settingsSectionCaptions()
     {
-        Fixture fixture(false);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
         QVERIFY(fixture.prepared);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
@@ -16768,7 +16868,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrSettings"));
         QTRY_VERIFY(fixture.visible("rrSettingsDisplay"));
         static const QRegularExpression sectionName("^rr\\w+Section$");
-        const QColor ink = ui::themeColors(false).ink;
+        const auto &colors = ui::themeColors(dark);
+        const QColor ink = dark ? colors.secondaryInk : colors.ink;
         QStringList seen, wrong;
         for (const char *tab : { "rrSettingsDisplay", "rrSettingsControls", "rrSettingsDefaults",
                                  "rrSettingsStyling", "rrSettingsDictionaries", "rrSettingsSystem",
@@ -16777,6 +16878,12 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 continue;
             QVERIFY(fixture.press(tab));
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            if (QString::fromLatin1(tab) == QLatin1String("rrSettingsSystem")) {
+                auto *sleep = fixture.widget("rrSleepScreen");
+                QVERIFY(sleep);
+                QVERIFY(!sleep->isEnabled());
+                QCOMPARE(ui::labelInk(sleep), dark ? colors.disabledInk : colors.ink);
+            }
             rewindPager(fixture, "rrSettingsOptionsPrevious");
             for (int page = 0; page < 20; ++page) {
                 QCoreApplication::processEvents();
@@ -16789,20 +16896,19 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                         continue;
                     const QRect area =
                             QRect(label->mapTo(reader, QPoint()), label->size()) & image.rect();
-                    // The darkest pixel is the ink of the caption's letters.
-                    int darkest = 255;
-                    QRgb darkestColor = qRgb(255, 255, 255);
+                    // Read the ink from the letters against the section background.
+                    QRgb lettering = dark ? qRgb(0, 0, 0) : qRgb(255, 255, 255);
                     for (int y = area.top(); y <= area.bottom(); ++y)
-                        for (int x = area.left(); x <= area.right(); ++x)
-                            if (qGray(image.pixel(x, y)) < darkest) {
-                                darkest = qGray(image.pixel(x, y));
-                                darkestColor = image.pixel(x, y);
-                            }
+                        for (int x = area.left(); x <= area.right(); ++x) {
+                            const auto pixel = image.pixel(x, y);
+                            if (dark ? qGray(pixel) > qGray(lettering)
+                                     : qGray(pixel) < qGray(lettering))
+                                lettering = pixel;
+                        }
                     const QString entry =
-                            QString("%1 %2 %3")
-                                    .arg(tab, label->text(), QColor(darkestColor).name());
+                            QString("%1 %2 %3").arg(tab, label->text(), QColor(lettering).name());
                     seen << entry;
-                    if (QColor(darkestColor) != ink)
+                    if (QColor(lettering) != ink)
                         wrong << entry;
                 }
                 if (!fixture.visible("rrSettingsOptionsNext")
@@ -17016,6 +17122,17 @@ private slots:
         auto saved = storage::readJson(fixture.paths.preferences());
         saved["zen_mode"] = true;
         QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
+        const QDateTime lastSync(QDate(2026, 11, 9), QTime(8, 12));
+        QVERIFY(storage::writeJson(fixture.paths.syncAccount(),
+                                   { { "schema", 1 },
+                                     { "server", "https://127.0.0.1" },
+                                     { "username", "reader" },
+                                     { "key", QString(32, 'a') },
+                                     { "device_id", "gallery-device" },
+                                     { "automatic", true },
+                                     { "sync_on_open", false },
+                                     { "sync_on_close", false },
+                                     { "last_sync", lastSync.toUTC().toString(Qt::ISODate) } }));
         selectPreview(fixture, preset);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
@@ -17049,12 +17166,24 @@ private slots:
         // shows every section it can.
         QVERIFY(fixture.press("rrSettings"));
         QTRY_VERIFY(fixture.visible("rrZenSettings"));
-        auto *kosyncPage = dynamic_cast<reader::KosyncPage *>(fixture.widget("rrKosyncPage"));
-        QVERIFY(kosyncPage);
-        kosyncPage->setAccount("https://sync.example.com", "reader", true, true);
-        kosyncPage->setLastSync(QDateTime(QDate(2026, 11, 9), QTime(8, 12)));
         QTRY_VERIFY(fixture.visible("rrZenSyncNow"));
+        // The landscape phone has no camera inset and puts its clock in the menu row.
+        if (preset == 5)
+            QCOMPARE(fixture.widget("rrGeneralSettings")->y(), 0);
         QVERIFY(capture(fixture, name + "-zen-settings"));
+        if (preset == 4 || preset == 5) {
+            // The hold button ends above the heading's bottom rule, including
+            // after switching themes while the button is in the heading.
+            auto *leave = fixture.widget("rrZenLeave");
+            auto *heading = fixture.widget("rrSettingsHeader");
+            QVERIFY(leave && heading && leave->parentWidget() == heading);
+            const int end =
+                    heading->rect().bottom() - heading->layout()->contentsMargins().bottom();
+            QCOMPARE(leave->geometry().bottom(), end);
+            QVERIFY(fixture.press("rrZenDarkMode"));
+            QTRY_COMPARE(ui::darkTheme(leave), !dark);
+            QCOMPARE(leave->geometry().bottom(), end);
+        }
         QVERIFY(fixture.press("rrSettingsClose"));
     }
 
@@ -17850,7 +17979,7 @@ private slots:
         for (int i = 0; i < 5 + ui::metrics::syncChoice::pageJump; ++i)
             QVERIFY(fixture.turnPage(-1));
         QCOMPARE(fixture.state().value("page").toInt(), earlierPage);
-        QVERIFY(fixture.buildSettings());
+        QVERIFY(fixture.buildKosyncPage());
         QCOMPARE(fixture.state().value("page").toInt(), earlierPage);
 
         struct Case

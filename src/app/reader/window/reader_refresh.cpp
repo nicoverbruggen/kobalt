@@ -61,19 +61,23 @@ void Reader::refresh()
     if (syncCoordinator && isVisible() && !services.suspended())
         syncCoordinator->resume();
     const bool darkReady = publishPendingDarkMode();
-    if (settingsVisible())
-        static_cast<SettingsPanel *>(general)->updateButtonControls(
-                buttonControls(), preferences,
-                savingButtonControls || savingDarkMode >= 0 || savingDenseGraph);
+    auto *settings = static_cast<SettingsPanel *>(general);
+    if (settingsVisible() && settings->buttonControlsButton)
+        settings->updateButtonControls(buttonControls(), preferences,
+                                       savingButtonControls || savingDarkMode >= 0
+                                               || savingDenseGraph);
     const bool dark = savingDarkMode >= 0 ? bool(savingDarkMode)
             : pendingDarkMode >= 0        ? bool(pendingDarkMode)
                                           : session->state().value("dark_mode").toBool(false);
     const bool darkEnabled = savingDarkMode < 0 && pendingDarkMode < 0 && !session->busy()
             && !session->temporaryTypography();
-    if (darkOption) {
-        if (!restoringDefaults)
-            darkOption->setChecked(dark);
-        darkOption->setEnabled(darkEnabled);
+    if (!restoringDefaults)
+        darkOption.set(dark);
+    if (darkOption.widget)
+        darkOption.widget->setEnabled(darkEnabled);
+    if (settings && settings->zenDarkOption) {
+        settings->zenDarkOption->setChecked(darkOption.checked());
+        settings->zenDarkOption->setEnabled(darkEnabled);
     }
     lightPopup->setDarkModeShortcut(services.lightAvailable(), dark, darkEnabled);
     if (recordedOpening && !kosyncStarted)

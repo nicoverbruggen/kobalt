@@ -11,6 +11,7 @@
 #include "dictionaries_page.h"
 #include "interface_style.h"
 #include "kosync_page.h"
+#include "kosync_schedule_sheet.h"
 #include "assets/font_catalog.h"
 #include "reading/style_sample.h"
 #include <QHash>
@@ -51,7 +52,8 @@ enum class SettingsPage {
     // Shown only in debug mode, after About.
     Debug,
     // Zen mode's own page. It has no tab: the rail is hidden in Zen mode.
-    Zen
+    Zen,
+    Theming
 };
 
 struct SettingsPanelInputs
@@ -79,6 +81,9 @@ class SettingsPanel final : public ui::Panel
 public:
     SettingsPanel(QWidget *parent, const SettingsPanelInputs &inputs);
     ~SettingsPanel() override;
+    // Called once, before measuring a section, to connect and fill its controls.
+    std::function<void(SettingsPage, QWidget *)> pageBuilt;
+    bool pageIsBuilt(SettingsPage page) const;
     void dismissRestore();
     void dismissStandbyConfirmation();
     void dismissAutomaticOpeningConfirmation();
@@ -88,8 +93,7 @@ public:
     // A confirmed restore of the appearance defaults or of the text presets,
     // after its dialog closed.
     std::function<void()> restoreDefaultsConfirmed, restorePresetsConfirmed;
-    // Each confirmation dialog is made the first time it is needed. The
-    // reader prepares its text as it does for the widgets it built itself.
+    // Prepares widgets outside a section, such as a dialog or the Zen heading.
     std::function<void(QWidget *)> widgetCreated;
     void showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
                          const QString &current, const QString &emptyLabel,
@@ -204,7 +208,10 @@ public:
     // off in the draft and shows all settings; closing Settings applies it.
     void setZenLayout(bool zen);
 
-    std::function<void()> zenLightRequested, zenLeft;
+    std::function<void()> zenLightRequested, zenSyncRequested, zenScheduleRequested, zenLeft;
+    ui::DescribedOption *zenDarkOption = nullptr;
+    void setZenLightAvailable(bool available);
+    void setZenSync(bool ready, bool enabled, const QString &last, const QString &automatic);
     ui::DescribedOption *automaticOpeningOption = nullptr, *minimalAnnotationOption = nullptr;
     ui::CaptionButton *defaultFontButton = nullptr, *uiFontButton = nullptr,
                       *uiMonoFontButton = nullptr, *headerFooterFontButton = nullptr,
@@ -231,6 +238,7 @@ public:
     QPushButton *openAcknowledgments = nullptr, *debugProgress = nullptr;
     DictionariesPage *dictionaries = nullptr;
     KosyncPage *kosync = nullptr;
+    KosyncScheduleEditor kosyncSchedule;
     QLabel *settingsError = nullptr;
 
 protected:
@@ -244,15 +252,25 @@ private:
                             std::function<void(int, int)> pairChosen);
     QWidget *tabRail = nullptr, *optionsColumn = nullptr;
     QWidget *themingPage = nullptr;
-    bool zen = false, lightSupported = false;
-    void updateZenPage();
+    const SettingsPanelInputs inputs;
+    void ensurePage(SettingsPage page);
+    void buildDisplay(QWidget *displayPage);
+    void buildControls(QWidget *controlsPage);
+    void buildDefaults(QWidget *defaultsPage);
+    void buildStyling(QWidget *stylingPage);
+    void buildSystem(QWidget *systemPage);
+    void buildTheming();
+    void buildAbout();
+    void buildDebug(QWidget *debugPage);
+    void buildZen();
+    int fitZenLeave(bool shown, bool landscape);
+    bool zen = false;
     QWidget *zenPage = nullptr, *zenMarkBox = nullptr, *zenLeaveBar = nullptr,
             *zenSyncSection = nullptr;
     // The hold button sits in the bar below the page, or in the heading on a
     // landscape screen, where the bar would take too much height.
     QPushButton *zenLeave = nullptr;
     QBoxLayout *headingLayout = nullptr, *leaveLayout = nullptr;
-    ui::DescribedOption *zenDarkOption = nullptr;
     ui::CaptionButton *zenLightButton = nullptr, *zenSyncButton = nullptr,
                       *zenAutomaticButton = nullptr, *zenAboutButton = nullptr;
     QLabel *settingsTitle = nullptr;
@@ -278,7 +296,7 @@ private:
     void fitRail(int availableHeight = 0);
     AboutPage *aboutPage = nullptr;
     QPointer<ui::ChoiceModal> restoreDialog, restorePresetsDialog;
-    static void styleListAction(ui::CaptionButton *button);
+
     QPointer<ui::ChoiceModal> standbyDialog;
     QPointer<ui::ChoiceModal> automaticOpeningDialog;
     ui::ChoiceModal *restoreConfirmation();

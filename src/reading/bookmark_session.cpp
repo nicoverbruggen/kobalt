@@ -27,6 +27,33 @@ QString bookmarkLayoutKey(int pages, const QJsonObject &state, const QSize &page
     return QString::fromUtf8(QJsonDocument(layout).toJson(QJsonDocument::Compact));
 }
 
+static bool sameBookmarkLayout(const QJsonObject &state, const QJsonObject &previous)
+{
+    // Repeated calls for the same frame share the JSON object's storage.
+    if (state == previous)
+        return true;
+    const bool sliced = state.contains("book_fraction");
+    if (sliced != previous.contains("book_fraction"))
+        return false;
+    if (sliced
+        && (state.value("slice_start") != previous.value("slice_start")
+            || state.value("rough_pages") != previous.value("rough_pages")))
+        return false;
+    return appearance::same(state, previous);
+}
+
+QString BookmarkLayoutKeyCache::key(int pages, const QJsonObject &state, const QSize &pageArea)
+{
+    if (lastKey.isEmpty() || pages != lastPages || pageArea != lastArea
+        || !sameBookmarkLayout(state, lastState)) {
+        lastPages = pages;
+        lastArea = pageArea;
+        lastKey = bookmarkLayoutKey(pages, state, pageArea);
+    }
+    lastState = state;
+    return lastKey;
+}
+
 BookmarkSession::BookmarkSession(ReaderSession &session, std::function<QString()> layout,
                                  const QString &annotations, const QString &identity,
                                  const QByteArray &fingerprint, const QString &title,

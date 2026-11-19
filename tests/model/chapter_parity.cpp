@@ -891,8 +891,9 @@ Action sessionLists()
                                         {}, {}, {}, {}, [&] { return readingClock; });
                 readingBook.discardPendingSaves();
                 readingBook.observeReading();
+                BookmarkLayoutKeyCache layoutCache;
                 const auto layout = [&] {
-                    return bookmarkLayoutKey(session.pages(), session.state(), viewport);
+                    return layoutCache.key(session.pages(), session.state(), viewport);
                 };
                 BookmarkSession bookmarks(session, layout, scratch.path() + "/annotations",
                                           "session-lists", session.sourceHash(), session.title());
@@ -940,7 +941,10 @@ Action sessionLists()
                 require(session.turn(1), "Cannot turn within the bookmark slice");
                 wait("same-slice turn",
                      [&] { return !session.busy() && !session.preparingNeighbours(); });
-                require(layout() == bookmarkSlice, "Bookmark fixture left its initial slice");
+                const auto turnedKey = layout();
+                require(turnedKey == bookmarkSlice, "Bookmark fixture left its initial slice");
+                require(turnedKey.constData() == bookmarkSlice.constData(),
+                        "Same-slice turn serialized the bookmark layout again");
                 bookmarks.sync();
                 wait("same-slice bookmark resolution", [&] {
                     bookmarks.sync();

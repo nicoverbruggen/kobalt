@@ -2972,7 +2972,7 @@ void Reader::turnPage(int direction, quint32 sourceTime, bool userInput, ui::Inp
 // The layout that bookmark pages belong to, including the page area size.
 QString Reader::layoutKey() const
 {
-    return kobalt::bookmarkLayoutKey(session->pages(), session->state(), bodySize());
+    return bookmarkLayout.key(session->pages(), session->state(), bodySize());
 }
 
 void Reader::syncBookmarks()

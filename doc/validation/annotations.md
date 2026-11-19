@@ -2,6 +2,8 @@
 
 The bookmark-session checks also prepare neighboring slices in Fast and Hybrid modes, add and remove a bookmark on the displayed passage, and reopen the saved store to verify that a later bookmark survives. They run against the existing JSON and SQLite storage variants.
 
+The bookmark-session checks compare cached layout keys with the serialized frame after text reflow, viewport changes, a change of slice and revised page counts. Chapter parity checks that a turn within the same slice reuses the key shared by bookmarks and highlights.
+
 Label `annotations`. Build `mac-tests`, then run `ctest --preset mac -L annotations` from `platforms/desktop/`. `ctest --preset mac -N -L annotations` lists its tests.
 
 These checks cover bookmarks, pinned bookmarks, bookmark returns, highlights, notes, annotation mode, the annotation list, the annotation database and annotation export. The `model` checks hold the stores and the database, the `session` checks run each editing case in separate JSON and SQLite processes, and the `desktop`, `lifecycle` and `ui` checks drive the production reader.

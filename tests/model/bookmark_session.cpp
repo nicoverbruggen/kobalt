@@ -60,6 +60,52 @@ QByteArray read(const QString &path)
     return file.readAll();
 }
 
+void bookmarkLayoutKeyInputs(const QJsonObject &state, int pages, QSize area)
+{
+    BookmarkLayoutKeyCache cache;
+    auto frame = state;
+    const auto key = [&] {
+        const auto result = cache.key(pages, frame, area);
+        require(result == bookmarkLayoutKey(pages, frame, area),
+                "Cached bookmark key differs from the serialized frame");
+        return result;
+    };
+    const auto whole = key();
+    // Holding the first QString keeps its storage alive. Serializing the same
+    // JSON again gives equal text in a different allocation.
+    require(key().constData() == whole.constData(), "Repeated bookmark lookup serialized again");
+    frame["slice_start"] = "/chapter/one";
+    frame["rough_pages"] = 120;
+    frame["position"] = "/chapter/one/paragraph";
+    require(key().constData() == whole.constData(),
+            "Whole-book bookmark key was rebuilt for unrelated frame fields");
+    frame["book_fraction"] = 0.1;
+    const auto slice = key();
+    require(slice != whole, "Switching to a partial layout reused the whole-book key");
+    frame["book_fraction"] = 0.2;
+    frame["rough_page"] = 24;
+    require(key().constData() == slice.constData(),
+            "Moving inside a bookmark slice serialized its layout again");
+    frame["slice_start"] = "/chapter/two";
+    const auto chapter = key();
+    require(chapter != slice, "A different chapter slice reused the bookmark key");
+    frame["rough_pages"] = 121;
+    const auto estimate = key();
+    require(estimate != chapter, "A new whole-book estimate reused the bookmark key");
+    ++pages;
+    const auto repaged = key();
+    require(repaged != estimate, "A new slice page count reused the bookmark key");
+    area.rwidth() += 1;
+    const auto wider = key();
+    require(wider != repaged, "A wider page reused the bookmark key");
+    area.rheight() += 1;
+    require(key() != wider, "A taller page reused the bookmark key");
+    frame.remove("book_fraction");
+    const auto resizedWhole = key();
+    frame["top_margin_pixels"] = state.value("top_margin_pixels").toInt() + 1;
+    require(key() != resizedWhole, "A new margin reused the bookmark key at the same page count");
+}
+
 void bookmarkAfterPreparation()
 {
     QTemporaryDir directory;
@@ -212,6 +258,7 @@ int main(int argc, char **argv)
         const QSize pageArea(758, 900);
         const auto originalState = model.state();
         const auto originalKey = bookmarkLayoutKey(model.pages(), originalState, pageArea);
+        bookmarkLayoutKeyInputs(originalState, model.pages(), pageArea);
         {
             QTemporaryDir emptyRoot;
             require(emptyRoot.isValid(), "Cannot create immediate-bookmark fixture");
@@ -555,8 +602,15 @@ int main(int argc, char **argv)
                         "Beautifier changed a bookmark anchor");
         }
         const int pagesBefore = model.pages();
+        BookmarkLayoutKeyCache reflowCache;
+        const auto beforeReflow = reflowCache.key(model.pages(), model.state(), pageArea);
+        const auto revision = model.layoutRevision();
         require(model.style(minimumFontPixels(), 100), "Cannot change the text size");
         waitUntil([&] { return !model.busy(); });
+        const auto afterReflow = reflowCache.key(model.pages(), model.state(), pageArea);
+        require(model.layoutRevision() != revision && afterReflow != beforeReflow
+                        && afterReflow == bookmarkLayoutKey(model.pages(), model.state(), pageArea),
+                "Text size reflow kept a stale bookmark layout key");
         require(model.pages() < pagesBefore / 3,
                 "The smallest size does not merge enough bookmark pages");
         {

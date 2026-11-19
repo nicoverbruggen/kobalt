@@ -1106,6 +1106,7 @@ private:
     static QString refreshLabel(kobalt::ScreenRefresh mode);
     void showScreenRefresh();
     void openScreenRefresh();
+    mutable kobalt::BookmarkLayoutKeyCache bookmarkLayout;
     // Declared after book, so it is destroyed before the session it borrows.
     std::unique_ptr<kobalt::BookmarkSession> bookmarks;
     std::unique_ptr<kobalt::HighlightSession> highlights;

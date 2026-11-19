@@ -15,6 +15,18 @@ class ReaderSession;
 
 QString bookmarkLayoutKey(int pages, const QJsonObject &state, const QSize &pageArea);
 
+class BookmarkLayoutKeyCache
+{
+public:
+    QString key(int pages, const QJsonObject &state, const QSize &pageArea);
+
+private:
+    QJsonObject lastState;
+    QSize lastArea;
+    int lastPages = 0;
+    QString lastKey;
+};
+
 // Kobalt's own bookmarks for one open book, one per page. The engine thread
 // looks up the page of each stored bookmark whenever the layout changes.
 // Bookmarks that end up on one page are merged, and every change is saved.

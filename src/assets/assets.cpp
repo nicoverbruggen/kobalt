@@ -206,14 +206,19 @@ QString AssetBundle::file(const QString &name) const
     return data->root + '/' + name;
 }
 
-QString AssetBundle::verifiedFile(const QString &name) const
+QMap<QString, QString> AssetBundle::verifiedHyphenation() const
 {
     QMutexLocker lock(&data->mutex);
-    const auto path = file(name);
-    for (const auto &entry : data->checked)
-        if (entry.path == path)
-            return path;
-    return {};
+    QMap<QString, QString> result;
+    const auto directory = file("hyph") + '/';
+    for (const auto &entry : data->checked) {
+        if (entry.path.startsWith(directory) && entry.path.endsWith(".khg")) {
+            auto id = entry.path.mid(directory.size());
+            id.chop(4);
+            result.insert(id + ".pattern", entry.path);
+        }
+    }
+    return result;
 }
 
 QMap<QString, QByteArray> AssetBundle::verifiedFontDigests() const

@@ -125,7 +125,7 @@ public:
     HyphDataLoader() {}
     virtual ~HyphDataLoader() {}
 	virtual LVStreamRef loadData(lString32 id) = 0;
-    virtual LVStreamRef compiledGermanPatterns() { return LVStreamRef(); }
+    virtual LVStreamRef compiledPatterns(const lString32 &) { return LVStreamRef(); }
 };
 
 /// hyphenation manager
@@ -146,7 +146,7 @@ class HyphMan
     static int _TrustSoftHyphens;
 public:
     // Produces the packed asset from the same patterns that the XML loader accepts.
-    static bool compileGermanPatterns(LVStreamRef source, LVStreamRef output);
+    static bool compilePatterns(LVStreamRef source, LVStreamRef output);
     static void uninit();
     static bool initDictionaries(lString32 dir, bool clear = true);
     static HyphDictionaryList * getDictList() { return _dictList; }

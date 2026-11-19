@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// German.pattern uses only Latin-1. Each bucket holds a sequence of records:
+// This format stores patterns whose letters fit in Latin-1. Each bucket holds a sequence of records:
 // length, Latin-1 letters, and length+1 ASCII weights. The offsets include the
 // end of the final bucket. Words in the book are still full Unicode.
 namespace {
@@ -20,7 +20,7 @@ void writePacked32(lUInt8 *p, lUInt32 value)
 }
 }
 
-bool HyphMan::compileGermanPatterns(LVStreamRef source, LVStreamRef output)
+bool HyphMan::compilePatterns(LVStreamRef source, LVStreamRef output)
 {
     TexHyph dictionary;
     lUInt32 crc;

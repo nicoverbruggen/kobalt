@@ -30,8 +30,8 @@ public:
     bool setAside(const QString &name) const;
     QMap<QString, QByteArray> verifiedFontDigests() const;
     QString file(const QString &name) const;
-    // Returns a path only for a member that passed the bundle check.
-    QString verifiedFile(const QString &name) const;
+    // Maps a dictionary ID such as English_US.pattern to its verified packed file.
+    QMap<QString, QString> verifiedHyphenation() const;
     QByteArray fontData(const QString &name) const;
     // Capture verified metadata without retaining font bytes or this bundle.
     // The reader checks the file again when it is first needed.

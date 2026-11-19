@@ -687,7 +687,7 @@ if(BUILD_TESTING)
                 file(WRITE "${fixture}/hyph/fixture.pattern" "${pattern}")
                 # Simulate a package that omits the optional packed dictionary.
                 string(SHA256 packed_hash "packed")
-                file(WRITE "${fixture}/manifest.json" "{\"schema\":1,\"version\":\"${KOBALT_VERSION}\",\"files\":[{\"path\":\"hyph/fixture.pattern\",\"size\":${size},\"sha256\":\"${hash}\"},{\"path\":\"hyph/German.khg\",\"size\":6,\"sha256\":\"${packed_hash}\"}]}")
+                file(WRITE "${fixture}/manifest.json" "{\"schema\":1,\"version\":\"${KOBALT_VERSION}\",\"files\":[{\"path\":\"hyph/fixture.pattern\",\"size\":${size},\"sha256\":\"${hash}\"},{\"path\":\"hyph/Dutch.khg\",\"size\":6,\"sha256\":\"${packed_hash}\"}]}")
                 qt_add_resources(kobalt-${name}-tests android_asset_fixture PREFIX "/android-assets" BASE "${fixture}"
                     FILES "${fixture}/manifest.json" "${fixture}/hyph/fixture.pattern")
             endif()

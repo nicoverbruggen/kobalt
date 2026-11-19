@@ -376,14 +376,29 @@
       "size": 407328
     },
     {
+      "path": "hyph/Dutch.khg",
+      "sha256": "c816035af301c31731b9d21009d1923d6fbbcdade36cdedf70b74cbf6f2db775",
+      "size": 201820
+    },
+    {
       "path": "hyph/Dutch.pattern",
       "sha256": "940d83d1b468a6087aec28f8665962b35181945b7daf6835d72bcc47ebfa70d2",
       "size": 353931
     },
     {
+      "path": "hyph/English_GB.khg",
+      "sha256": "26230262d542f15faa7f895ad9405ed237337c6750c68403a03e14657d31d4e0",
+      "size": 156854
+    },
+    {
       "path": "hyph/English_GB.pattern",
       "sha256": "bc66e68eb8f24e1196f08c60a012df8e101dc4f793d15653c71aa8f122034cec",
       "size": 217146
+    },
+    {
+      "path": "hyph/English_US.khg",
+      "sha256": "26f4311530264ffba5788551698d22d46d171812f3af4ca9e92e2331a1321a9b",
+      "size": 162596
     },
     {
       "path": "hyph/English_US.pattern",
@@ -394,6 +409,11 @@
       "path": "hyph/Estonian.pattern",
       "sha256": "84637050258445479f8070322d0bb4cdd2b07c35d0171f6efae595e631534084",
       "size": 101036
+    },
+    {
+      "path": "hyph/Finnish.khg",
+      "sha256": "a313d0c6342c70d8b624a3ec7cb51b9f562d98b2b4248866970a39d45b5977c3",
+      "size": 67716
     },
     {
       "path": "hyph/Finnish.pattern",
@@ -426,6 +446,11 @@
       "size": 1722495
     },
     {
+      "path": "hyph/Italian.khg",
+      "sha256": "21bedfe135039cbb18ea5a172cdf257411b78461686e4201f05f43a3b5e7b76f",
+      "size": 67830
+    },
+    {
       "path": "hyph/Italian.pattern",
       "sha256": "38a933d1dcdfa947bd48867fb15ec7c2dd938992bfa29787610b9b48f9c4a132",
       "size": 7947
@@ -446,9 +471,19 @@
       "size": 137780
     },
     {
+      "path": "hyph/Portuguese.khg",
+      "sha256": "bf9e10d21c5b6c39d78cbe4e9c4d1e9cfb7eb4af54f80d0b3bfb4cf19fe63b7d",
+      "size": 67440
+    },
+    {
       "path": "hyph/Portuguese.pattern",
       "sha256": "3aa820a6b65d9adce5c367866413d863453da467e10e2f1ce0d46efa892e14ad",
       "size": 7561
+    },
+    {
+      "path": "hyph/Portuguese_BR.khg",
+      "sha256": "4086ad3c6aedc6824c11da2f1ebf556c3cf158bb6335436fe0b67ac20341f25c",
+      "size": 77370
     },
     {
       "path": "hyph/Portuguese_BR.pattern",
@@ -469,6 +504,11 @@
       "path": "hyph/Slovenian.pattern",
       "sha256": "baa82dae9e5f7a07e4893d7fd202b81a51af24cacc9fa2ef7475f60a7066680c",
       "size": 26592
+    },
+    {
+      "path": "hyph/Spanish.khg",
+      "sha256": "8a73a26f7ae33337c3b4d56d271876e5389cb21d9166a5f61c5441df4a7a44a0",
+      "size": 125718
     },
     {
       "path": "hyph/Spanish.pattern",

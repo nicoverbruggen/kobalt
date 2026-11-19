@@ -66,7 +66,7 @@ std::unique_ptr<AssetBundle> installAssets(const QString &applicationData)
                 continue;
         }
         // The XML dictionary also ships in the bundle and is sufficient on its own.
-        if (name != QLatin1String("hyph/German.khg"))
+        if (!name.startsWith("hyph/") || !name.endsWith(".khg"))
             return {};
     }
     if (!write(root + "/manifest.json", bytes) || !bundle->available())

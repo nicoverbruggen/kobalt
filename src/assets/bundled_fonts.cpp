@@ -68,7 +68,7 @@ kobalt::EngineFontInputs kobalt::engineFontInputs(const AssetBundle &assets,
             inputs.fallbackFiles.append(path);
     }
     inputs.hyphenationDirectory = assets.file("hyph");
-    inputs.compiledGermanPatterns = assets.verifiedFile("hyph/German.khg");
+    inputs.compiledHyphenation = assets.verifiedHyphenation();
     QDir hyphenation(inputs.hyphenationDirectory);
     for (const auto &name : hyphenation.entryList(QDir::Files))
         if (assets.setAside("hyph/" + name))

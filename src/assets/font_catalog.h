@@ -51,7 +51,7 @@ struct EngineFontInputs
     // does not load them.
     QStringList excludedHyphenation = {};
     QMap<QString, QByteArray> verifiedFontDigests = {};
-    QString compiledGermanPatterns = {};
+    QMap<QString, QString> compiledHyphenation = {};
     bool operator==(const EngineFontInputs &other) const;
 };
 

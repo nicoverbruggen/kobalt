@@ -286,8 +286,8 @@ HyphMethod * HyphMan::getHyphMethodForDictionary( lString32 id, int leftHyphenMi
         return &NO_HYPH;
     }
     TexHyph * newmethod = new TexHyph(id, leftHyphenMin, rightHyphenMin);
-    const bool packed = id == U"German.pattern"
-            && newmethod->loadPacked(stream, _dataLoader->compiledGermanPatterns());
+    const bool packed = p->getType() == HDT_DICT_TEX
+            && newmethod->loadPacked(stream, _dataLoader->compiledPatterns(id));
     if ( !packed && !newmethod->load( stream ) ) {
         CRLog::error("Cannot open hyphenation dictionary %s", UnicodeToUtf8(id).c_str() );
         delete newmethod;

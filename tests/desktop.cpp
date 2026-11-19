@@ -1795,6 +1795,9 @@ void activityTour(Fixture &fixture, const Scene &scene, const Pages &pages)
     // The history loads after the open book's session is saved.
     QTRY_VERIFY(fixture.visible("rrActivityOverview"));
     QVERIFY(scene("stats-activity-welcome"));
+    QPointer<QWidget> activity = fixture.widget("rrActivity");
+    QPointer<QWidget> todayFigure = fixture.widget("rrActivityTodayFigure");
+    QVERIFY(activity && todayFigure);
     QVERIFY(fixture.press("rrActivityWelcomeClose"));
     QTRY_VERIFY(!fixture.visible("rrActivityWelcome"));
     QTRY_VERIFY(fixture.visible("rrActivityOverview"));
@@ -1878,6 +1881,8 @@ void activityTour(Fixture &fixture, const Scene &scene, const Pages &pages)
     QTRY_COMPARE(labelText(fixture, "rrActivityMonthTotalCaption"), QString("October"));
     QVERIFY(fixture.press("rrActivityMonthsNext"));
     QTRY_COMPARE(labelText(fixture, "rrActivityMonthTotalCaption"), QString("This month"));
+    QVERIFY(fixture.press("rrActivityMonthsPrevious"));
+    QTRY_COMPARE(labelText(fixture, "rrActivityMonthTotalCaption"), QString("October"));
     QVERIFY(fixture.press("rrActivityBooksTab"));
     QTRY_VERIFY(fixture.visible("rrActivityBooks"));
     while (fixture.widget("rrActivityBooksPrevious")->isVisible()
@@ -1923,6 +1928,11 @@ void activityTour(Fixture &fixture, const Scene &scene, const Pages &pages)
     QVERIFY(fixture.press(entry));
     QTRY_VERIFY(fixture.visible("rrActivityOverview"));
     QVERIFY(!fixture.visible("rrActivityWelcome"));
+    QVERIFY(activity && activity == fixture.widget("rrActivity"));
+    QVERIFY(todayFigure && todayFigure == fixture.widget("rrActivityTodayFigure"));
+    QVERIFY(!fixture.visible("rrActivityBookPage") && !fixture.visible("rrActivityBack"));
+    QVERIFY(fixture.press("rrActivityCalendarTab"));
+    QTRY_COMPARE(labelText(fixture, "rrActivityMonthTotalCaption"), QString("This month"));
     QVERIFY(fixture.press("rrActivityClose"));
     QTRY_VERIFY(!fixture.visible("rrActivity"));
     QVERIFY(fixture.press("rrNavStats"));
@@ -13059,6 +13069,66 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         activityTour(
                 fixture, [](const QString &) { return true; },
                 [](const QString &, const char *) {});
+        if (QTest::currentTestFailed())
+            return;
+        QVERIFY(fixture.press("rrNavStats"));
+        QTRY_VERIFY(fixture.visible("rrGraphActivity") || fixture.visible("rrGraphActivityCell"));
+        const char *entry =
+                fixture.visible("rrGraphActivity") ? "rrGraphActivity" : "rrGraphActivityCell";
+
+        struct Gates
+        {
+            QSemaphore oldRead, newRead;
+            std::atomic_bool between{ false };
+        };
+
+        const auto gates = std::make_shared<Gates>();
+        storage::RecordWriter writer(storage::RecordWriter::Delivery::All);
+        const auto release = qScopeGuard([gates] {
+            gates->oldRead.release();
+            gates->newRead.release();
+        });
+        // Queue one read per opening and hold the writer between them. The old
+        // result must not replace the new opening's loading screen.
+        writer.post(
+                [gates] {
+                    gates->oldRead.acquire();
+                    return true;
+                },
+                {});
+        QVERIFY(fixture.press(entry));
+        QTRY_VERIFY(fixture.visible("rrActivityMessage"));
+        QVERIFY(fixture.press("rrActivityClose"));
+        QVERIFY(!fixture.visible("rrActivity"));
+        writer.post(
+                [gates, directory = fixture.paths.directory] {
+                    gates->between = true;
+                    gates->newRead.acquire();
+                    return storage::profileTransaction(directory, [](QSqlDatabase &db) {
+                        QSqlQuery update(db);
+                        update.prepare("UPDATE profile_state SET payload=? WHERE name=?");
+                        update.addBindValue(QStringLiteral("{\"milliseconds\":3480000}"));
+                        update.addBindValue("reading-day:" + activityToday.toString(Qt::ISODate)
+                                            + ":activity-seed");
+                        return update.exec() && update.numRowsAffected() == 1;
+                    });
+                },
+                {});
+        QVERIFY(fixture.press(entry));
+        gates->oldRead.release();
+        QTRY_VERIFY(gates->between.load());
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+        QVERIFY(fixture.visible("rrActivityMessage"));
+        QVERIFY(!fixture.visible("rrActivityOverview"));
+        gates->newRead.release();
+        QTRY_VERIFY(fixture.visible("rrActivityOverview"));
+        QTRY_COMPARE(labelText(fixture, "rrActivityTodayFigure"), QString("58"));
+        QVERIFY(fixture.press("rrActivityClose"));
+        QVERIFY(fixture.press("rrNavLayout"));
+        QTRY_VERIFY(fixture.visible("rrHeaderFooter"));
+        QVERIFY(fixture.press("rrNavLayout"));
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.turnPage(1));
     }
 
     void activityVisibility_data()

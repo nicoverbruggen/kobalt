@@ -819,7 +819,7 @@ void Reader::syncPinnedBookmarks()
     const bool visible = features::enabled(preferences, features::Bookmarks) && !pins.isEmpty()
             && topControls->isVisible() && !session->busy() && !lifecycleHidden && !closing
             && !services.suspended() && !annotationMode && !seekOpen && !appearanceEdit.panelOpen()
-            && !activityView && !settingsVisible() && !menu->isVisible() && !choices->isVisible()
+            && !activityOpen() && !settingsVisible() && !menu->isVisible() && !choices->isVisible()
             && !lightPopup->isVisible() && !bookmarkList->isVisible() && !acknowledgmentsVisible()
             && !searchPanel->isVisible() && !dictionaryPanel->isVisible() && !linksActive()
             && !lookupPending && !syncDialog && !kosyncDialog && !finishDialog
@@ -1533,8 +1533,8 @@ void Reader::openSleepChoice(const QString &name, const QString &optionPrefix,
     if (sleepPopup) {
         return;
     }
-    const auto sheet = ui::makeChoiceSheet(this, name, heading, description, name + "Title",
-                                            name + "Hint");
+    const auto sheet =
+            ui::makeChoiceSheet(this, name, heading, description, name + "Title", name + "Hint");
     sleepPopup = sheet.overlay;
     sleepPopup->dismissed = [this] { closeSleepScreen(); };
     auto *choices = sheet.list;

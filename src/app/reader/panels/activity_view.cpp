@@ -745,6 +745,14 @@ public:
         cells = { streak, longest, month };
     }
 
+    void reset()
+    {
+        summary = {};
+        shown = {};
+        grid->setMonth({}, {}, {});
+        year->setYear({}, {}, {});
+    }
+
     void setSummary(const activity::Summary &value, const ActivityRecords &) override
     {
         summary = value;
@@ -1120,6 +1128,22 @@ public:
         });
     }
 
+    void reset()
+    {
+        months.clear();
+        hiddenCount = page = 0;
+        pages.clear();
+        copyCaptions.clear();
+        copyDescriptions.clear();
+        clearCovers();
+        for (auto *row : rows) {
+            row->setBook({}, {});
+            row->setCover({}, false);
+            row->hide();
+        }
+        setProperty("activity_covers_pending", 0);
+    }
+
     void setSummary(const activity::Summary &summary, const ActivityRecords &) override
     {
         setGroups(summary.months, int(summary.hiddenBooks.size()));
@@ -1130,9 +1154,7 @@ public:
     // hidden books' own list.
     void setGroups(const QVector<activity::MonthBooks> &groups, int hidden, bool firstPage = false)
     {
-        known.clear();
-        missingBooks.clear();
-        covers.clear();
+        clearCovers();
         months = groups;
         hiddenCount = hidden;
         // A reload, such as after hiding a book, keeps the page in view.
@@ -1311,6 +1333,13 @@ public:
     }
 
 private:
+    void clearCovers()
+    {
+        known.clear();
+        missingBooks.clear();
+        covers.clear();
+    }
+
     QHash<QString, QImage> covers;
     QSet<QString> known, missingBooks;
 };
@@ -1853,6 +1882,8 @@ public:
             arrange();
         });
     }
+
+    void resetPage() { page = 0; }
 
     // The streaks let the streak line say whether the longest one is still
     // going, and if not, when it ended and what the current one is.
@@ -2404,6 +2435,17 @@ public:
 
     void forget() { book.clear(); }
 
+    void reset()
+    {
+        book.clear();
+        total = {};
+        sessions.clear();
+        days.clear();
+        extras = {};
+        chart->setDays({}, {});
+        page = 0;
+    }
+
     void setBook(const QString &key, const ActivityRecords &records, const QDate &now,
                  const ActivityOpenBook &open)
     {
@@ -2711,6 +2753,26 @@ ActivityView::ActivityView(QWidget *parent) : ui::Panel(parent)
         connect(tab, &QPushButton::clicked, this, [this, index] { showSection(Section(index)); });
         tabs.append(tab);
     }
+    setLoading();
+}
+
+void ActivityView::reset()
+{
+    records = {};
+    summary = {};
+    openBookData = {};
+    bookKey.clear();
+    currentBook.clear();
+    copiesMonth = {};
+    copiesTitle.clear();
+    copiesAuthor.clear();
+    current = Section::Overview;
+    detail = bookReturn = Detail::None;
+    calendar->reset();
+    for (auto *list : { books, hiddenPage, copiesPage })
+        list->reset();
+    milestonesPage->resetPage();
+    bookPage->reset();
     setLoading();
 }
 

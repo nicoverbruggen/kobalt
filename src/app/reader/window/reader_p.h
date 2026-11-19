@@ -819,10 +819,14 @@ private:
     // My Words. Null with the JSON diagnostic backend, which has no database.
     std::unique_ptr<kobalt::SavedWords> savedWords;
     // Activity: the reading history behind Stats. The store reads on the
-    // profile writer thread; the view exists while it is open.
+    // profile writer thread. Keep the view's widgets across openings.
     std::unique_ptr<kobalt::ActivityRecordStore> activityRecords;
     std::unique_ptr<kobalt::library::CoverThumbnails> activityCovers;
     QPointer<kobalt::ActivityView> activityView;
+
+    bool activityOpen() const { return activityView && !activityView->isHidden(); }
+
+    quint64 activityOpening = 0, activityBookRequest = 0;
     // Shown the first time Activity opens: the history covers this device only.
     QPointer<ui::ModalOverlay> activityWelcome;
     void showActivityWelcome();

@@ -1619,7 +1619,7 @@ void Reader::resizeEvent(QResizeEvent *)
         acknowledgments->setGeometry(safeRect);
     searchPanel->setGeometry(safeRect);
     // Activity covers the same area as the All presets screen.
-    if (activityView)
+    if (activityOpen())
         activityView->setGeometry(textPresetGalleryBounds());
     const int bookmarkTop = navigation ? navigation->statusHeight() : 0;
     bookmarkList->setGeometry(0, bookmarkTop, width(),

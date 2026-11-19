@@ -61,7 +61,7 @@ void Reader::loadActivity()
                 if (!guard || !guard->book)
                     return;
                 if (!ok) {
-                    if (guard->activityView)
+                    if (guard->activityOpen())
                         guard->activityView->setUnavailable();
                     return;
                 }
@@ -71,9 +71,12 @@ void Reader::loadActivity()
                                                                    .arg(time)
                                                                    .arg(summary->current.days)
                                                          : time);
-                if (!guard->activityView)
+                if (!guard->activityOpen())
                     return;
                 guard->activityView->setRecords(std::move(records), std::move(*summary));
+                const auto currentBook = guard->wordsBook();
+                if (guard->activityView->bookOpen(currentBook))
+                    guard->mapActivityBook(currentBook);
                 prepareRefresh(guard->activityView);
             });
 }
@@ -82,18 +85,18 @@ void Reader::loadActivity()
 // needs no confirmation. Both changes are written on the profile writer.
 void Reader::hideActivityBook(const QString &key, bool hidden)
 {
-    if (!activityRecords || !book)
+    if (!activityOpen() || !activityRecords || !book)
         return;
     QPointer<Reader> guard(this);
-    activityRecords->hide(key, hidden, [guard](bool ok) {
-        if (guard)
+    activityRecords->hide(key, hidden, [guard, opening = activityOpening](bool ok) {
+        if (guard && guard->activityOpening == opening)
             guard->finishActivityEdit(ok);
     });
 }
 
 void Reader::deleteActivityBook(const QString &key, const QString &title)
 {
-    if (!activityRecords || !book || key == wordsBook())
+    if (!activityOpen() || !activityRecords || !book || key == wordsBook())
         return;
     auto *choice = new ui::ChoiceModal(
             this,
@@ -110,20 +113,22 @@ void Reader::deleteActivityBook(const QString &key, const QString &title)
                             + "color:palette(placeholder-text);");
     QPointer<ui::ChoiceModal> modal(choice);
     QPointer<Reader> guard(this);
-    const auto finish = [modal, guard, key](bool remove) {
+    const auto finish = [modal, guard, key, opening = activityOpening](bool remove) {
         if (!modal)
             return;
         modal->hide();
         modal->deleteLater();
-        if (!remove || !guard || !guard->activityRecords || !guard->book)
+        if (!remove || !guard || !guard->activityOpen() || guard->activityOpening != opening
+            || !guard->activityRecords || !guard->book)
             return;
-        guard->activityRecords->remove(key, guard->book->readingOpeningId(), [guard, key](bool ok) {
-            if (!guard)
-                return;
-            if (ok && guard->activityView)
-                guard->activityView->closeBook(key);
-            guard->finishActivityEdit(ok);
-        });
+        guard->activityRecords->remove(key, guard->book->readingOpeningId(),
+                                       [guard, key, opening](bool ok) {
+                                           if (!guard || guard->activityOpening != opening)
+                                               return;
+                                           if (ok && guard->activityOpen())
+                                               guard->activityView->closeBook(key);
+                                           guard->finishActivityEdit(ok);
+                                       });
     };
     connect(choice->secondaryButton(), &QPushButton::clicked, choice, [finish] { finish(false); });
     connect(choice->primaryButton(), &QPushButton::clicked, choice, [finish] { finish(true); });
@@ -139,33 +144,36 @@ void Reader::deleteActivityBook(const QString &key, const QString &title)
 
 void Reader::finishActivityEdit(bool ok)
 {
-    if (!ok && activityView)
+    if (!ok && activityOpen())
         showNotice({ strings::get("activity.title"), strings::get("activity.change_not_saved"),
                      QStringLiteral("rrActivityWriteError") });
-    loadActivity();
+    if (activityOpen() || !chapterGraph->isHidden())
+        loadActivity();
 }
 
 void Reader::openActivity()
 {
-    if (activityView || !book || !book->tracksReadingHistory()
+    if (activityOpen() || !book || !book->tracksReadingHistory()
         || !features::enabled(preferences, features::Activity))
         return;
     session->cancelPendingTurn();
-    activityView = new ActivityView(this);
+    ++activityOpening;
+    if (!activityView) {
+        activityView = new ActivityView(this);
+        activityView->closed = [this] { closeActivity(); };
+        activityView->hideRequested = [this](const QString &key, bool hidden) {
+            hideActivityBook(key, hidden);
+        };
+        activityView->deleteRequested = [this](const QString &key, const QString &title) {
+            deleteActivityBook(key, title);
+        };
+        activityView->bookRequested = [this](const QString &key) { mapActivityBook(key); };
+        activityView->coversRequested = [this](const QVector<activity::BookTotal> &books,
+                                               QSize size) { loadActivityCovers(books, size); };
+        prepareRefresh(activityView);
+    }
     activityView->setGeometry(textPresetGalleryBounds());
-    activityView->closed = [this] { closeActivity(); };
     activityView->setCurrentBook(wordsBook());
-    activityView->hideRequested = [this](const QString &key, bool hidden) {
-        hideActivityBook(key, hidden);
-    };
-    activityView->deleteRequested = [this](const QString &key, const QString &title) {
-        deleteActivityBook(key, title);
-    };
-    activityView->bookRequested = [this](const QString &key) { mapActivityBook(key); };
-    activityView->coversRequested = [this](const QVector<activity::BookTotal> &books, QSize size) {
-        loadActivityCovers(books, size);
-    };
-    prepareRefresh(activityView);
     activityView->show();
     activityView->raise();
     // The open book's routine save runs now instead of later, in the
@@ -226,7 +234,7 @@ void Reader::showActivityWelcome()
 // Android's document-provider books, keep the placeholder.
 void Reader::loadActivityCovers(const QVector<activity::BookTotal> &books, QSize size)
 {
-    if (!activityView)
+    if (!activityOpen())
         return;
     if (!activityCovers)
         activityCovers = std::make_unique<library::CoverThumbnails>(
@@ -242,18 +250,18 @@ void Reader::loadActivityCovers(const QVector<activity::BookTotal> &books, QSize
     QPointer<Reader> guard(this);
     activityCovers->request(files, size,
                             [guard](const QString &key, const QImage &cover, bool missing) {
-                                if (guard && guard->activityView)
+                                if (guard && guard->activityOpen())
                                     guard->activityView->setCover(key, cover, missing);
                             });
 }
 
 void Reader::closeActivity()
 {
-    if (!activityView)
+    if (!activityOpen())
         return;
+    ++activityBookRequest;
     activityView->hide();
-    activityView->deleteLater();
-    activityView.clear();
+    activityView->reset();
     // Covers still being read are not needed any more; the loader stops
     // without waiting, and the disk cache keeps the covers already read.
     activityCovers.reset();
@@ -264,12 +272,16 @@ void Reader::closeActivity()
 // can show how far each session went and the progress over time.
 void Reader::mapActivityBook(const QString &key)
 {
-    if (!activityView || key != wordsBook())
+    const auto request = ++activityBookRequest;
+    if (!activityOpen() || key != wordsBook())
         return;
     const auto sessions = activity::bookSessions(activityView->data(), key, activityToday());
     QStringList positions;
-    for (const auto &item : sessions)
+    QVector<qint64> starts;
+    for (const auto &item : sessions) {
         positions << item.startPosition << item.endPosition;
+        starts.append(item.started);
+    }
     ActivityOpenBook open;
     open.book = key;
     open.percent = book->finishedHere() ? 100 : session->progressPercent();
@@ -278,16 +290,17 @@ void Reader::mapActivityBook(const QString &key)
     if (positions.isEmpty())
         return;
     QPointer<Reader> guard(this);
-    session->bookmarkPages(positions, [guard, sessions, open](QVector<int> pages) mutable {
-        if (!guard || !guard->activityView || pages.size() != 2 * sessions.size())
+    session->bookmarkPages(positions, [guard, request, starts, open](QVector<int> pages) mutable {
+        if (!guard || !guard->activityOpen() || guard->activityBookRequest != request
+            || !guard->activityView->bookOpen(open.book) || pages.size() != 2 * starts.size())
             return;
         const int total = guard->session->bookPages();
-        for (int index = 0; index < sessions.size(); ++index) {
+        for (int index = 0; index < starts.size(); ++index) {
             const int start = pages[2 * index], end = pages[2 * index + 1];
             if (start < 0 || end < 0 || total <= 0)
                 continue;
             open.ranges.insert(
-                    sessions[index].started,
+                    starts[index],
                     { pageProgressPercent(start, total), pageProgressPercent(end, total) });
         }
         guard->activityView->setOpenBook(open);

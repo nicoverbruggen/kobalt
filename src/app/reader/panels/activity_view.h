@@ -40,6 +40,8 @@ public:
     explicit ActivityView(QWidget *parent);
     // Until the records arrive.
     void setLoading();
+    // Drop this opening's history and return to Overview while the view is hidden.
+    void reset();
     void setUnavailable();
     // The records and their summary, which the caller computes off the
     // interface thread.
@@ -56,6 +58,8 @@ public:
     Section section() const { return current; }
 
     bool bookOpen() const { return detail == Detail::Book; }
+
+    bool bookOpen(const QString &key) const { return bookOpen() && bookKey == key; }
 
     const ActivityRecords &data() const { return records; }
 

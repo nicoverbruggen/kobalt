@@ -58,12 +58,15 @@ std::unique_ptr<AssetBundle> installAssets(const QString &applicationData)
             || name.split('/').contains("..") || name.split('/').contains("."))
             return {};
         QFile source(":/android-assets/" + name);
-        if (!source.open(QIODevice::ReadOnly))
-            return {};
-        const auto data = source.readAll();
-        if (QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex()
-                    != entry.value("sha256").toString().toLatin1()
-            || !write(root + '/' + name, data))
+        if (source.open(QIODevice::ReadOnly)) {
+            const auto data = source.readAll();
+            if (QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex()
+                        == entry.value("sha256").toString().toLatin1()
+                && write(root + '/' + name, data))
+                continue;
+        }
+        // The XML dictionary also ships in the bundle and is sufficient on its own.
+        if (name != QLatin1String("hyph/German.khg"))
             return {};
     }
     if (!write(root + "/manifest.json", bytes) || !bundle->available())

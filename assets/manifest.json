@@ -411,6 +411,11 @@
       "size": 70271
     },
     {
+      "path": "hyph/German.khg",
+      "sha256": "0ece83cc9e3ca42d5486412b51bf3a167f6eebcd38b02ec42a2ca20089f80729",
+      "size": 501278
+    },
+    {
       "path": "hyph/German.pattern",
       "sha256": "d5c9bef88d59776fe5e5d5476f95c92c824bed9060456ddd995ee796036b0f5e",
       "size": 970695

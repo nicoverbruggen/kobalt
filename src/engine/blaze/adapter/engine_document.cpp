@@ -346,7 +346,16 @@ bool validAlignment(const QString &value)
 class CheckedHyphenationLoader final : public HyphDataLoader
 {
 public:
-    explicit CheckedHyphenationLoader(QStringList excluded) : excluded(std::move(excluded)) { }
+    CheckedHyphenationLoader(QStringList excluded, QString packed)
+        : excluded(std::move(excluded)), packedGerman(std::move(packed))
+    {
+    }
+
+    LVStreamRef compiledGermanPatterns() override
+    {
+        return packedGerman.isEmpty() ? LVStreamRef()
+                                      : LVOpenFileStream(cre(packedGerman).c_str(), LVOM_READ);
+    }
 
     LVStreamRef loadData(lString32 id) override
     {
@@ -363,6 +372,7 @@ public:
 
 private:
     QStringList excluded;
+    QString packedGerman;
 };
 
 } // namespace
@@ -452,7 +462,8 @@ bool EngineDocument::initializeFonts()
     // Bundled dictionaries hyphenate by language. A language whose dictionary
     // is not bundled keeps the engine's algorithmic hyphenation.
     HyphMan::initDictionaries(cre(fonts_.hyphenationDirectory + '/'));
-    HyphMan::setDataLoader(new CheckedHyphenationLoader(fonts_.excludedHyphenation));
+    HyphMan::setDataLoader(new CheckedHyphenationLoader(fonts_.excludedHyphenation,
+                                                        fonts_.compiledGermanPatterns));
     for (const auto *name : engineHyphenationPatterns) {
         if (QFileInfo::exists(fonts_.hyphenationDirectory + '/' + name))
             continue;

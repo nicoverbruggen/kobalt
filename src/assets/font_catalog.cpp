@@ -99,7 +99,8 @@ bool EngineFontInputs::operator==(const EngineFontInputs &other) const
     return sources == other.sources && fallbackFiles == other.fallbackFiles
             && hyphenationDirectory == other.hyphenationDirectory
             && excludedHyphenation == other.excludedHyphenation
-            && verifiedFontDigests == other.verifiedFontDigests;
+            && verifiedFontDigests == other.verifiedFontDigests
+            && compiledGermanPatterns == other.compiledGermanPatterns;
 }
 
 QString fontFamilyKey(const QString &family)

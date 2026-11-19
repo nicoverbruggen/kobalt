@@ -49,6 +49,7 @@ int main(int argc, char **argv)
     require(QFile::remove(current), "Cannot remove installation blocker");
     auto bundle = kobalt::android::installAssets(profile.path());
     require(bundle && bundle->available(), "Current assets were not installed and verified");
+    require(bundle->setAside("hyph/German.khg"), "Missing packed dictionary was not set aside");
     require(!QFileInfo::exists(old), "Successful installation retained the old bundle");
     require(QFileInfo::exists(current + "/hyph/fixture.pattern"), "Cleanup removed current assets");
     require(QFileInfo::exists(assets + "unrelated/keep")

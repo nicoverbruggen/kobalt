@@ -206,6 +206,16 @@ QString AssetBundle::file(const QString &name) const
     return data->root + '/' + name;
 }
 
+QString AssetBundle::verifiedFile(const QString &name) const
+{
+    QMutexLocker lock(&data->mutex);
+    const auto path = file(name);
+    for (const auto &entry : data->checked)
+        if (entry.path == path)
+            return path;
+    return {};
+}
+
 QMap<QString, QByteArray> AssetBundle::verifiedFontDigests() const
 {
     QMutexLocker lock(&data->mutex);

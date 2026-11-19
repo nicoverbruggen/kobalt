@@ -11,7 +11,8 @@ Kobalt corrected the exception conversion to block breaks not listed in the orig
 English_GB.pattern
 From hyph-en-gb.tex (https://github.com/hyphenation/tex-hyphen). Copyright (C) 1992, 1996, 2005, 2016 Dominik Wujastyk, Graham Toal. MIT license, below.
 
-German.pattern
+German.pattern and German.khg
+German.khg contains the same patterns in compiled form.
 From the wortliste project (https://repo.or.cz/wortliste.git). The file keeps its copyright notice and MIT license in its header.
 
 Dutch.pattern

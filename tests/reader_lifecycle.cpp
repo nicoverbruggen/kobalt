@@ -5909,6 +5909,7 @@ private slots:
 
         ui::setDensity(ppi);
         ReadingPage page(nullptr, [] { });
+        page.setProperty("reader_dark", dark);
         page.resize(800, 1100);
         auto palette = page.palette();
         palette.setColor(QPalette::Window, dark ? Qt::black : Qt::white);

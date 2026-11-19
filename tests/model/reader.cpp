@@ -1577,6 +1577,15 @@ int main(int argc, char **argv)
                 ++interface;
                 if (font.family == "IBM Plex Sans") {
                     require(font.files.size() == 3, "Bundled control family lost a style");
+                } else if (font.family == "Kalam") {
+                    require(font.files.size() == 2
+                                    && font.files.first().endsWith("/Kalam-Regular.ttf")
+                                    && font.files.last().endsWith("/Kalam-Bold.ttf"),
+                            "Kalam lost its regular or bold interface face");
+                } else if (font.family == "Playpen Sans") {
+                    require(font.files.size() == 1
+                                    && font.files.first().endsWith("/PlaypenSans.ttf"),
+                            "Playpen Sans lost its bundled interface face");
                 } else if (font.family == "Noto Naskh Arabic") {
                     ++arabicFallback;
                     require(font.files.size() == 2
@@ -1612,7 +1621,7 @@ int main(int argc, char **argv)
         const auto coreFiles =
                 QJsonDocument::fromJson(collection.readAll()).object().value("files").toArray();
         require(!coreFiles.isEmpty() && coreFiles.size() % 4 == 0, "Core collection lost a style");
-        require(core == coreFiles.size() / 4 + variableCore && sideloaded == 1 && interface == 9
+        require(core == coreFiles.size() / 4 + variableCore && sideloaded == 1 && interface == 11
                         && arabicFallback == 1 && hebrewFallback == 1,
                 "Core collection or font catalog incomplete");
         require(kobalt::fontFamilyKey("KF Libron") == kobalt::fontFamilyKey("Libron"),

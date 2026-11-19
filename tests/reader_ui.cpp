@@ -4624,6 +4624,7 @@ private slots:
         QFETCH(int, ppi);
         ui::setDensity(ppi);
         ReadingPage page(nullptr, [] { });
+        page.setProperty("reader_dark", dark);
         auto colors = page.palette();
         colors.setColor(QPalette::Window, dark ? Qt::black : Qt::white);
         colors.setColor(QPalette::WindowText, dark ? Qt::white : Qt::black);
@@ -4841,6 +4842,7 @@ private slots:
 
         ui::setDensity(ppi);
         ReadingPage page(nullptr, [] { });
+        page.setProperty("reader_dark", dark);
         page.resize(ui::px(800), ui::px(1000));
         page.image = QImage(page.size(), QImage::Format_RGB32);
         const auto paper = dark ? Qt::black : Qt::white;

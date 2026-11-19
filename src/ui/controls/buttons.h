@@ -269,6 +269,7 @@ public:
     }
 
     void setSample(QWidget *sample);
+    QWidget *sample() const { return rowSample; }
 
     QString typefacePreview() const { return previewFace; }
 

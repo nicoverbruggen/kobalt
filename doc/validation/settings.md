@@ -14,7 +14,7 @@
 
 `desktop.settingsDebugMode` checks that the Debug tab and Faster are hidden without debug mode, that the Debug mode checkbox shows the tab at once and offers Faster, that turning it off changes Faster back to Hybrid, the device facts, that closing Settings saves `debug_mode`, that the header and footer picker offers the performance fields only in debug mode, and that Evict book cache asks first, can be cancelled and closes the book. The desktop app has no parsed-book cache; `engine.large-toc` checks the eviction itself.
 
-The `playfulTheme` gallery case switches presets in the reader, checks that Classic restores IBM Plex Sans while Settings is open, and checks custom icon and palette persistence across preset switches. It captures Notebook settings. The palette gallery shows Sage and Sepia in the Library and the Zen menu.
+The `playfulTheme` gallery case verifies that the preset and palette rows keep their sample widgets when a selection repeats and when the preset changes. It checks sample sizes and painted swatch colors in the reader at normal and 150% interface text. It switches presets in the reader, checks that Classic restores IBM Plex Sans while Settings is open, and checks custom icon and palette persistence across preset switches. It captures Notebook settings. The palette gallery shows Sage and Sepia in the Library and the Zen menu.
 
 `desktop.settingsStandby` checks supported and unsupported hosts, the default state, confirmation, cancellation, unanswered-warning dismissal, persistence after reopening and re-enabling standby. The gallery includes the System settings pages and the standby confirmation. The same case turns on debug mode and captures the Debug pages and the eviction confirmation.
 

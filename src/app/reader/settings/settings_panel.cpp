@@ -1352,11 +1352,21 @@ class ThemeSample final : public QWidget
 public:
     using Kind = SettingsPanel::ThemeChoice;
 
-    ThemeSample(QWidget *parent, InterfaceStyle style, Kind kind)
-        : QWidget(parent), style(style), kind(kind)
+    ThemeSample(QWidget *parent, const InterfaceStyle &initial, Kind kind)
+        : QWidget(parent), kind(kind)
+    {
+        setAppearance(initial);
+    }
+
+    void setAppearance(const InterfaceStyle &next)
     {
         setFixedSize((kind == Kind::Preset ? 4 : 2) * chrome::tabIcon + chrome::tabGap,
                      chrome::tabIcon);
+        if (style.mainFace == next.mainFace && style.icons == next.icons
+            && style.palette == next.palette)
+            return;
+        style = next;
+        update();
     }
 
     void paintEvent(QPaintEvent *) override
@@ -1410,10 +1420,16 @@ void SettingsPanel::selectTheme(const QString &theme, const InterfaceStyle &styl
         themingButton->setCaption(caption);
     if (!presetButton)
         return;
+    const auto setSample = [&style](ui::CaptionButton *button, ThemeChoice kind) {
+        if (auto *sample = static_cast<ThemeSample *>(button->sample()))
+            sample->setAppearance(style);
+        else
+            button->setSample(new ThemeSample(button, style, kind));
+    };
     presetButton->setCaption(caption);
-    presetButton->setSample(new ThemeSample(presetButton, style, ThemeChoice::Preset));
+    setSample(presetButton, ThemeChoice::Preset);
     paletteButton->setCaption(paletteName(style.palette).toUpper());
-    paletteButton->setSample(new ThemeSample(paletteButton, style, ThemeChoice::Palette));
+    setSample(paletteButton, ThemeChoice::Palette);
     iconThemeButton->setCaption(iconStyleName(ui::iconStyleId(style.icons)).toUpper());
     iconThemeButton->setIconStylePreview(style.icons);
     themingPage->update();

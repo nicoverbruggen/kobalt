@@ -1053,7 +1053,13 @@ void Reader::applySettings()
     bookmarkList->setSortOrder(preferences.value("marks_sort").toString("position"));
     showMenuView();
     showNavigationBarButtons();
-    applyInterfaceFonts();
+    // Most edits apply as they are selected. Restore defaults and a face
+    // that was unavailable when Settings opened can still need applying.
+    if (!ui::interfaceFontsMatch(themeDraft.mainFace, settingsMonoFace, settingsStripFace,
+                                 settingsStripWeight)
+        || property("kobalt_icon_style").toInt() != int(themeDraft.icons)
+        || property("kobalt_palette").toString() != themeDraft.palette)
+        applyInterfaceFonts();
     dictionaryPanel->setDefinitionFont(settingsDictionaryFontFace, settingsDictionaryFontSize);
     navigation->setStatusVisible(!hideNativeStatus());
     const auto chrome = kobalt::headerfooter::select(preferences, services.phoneLayout);

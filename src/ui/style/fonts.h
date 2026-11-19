@@ -35,6 +35,8 @@ void setInterfaceMonoFontFamily(const QString &family);
 void setHeaderFooterFontFamily(const QString &family);
 QFont headerFooterFont(int pixels = -1);
 void setHeaderFooterAddedWeight(int steps);
+bool interfaceFontsMatch(const QString &mainFace, const QString &monoFace, const QString &stripFace,
+                         int stripWeight);
 int headerFooterAddedWeight();
 // Default keeps the native text path. Extra weight uses synthetic FreeType strokes.
 int headerFooterTextWeight();

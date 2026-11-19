@@ -512,6 +512,13 @@ void setHeaderFooterFontFamily(const QString &family)
     selectedHeaderFooterFamily = family;
 }
 
+bool interfaceFontsMatch(const QString &mainFace, const QString &monoFace, const QString &stripFace,
+                         int stripWeight)
+{
+    return mainFace == selectedInterfaceFamily && monoFace == selectedInterfaceMonoFamily
+            && stripFace == selectedHeaderFooterFamily && stripWeight == stripAddedWeight;
+}
+
 QFont headerFooterFont(int pixels)
 {
     return sizedFont(selectedHeaderFooterFamily.isEmpty() ? family(FamilyIndex::Mono)

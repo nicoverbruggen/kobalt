@@ -14269,6 +14269,71 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                      !previous);
     }
 
+    void settingsCloseFonts()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        const QJsonObject custom{ { "ui_theme", "custom" },
+                                  { "ui_font_face", "NV Jost" },
+                                  { "ui_mono_font_face", "NV Bitter" },
+                                  { "header_footer_font_face", "Libron" },
+                                  { "header_footer_added_weight", 6 } };
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        for (auto it = custom.begin(); it != custom.end(); ++it)
+            preferences[it.key()] = it.value();
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        const auto checkCustomFonts = [&] {
+            QCOMPARE(ui::interfaceFont().family(), custom.value("ui_font_face").toString());
+            QCOMPARE(ui::chromeFont().family(), custom.value("ui_mono_font_face").toString());
+            QCOMPARE(ui::headerFooterFont().family(),
+                     custom.value("header_footer_font_face").toString());
+            QCOMPARE(ui::headerFooterAddedWeight(),
+                     custom.value("header_footer_added_weight").toInt());
+        };
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        checkCustomFonts();
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        checkCustomFonts();
+        const auto saved = storage::readJson(fixture.paths.preferences());
+        for (auto it = custom.begin(); it != custom.end(); ++it)
+            QCOMPARE(saved.value(it.key()), it.value());
+
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsDefaults"));
+        QVERIFY(revealSettingsOption(fixture, "rrRestoreDefaults"));
+        QVERIFY(fixture.press("rrRestoreDefaults"));
+        QVERIFY(fixture.press("rrConfirmDefaults"));
+        checkCustomFonts();
+        {
+            BlockedFile blocked(fixture.paths.preferences());
+            QVERIFY(blocked.active());
+            QVERIFY(fixture.press("rrSettingsClose"));
+            QTRY_VERIFY(fixture.visible("rrSettingsWriteError"));
+            checkCustomFonts();
+            QVERIFY(blocked.restore());
+        }
+        QCOMPARE(storage::readJson(fixture.paths.preferences()), saved);
+        QVERIFY(fixture.press("rrSettingsWriteErrorConfirm"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QCOMPARE(ui::interfaceFont().family(), QStringLiteral("IBM Plex Sans"));
+        QCOMPARE(ui::chromeFont().family(), QStringLiteral("IBM Plex Mono"));
+        QCOMPARE(ui::headerFooterFont().family(), QStringLiteral("IBM Plex Mono"));
+        QCOMPARE(ui::headerFooterAddedWeight(), 2);
+        const auto restored = storage::readJson(fixture.paths.preferences());
+        QCOMPARE(restored.value("ui_theme").toString(), QStringLiteral("classic"));
+        for (const char *key : { "ui_font_face", "ui_mono_font_face", "header_footer_font_face" })
+            QVERIFY(restored.value(key).toString().isEmpty());
+        QCOMPARE(restored.value("header_footer_added_weight").toInt(2), 2);
+    }
+
     void inpageFootnotes_data()
     {
         QTest::addColumn<bool>("dark");

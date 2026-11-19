@@ -687,9 +687,12 @@ Engine::RoughPages EngineDocument::roughPages() const
     }
     if (fullDocumentReady()) {
         const auto anchor = engine_->getPageBookmark(page()).toString();
-        auto exact = full_->engine_->getDocument()->createXPointer(anchor);
-        if (!exact.isNull()) {
-            rough.page = full_->engine_->getBookmarkPage(exact) + 1;
+        auto &whole = *full_->engine_;
+        auto exact = whole.getDocument()->createXPointer(anchor);
+        // A heading hidden in the whole book has no page. Keep the page from the map.
+        const int y = exact.isNull() ? -1 : exact.toPoint().y;
+        if (y >= 0) {
+            rough.page = whole.screenOfColumn(whole.getPageList()->FindNearestPage(y, 0)) + 1;
             rough.pages = full_->pages();
             rough.pagesEstimated = false;
         }

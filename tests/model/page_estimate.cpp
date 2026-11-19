@@ -979,7 +979,8 @@ test::BookFiles observedBook()
 }
 
 // Opens the files of a book with `settings`, which can hold a saved state.
-void openResources(EngineDocument &model, const test::BookFiles &files, const QJsonObject &settings)
+void openResources(EngineDocument &model, const test::BookFiles &files, const QJsonObject &settings,
+                   QSize viewport = { 600, 800 })
 {
     QMap<QString, qint64> sizes;
     for (auto it = files.cbegin(); it != files.cend(); ++it)
@@ -992,7 +993,7 @@ void openResources(EngineDocument &model, const test::BookFiles &files, const QJ
             },
             std::make_shared<std::atomic_bool>(false));
     QString error;
-    require(model.openResources(source, sizes, { 600, 800 }, settings, &error), qPrintable(error));
+    require(model.openResources(source, sizes, viewport, settings, &error), qPrintable(error));
 }
 
 void openFiles(EngineDocument &model, const test::BookFiles &files)
@@ -2088,21 +2089,22 @@ void chaptersMeasuredInIdle()
 
 // The previous chapter is a placeholder in chapter mode. Its class only
 // participates in the sibling selector when the whole book is laid out.
-void hiddenHeadingAtHandoff()
+void hiddenHeadingAtHandoff(QSize viewport)
 {
-    auto files = test::engineBook(false, 2, 12);
-    for (const auto &name : { "OEBPS/c1.xhtml", "OEBPS/c2.xhtml" })
+    auto files = test::engineBook(false, 4, 50);
+    for (const auto &name : { "OEBPS/c3.xhtml", "OEBPS/c4.xhtml" })
         files[name].replace("<html ", "<html class='chapter' ");
-    files["OEBPS/c2.xhtml"].replace("</head>",
+    files["OEBPS/c4.xhtml"].replace("</head>",
                                     "<style>.chapter + .chapter h1 {display:none}</style></head>");
+    const QJsonObject settings{ { "font_pixels", 28 }, { "two_columns_landscape", true } };
 
     for (const bool prepared : { true, false }) {
         EngineDocument model(test::readerFonts());
-        openResources(model, files, { { "font_pixels", 28 } });
-        model.setChapterSlices(6);
+        openResources(model, files, settings, viewport);
+        model.setChapterSlices(chapterSlicePages());
         QString error;
-        require(model.showSpineItems(1, 1, &error) && model.go(0), qPrintable(error));
-        require(model.pageExcerpt(0).startsWith("Chapter 2"),
+        require(model.showSpineItems(3, 3, &error) && model.go(0), qPrintable(error));
+        require(model.pageExcerpt(0).startsWith("Chapter 4"),
                 "The chapter heading must be visible");
         require(model.turnInWindow(1), "Cannot turn past the heading");
         const auto next = model.position();
@@ -2110,7 +2112,7 @@ void hiddenHeadingAtHandoff()
         const auto heading = model.position();
         if (prepared) {
             EngineDocument whole(test::readerFonts());
-            openResources(whole, files, { { "font_pixels", 28 } });
+            openResources(whole, files, settings, viewport);
             require(whole.goTo(next) && whole.page() > 0,
                     "Cannot reach the passage after the hidden heading");
             const int page = whole.page();
@@ -2121,10 +2123,21 @@ void hiddenHeadingAtHandoff()
                     "A hidden heading must not be assigned the cover page");
             require(!whole.goTo(heading) && whole.page() == page && whole.position() == next,
                     "A jump to a hidden heading must keep the displayed passage");
-        }
-        if (prepared)
+            while (model.refinePageEstimate()) { }
             require(model.prepareFullDocument({}) == Engine::FullDocument::Ready,
                     "Cannot prepare the whole book");
+            // The heading is hidden in the whole book, but its first paragraph is on screen.
+            const int first =
+                    whole.pagesOf({ "/body/DocFragment[4]/body/p[1]/span/text().0" }).value(0, -1);
+            const auto count = model.roughPages();
+            require(first > 0 && count.page == first + 1 && count.pages == whole.pages()
+                            && !count.pagesEstimated,
+                    qPrintable(QString("Chapter 4 showed %1/%2 after pagination, expected %3/%4")
+                                       .arg(count.page)
+                                       .arg(count.pages)
+                                       .arg(first + 1)
+                                       .arg(whole.pages())));
+        }
         require(!model.setChapterMode(false, {}, {}),
                 "A heading hidden in the whole book must not move the reader to the cover");
         require(model.bookFraction() >= 0 && model.position() == heading && model.turnInWindow(1)
@@ -3449,7 +3462,8 @@ int main(int argc, char **argv)
     walkFixture("overflowing-float-bookmarks.epub", 3);
     walkFixture("heading-after-floats.epub", 1);
     hiddenHeadingOnChapterReflow();
-    hiddenHeadingAtHandoff();
+    hiddenHeadingAtHandoff({ 1072, 758 });
+    hiddenHeadingAtHandoff({ 600, 800 });
 #endif
     {
         QTemporaryDir directory;

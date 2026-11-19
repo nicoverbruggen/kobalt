@@ -576,7 +576,7 @@ int main(int argc, char **argv)
         // not leak into either QSS or custom painting after a theme change.
         for (bool dark : { false, true, false, true }) {
             host.setProperty("reader_dark", dark);
-            const auto &theme = themeColors(dark);
+            const auto theme = themeColors(dark);
             QPalette base;
             for (const auto group : { QPalette::Active, QPalette::Inactive, QPalette::Disabled })
                 for (const auto role :

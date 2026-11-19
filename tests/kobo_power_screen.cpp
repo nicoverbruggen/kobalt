@@ -17,6 +17,9 @@
 #include <QTest>
 #include <QScreen>
 #include <QScopeGuard>
+#include <QSemaphore>
+#include <atomic>
+#include "support/main_thread.h"
 #include <qpa/qwindowsysteminterface.h>
 
 // These substitute the native battery service and window types only. The
@@ -468,15 +471,34 @@ private slots:
             QVERIFY(query.exec("COMMIT"));
             screen.finishSave();
             QVERIFY(QFile::exists(paths.sleepScreen()));
-            screen.remember(snapshot, "book");
-            screen.forget();
+            QSemaphore entered, release;
+            std::atomic_bool timedOut{ false };
+            kobalt::storage::queueSleepSnapshotWork("hold", [&] {
+                entered.release();
+                timedOut = !release.tryAcquire(1, 5000);
+            });
+            QVERIFY(entered.tryAcquire(1, 5000));
+            {
+                kobalt::mainthread::Interaction interactive([] { return true; });
+                // Both the old file and the held worker remain until these calls return.
+                screen.remember(snapshot, "book");
+                screen.forget();
+                screen.clear();
+                QVERIFY(QFile::exists(paths.sleepScreen()));
+            }
+            release.release();
+            screen.finishSave();
+            QVERIFY(!timedOut);
             QVERIFY(!QFile::exists(paths.sleepScreen()));
             {
                 kobalt::nickel::HomeSleepScreen retiring(paths, nullptr);
                 retiring.remember(snapshot, "book");
             }
+            // Accepted work owns its input even after the screen owner goes away.
+            kobalt::storage::finishSleepSnapshotWork();
             QVERIFY(QFile::exists(paths.sleepScreen()));
             screen.forget();
+            screen.finishSave();
         }
         QSqlDatabase::removeDatabase(connection);
     }
@@ -568,6 +590,7 @@ private slots:
             screen.present();
             QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
             screen.forget();
+            screen.finishSave();
             QVERIFY(!QFile::exists(paths.sleepScreen()));
             screen.prepare(true);
             screen.present();

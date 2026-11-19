@@ -5,6 +5,7 @@
 #include "app/reader/views/sleep_screen.h"
 #include "storage/sleep_snapshot.h"
 #include "support/diagnostics.h"
+#include "support/main_thread.h"
 #include "support/strings.h"
 #include <QFile>
 #include <QImageReader>
@@ -16,7 +17,6 @@
 #include <QJsonArray>
 #include <QSqlDatabase>
 #include <dlfcn.h>
-#include <future>
 #include <atomic>
 #include <QElapsedTimer>
 
@@ -83,8 +83,9 @@ NativeBook readNativeBook(const QString &path, const QString &identity)
         database.setConnectOptions("QSQLITE_OPEN_READONLY;QSQLITE_BUSY_TIMEOUT=100");
         if (database.open()) {
             QSqlQuery query(database);
-            query.prepare("SELECT Title, Attribution, ImageId, ___PercentRead, ReadStatus FROM content "
-                          "WHERE ContentID = ? AND ContentType = 6 LIMIT 1");
+            query.prepare(
+                    "SELECT Title, Attribution, ImageId, ___PercentRead, ReadStatus FROM content "
+                    "WHERE ContentID = ? AND ContentType = 6 LIMIT 1");
             query.addBindValue(identity);
             if (query.exec() && query.next()) {
                 book.title = query.value(0).toString();
@@ -187,55 +188,54 @@ void HomeSleepScreen::remember(const sleep::Snapshot &next, const QString &ident
 void HomeSleepScreen::save(const sleep::Snapshot &next, const QString &identity)
 {
 #ifdef KOBALT_SCENARIO_PLAYER
-    saveMeasurement.reset();
+    measuredSave.reset();
     QElapsedTimer prepare;
     prepare.start();
 #endif
-    // A failed write must leave the stock screen, rather than a stale page
-    // from an earlier reading session.
     invalidated = true;
-    storage::removeSleepSnapshot(paths.sleepScreen());
     remembered = {};
     rememberedToken.clear();
-    if (next.image.isNull() || next.mode == sleep::Mode::Stock)
+    pendingSave.reset();
+    const auto path = paths.sleepScreen();
+    // Resolve Nickel's own connection only on its owning thread.
+    const auto database =
+            next.image.isNull() || next.mode == sleep::Mode::Stock ? QString() : databasePath();
+    if (database.isEmpty()) {
+        storage::queueSleepSnapshotWork(path, [path] { storage::removeSleepSnapshot(path); });
         return;
-#ifdef KOBALT_SCENARIO_PLAYER
-    const double invalidateMs = prepare.nsecsElapsed() / 1e6;
-#endif
-    // Resolve Nickel's connection on its owning thread. The worker receives
-    // only the filename and opens its own read-only connection for committed data.
-    const auto database = databasePath();
-    if (database.isEmpty())
-        return;
+    }
     remembered = next;
-    // Lookup and persistence run off the GUI thread. clear() waits before the
-    // cache is used or removed, including USB export and power-off.
+    pendingSave = std::make_shared<Saved>();
 #ifdef KOBALT_SCENARIO_PLAYER
-    const double prepareMs = prepare.nsecsElapsed() / 1e6;
-    saveMeasurement = std::make_shared<QJsonObject>();
-    pendingSave = std::async(std::launch::async,
-                             [path = paths.sleepScreen(), next, database, identity,
-                              measurement = saveMeasurement, prepareMs, invalidateMs] {
-                                 QJsonObject tokenTimes;
-                                 const auto token = readToken(database, identity, &tokenTimes);
-                                 const bool saved = !token.isEmpty()
-                                         && storage::measureSleepPersistence(path, next, token,
-                                                                             *measurement);
-                                 for (auto it = tokenTimes.begin(); it != tokenTimes.end(); ++it)
-                                     (*measurement)[it.key()] = it.value();
-                                 (*measurement)["prepare_ms"] = prepareMs;
-                                 (*measurement)["invalidate_ms"] = invalidateMs;
-                                 (*measurement)["saved"] = saved;
-                                 return Saved{ saved, token };
-                             });
-#else
-    pendingSave =
-            std::async(std::launch::async, [path = paths.sleepScreen(), next, database, identity] {
-                const auto token = readToken(database, identity);
-                return Saved{ !token.isEmpty() && storage::writeSleepSnapshot(path, next, token),
-                              token };
-            });
+    pendingSave->prepareMs = prepare.nsecsElapsed() / 1e6;
+    measuredSave = pendingSave;
 #endif
+    storage::queueSleepSnapshotWork(path, [path, next, database, identity, result = pendingSave] {
+#ifdef KOBALT_SCENARIO_PLAYER
+        QElapsedTimer invalidating;
+        invalidating.start();
+#endif
+        // A failed token lookup or write must leave no stale snapshot on disk.
+        storage::removeSleepSnapshot(path);
+#ifdef KOBALT_SCENARIO_PLAYER
+        const double invalidateMs = invalidating.nsecsElapsed() / 1e6;
+        auto &measurement = result->measurement;
+        QJsonObject tokenTimes;
+        result->token = readToken(database, identity, &tokenTimes);
+        result->ok = !result->token.isEmpty()
+                && storage::measureSleepPersistence(path, next, result->token, measurement);
+        for (auto it = tokenTimes.begin(); it != tokenTimes.end(); ++it)
+            measurement[it.key()] = it.value();
+        measurement["prepare_ms"] = result->prepareMs;
+        measurement["invalidate_ms"] = invalidateMs;
+        measurement["saved"] = result->ok;
+#else
+        result->token = readToken(database, identity);
+        result->ok = !result->token.isEmpty() && storage::writeSleepSnapshot(path, next, result->token);
+#endif
+        if (!result->ok)
+            diagnostic("sleep-snapshot-save-failed", {}, kobalt::DiagnosticSeverity::Error);
+    });
 }
 #ifdef KOBALT_SCENARIO_PLAYER
 QJsonObject HomeSleepScreen::takeSaveMeasurement()
@@ -243,33 +243,29 @@ QJsonObject HomeSleepScreen::takeSaveMeasurement()
     QElapsedTimer wait;
     wait.start();
     finishSave();
-    auto result = saveMeasurement ? *saveMeasurement : QJsonObject();
+    auto result = measuredSave ? measuredSave->measurement : QJsonObject();
     result["drain_ms"] = wait.nsecsElapsed() / 1e6;
-    saveMeasurement.reset();
+    measuredSave.reset();
     return result;
 }
 #endif
 void HomeSleepScreen::finishSave()
 {
-    if (!pendingSave.valid())
+    storage::finishSleepSnapshotWork();
+    if (!pendingSave)
         return;
-    const auto saved = pendingSave.get();
-    if (saved.ok) {
+    if (pendingSave->ok) {
         invalidated = false;
-        rememberedToken = saved.token;
+        rememberedToken = pendingSave->token;
     } else {
         remembered = {};
-        diagnostic("sleep-snapshot-save-failed", {}, kobalt::DiagnosticSeverity::Error);
     }
+    pendingSave.reset();
 }
 
 void HomeSleepScreen::forget()
 {
-    clear();
-    invalidated = true;
-    remembered = {};
-    rememberedToken.clear();
-    storage::removeSleepSnapshot(paths.sleepScreen());
+    remember({}, {});
 }
 
 bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &openingIdentity)
@@ -289,6 +285,11 @@ bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &opening
         if (readable && !state.object.value("hide_book_on_sleep_screen").toBool(false))
             return false;
     }
+    // Private statistics can come from the last snapshot. Sleep owns the screen now.
+    {
+        mainthread::AllowBlocking allow("sleep");
+        finishSave();
+    }
     // A failed or ambiguous lookup cannot safely opt a private book back into
     // Nickel's cover. Use the neutral screen until its choice can be read.
     clear();
@@ -300,7 +301,7 @@ bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &opening
     // covers and old reading-page caches must never become a private backdrop.
     if (!token.isEmpty() && token == rememberedToken && remembered.privateBook)
         source = remembered;
-    if (!source.privateBook && !token.isEmpty()) {
+    if (!invalidated && !source.privateBook && !token.isEmpty()) {
         const auto saved =
                 storage::readSleepSnapshot(paths.sleepScreen(), token, sleep::Mode::Plain);
         if (saved.privateBook)
@@ -380,8 +381,8 @@ bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIde
     // Nickel's percentage matches My Books, also after reading in Nickel.
     if (completed || book.percent >= 0 || state.object.value("percent").isDouble()) {
         shot.percent = book.percent >= 0 ? book.percent
-                : completed          ? 100
-                                     : qBound(0, state.object.value("percent").toInt(), 100);
+                : completed              ? 100
+                                         : qBound(0, state.object.value("percent").toInt(), 100);
         shot.progress = strings::get("sleep.percent_read").arg(shot.percent);
     }
     shot.details.title = book.title;
@@ -439,7 +440,13 @@ void HomeSleepScreen::prepare(bool enabled, bool powerOff)
     if (enabled && preparePrivateScreen(powerOff))
         return;
     clear();
-    if (!enabled || invalidated || !presentation->supportsSleepScreen())
+    if (!enabled || !presentation->supportsSleepScreen())
+        return;
+    {
+        mainthread::AllowBlocking allow("sleep");
+        finishSave();
+    }
+    if (invalidated)
         return;
     const auto preferences = storage::readPreferences(paths.preferences());
     if (preferences.status != storage::ReadStatus::Ok)
@@ -473,6 +480,7 @@ void HomeSleepScreen::persistPowerOff(const QString &identity)
     if (poweredOff && !shutdownBackdrop.image.isNull()) {
         save(shutdownBackdrop, identity);
         // Nickel powers off once the shutdown continues.
+        mainthread::AllowBlocking allow("host checkpoint");
         finishSave();
     }
     shutdownBackdrop = {};
@@ -508,9 +516,6 @@ void HomeSleepScreen::present()
 
 void HomeSleepScreen::clear()
 {
-    // Sleep, wake, USB and power-off all clear first. None of them may meet a
-    // half-written file or unmount storage under the writer.
-    finishSave();
     presentation->clearSleepScreen();
     snapshot = {};
     underlay.clear();

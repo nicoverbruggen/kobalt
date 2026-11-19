@@ -5,7 +5,7 @@
 #include "platform/api/window_presentation.h"
 #include <QObject>
 #include <functional>
-#include <future>
+#include <memory>
 
 namespace kobalt::nickel {
 class HomeSleepScreen final : public QObject
@@ -52,13 +52,18 @@ private:
     {
         bool ok = false;
         QString token;
+#ifdef KOBALT_SCENARIO_PLAYER
+        double prepareMs = 0;
+        QJsonObject measurement;
+#endif
     };
 
-    std::future<Saved> pendingSave;
+    // Only this generation may supply the remembered image and token.
+    std::shared_ptr<Saved> pendingSave;
     sleep::Snapshot remembered;
     QString rememberedToken;
 #ifdef KOBALT_SCENARIO_PLAYER
-    std::shared_ptr<QJsonObject> saveMeasurement;
+    std::shared_ptr<Saved> measuredSave;
 #endif
 };
 } // namespace kobalt::nickel

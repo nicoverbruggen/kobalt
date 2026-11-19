@@ -17,6 +17,26 @@ extern void (*nativeAboutUsbConnect)(void *);
 extern void (*nativePowerOff)(void *, bool);
 extern void (*nativeReboot)(void *);
 
+// Observes Nickel's USB completion even when no reader coordinator is installed.
+class StockStorageHandoff final : public QObject
+{
+    Q_OBJECT
+public:
+    enum class State { Available, Preparing, Exported, Remounting, Shutdown };
+    void begin(State state);
+    void cancel();
+
+    bool blocked() const { return state != State::Available; }
+
+private slots:
+    void unplugging();
+    void processingDone();
+
+private:
+    State state = State::Available;
+    QPointer<QObject> usb;
+};
+
 // Construct only after firmwareSupported() accepts Nickel. Nickel owns power and storage;
 // this adapter prepares Kobalt before those native transitions continue.
 class NativeLifecycle : public QObject
@@ -34,6 +54,7 @@ public:
     // Thread-safe gate for queued session writes. Closed before storage is
     // handed to USB or Nickel begins its final shutdown.
     static bool nativeSessionSaveAllowed();
+    static bool stockStorageBlocked();
     // GUI-thread permission for progress writes, including a held shutdown
     // while Nickel's sleep or PIN screen is still visible.
     static bool nativeProgressSaveAllowed();
@@ -44,16 +65,13 @@ public:
     // The completion is consumed once, when doneProcessing is emitted.
     bool scanLibrary(std::function<void()> done);
 
-    bool blocked() const
-    {
-        return asleep || usbPending || exported || poweringOff || removalPending;
-    }
+    bool blocked() const { return asleep || storageBlocked() || poweringOff || removalPending; }
 
     bool batteryLowShutdown() const { return poweringOff && batteryLow_; }
 
     bool shuttingDown() const { return poweringOff; }
 
-    bool storageBlocked() const { return usbPending || exported; }
+    bool storageBlocked() const { return usbPending || exported || stockStorageBlocked(); }
 
     bool draining = false;
     std::function<void(Shutdown)> preparePowerScreen;

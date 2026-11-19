@@ -1,6 +1,11 @@
 #include "sleep_snapshot.h"
 #include "support/main_thread.h"
 #include "support/qt_compat.h"
+#include <QCoreApplication>
+#include <QHash>
+#include <QList>
+#include <QThreadPool>
+#include <QRunnable>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -13,11 +18,72 @@
 #include <QDateTime>
 #include <QPainter>
 #include <algorithm>
+#include <atomic>
+#include <mutex>
 #include <cmath>
 #include <random>
 
 namespace kobalt::storage {
 namespace {
+std::atomic<unsigned> pendingJobs{ 0 };
+
+struct SnapshotWorker
+{
+    QThreadPool pool;
+    std::mutex mutex;
+    QHash<QString, std::function<void()>> queued;
+    // Only the GUI thread registers and delivers handoffs.
+    QList<std::function<void()>> handoffs;
+
+    SnapshotWorker()
+    {
+        pool.setMaxThreadCount(1);
+        pool.setExpiryTimeout(-1);
+        QObject::connect(
+                QCoreApplication::instance(), &QCoreApplication::aboutToQuit, &pool,
+                [] {
+                    mainthread::AllowBlocking allow("application quits");
+                    finishSleepSnapshotWork();
+                },
+                Qt::DirectConnection);
+    }
+};
+
+SnapshotWorker &snapshotWorker()
+{
+    static SnapshotWorker worker;
+    return worker;
+}
+
+class SnapshotJob final : public QRunnable
+{
+public:
+    explicit SnapshotJob(QString path) : path(std::move(path)) { }
+
+    void run() override
+    {
+        std::function<void()> work;
+        auto &worker = snapshotWorker();
+        {
+            std::lock_guard<std::mutex> lock(worker.mutex);
+            work = worker.queued.take(path);
+        }
+        work();
+        if (--pendingJobs == 0)
+            qt::invoke(
+                    QCoreApplication::instance(),
+                    [] {
+                        auto &handoffs = snapshotWorker().handoffs;
+                        while (!handoffs.isEmpty() && !sleepSnapshotWorkPending())
+                            handoffs.takeFirst()();
+                    },
+                    Qt::QueuedConnection);
+    }
+
+private:
+    QString path;
+};
+
 constexpr qint64 maxPixels = 4 * 1024 * 1024;
 constexpr qint64 maxBytes = 20 * 1024 * 1024;
 // Each optional text field, so the metadata stays well inside its 16 KiB limit.
@@ -199,6 +265,43 @@ bool persistSnapshot(const QString &path, const sleep::Snapshot &snapshot, const
 }
 } // namespace
 
+void queueSleepSnapshotWork(const QString &path, std::function<void()> work)
+{
+    auto &worker = snapshotWorker();
+    {
+        std::lock_guard<std::mutex> lock(worker.mutex);
+        auto &queued = worker.queued[path];
+        // Drop unstarted saves of the same file, including their large images.
+        queued.swap(work);
+        if (work)
+            return;
+        ++pendingJobs;
+    }
+    worker.pool.start(new SnapshotJob(path));
+}
+
+bool sleepSnapshotWorkPending()
+{
+    return pendingJobs.load() != 0;
+}
+
+void afterSleepSnapshotWork(std::function<void()> ready)
+{
+    if (!sleepSnapshotWorkPending()) {
+        ready();
+        return;
+    }
+    snapshotWorker().handoffs.append(std::move(ready));
+}
+
+void finishSleepSnapshotWork()
+{
+    if (sleepSnapshotWorkPending()) {
+        mainthread::BlockingOperation operation("sleep-snapshot-drain");
+        snapshotWorker().pool.waitForDone();
+    }
+}
+
 bool writeSleepSnapshot(const QString &path, const sleep::Snapshot &snapshot, const QString &token)
 {
     mainthread::BlockingOperation blockingOperation("sleep-snapshot-write");
@@ -333,6 +436,7 @@ QImage loadSleepWallpaper(const QStringList &directories, const QString &name, Q
 
 void removeSleepSnapshot(const QString &path)
 {
+    mainthread::BlockingOperation removing("sleep-snapshot-remove");
     QFile::remove(path);
     QFile::remove(referencePath(path));
 }
@@ -379,6 +483,7 @@ bool configureSleepSnapshotCodec(QImageWriter &writer, bool supportsCompression,
 bool measureSleepPersistence(const QString &path, const sleep::Snapshot &snapshot,
                              const QString &token, QJsonObject &measurement)
 {
+    mainthread::BlockingOperation writing("sleep-snapshot-write");
     return persistSnapshot(path, snapshot, token, &measurement);
 }
 #endif

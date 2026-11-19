@@ -6,6 +6,7 @@
 #include "reader_environment.h"
 #include "engine/engine_activity.h"
 #include "storage/profile_database.h"
+#include "storage/sleep_snapshot.h"
 #include "support/diagnostics.h"
 #include "support/main_thread.h"
 #include "standby_input.h"
@@ -36,6 +37,12 @@ namespace kobalt {
 namespace {
 QPointer<NativeLifecycle> active;
 std::atomic_bool sessionStorageAvailable{ true };
+
+StockStorageHandoff &stockHandoff()
+{
+    static StockStorageHandoff handoff;
+    return handoff;
+}
 
 struct PowerApi
 {
@@ -94,6 +101,56 @@ bool NativeLifecycle::usbSaveAllowed()
     // the held workflow permits its final write; sleep and PIN still block it.
     return active && active->pendingWorkflow && !active->exported && !active->poweringOff
             && !nativeSleeping();
+}
+
+void StockStorageHandoff::begin(State next)
+{
+    // Native workflow and gadget hooks can call each other. Only the first
+    // handoff drains the stock opening's queued invalidation.
+    if (state == State::Available) {
+        mainthread::AllowBlocking allow("host checkpoint");
+        sessionStorageAvailable.store(false);
+        storage::finishSleepSnapshotWork();
+    }
+    if (state != State::Shutdown && (state == State::Available || next != State::Preparing))
+        state = next;
+    if (state != State::Exported || usb)
+        return;
+    const auto manager = symbol<QObject *(*)()>("_ZN19PlugWorkflowManager14sharedInstanceEv");
+    usb = manager ? manager() : nullptr;
+    if (usb) {
+        connect(usb.data(), SIGNAL(aboutToUnplug()), this, SLOT(unplugging()),
+                Qt::DirectConnection);
+        connect(usb.data(), SIGNAL(doneProcessing()), this, SLOT(processingDone()),
+                Qt::DirectConnection);
+    }
+}
+
+void StockStorageHandoff::cancel()
+{
+    if (state == State::Preparing) {
+        state = State::Available;
+        sessionStorageAvailable.store(true);
+    }
+}
+
+void StockStorageHandoff::unplugging()
+{
+    if (state == State::Exported)
+        state = State::Remounting;
+}
+
+void StockStorageHandoff::processingDone()
+{
+    if (state == State::Remounting) {
+        state = State::Available;
+        sessionStorageAvailable.store(true);
+    }
+}
+
+bool NativeLifecycle::stockStorageBlocked()
+{
+    return stockHandoff().blocked();
 }
 
 bool NativeLifecycle::nativeSessionSaveAllowed()
@@ -326,7 +383,8 @@ NativeLifecycle::NativeLifecycle(QObject *parent) : QObject(parent)
     connected_ = a && resuming && b && c && d;
     if (connected_) {
         active = this;
-        sessionStorageAvailable.store(true);
+        if (!stockStorageBlocked())
+            sessionStorageAvailable.store(true);
         QCoreApplication::instance()->installEventFilter(this);
         asleep = nativeSleeping();
         engineActivity().pause(asleep);
@@ -436,7 +494,7 @@ void NativeLifecycle::holdAwake(bool hold)
 
 bool NativeLifecycle::canSuspend()
 {
-    if (awakeHeld)
+    if (awakeHeld || storage::sleepSnapshotWorkPending())
         return false;
     // Active storage work must finish before standby. Only low battery
     // requests a new reading save here; ordinary activity can stay in memory.
@@ -451,8 +509,10 @@ bool NativeLifecycle::canSuspend()
 
 bool NativeLifecycle::interceptShutdown(QObject *manager, Shutdown mode)
 {
-    if (!active || !active->prepareShutdown)
+    if (!active || !active->prepareShutdown || stockStorageBlocked()) {
+        stockHandoff().begin(StockStorageHandoff::State::Shutdown);
         return false;
+    }
     if (active->poweringOff)
         return true;
     if (!active->storageBlocked() && active->preparePowerScreen)
@@ -495,13 +555,14 @@ bool NativeLifecycle::interceptShutdown(QObject *manager, Shutdown mode)
         else
             nativePowerOff(guard.data(), mode == Shutdown::BatteryLow);
     };
-    active->prepareShutdown(finish);
+    active->prepareShutdown([finish] { storage::afterSleepSnapshotWork(finish); });
     return true;
 }
 
 bool NativeLifecycle::interceptUsbWorkflow(QObject *manager)
 {
-    if (!active || !active->prepareUsb) {
+    if (!active || !active->prepareUsb || stockStorageBlocked()) {
+        stockHandoff().begin(StockStorageHandoff::State::Preparing);
         return false;
     }
     if (active->storageBlocked() || active->poweringOff || active->removalPending
@@ -518,7 +579,7 @@ bool NativeLifecycle::interceptUsbWorkflow(QObject *manager)
     active->storageReady = false;
     engineActivity().pause(false);
     diagnostic("usb-save-start");
-    active->prepareUsb([guard, request] {
+    const auto handoff = [guard, request] {
         if (!guard || request != guard->generation || !guard->usbPending
             || !guard->pendingWorkflow) {
             return;
@@ -536,13 +597,18 @@ bool NativeLifecycle::interceptUsbWorkflow(QObject *manager)
         // Resume the whole caller, not just its aboutToConnect signal. Nickel
         // can now clear its views and databases without racing our save.
         nativeUsbWorkflow(manager);
-    });
+    };
+    active->prepareUsb([handoff] { storage::afterSleepSnapshotWork(handoff); });
     return true;
 }
 
 void NativeLifecycle::beginUsb()
 {
-    if (!active || !active->prepareUsb || active->storageBlocked() || active->poweringOff)
+    if (!active || !active->prepareUsb || stockStorageBlocked()) {
+        stockHandoff().begin(StockStorageHandoff::State::Preparing);
+        return;
+    }
+    if (active->storageBlocked() || active->poweringOff)
         return;
     const auto directory = QString::fromLatin1(nickel::configDir);
     active->usbRemoval.begin(QFile::exists(directory + QStringLiteral("/.initialized")),
@@ -553,7 +619,7 @@ void NativeLifecycle::beginUsb()
     active->storageReady = false;
     engineActivity().pause(false);
     diagnostic("usb-release-start");
-    active->prepareUsb([guard, request] {
+    const auto handoff = [guard, request] {
         if (!guard || request != guard->generation || !guard->usbPending)
             return;
         sessionStorageAvailable.store(false);
@@ -563,13 +629,16 @@ void NativeLifecycle::beginUsb()
             guard->storageReleased();
         guard->storageReady = true;
         guard->finishUsb();
-    });
+    };
+    active->prepareUsb([handoff] { storage::afterSleepSnapshotWork(handoff); });
 }
 
 bool NativeLifecycle::interceptUsb(QObject *manager)
 {
-    if (!active || !active->prepareUsb)
+    if (!active || !active->prepareUsb || stockStorageBlocked()) {
+        stockHandoff().begin(StockStorageHandoff::State::Exported);
         return false;
+    }
     if (active->exported || active->poweringOff)
         return true;
     beginUsb();
@@ -607,6 +676,10 @@ void NativeLifecycle::unplugging()
 
 void NativeLifecycle::disconnected()
 {
+    if (stockStorageBlocked()) {
+        stockHandoff().cancel();
+        return;
+    }
     if (!active || active->exported || active->poweringOff)
         return; // Wait for remount, or leave storage closed for shutdown.
     // USB ended before export. The profile may already have been released
@@ -646,7 +719,7 @@ void NativeLifecycle::processingDone()
     if (completed)
         completed();
     // Ordinary library scans also emit this signal. Only a remount ends USB.
-    if (!exported || !remounting)
+    if (poweringOff || !exported || !remounting)
         return;
     remounting = false;
     ++generation;

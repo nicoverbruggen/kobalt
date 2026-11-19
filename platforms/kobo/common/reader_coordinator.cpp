@@ -396,7 +396,7 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         timer.start();
     // Read and check the interface faces on a worker thread before any tap,
     // so the first opening view does not wait for storage.
-    if (available()) {
+    if (!NativeLifecycle::stockStorageBlocked() && available()) {
         if (environment_.assets.available())
             kobalt::ui::prepareOpeningFonts(environment_.assets);
         openingDark = storage::readPreferences(environment_.paths.preferences())
@@ -406,7 +406,8 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
 #ifdef KOBALT_SCENARIO_PLAYER
     // A device set up for scenarios must not sync the benchmark book, also
     // not when a person opens it to start the run.
-    if (QFile::exists(environment_.paths.directory + "/scenarios/scenarios.json"))
+    if (!NativeLifecycle::stockStorageBlocked()
+        && QFile::exists(environment_.paths.directory + "/scenarios/scenarios.json"))
         kobalt::kosync::pauseAutomatic(true);
 #endif
 }
@@ -415,9 +416,10 @@ void forgetHomeSleepScreen()
 {
     if (activeCoordinator)
         activeCoordinator->forgetSleepScreen();
-    else if (!NativeLifecycle::suspended())
-        storage::removeSleepSnapshot(
-                storage::Paths{ QString::fromLatin1(configDir) }.sleepScreen());
+    else if (!NativeLifecycle::suspended() && NativeLifecycle::nativeSessionSaveAllowed()) {
+        const auto path = storage::Paths{ QString::fromLatin1(configDir) }.sleepScreen();
+        storage::queueSleepSnapshotWork(path, [path] { storage::removeSleepSnapshot(path); });
+    }
 }
 
 void ReaderCoordinator::forgetSleepScreen()
@@ -1182,10 +1184,6 @@ kobalt::ReaderWindow *ReaderCoordinator::createReader(bool koboCloud)
                     if ((!lifecycle->blocked() && !NativeLifecycle::suspended())
                         || NativeLifecycle::usbSaveAllowed()) {
                         homeSleep->remember(snapshot, identity);
-                        // USB export unmounts this storage after the reader's
-                        // final save. Write the file before that continues.
-                        if (lifecycle->blocked())
-                            homeSleep->finishSave();
                     }
                 });
     };
@@ -1527,7 +1525,6 @@ void ReaderCoordinator::runScenarios(const QString &path)
     host.open = [this, openKey](const QString &key) {
         if (key != openKey || !scenarioOpening)
             return false;
-        homeSleep->finishSave();
         auto opening = std::make_shared<std::unique_ptr<NativeOpening>>(scenarioOpening->copy());
         return *opening && begin([opening] { return std::move(*opening); });
     };

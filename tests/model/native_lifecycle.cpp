@@ -3,11 +3,14 @@
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
 #include "storage/record_writer.h"
+#include "storage/sleep_snapshot.h"
 #include "check.h"
 #include "support/diagnostics.h"
 #include <QCoreApplication>
 #include <QEvent>
+#include <QEventLoop>
 #include <QTemporaryDir>
+#include <QSemaphore>
 #include <QSqlQuery>
 #include <QVector>
 #include <atomic>
@@ -154,6 +157,26 @@ int main(int argc, char **argv)
     kobalt::nativeAboutUsbConnect = kobalt::nativeReboot = unused;
     kobalt::nativePowerOff = poweredOff;
     auto *usb = PlugWorkflowManager::sharedInstance();
+    // Before the coordinator exists, declining the workflow keeps Nickel's storage.
+    require(!kobalt::NativeLifecycle::interceptUsbWorkflow(usb)
+                    && kobalt::NativeLifecycle::stockStorageBlocked(),
+            "Stock USB preparation did not block startup");
+    kobalt::NativeLifecycle::disconnected();
+    require(kobalt::NativeLifecycle::nativeSessionSaveAllowed()
+                    && !kobalt::NativeLifecycle::stockStorageBlocked(),
+            "Declining stock USB kept storage blocked");
+
+    // Actual gadget export must drain an earlier stock opening's deletion.
+    std::atomic_bool stockInvalidated{ false };
+    kobalt::storage::queueSleepSnapshotWork("stock-opening", [&] { stockInvalidated = true; });
+    require(!kobalt::NativeLifecycle::interceptUsb(usb) && stockInvalidated
+                    && !kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+            "Stock USB handoff raced an early snapshot invalidation");
+    kobalt::NativeLifecycle::disconnected();
+    emit usb->doneProcessing();
+    require(kobalt::NativeLifecycle::stockStorageBlocked()
+                    && !kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+            "An unplug hook or unrelated scan reopened stock USB storage");
     N3PowerWorkflowManager::sharedInstance();
     QTemporaryDir logs;
     kobalt::initializeDiagnostics(logs.path());
@@ -180,7 +203,23 @@ int main(int argc, char **argv)
                 require(manager == PowerManager::sharedInstance() && wakeupCount == "123",
                         "Suspend hook changed its native arguments");
             };
-    kobalt::NativeLifecycle lifecycle(nullptr);
+    auto owner = std::make_unique<kobalt::NativeLifecycle>(nullptr);
+    auto &lifecycle = *owner;
+    require(lifecycle.blocked() && lifecycle.storageBlocked()
+                    && !kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+            "A new coordinator reopened storage during a stock export");
+    emit usb->aboutToUnplug();
+    kobalt::NativeLifecycle::disconnected();
+    require(lifecycle.storageBlocked() && !kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+            "Stock unplug restored snapshot access before remount");
+    require(!kobalt::NativeLifecycle::interceptUsb(usb), "Stock USB reconnect was intercepted");
+    emit usb->doneProcessing();
+    require(lifecycle.storageBlocked() && !kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+            "The first remount reopened storage during the second export");
+    emit usb->aboutToUnplug();
+    emit usb->doneProcessing();
+    require(!lifecycle.blocked() && kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+            "Stock remount did not restore snapshot access");
     int scanCompletions = 0;
     require(lifecycle.scanLibrary([&] { ++scanCompletions; }) && usb->scans == 1,
             "Native library scan was not requested");
@@ -359,6 +398,11 @@ int main(int argc, char **argv)
     }
     // Both native USB entry points must release the connection before handoff.
     for (bool fullWorkflow : { false, true }) {
+        QSemaphore release;
+        std::atomic_bool timedOut{ false };
+        kobalt::storage::queueSleepSnapshotWork("held-snapshot",
+                                                [&] { timedOut = !release.tryAcquire(1, 5000); });
+        require(!kobalt::NativeLifecycle::canSuspend(), "Standby interrupted snapshot storage");
         if (fullWorkflow)
             kobalt::NativeLifecycle::interceptUsbWorkflow(usb);
         else
@@ -368,6 +412,13 @@ int main(int argc, char **argv)
                 "Pending USB blocked its native final save");
         const auto finish = drains.takeLast();
         finish();
+        require(available(), "USB took storage while a snapshot was pending");
+        QEventLoop delivered;
+        kobalt::storage::afterSleepSnapshotWork([&] { delivered.quit(); });
+        QTimer::singleShot(5000, &delivered, &QEventLoop::quit);
+        release.release();
+        delivered.exec();
+        require(!timedOut, "USB blocked the event thread on the snapshot");
         require(!available(), "USB preparation did not keep the profile closed");
         const int count = handoffs;
         finish();
@@ -439,12 +490,22 @@ int main(int argc, char **argv)
     power->asleep = true;
     emit power->aboutToSleep();
     power->visible = true;
+    QSemaphore releaseSnapshot;
+    std::atomic_bool snapshotTimedOut{ false };
+    kobalt::storage::queueSleepSnapshotWork(
+            "power-off", [&] { snapshotTimedOut = !releaseSnapshot.tryAcquire(1, 5000); });
     require(kobalt::NativeLifecycle::interceptShutdown(usb,
                                                        kobalt::NativeLifecycle::Shutdown::PowerOff),
             "Power-off was not intercepted");
     kobalt::NativeLifecycle::disconnected();
     abandoned();
-    QCoreApplication::processEvents();
+    require(!shutdowns, "Power-off interrupted snapshot storage");
+    QEventLoop delivered;
+    kobalt::storage::afterSleepSnapshotWork([&] { delivered.quit(); });
+    QTimer::singleShot(5000, &delivered, &QEventLoop::quit);
+    releaseSnapshot.release();
+    delivered.exec();
+    require(!snapshotTimedOut, "Power-off waited for the snapshot on the event thread");
     require(sleepHandoffs == 3, "A queued sleep handoff crossed power-off");
     require(shutdowns == 1 && !available(), "USB cancellation reopened storage during shutdown");
     require(!kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
@@ -452,6 +513,19 @@ int main(int argc, char **argv)
     kobalt::storage::reopenProfile();
     kobalt::storage::closeProfile();
     kobalt::pauseDiagnostics(true);
+
+    // A stock shutdown wins over either USB signal, also across coordinator startup.
+    owner.reset();
+    require(!kobalt::NativeLifecycle::interceptUsb(usb), "Stock USB should continue in Nickel");
+    emit usb->aboutToUnplug();
+    require(!kobalt::NativeLifecycle::interceptShutdown(
+                    usb, kobalt::NativeLifecycle::Shutdown::PowerOff),
+            "Stock power-off should continue in Nickel");
+    kobalt::NativeLifecycle::disconnected();
+    emit usb->doneProcessing();
+    kobalt::NativeLifecycle late(nullptr);
+    require(late.storageBlocked() && !kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+            "USB completion or a new coordinator reopened storage during stock power-off");
 }
 
 #include "native_lifecycle.moc"

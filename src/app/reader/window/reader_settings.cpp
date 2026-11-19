@@ -94,7 +94,6 @@ kobalt::headerfooter::Values Reader::chromeValues(ChromeFields fields)
     values.author = session->author();
     values.chapter = session->chapterTitle().isEmpty() ? strings::get("reader.reading")
                                                        : session->chapterTitle();
-    values.time = services.clock();
     values.chapterPage = session->chapterPage();
     values.chapterPages = session->chapterPages();
     values.page = session->page() + 1;
@@ -121,23 +120,26 @@ kobalt::headerfooter::Values Reader::chromeValues(ChromeFields fields)
                         / itemPages);
     }
     values.deviceStatus = !hideNativeStatus();
-    if (values.deviceStatus) {
-        // The chooser previews every field. The slot map also previews assigned
-        // fields in disabled strips, which it draws dimmed.
-        bool needsBattery = fields == ChromeFields::Chooser;
-        const auto &layout = page->chrome;
-        for (int slot = 0; !needsBattery && slot < headerfooter::slotCount; ++slot) {
-            const bool shown = headerfooter::footerSlot(slot)
-                    ? layout.footerEnabled && page->notice.isEmpty()
-                    : layout.headerEnabled;
-            needsBattery = (shown || fields == ChromeFields::SlotMap)
-                    && batteryField(layout.slotFields[slot]);
-        }
-        if (needsBattery) {
-            const auto battery = services.battery();
-            values.battery = battery.percent;
-            values.charging = battery.charging;
-        }
+    // The chooser previews every field. The slot map also previews assigned
+    // fields in disabled strips, which it draws dimmed.
+    bool needsClock = fields == ChromeFields::Chooser, needsBattery = needsClock;
+    const auto &layout = page->chrome;
+    for (int slot = 0; !(needsClock && needsBattery) && slot < headerfooter::slotCount; ++slot) {
+        const bool shown = headerfooter::footerSlot(slot)
+                ? layout.footerEnabled && page->notice.isEmpty()
+                : layout.headerEnabled;
+        if (!shown && fields == ChromeFields::Reading)
+            continue;
+        const auto field = layout.slotFields[slot];
+        needsClock |= field == headerfooter::Field::Time;
+        needsBattery |= batteryField(field);
+    }
+    if (needsClock)
+        values.time = clockText();
+    if (needsBattery && values.deviceStatus) {
+        const auto battery = services.battery();
+        values.battery = battery.percent;
+        values.charging = battery.charging;
     }
     const auto estimates = book->estimates();
     values.chapterMilliseconds = estimates.chapterMilliseconds;
@@ -188,9 +190,9 @@ bool Reader::chromeTicks() const
     using kobalt::headerfooter::Field;
     for (int slot = 0; slot < headerfooter::slotCount; ++slot) {
         const auto field = page->chrome.slotFields[slot];
-        if (field == Field::Time || field == Field::ChapterTimeLeft || field == Field::BookTimeLeft)
+        if (field == Field::ChapterTimeLeft || field == Field::BookTimeLeft)
             return true;
-        if (batteryField(field) && !hideNativeStatus()
+        if ((field == Field::Time || (batteryField(field) && !hideNativeStatus()))
             && (headerfooter::footerSlot(slot) ? page->chrome.footerEnabled
                                                : page->chrome.headerEnabled))
             return true;
@@ -423,9 +425,7 @@ void Reader::refreshHostPresentation()
         settings->showPowerManagement(wifiPowerSaverVisible());
     }
     updateKosyncFeatures();
-    if (topControls->isVisible())
-        updateMenuBattery();
-    updateMenuStatus();
+    updateMenuStatus(topControls->isVisible());
     resizeEvent(nullptr);
     refresh();
 }

@@ -681,8 +681,8 @@ void Reader::startClockTimer()
             return;
         // A timer that fires before the minute changes only re-arms, so the
         // minute work runs once a minute.
-        const int now = millisecondsOfDay();
-        const bool due = now / 60000 != clockMinute;
+        const auto now = localDateTime();
+        const bool due = clockMinute(now) != timerMinute;
         // The tick itself always re-arms from this minute.
         clockTimer->stop();
         startClock(now);
@@ -695,8 +695,7 @@ void Reader::startClockTimer()
         if (minuteTicked)
             minuteTicked();
         if (topControls->isVisible()) {
-            updateMenuBattery();
-            updateMenuStatus();
+            updateMenuStatus(true);
             return;
         }
         if (!chromeTicks() || settingsVisible() || dictionaryPanel->isVisible()

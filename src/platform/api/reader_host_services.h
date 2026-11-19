@@ -10,6 +10,7 @@
 #include "light_controls.h"
 #include "safe_area.h"
 #include "window_presentation.h"
+#include <QDateTime>
 #include <QFont>
 #include <QJsonObject>
 #include <QSize>
@@ -116,9 +117,9 @@ struct ReaderHostServices
     // filter window without waiting. Hosts leave it empty: the reader then
     // uses its own monotonic timer.
     std::function<qint64()> inputMilliseconds;
-    // Optional local time of day in milliseconds for the reader's minute tick;
-    // tests replace it.
-    std::function<int()> millisecondsOfDay;
+    // Optional local wall clock for the minute tick and displayed time. Tests
+    // replace it to advance through minute, date and time zone changes.
+    std::function<QDateTime()> localDateTime;
     // Optional UTC milliseconds that decide today's date in Activity; tests
     // replace it so captures keep their dates.
     std::function<qint64()> activityMilliseconds;

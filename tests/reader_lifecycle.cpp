@@ -107,6 +107,7 @@
 #include <QThread>
 #include <QTimer>
 #include <QTime>
+#include <QTimeZone>
 #include <QUrl>
 #include <QCryptographicHash>
 #include <QtEndian>
@@ -336,6 +337,12 @@ bool prepareSleepBooks(const QString &directory)
             "</manifest>",
             "<item id=\"colors\" href=\"colors.png\" media-type=\"image/png\"/></manifest>");
     return test::writeBook(directory, "deferred-cover.epub", files);
+}
+
+QDateTime testLocalTime(int milliseconds)
+{
+    return QDateTime(QDate(2026, 1, 15), QTime::fromMSecsSinceStartOfDay(milliseconds),
+                     QTimeZone::UTC);
 }
 
 storage::Paths testPaths()
@@ -1168,12 +1175,16 @@ private slots:
             preferences["header_footer_text"] = QJsonObject{ { "header_size", "off" } };
         QVERIFY(storage::writePreferences(testPaths().preferences(), preferences));
         QString time = "09:00";
-        int timeOfDay = 9 * 3600000 + 30000;
+        auto local = testLocalTime(9 * 3600000 + 30000);
+        int reads = 0;
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{ host };
         host.configureServices = [&](ReaderHostServices &services) {
-            services.clock = [&] { return time; };
-            services.millisecondsOfDay = [&] { return timeOfDay; };
+            services.clock = [&] {
+                ++reads;
+                return time;
+            };
+            services.localDateTime = [&] { return local; };
         };
         QSignalSpy opened(&host, &ReaderFixture::opened);
         host.open(fixture(), nativeSize);
@@ -1191,13 +1202,15 @@ private slots:
         const auto body = page->image.cacheKey();
         const auto position = host.session()->state().value("position");
         time = "09:01";
-        timeOfDay = 9 * 3600000 + 60050;
+        reads = 0;
+        local = testLocalTime(9 * 3600000 + 60050);
         QVERIFY(QMetaObject::invokeMethod(clock, "timeout", Qt::DirectConnection));
         QVERIFY(!host.window()->property("reader_page_turn").toBool());
-        QVERIFY(page->headerText().contains(time));
-        if (header)
+        QCOMPARE(reads, header ? 1 : 0);
+        if (header) {
+            QVERIFY(page->headerText().contains(time));
             QTRY_VERIFY(!paints.painted.isEmpty());
-        else
+        } else
             QCoreApplication::processEvents();
         QVERIFY(!paints.painted.intersects(
                 QRect(0, page->topHeight(), page->width(),
@@ -1208,6 +1221,25 @@ private slots:
         QVERIFY(QMetaObject::invokeMethod(clock, "timeout", Qt::DirectConnection));
         QCoreApplication::processEvents();
         QVERIFY(paints.painted.isEmpty());
+        QCOMPARE(reads, header ? 1 : 0);
+
+        if (header && !custom) {
+            // Keep the same time of day across a new date, then a new UTC offset.
+            local = local.addDays(1);
+            host.window()->refreshHostPresentation();
+            QCOMPARE(reads, 2);
+            local = QDateTime(local.date(), local.time(), QTimeZone::fromSecondsAheadOfUtc(3600));
+            host.window()->refreshHostPresentation();
+            QCOMPARE(reads, 3);
+            host.window()->resumeReadingClock();
+            QCOMPARE(reads, 3);
+            host.window()->sleepReader();
+            const int beforeWake = reads;
+            time = "9:01 AM";
+            host.window()->wakeReader();
+            QTRY_VERIFY(page->headerText().contains(time));
+            QCOMPARE(reads, beforeWake + 1);
+        }
     }
 
     void preloadedBookOpensWithFreshHost_data()
@@ -1226,9 +1258,18 @@ private slots:
         {
             ReaderFixture previous(paths, testFonts, testPlaceholder);
             CloseHost cleanup{ previous };
+            previous.configureServices = [](ReaderHostServices &services) {
+                services.clock = [] { return QStringLiteral("09:00"); };
+                services.localDateTime = [] { return testLocalTime(9 * 3600000); };
+            };
             QSignalSpy opened(&previous, &ReaderFixture::opened);
             previous.open(path);
             QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+            previous.window()->show();
+            auto *page =
+                    dynamic_cast<ReadingPage *>(previous.window()->findChild<QWidget *>("rrPage"));
+            QVERIFY(page);
+            QTRY_VERIFY(page->headerText().contains("09:00"));
             previous.shutdown();
             QTRY_VERIFY_WITH_TIMEOUT(previous.idle(), 10000);
         }
@@ -1272,6 +1313,8 @@ private slots:
         ReaderFixture host(paths, testFonts, testPlaceholder);
         CloseHost cleanup{ host };
         host.configureServices = [&](ReaderHostServices &services) {
+            services.clock = [] { return QStringLiteral("9:00 AM"); };
+            services.localDateTime = [] { return testLocalTime(9 * 3600000); };
             services.observeBattery = [&](QObject *, std::function<void()>) { ++observers; };
             services.holdWifiOff = [&](QObject *, std::function<bool()>) { ++observers; };
         };
@@ -1283,6 +1326,10 @@ private slots:
         QCOMPARE(host.session()->state().value("dark_mode").toBool(), dark);
         QVERIFY(!host.session()->image().isNull());
         QCOMPARE(observers, 2);
+        host.window()->show();
+        auto *page = dynamic_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
+        QVERIFY(page);
+        QTRY_VERIFY(page->headerText().contains("9:00 AM"));
     }
 
     void clockStopsWhileReaderIsHidden_data()
@@ -7037,7 +7084,7 @@ private slots:
         int timeOfDay = 9 * 3600000;
         host.configureServices = [&](ReaderHostServices &services) {
             services.clock = [&] { return clockText; };
-            services.millisecondsOfDay = [&] { return timeOfDay; };
+            services.localDateTime = [&] { return testLocalTime(timeOfDay); };
             services.observeWifi = [&](QObject *, std::function<void(WifiStatus)> changed) {
                 wifiChanged = changed;
                 changed({ true, true, 4 });
@@ -8439,7 +8486,7 @@ private slots:
         int timeOfDay = 10 * 3600000 + 30000;
         ReaderFixture host(paths, testFonts, testPlaceholder);
         host.configureServices = [&timeOfDay](ReaderHostServices &services) {
-            services.millisecondsOfDay = [&timeOfDay] { return timeOfDay; };
+            services.localDateTime = [&timeOfDay] { return testLocalTime(timeOfDay); };
         };
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);
@@ -8500,7 +8547,7 @@ private slots:
         int timeOfDay = 10 * 3600000 + 30000;
         ReaderFixture host(paths, testFonts, testPlaceholder);
         host.configureServices = [&timeOfDay](ReaderHostServices &services) {
-            services.millisecondsOfDay = [&timeOfDay] { return timeOfDay; };
+            services.localDateTime = [&timeOfDay] { return testLocalTime(timeOfDay); };
         };
         CloseHost cleanup{ host };
         const auto identity =
@@ -8565,11 +8612,16 @@ private slots:
                 QJsonObject{ { "header_footer", "custom" },
                              { "header_footer_custom",
                                QJsonObject{ { "top_left", "book_time_left" },
-                                            { "top_right", "nothing" } } } }));
+                                            { "top_right", "time" } } } }));
         int timeOfDay = 10 * 3600000 + 30000;
+        int clockReads = 0;
         ReaderFixture host(paths, testFonts, testPlaceholder);
-        host.configureServices = [&timeOfDay](ReaderHostServices &services) {
-            services.millisecondsOfDay = [&timeOfDay] { return timeOfDay; };
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.clock = [&] {
+                ++clockReads;
+                return QTime::fromMSecsSinceStartOfDay(timeOfDay).toString("HH:mm");
+            };
+            services.localDateTime = [&timeOfDay] { return testLocalTime(timeOfDay); };
         };
         CloseHost cleanup{ host };
         const auto identity =
@@ -8591,6 +8643,14 @@ private slots:
         timeOfDay = 10 * 3600000 + 60050;
         QVERIFY(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection));
         QCOMPARE(host.progress->minuteTicks, before + 1);
+        auto *page = dynamic_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
+        QVERIFY(page && page->headerText().contains("10:01"));
+        const int stripReads = clockReads;
+        QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
+        auto *menuClock = host.window()->findChild<QLabel *>("rrMenuClock");
+        QTRY_VERIFY(menuClock && menuClock->isVisible());
+        QCOMPARE(menuClock->text(), QStringLiteral("10:01"));
+        QCOMPARE(clockReads, stripReads);
     }
 
     // Checks that a page turn with the menu hidden leaves the menu's controls alone, and that opening the menu brings them up to date.
@@ -8602,10 +8662,18 @@ private slots:
                 QJsonObject{ { "header_footer", "custom" },
                              { "header_footer_custom",
                                QJsonObject{ { "header_size", "off" },
+                                            { "top_left", "time" },
                                             { "top_right", "battery_percent_only" } } } }));
         int batteryReads = 0, percent = 73;
+        int clockReads = 0;
+        auto local = testLocalTime(7 * 3600000);
         ReaderFixture host(paths, testFonts, testPlaceholder);
         host.configureServices = [&](ReaderHostServices &services) {
+            services.localDateTime = [&] { return local; };
+            services.clock = [&] {
+                ++clockReads;
+                return QStringLiteral("7:01 AM");
+            };
             services.battery = [&] {
                 ++batteryReads;
                 return BatteryStatus{ percent, false, false };
@@ -8628,6 +8696,8 @@ private slots:
         // Opening syncs the controls once, hidden.
         QCoreApplication::processEvents();
         batteryReads = 0;
+        clockReads = 0;
+        local = local.addSecs(60);
         const int start = host.session()->page();
         const int shown = scrubber->slider()->value();
         test::skipPageTurnWindow();
@@ -8640,6 +8710,7 @@ private slots:
         QCOMPARE(scrubber->slider()->value(), shown);
         QVERIFY(!menu->isVisible());
         QCOMPARE(batteryReads, 0);
+        QCOMPARE(clockReads, 0);
         percent = 64;
         // The menu opens with the page that is shown now.
         QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
@@ -8649,6 +8720,7 @@ private slots:
                 host.window()->findChild<QWidget *>("rrMenuBattery"));
         QVERIFY(indicator && indicator->isVisible());
         QCOMPARE(indicator->level(), percent);
+        QCOMPARE(clockReads, 1);
         const int open = scrubber->slider()->value();
         // With the menu open, a page button turn updates the controls at once.
         test::skipPageTurnWindow();
@@ -8661,6 +8733,12 @@ private slots:
         auto *slot = host.window()->findChild<QPushButton *>("rrHeaderFooterSlot2");
         QVERIFY(slot && slot->isVisible());
         QVERIFY(slot->accessibleName().contains(strings::get("common.percent").arg(percent)));
+        const auto *timeSlot = host.window()->findChild<QPushButton *>("rrHeaderFooterSlot0");
+        QVERIFY(timeSlot && timeSlot->accessibleName().contains("7:01 AM"));
+        QVERIFY(click(canvas, slot));
+        auto *chooser = host.window()->findChild<QWidget *>("rrHeaderFooterChooser");
+        QTRY_VERIFY(chooser && chooser->isVisible());
+        QCOMPARE(clockReads, 1);
     }
 
     // A preview of the same book preempts estimates without abandoning their
@@ -8778,7 +8856,7 @@ private slots:
         // Ten o'clock exactly: the clock is armed for a minute and stays out of the window.
         ReaderFixture host(paths, testFonts, testPlaceholder);
         host.configureServices = [](ReaderHostServices &services) {
-            services.millisecondsOfDay = [] { return 10 * 3600000; };
+            services.localDateTime = [] { return testLocalTime(10 * 3600000); };
         };
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);

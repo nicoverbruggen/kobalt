@@ -878,34 +878,31 @@ void Reader::updateGraph()
                               session->bookPagesEstimated());
 }
 
-void Reader::updateMenuBattery()
+void Reader::updateMenuStatus(bool refreshDevice)
 {
-    // Even a hidden Zen battery needs its level checked when the menu opens
-    // and on the minute tick. It becomes visible at 20 percent.
-    if (hideNativeStatus())
-        return;
-    const auto battery = services.battery();
-    menuBattery->setStatus(battery.percent, battery.charging);
-}
-
-void Reader::updateMenuStatus()
-{
-    const auto time = services.clock();
-    const bool clockChanged = menuClock->text() != time;
-    if (clockChanged)
-        menuClock->setText(time);
+    const bool nativeStatus = !hideNativeStatus();
+    bool clockChanged = false;
+    if (refreshDevice && nativeStatus) {
+        const auto time = clockText();
+        clockChanged = menuClock->text() != time;
+        if (clockChanged)
+            menuClock->setText(time);
+        // The Zen battery can become visible at 20 percent.
+        const auto battery = services.battery();
+        menuBattery->setStatus(battery.percent, battery.charging);
+    }
     const auto reading = book->sessionReadingMilliseconds();
     const auto session = features::enabled(preferences, features::Stats) && reading > 300000
             ? strings::get("reader.session_minutes").arg(reading / 60000)
             : QString();
     if (menuSession->text() != session)
         menuSession->setText(session);
-    menuSession->setVisible(!hideNativeStatus() && !zenMode() && !session.isEmpty());
+    menuSession->setVisible(nativeStatus && !zenMode() && !session.isEmpty());
     if (clockChanged && navigation && topControls->isVisible())
         navigation->updateSessionGeometry();
     // Zen mode centers the clock in its group and shows a low battery, and
     // its reading stats follow the minutes read.
-    if (clockChanged && navigation && topControls->isVisible() && zenMode())
+    if (refreshDevice && navigation && topControls->isVisible() && zenMode())
         syncNavigation();
     if (chapterGraph && chapterGraph->isVisible())
         updateReadingStats();

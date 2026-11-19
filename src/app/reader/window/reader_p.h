@@ -75,6 +75,7 @@
 #include <QTimer>
 #include <functional>
 #include <memory>
+#include <tuple>
 
 class QVBoxLayout;
 
@@ -537,8 +538,13 @@ private:
     quint64 sleepCoverRequest = 0;
     Qt::ScreenOrientation sleepOrientation = Qt::PrimaryOrientation;
     QTimer *clockTimer = nullptr;
-    // The minute of the day the clock timer was last armed in.
-    int clockMinute = -1;
+    // The local date, minute of the day and UTC offset distinguish repeated
+    // minutes after standby or a time zone change.
+    using ClockMinute = std::tuple<QDate, int, int>;
+    static ClockMinute clockMinute(const QDateTime &now);
+    ClockMinute timerMinute, displayedMinute;
+    QString displayedClock;
+    bool clockUsesDesktopFill = false;
     const bool liveState = QFile::exists(book->paths().directory + "/live-state");
     QLabel *menuClock, *menuSession;
     kobalt::ui::BatteryIndicator *menuBattery;
@@ -856,10 +862,10 @@ private:
     QString bookFace();
 
     void startClock();
-    void startClock(int now);
-    int millisecondsOfDay() const;
-    void updateMenuBattery();
-    void updateMenuStatus();
+    void startClock(const QDateTime &now);
+    QDateTime localDateTime() const;
+    QString clockText();
+    void updateMenuStatus(bool refreshDevice = false);
     void updateReadingStats();
     void configureNavigation();
     void activateNavigation(kobalt::NavigationDestination destination);

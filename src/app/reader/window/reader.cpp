@@ -554,7 +554,7 @@ sleep::Details Reader::sleepDetails()
     details.title = session->title();
     details.author = session->author();
     details.chapter = session->chapterTitle();
-    details.clock = services.clock ? services.clock() : QString();
+    details.clock = clockText();
     // The letter uses the reader's chosen face; private text needs it registered.
     details.font = preferences.value("default_font_face").toString(kobalt::defaultFontFace);
     registerPickerFonts(details.font);
@@ -863,8 +863,11 @@ void Reader::wakeReader()
     sleepImage = {};
     presentation->clearSleepScreen();
     setProperty("reader_sleep_clean_pending", false);
-    if (lifecycleHidden)
+    const bool menuStayedVisible = lifecycleHidden && topControls->isVisible();
+    if (lifecycleHidden) {
+        displayedMinute = {};
         wakePositionEpoch = book->advancePositionSaveEpoch();
+    }
     lifecycleHidden = false;
     if (sleep::uses(preferences, sleep::Mode::Overlay))
         prepareSleepOverlay();
@@ -887,6 +890,9 @@ void Reader::wakeReader()
         orientation->start(kobalt::shownOrientation(QGuiApplication::primaryScreen()));
     }
     showFullScreen();
+    // A wake before the native sleep handoff did not hide and reshow the toolbar.
+    if (menuStayedVisible)
+        updateMenuStatus(true);
     book->invalidateProgress();
     startClock();
     refresh();
@@ -1161,7 +1167,7 @@ bool Reader::eventFilter(QObject *watched, QEvent *event)
         if (!clockTimer->isActive())
             startClock();
         book->minuteTick();
-        updateMenuBattery();
+        updateMenuStatus(true);
     }
     // The sheet and the chooser are built separately, on first use. Either
     // can exist without the other.
@@ -2101,10 +2107,28 @@ void Reader::lookupSelection()
             true);
 }
 
-int Reader::millisecondsOfDay() const
+QDateTime Reader::localDateTime() const
 {
-    return services.millisecondsOfDay ? services.millisecondsOfDay()
-                                      : QTime::currentTime().msecsSinceStartOfDay();
+    return services.localDateTime ? services.localDateTime() : QDateTime::currentDateTime();
+}
+
+Reader::ClockMinute Reader::clockMinute(const QDateTime &now)
+{
+    return ClockMinute(now.date(), now.time().msecsSinceStartOfDay() / 60000, now.offsetFromUtc());
+}
+
+QString Reader::clockText()
+{
+    const auto minute = clockMinute(localDateTime());
+    // Desktop Fill uses the system time while device previews use a fixed time.
+    const bool desktopFill = hideNativeStatus();
+    // Nickel reads its 12/24-hour preference when it formats the time.
+    if (displayedMinute != minute || clockUsesDesktopFill != desktopFill) {
+        displayedClock = services.clock ? services.clock() : QString();
+        displayedMinute = minute;
+        clockUsesDesktopFill = desktopFill;
+    }
+    return displayedClock;
 }
 
 void Reader::resumeReadingClock()
@@ -2124,7 +2148,7 @@ void Reader::resumeReadingClock()
 
 void Reader::startClock()
 {
-    startClock(millisecondsOfDay());
+    startClock(localDateTime());
 }
 
 // The minute tick serves the host's minute work, a header or footer field
@@ -2150,7 +2174,7 @@ bool Reader::paceNeeded() const
 // minutes appear only in the reading menu, which pauses the reading clock and
 // refreshes its status when it opens, so no other minute needs a wakeup. The
 // reader's other periodic work runs on the same tick.
-void Reader::startClock(int now)
+void Reader::startClock(const QDateTime &now)
 {
     // Called where the clock's consumers or the reader's visibility change,
     // which are the Book status field's conditions too.
@@ -2162,12 +2186,13 @@ void Reader::startClock(int now)
         return;
     }
     // A restart after the minute changed, before its tick ran, keeps that tick.
-    if (clockTimer->isActive() && now / 60000 != clockMinute) {
+    const auto minute = clockMinute(now);
+    if (clockTimer->isActive() && minute != timerMinute) {
         clockTimer->start(0);
         return;
     }
-    clockMinute = now / 60000;
-    clockTimer->start(60000 - now % 60000 + 50);
+    timerMinute = minute;
+    clockTimer->start(60000 - now.time().msecsSinceStartOfDay() % 60000 + 50);
 }
 
 void Reader::configureNavigation()

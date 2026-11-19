@@ -69,6 +69,9 @@ public:
     void setValue(const QString &value, const ValueStyle &style);
     // A non-interactive thumbnail shares the row's click target.
     void setPreview(QWidget *widget, QSize size);
+
+    QWidget *previewWidget() const { return preview; }
+
     // An icon before the label, placed like the icons of list action rows.
     void setLeadingIcon(ControlIcon icon);
 

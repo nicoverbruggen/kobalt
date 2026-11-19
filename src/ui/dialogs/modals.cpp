@@ -732,7 +732,7 @@ void ModalOverlay::setDelayedProgress(bool active, qint64 elapsedMilliseconds, i
 void ModalOverlay::resizeEvent(QResizeEvent *)
 {
     if (fitChoiceContents)
-        fitChoiceContents();
+        fitChoiceContents(true);
     else if (property("reader_standard_modal").toBool())
         fitCard();
     else

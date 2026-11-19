@@ -951,6 +951,97 @@ private slots:
         QVERIFY2(!dialog, "The detached confirmation still refers to the deleted Settings panel");
     }
 
+    void settingsChoiceSheetReusesRows()
+    {
+        QWidget window;
+        window.resize(720, 1440);
+        reader::SettingsPanel settings(&window, {});
+        window.show();
+        QVector<int> chosen;
+        settings.showColumnSpacingChoices(100, [&](int value) { chosen.append(-value); });
+        QPointer<QWidget> spacing = window.findChild<QWidget *>("rrColumnSpacingPopup");
+        QPointer<QCheckBox> first = window.findChild<QCheckBox *>("rrColumnSpacing100");
+        QPointer<QCheckBox> second = window.findChild<QCheckBox *>("rrColumnSpacing150");
+        QVERIFY(spacing && spacing->isVisible() && first && second && first->isChecked());
+        QTest::keyClick(spacing, Qt::Key_Escape);
+        QVERIFY(spacing && !spacing->isVisible());
+        QVERIFY(chosen.isEmpty());
+
+        QString format;
+        settings.showPercentageFormats("whole", [&](const QString &value) { format = value; });
+        auto *decimal = window.findChild<QCheckBox *>("rrPercentageFormat_decimal");
+        QVERIFY(decimal && decimal->isVisible());
+        decimal->click();
+        QCOMPARE(format, QStringLiteral("decimal"));
+
+        window.resize(1440, 720);
+        settings.showColumnSpacingChoices(150, [&](int value) { chosen.append(value); });
+        QVERIFY(spacing && spacing->isVisible());
+        QCOMPARE(spacing->geometry(), window.rect());
+        auto *card = spacing->findChild<QWidget *>("rrModalCard");
+        QVERIFY(card && spacing->rect().contains(card->geometry()));
+        QVERIFY(first && first == spacing->findChild<QCheckBox *>("rrColumnSpacing100"));
+        QVERIFY(second && second == spacing->findChild<QCheckBox *>("rrColumnSpacing150"));
+        QVERIFY(!first->isChecked() && second->isChecked());
+        first->click();
+        QCOMPARE(chosen, QVector<int>{ 100 });
+        QVERIFY(!spacing->isVisible());
+    }
+
+    void settingsFontSheetReusesRows()
+    {
+        QWidget window;
+        window.resize(720, 1440);
+        reader::SettingsPanel settings(&window, {});
+        window.show();
+        QVector<ReadingFont> catalog{ { {}, {}, FontOrigin::Recommended, {}, {} },
+                                      { "NV Jost", {}, FontOrigin::Recommended, {}, {} },
+                                      { "Libron", {}, FontOrigin::BuiltIn, {}, {} } };
+        QStringList chosen;
+        settings.showFontChoices("Main font", catalog, "NV Jost", "Publisher",
+                                 [&](const QString &value) { chosen.append("main:" + value); });
+        QPointer<QWidget> sheet = window.findChild<QWidget *>("rrSettingsFontPopup");
+        QPointer<QCheckBox> empty = window.findChild<QCheckBox *>("rrSettingsFontChoice0");
+        QPointer<QCheckBox> jost = window.findChild<QCheckBox *>("rrSettingsFontChoice1");
+        QPointer<QCheckBox> libron = window.findChild<QCheckBox *>("rrSettingsFontChoice2");
+        QVERIFY(sheet && empty && jost && libron && jost->isVisible() && jost->isChecked());
+        QCOMPARE(empty->text(), QStringLiteral("Publisher"));
+        QTest::keyClick(sheet, Qt::Key_Escape);
+        QVERIFY(sheet && !sheet->isVisible());
+        QVERIFY(chosen.isEmpty());
+
+        window.resize(1440, 720);
+        settings.showFontChoices("Strip font", catalog, "Libron", "Default",
+                                 [&](const QString &value) { chosen.append("strip:" + value); });
+        QVERIFY(sheet && sheet->isVisible());
+        QCOMPARE(sheet->geometry(), window.rect());
+        auto *card = sheet->findChild<QWidget *>("rrModalCard");
+        auto *title = sheet->findChild<QLabel *>("rrSettingsFontTitle");
+        QVERIFY(card && sheet->rect().contains(card->geometry()) && title);
+        QCOMPARE(title->text(), QStringLiteral("Strip font"));
+        QVERIFY(empty && empty == sheet->findChild<QCheckBox *>("rrSettingsFontChoice0"));
+        QVERIFY(jost && !jost->isChecked());
+        QVERIFY(libron && libron == sheet->findChild<QCheckBox *>("rrSettingsFontChoice2"));
+        QCOMPARE(empty->text(), QStringLiteral("Default"));
+        QVERIFY(libron->isVisible() && libron->isChecked());
+        libron->click();
+        QCOMPARE(chosen, QStringList{ "strip:Libron" });
+
+        QPointer<ui::ModalOverlay> activeSheet;
+        settings.sheetShown = [&](ui::ModalOverlay *shown) { activeSheet = shown; };
+        catalog[2].family = QStringLiteral("NV Bitter");
+        catalog[2].origin = FontOrigin::Sideloaded;
+        settings.showFontChoices("Strip font", catalog, "NV Bitter", "Default",
+                                 [&](const QString &value) { chosen.append(value); });
+        QVERIFY(activeSheet && activeSheet->isVisible());
+        auto *replacement = activeSheet->findChild<QCheckBox *>("rrSettingsFontChoice2");
+        QVERIFY(replacement && replacement->isVisible() && replacement->isChecked());
+        QCOMPARE(replacement->property("reader_font_family").toString(),
+                 QStringLiteral("NV Bitter"));
+        replacement->click();
+        QCOMPARE(chosen, (QStringList{ "strip:Libron", "NV Bitter" }));
+    }
+
     void settingsChoiceFitsAfterResize_data()
     {
         QTest::addColumn<QString>("tabName");

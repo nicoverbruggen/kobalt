@@ -14,9 +14,9 @@ public:
     {
     }
 
-    void fit()
+    void fit(bool keepPage)
     {
-        const int previous = starts.value(page, -1);
+        const int previous = keepPage ? starts.value(page, -1) : -1;
         starts.clear();
         if (pager)
             pager->hide();
@@ -50,10 +50,14 @@ public:
                 name.chop(5);
             pager = new PagerBar(card, name);
             card->rows()->addWidget(pager);
-            connect(pager->previous, &QPushButton::clicked, this,
-                    [this] { showPage(pager->turnTarget(-1)); });
-            connect(pager->next, &QPushButton::clicked, this,
-                    [this] { showPage(pager->turnTarget(1)); });
+            connect(pager->previous, &QPushButton::clicked, this, [this] {
+                if (pager->isVisible())
+                    showPage(pager->turnTarget(-1));
+            });
+            connect(pager->next, &QPushButton::clicked, this, [this] {
+                if (pager->isVisible())
+                    showPage(pager->turnTarget(1));
+            });
         }
         room = qMax(1, availableHeight - card->height() - int(metrics::chrome::actionHeight));
         starts.append(0);
@@ -117,9 +121,9 @@ void fitChoiceSheet(ModalOverlay *overlay, RadioList *list)
 {
     if (!overlay->fitChoiceContents) {
         auto *contents = new ChoiceContents(overlay, list);
-        overlay->fitChoiceContents = [contents] { contents->fit(); };
+        overlay->fitChoiceContents = [contents](bool keepPage) { contents->fit(keepPage); };
     }
-    overlay->fitChoiceContents();
+    overlay->fitChoiceContents(false);
 }
 
 void presentChoiceSheet(ModalOverlay *overlay, RadioList *list)

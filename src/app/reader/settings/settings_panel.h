@@ -18,6 +18,7 @@
 #include <QStackedWidget>
 #include <QVector>
 #include <QPointer>
+#include <QVariant>
 
 namespace kobalt {
 class AboutPage;
@@ -102,8 +103,6 @@ public:
     // Shows, raises and focuses the open sheet, then reports it through
     // sheetShown().
     void presentSheet();
-    ui::RadioList *openChoiceSheet(const QString &name, const QString &title,
-                                   const QString &hint = {}, const QString &titleName = {});
     void showHeaderFooterWeights(int current, const QFont &sampleFont,
                                  std::function<void(int)> chosen);
     void showDictionaryFontSizes(int current, const QString &family, bool customFont,
@@ -247,6 +246,21 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+    // One small list per built-in chooser. Its inputs describe the rows
+    // that were built, independently of this opening's selection and callback.
+    struct SavedChoiceSheet
+    {
+        QPointer<ui::ModalOverlay> overlay;
+        ui::RadioList *list = nullptr;
+        QVariantList inputs;
+    };
+
+    QHash<QString, SavedChoiceSheet> choiceSheets;
+    QPointer<ui::RadioList> activeChoices;
+    ui::RadioList *openChoiceSheet(const QString &name, const QString &title,
+                                   const QString &hint = {}, const QString &titleName = {},
+                                   QVariantList inputs = {});
+    void presentChoices(int current, std::function<void(int)> chosen);
     void showStylingChoices(AdvancedText feature, int current, std::function<void(int)> chosen,
                             const QString &alignment, int secondary,
                             std::function<void(int, int)> pairChosen);
@@ -304,6 +318,8 @@ private:
     ui::ChoiceModal *standbyConfirmation();
     ui::ChoiceModal *automaticOpeningConfirmation();
     void dialogCreated(ui::ChoiceModal *dialog);
+    QPointer<ui::ModalOverlay> fontSheet;
+    void releaseFontChoice();
     QHash<int, StyleSample> stylingSamples;
     // The open styling sheet, if any, and the option its preview shows.
     QPointer<QWidget> stylingPreview;

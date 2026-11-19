@@ -25,6 +25,7 @@
 #include "ui/style/fonts.h"
 #include "ui/style/styles.h"
 #include <QApplication>
+#include <algorithm>
 #include <memory>
 #include <QtMath>
 #include <QButtonGroup>
@@ -1452,26 +1453,27 @@ void SettingsPanel::showThemeChoices(ThemeChoice kind, const InterfaceStyle &sty
     const QString current = icons ? ui::iconStyleId(style.icons)
             : palette             ? style.palette
                                   : selectedTheme;
-    for (const auto &id : ids) {
-        auto *option = choices->add(name + "_" + id,
-                                    icons             ? iconStyleName(id)
-                                            : palette ? paletteName(id)
-                                                      : themeName(id));
+    const bool buildRows = choices->options().isEmpty();
+    for (int index = 0; index < ids.size(); ++index) {
+        const auto &id = ids[index];
+        auto *option = buildRows ? choices->add(name + "_" + id,
+                                                icons             ? iconStyleName(id)
+                                                        : palette ? paletteName(id)
+                                                                  : themeName(id))
+                                 : choices->options()[index];
         auto preview = kind == ThemeChoice::Preset && id != "custom" ? themePreset(id) : style;
         if (icons)
             preview.icons = ui::iconStyleFromId(id);
         if (palette)
             preview.palette = id;
-        auto *sample = new ThemeSample(option, preview, kind);
-        option->setPreview(sample, sample->size());
+        if (buildRows) {
+            auto *sample = new ThemeSample(option, preview, kind);
+            option->setPreview(sample, sample->size());
+        } else {
+            static_cast<ThemeSample *>(option->previewWidget())->setAppearance(preview);
+        }
     }
-    choices->setCurrent(ids.indexOf(current));
-    choices->chosen = [this, ids, chosen](int index) {
-        dismissSheet();
-        chosen(ids[index]);
-    };
-    ui::fitChoiceSheet(sheet, choices);
-    presentSheet();
+    presentChoices(ids.indexOf(current), [ids, chosen](int index) { chosen(ids[index]); });
 }
 
 void SettingsPanel::styleTabs(bool list)
@@ -1773,68 +1775,138 @@ SettingsPanel::~SettingsPanel()
     delete standbyDialog;
     delete automaticOpeningDialog;
     delete sheet;
+    for (const auto &saved : choiceSheets)
+        delete saved.overlay;
+    delete fontSheet;
 }
 
-void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
-                                    const QString &current, const QString &emptyLabel,
-                                    std::function<void(const QString &)> chosen)
+namespace {
+void retireChoiceSheet(ui::ModalOverlay *overlay)
 {
-    if (sheet || fonts.isEmpty())
-        return;
-    sheet = new ui::ModalOverlay(parentWidget());
-    sheet->setObjectName("rrSettingsFontPopup");
-    sheet->setDimmed(true);
-    sheet->setGeometry(parentWidget()->rect());
-    sheet->dismissed = [this] { dismissSheet(); };
-    auto *card = sheet->card();
-    auto *rows = card->rows();
-    rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
-                             metrics::control::border, metrics::control::border);
-    rows->setSpacing(0);
-    auto *heading = card->heading(title, {}, "rrSettingsFontTitle").title->parentWidget();
-    auto *section = new ui::ListHeader(card);
-    section->setObjectName("rrSettingsFontSection");
-    section->setShaded(true);
-    section->setFixedHeight(section->sizeHint().height());
-    rows->addWidget(section);
-    auto *choices = new ui::RadioList(card);
-    choices->setObjectName("rrSettingsFontChoices");
-    choices->setMinimumRowHeight(metrics::list::oneLine);
-    int selected = 0;
-    for (int index = 0; index < fonts.size(); ++index) {
-        const auto &family = fonts[index].family;
-        auto *option = choices->add(QString("rrSettingsFontChoice%1").arg(index),
-                                    family.isEmpty() ? emptyLabel : fontDisplayName(family));
-        option->setProperty("reader_font_family", family);
-        if (family == current)
-            selected = index;
+    // A selection callback can reopen the chooser before its click returns.
+    // Only the replacement should be found by name while the old sheet waits.
+    for (auto *widget : overlay->findChildren<QWidget *>())
+        widget->setObjectName({});
+    overlay->setObjectName({});
+    overlay->deleteLater();
+}
+
+QVariantList choiceSheetAppearance(QWidget *parent)
+{
+    return { ui::density(),       ui::textScale(),  ui::iconPx(100),
+             ui::interfaceFont(), ui::chromeFont(), parent->palette() };
+}
+
+class SettingsFontSheet final : public ui::ModalOverlay
+{
+public:
+    explicit SettingsFontSheet(QWidget *parent)
+        : ui::ModalOverlay(parent), appearance(choiceSheetAppearance(parent))
+    {
+        setDimmed(true);
+        auto *rows = card()->rows();
+        heading = card()->heading({}, {}, "rrSettingsFontTitle").title;
+        section = new ui::ListHeader(card());
+        section->setObjectName("rrSettingsFontSection");
+        section->setShaded(true);
+        section->setFixedHeight(section->sizeHint().height());
+        rows->addWidget(section);
+        choices = new ui::RadioList(card());
+        choices->setObjectName("rrSettingsFontChoices");
+        choices->setMinimumRowHeight(metrics::list::oneLine);
+        rows->addWidget(choices);
+        pager = new ui::PagerBar(card(), "rrSettingsFont");
+        rows->addWidget(pager);
+        connect(pager->previous, &QPushButton::clicked, this,
+                [this] { showPage(pager->turnTarget(-1)); });
+        connect(pager->next, &QPushButton::clicked, this,
+                [this] { showPage(pager->turnTarget(1)); });
     }
-    choices->setCurrent(selected);
-    rows->addWidget(choices);
-    auto *pager = new ui::PagerBar(card, "rrSettingsFont");
-    rows->addWidget(pager);
-    const int cardWidth = qMin<int>(metrics::notice::cardWidth,
-                                    parentWidget()->width() - 2 * metrics::notice::sideClearance);
-    const int rowHeight = choices->rowHeight(cardWidth - 2 * metrics::control::border);
-    heading->ensurePolished();
-    const int overhead = rows->contentsMargins().top() + rows->contentsMargins().bottom()
-            + heading->sizeHint().height() + section->height() + pager->height();
-    const int perPage = qMax(
-            1,
-            (parentWidget()->height() - 2 * metrics::notice::sideClearance - overhead) / rowHeight);
-    QVector<QPair<int, int>> pages;
-    for (int first = 0; first < fonts.size();) {
-        int end = first + 1;
-        while (end < fonts.size() && end - first < perPage
-               && fonts[end].origin == fonts[first].origin)
-            ++end;
-        pages.append({ first, end - first });
-        first = end;
+
+    bool accepts(int count) const
+    {
+        return choices->options().size() == count
+                && appearance == choiceSheetAppearance(parentWidget());
     }
-    const auto showPage = [this, choices, pager, section, card, cardWidth, rowHeight, pages,
-                           fonts](int page) {
+
+    void configure(const QString &title, const QVector<ReadingFont> &catalog,
+                   const QString &current, const QString &emptyLabel,
+                   std::function<void(const QString &)> chosen)
+    {
+        setGeometry(parentWidget()->rect());
+        heading->setText(title);
+        fonts = catalog;
+        int selected = 0;
+        for (int index = 0; index < fonts.size(); ++index) {
+            const auto &family = fonts[index].family;
+            const auto label = family.isEmpty() ? emptyLabel : fontDisplayName(family);
+            auto *option = index < choices->options().size()
+                    ? choices->options()[index]
+                    : choices->add(QString("rrSettingsFontChoice%1").arg(index), label);
+            option->setText(label);
+            option->setProperty("reader_font_family", family);
+            if (family == current)
+                selected = index;
+        }
+        choices->setCurrent(selected);
+        choices->chosen = [this, chosen = std::move(chosen)](int index) {
+            const auto family = fonts[index].family;
+            dismissed();
+            chosen(family);
+        };
+        fit(selected);
+    }
+
+    void release()
+    {
+        choices->chosen = {};
+        fonts.clear();
+        pages.clear();
+    }
+
+private:
+    void resizeEvent(QResizeEvent *event) override
+    {
+        if (!fonts.isEmpty() && size() != fittedSize)
+            fit(firstVisible);
+        ui::ModalOverlay::resizeEvent(event);
+    }
+
+    void fit(int row)
+    {
+        fittedSize = size();
+        cardWidth =
+                qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance);
+        rowHeight = choices->rowHeight(cardWidth - 2 * metrics::control::border);
+        auto *header = heading->parentWidget();
+        header->ensurePolished();
+        const auto margins = card()->rows()->contentsMargins();
+        const int overhead = margins.top() + margins.bottom() + header->sizeHint().height()
+                + section->height() + pager->height();
+        const int perPage =
+                qMax(1, (height() - 2 * metrics::notice::sideClearance - overhead) / rowHeight);
+        pages.clear();
+        int initialPage = 0;
+        for (int first = 0; first < fonts.size();) {
+            int end = first + 1;
+            while (end < fonts.size() && end - first < perPage
+                   && fonts[end].origin == fonts[first].origin)
+                ++end;
+            if (first <= row && row < end)
+                initialPage = pages.size();
+            pages.append({ first, end - first });
+            first = end;
+        }
+        showPage(initialPage);
+    }
+
+    void showPage(int page)
+    {
+        if (pages.isEmpty())
+            return;
         page = qBound(0, page, int(pages.size()) - 1);
         const auto range = pages[page];
+        firstVisible = range.first;
         for (int index = range.first; index < range.first + range.second; ++index) {
             auto *option = choices->options()[index];
             option->setFontPreviewSource(
@@ -1862,24 +1934,50 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
         choices->showRows(range.first, range.second);
         choices->setFixedHeight(range.second * rowHeight);
         pager->setPage(page, pages.size());
-        card->fitToWidth(cardWidth);
-        sheet->centerCard();
-    };
-    connect(pager->previous, &QPushButton::clicked, sheet,
-            [pager, showPage] { showPage(pager->turnTarget(-1)); });
-    connect(pager->next, &QPushButton::clicked, sheet,
-            [pager, showPage] { showPage(pager->turnTarget(1)); });
-    choices->chosen = [this, fonts, chosen](int index) {
-        const auto family = fonts[index].family;
-        dismissSheet();
-        chosen(family);
-    };
-    int initialPage = 0;
-    for (int page = 0; page < pages.size(); ++page)
-        if (selected >= pages[page].first && selected < pages[page].first + pages[page].second)
-            initialPage = page;
-    showPage(initialPage);
+        card()->fitToWidth(cardWidth);
+        centerCard();
+    }
+
+    QLabel *heading;
+    ui::ListHeader *section;
+    ui::RadioList *choices;
+    ui::PagerBar *pager;
+    QVector<ReadingFont> fonts;
+    QVector<QPair<int, int>> pages;
+    int firstVisible = 0, cardWidth = 0, rowHeight = 0;
+    QSize fittedSize;
+    const QVariantList appearance;
+};
+} // namespace
+
+void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
+                                    const QString &current, const QString &emptyLabel,
+                                    std::function<void(const QString &)> chosen)
+{
+    if (sheet || fonts.isEmpty())
+        return;
+    auto *popup = static_cast<SettingsFontSheet *>(fontSheet.data());
+    if (popup && !popup->accepts(fonts.size())) {
+        retireChoiceSheet(popup);
+        popup = nullptr;
+    }
+    if (!popup) {
+        popup = new SettingsFontSheet(parentWidget());
+        fontSheet = popup;
+        popup->dismissed = [panel = QPointer<SettingsPanel>(this), popup] {
+            if (panel && panel->sheet == popup)
+                panel->dismissSheet();
+        };
+    }
+    sheet = popup;
+    popup->setObjectName("rrSettingsFontPopup");
+    popup->configure(title, fonts, current, emptyLabel, std::move(chosen));
     presentSheet();
+}
+
+void SettingsPanel::releaseFontChoice()
+{
+    static_cast<SettingsFontSheet *>(fontSheet.data())->release();
 }
 
 QString SettingsPanel::dictionaryFontSizeLabel(int percent, bool compact)
@@ -1900,16 +1998,40 @@ QString SettingsPanel::dictionaryFontSizeLabel(int percent, bool compact)
     }
 }
 
-// Opens a sheet with a title and one pick-one list, as `sheet`. The caller
-// adds the options, fits it with ui::fitChoiceSheet() and shows it with
-// presentSheet().
 ui::RadioList *SettingsPanel::openChoiceSheet(const QString &name, const QString &title,
-                                              const QString &hint, const QString &titleName)
+                                              const QString &hint, const QString &titleName,
+                                              QVariantList inputs)
 {
-    const auto made = ui::makeChoiceSheet(parentWidget(), name, title, hint, titleName);
-    sheet = made.overlay;
-    sheet->dismissed = [this] { dismissSheet(); };
-    return made.list;
+    inputs << title;
+    inputs.append(choiceSheetAppearance(parentWidget()));
+    auto &saved = choiceSheets[name];
+    if (!saved.overlay || saved.inputs != inputs) {
+        if (saved.overlay)
+            retireChoiceSheet(saved.overlay);
+        const auto made = ui::makeChoiceSheet(parentWidget(), name, title, hint, titleName);
+        saved.overlay = made.overlay;
+        saved.list = made.list;
+        saved.inputs = std::move(inputs);
+        made.overlay->dismissed = [panel = QPointer<SettingsPanel>(this), overlay = made.overlay] {
+            if (panel && panel->sheet == overlay)
+                panel->dismissSheet();
+        };
+    }
+    sheet = saved.overlay;
+    sheet->setGeometry(parentWidget()->rect());
+    activeChoices = saved.list;
+    return activeChoices;
+}
+
+void SettingsPanel::presentChoices(int current, std::function<void(int)> chosen)
+{
+    activeChoices->setCurrent(current);
+    activeChoices->chosen = [this, chosen = std::move(chosen)](int index) {
+        dismissSheet();
+        chosen(index);
+    };
+    ui::fitChoiceSheet(sheet, activeChoices);
+    presentSheet();
 }
 
 void SettingsPanel::showDictionaryFontSizes(int current, const QString &family, bool customFont,
@@ -1917,53 +2039,52 @@ void SettingsPanel::showDictionaryFontSizes(int current, const QString &family, 
 {
     if (sheet)
         return;
-    auto *choices =
-            openChoiceSheet("rrDictionaryFontSize", strings::get("settings.dictionary_font_size"));
-    choices->setMinimumRowHeight(metrics::list::oneLine);
     const bool compact = isPhoneScreen(parentWidget()->size(), ui::density());
-    for (int percent : appearance::dictionaryFontSizes) {
-        auto *option = choices->add(
-                QString("rrDictionaryFontSize%1").arg(percent),
-                ui::textScale() >= 1.5 ? QString() : dictionaryFontSizeLabel(percent, compact));
-        option->setAccessibleName(dictionaryFontSizeLabel(percent));
-        const auto font = DictionaryPanel::definitionFont(family, percent);
-        const int lineHeight = DictionaryPanel::definitionLineHeight(percent, customFont);
-        const auto sample = strings::get("settings.dictionary_font_sample");
-        auto *preview = new QWidget(option);
-        preview->setObjectName(QString("rrDictionaryFontPreview%1").arg(percent));
-        const int padding = ui::px(12);
-        auto *layout = new QHBoxLayout(preview);
-        layout->setContentsMargins(padding, padding, padding, padding);
-        auto *label = new ui::SampleLabel(preview);
-        label->optical = true;
-        label->setTextFormat(Qt::PlainText);
-        label->setFont(font);
-        label->setText(sample);
-        auto face = font.family();
-        face.replace('\\', "\\\\");
-        face.replace('"', "\\\"");
-        readerStyle(
-                label,
-                QString("font-family:\"%1\";font-size:%2px;font-weight:400;background:transparent;border:none;")
-                        .arg(face)
-                        .arg(font.pixelSize()));
-        label->ensurePolished();
-        layout->addWidget(label);
-        const auto sampleFont = label->font();
-        const int height =
-                qCeil(ui::interfaceLineHeight(sampleFont) * qMax(100, lineHeight) / 100.0)
-                + 2 * padding;
-        const int textWidth = ui::interfaceTextWidth(sample, sampleFont);
-        option->setPreview(preview, { textWidth + 2 * padding, height });
-        if (percent == current)
-            choices->setCurrent(choices->options().size() - 1);
+    auto *choices = openChoiceSheet(
+            "rrDictionaryFontSize", strings::get("settings.dictionary_font_size"), {}, {},
+            { family, customFont, compact,
+              ui::privateLayoutKey(DictionaryPanel::definitionFont(family, 100)) });
+    if (choices->options().isEmpty()) {
+        choices->setMinimumRowHeight(metrics::list::oneLine);
+        for (int percent : appearance::dictionaryFontSizes) {
+            auto *option = choices->add(
+                    QString("rrDictionaryFontSize%1").arg(percent),
+                    ui::textScale() >= 1.5 ? QString() : dictionaryFontSizeLabel(percent, compact));
+            option->setAccessibleName(dictionaryFontSizeLabel(percent));
+            const auto font = DictionaryPanel::definitionFont(family, percent);
+            const int lineHeight = DictionaryPanel::definitionLineHeight(percent, customFont);
+            const auto sample = strings::get("settings.dictionary_font_sample");
+            auto *preview = new QWidget(option);
+            preview->setObjectName(QString("rrDictionaryFontPreview%1").arg(percent));
+            const int padding = ui::px(12);
+            auto *layout = new QHBoxLayout(preview);
+            layout->setContentsMargins(padding, padding, padding, padding);
+            auto *label = new ui::SampleLabel(preview);
+            label->optical = true;
+            label->setTextFormat(Qt::PlainText);
+            label->setFont(font);
+            label->setText(sample);
+            auto face = font.family();
+            face.replace('\\', "\\\\");
+            face.replace('"', "\\\"");
+            readerStyle(
+                    label,
+                    QString("font-family:\"%1\";font-size:%2px;font-weight:400;background:transparent;border:none;")
+                            .arg(face)
+                            .arg(font.pixelSize()));
+            label->ensurePolished();
+            layout->addWidget(label);
+            const auto sampleFont = label->font();
+            const int height =
+                    qCeil(ui::interfaceLineHeight(sampleFont) * qMax(100, lineHeight) / 100.0)
+                    + 2 * padding;
+            const int textWidth = ui::interfaceTextWidth(sample, sampleFont);
+            option->setPreview(preview, { textWidth + 2 * padding, height });
+        }
     }
-    choices->chosen = [this, chosen](int index) {
-        dismissSheet();
-        chosen(appearance::dictionaryFontSizes[index]);
-    };
-    ui::fitChoiceSheet(sheet, choices);
-    presentSheet();
+    const auto &sizes = appearance::dictionaryFontSizes;
+    presentChoices(int(std::find(sizes.begin(), sizes.end(), current) - sizes.begin()),
+                   [chosen](int index) { chosen(appearance::dictionaryFontSizes[index]); });
 }
 
 void SettingsPanel::showHeaderFooterWeights(int current, const QFont &sampleFont,
@@ -1973,27 +2094,23 @@ void SettingsPanel::showHeaderFooterWeights(int current, const QFont &sampleFont
         return;
     auto *choices =
             openChoiceSheet("rrHeaderFooterWeight", strings::get("settings.header_footer_weight"),
-                            {}, "rrHeaderFooterWeightTitle");
-    choices->setMinimumRowHeight(metrics::list::oneLine);
+                            {}, "rrHeaderFooterWeightTitle", { sampleFont, ui::interfaceWeight() });
     const QVector<int> weights{ 0, 2, 4, 6, 8 };
-    for (int steps : weights) {
-        auto *option = choices->add(
-                QString("rrHeaderFooterWeight%1").arg(steps),
-                steps ? strings::get("settings.header_footer_weight_heavier").arg(steps)
-                      : strings::get("settings.header_footer_weight_lighter"));
-        ui::DescribedOption::ValueStyle sample;
-        sample.sampleFont = sampleFont;
-        sample.sampleWeight = ui::interfaceWeight() + steps;
-        option->setValue(QStringLiteral("SAMPLE TEXT"), sample);
-        if (steps == current)
-            choices->setCurrent(choices->options().size() - 1);
+    if (choices->options().isEmpty()) {
+        choices->setMinimumRowHeight(metrics::list::oneLine);
+        for (int steps : weights) {
+            auto *option = choices->add(
+                    QString("rrHeaderFooterWeight%1").arg(steps),
+                    steps ? strings::get("settings.header_footer_weight_heavier").arg(steps)
+                          : strings::get("settings.header_footer_weight_lighter"));
+            ui::DescribedOption::ValueStyle sample;
+            sample.sampleFont = sampleFont;
+            sample.sampleWeight = ui::interfaceWeight() + steps;
+            option->setValue(QStringLiteral("SAMPLE TEXT"), sample);
+        }
     }
-    choices->chosen = [this, chosen, weights](int index) {
-        dismissSheet();
-        chosen(weights[index]);
-    };
-    ui::fitChoiceSheet(sheet, choices);
-    presentSheet();
+    presentChoices(weights.indexOf(current),
+                   [weights, chosen](int index) { chosen(weights[index]); });
 }
 
 QString SettingsPanel::columnSpacingLabel(int percent)
@@ -2114,22 +2231,16 @@ void SettingsPanel::showTimeRemainingFormats(const QString &current,
             openChoiceSheet("rrTimeRemainingFormat", strings::get("settings.time_remaining_format"),
                             strings::get("settings.time_remaining_format_description"));
     const QStringList formats{ "detailed", "approximate" };
-    for (const auto &format : formats) {
-        choices->add(QString("rrTimeRemainingFormat_%1").arg(format),
-                     timeRemainingFormatLabel(format),
-                     strings::get(QString("settings.time_remaining_%1_description")
-                                          .arg(format)
-                                          .toLatin1()
-                                          .constData()));
-        if (format == current)
-            choices->setCurrent(choices->options().size() - 1);
-    }
-    choices->chosen = [this, chosen, formats](int index) {
-        dismissSheet();
-        chosen(formats[index]);
-    };
-    ui::fitChoiceSheet(sheet, choices);
-    presentSheet();
+    if (choices->options().isEmpty())
+        for (const auto &format : formats)
+            choices->add(QString("rrTimeRemainingFormat_%1").arg(format),
+                         timeRemainingFormatLabel(format),
+                         strings::get(QString("settings.time_remaining_%1_description")
+                                              .arg(format)
+                                              .toLatin1()
+                                              .constData()));
+    presentChoices(formats.indexOf(current),
+                   [chosen, formats](int index) { chosen(formats[index]); });
 }
 
 QString SettingsPanel::percentageFormatLabel(const QString &format)
@@ -2147,21 +2258,16 @@ void SettingsPanel::showPercentageFormats(const QString &current,
             openChoiceSheet("rrPercentageFormat", strings::get("settings.percentage_format"),
                             strings::get("settings.percentage_format_description"));
     const QStringList formats{ "whole", "decimal" };
-    for (const auto &format : formats) {
-        choices->add(QString("rrPercentageFormat_%1").arg(format), percentageFormatLabel(format),
-                     strings::get(QString("settings.percentage_%1_description")
-                                          .arg(format)
-                                          .toLatin1()
-                                          .constData()));
-        if (format == current)
-            choices->setCurrent(choices->options().size() - 1);
-    }
-    choices->chosen = [this, chosen, formats](int index) {
-        dismissSheet();
-        chosen(formats[index]);
-    };
-    ui::fitChoiceSheet(sheet, choices);
-    presentSheet();
+    if (choices->options().isEmpty())
+        for (const auto &format : formats)
+            choices->add(QString("rrPercentageFormat_%1").arg(format),
+                         percentageFormatLabel(format),
+                         strings::get(QString("settings.percentage_%1_description")
+                                              .arg(format)
+                                              .toLatin1()
+                                              .constData()));
+    presentChoices(formats.indexOf(current),
+                   [chosen, formats](int index) { chosen(formats[index]); });
 }
 
 QString SettingsPanel::renderingModeLabel(const QString &mode)
@@ -2176,27 +2282,20 @@ void SettingsPanel::showRenderingModes(const QString &current,
 {
     if (sheet)
         return;
-    auto *choices = openChoiceSheet("rrRendering", strings::get("settings.rendering"),
-                                    strings::get("settings.rendering_description"));
     // Hybrid replaces Fast. Debug mode still offers it.
     QStringList modes{ "hybrid", "accurate" };
     if (debugModeOption && debugModeOption->isChecked())
         modes.insert(1, "fast");
-    for (const auto &mode : modes) {
-        choices->add(QString("rrRendering_%1").arg(mode), renderingModeLabel(mode),
-                     strings::get(mode == "accurate" ? "settings.rendering_accurate_description"
-                                          : mode == "fast"
-                                          ? "settings.rendering_fast_description"
-                                          : "settings.rendering_hybrid_description"));
-        if (mode == current)
-            choices->setCurrent(choices->options().size() - 1);
-    }
-    choices->chosen = [this, chosen, modes](int index) {
-        dismissSheet();
-        chosen(modes[index]);
-    };
-    ui::fitChoiceSheet(sheet, choices);
-    presentSheet();
+    auto *choices = openChoiceSheet("rrRendering", strings::get("settings.rendering"),
+                                    strings::get("settings.rendering_description"), {}, { modes });
+    if (choices->options().isEmpty())
+        for (const auto &mode : modes)
+            choices->add(QString("rrRendering_%1").arg(mode), renderingModeLabel(mode),
+                         strings::get(mode == "accurate" ? "settings.rendering_accurate_description"
+                                              : mode == "fast"
+                                              ? "settings.rendering_fast_description"
+                                              : "settings.rendering_hybrid_description"));
+    presentChoices(modes.indexOf(current), [chosen, modes](int index) { chosen(modes[index]); });
 }
 
 void SettingsPanel::showColumnSpacingChoices(int current, std::function<void(int)> chosen)
@@ -2206,17 +2305,11 @@ void SettingsPanel::showColumnSpacingChoices(int current, std::function<void(int
     auto *choices = openChoiceSheet("rrColumnSpacing", strings::get("reader.column_spacing"),
                                     strings::get("settings.column_spacing_description"));
     const QVector<int> spacings{ 100, 150, 200, 250, 300 };
-    for (int percent : spacings) {
-        choices->add(QString("rrColumnSpacing%1").arg(percent), columnSpacingLabel(percent));
-        if (percent == current)
-            choices->setCurrent(choices->options().size() - 1);
-    }
-    choices->chosen = [this, chosen, spacings](int index) {
-        dismissSheet();
-        chosen(spacings[index]);
-    };
-    ui::fitChoiceSheet(sheet, choices);
-    presentSheet();
+    if (choices->options().isEmpty())
+        for (int percent : spacings)
+            choices->add(QString("rrColumnSpacing%1").arg(percent), columnSpacingLabel(percent));
+    presentChoices(spacings.indexOf(current),
+                   [chosen, spacings](int index) { chosen(spacings[index]); });
 }
 
 namespace {
@@ -2701,15 +2794,24 @@ void SettingsPanel::dismissSheet()
 {
     if (!sheet)
         return;
-    // The closed sheet is deleted later. Until then, only the next sheet's
+    // The closed Styling sheet is deleted later. Until then, only the next sheet's
     // preview may answer to the shared name.
     if (stylingPreview)
         stylingPreview->setObjectName({});
     stylingPreview.clear();
     stylingSampleReady = {};
-    sheet->hide();
-    sheet->deleteLater();
+    const auto closing = sheet;
     sheet.clear();
+    const bool retained = activeChoices || closing == fontSheet;
+    if (activeChoices) {
+        activeChoices->chosen = {};
+        activeChoices = nullptr;
+    } else if (closing == fontSheet) {
+        releaseFontChoice();
+    }
+    closing->hide();
+    if (!retained && closing)
+        closing->deleteLater();
 }
 
 void SettingsPanel::presentSheet()

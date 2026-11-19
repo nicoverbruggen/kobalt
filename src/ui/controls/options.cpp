@@ -415,8 +415,9 @@ DescribedOption *RadioList::add(const QString &name, const QString &label,
     option->setPresentation(look);
     const int index = rows.size();
     QObject::connect(option, &QCheckBox::clicked, this, [this, index] {
-        if (chosen)
-            chosen(index);
+        // A choice can dismiss or reopen its list and replace the callback.
+        if (const auto callback = chosen)
+            callback(index);
     });
     rows.append(option);
     arrange();

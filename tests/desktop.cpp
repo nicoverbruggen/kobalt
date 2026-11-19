@@ -17426,7 +17426,7 @@ private slots:
         QCOMPARE(ui::interfaceFont().family(), QStringLiteral("IBM Plex Sans"));
         QCOMPARE(presetRow->font().family(), QStringLiteral("IBM Plex Sans"));
         QCOMPARE(ui::dividerColor(presetRow), ui::themeColors(dark).divider);
-        QTRY_VERIFY(!fixture.widget("rrThemePopup"));
+        QTRY_VERIFY(!fixture.visible("rrThemePopup"));
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_COMPARE(ui::interfaceFont().family(), QStringLiteral("IBM Plex Sans"));
         if (!fixture.visible("rrSettings"))

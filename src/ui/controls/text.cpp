@@ -19,11 +19,13 @@
 #include <QPainterPath>
 #include <QTextBlock>
 #include <QTextBoundaryFinder>
+#include <QTextCursor>
 #include <QTextDocument>
 #include <QTextFragment>
 #include <QTextLayout>
 #include <QtMath>
 #include <algorithm>
+#include <limits>
 
 namespace kobalt::ui {
 QString headerFooterText(const headerfooter::Content &content, const QFont &font, int width)
@@ -100,8 +102,10 @@ QVector<QPair<int, int>> lineRanges(const QVector<QPair<int, int>> &ranges, int 
     return result;
 }
 
-QVector<ExcerptLine> privateExcerptLines(const QTextDocument &document, const QFont &font,
-                                         int width, int maximumLines = 0, bool *overflow = nullptr)
+QVector<ExcerptLine>
+privateExcerptLines(const QTextDocument &document, const QFont &font, int width,
+                    int maximumLines = 0, bool *overflow = nullptr,
+                    qreal maximumHeight = std::numeric_limits<qreal>::infinity())
 {
     if (overflow)
         *overflow = false;
@@ -169,6 +173,8 @@ QVector<ExcerptLine> privateExcerptLines(const QTextDocument &document, const QF
                            measured.lineAscent, lineText.isEmpty() ? 0 : measured.advance,
                            direction });
             top += height;
+            if (top > maximumHeight)
+                return lines;
             start = end;
             if (start == separator) {
                 ++start;
@@ -536,25 +542,114 @@ void InterfaceLabel::paintEvent(QPaintEvent *event)
         drawInterfaceText(painter, bounds, text(), alignment());
 }
 
+namespace {
+// Stop once the result exceeds the available height. The complete height is
+// only needed when sizing the rows, before any search hits are displayed.
+qreal excerptHeight(QTextDocument &document, const QFont &font, int width, qreal maximum)
+{
+    if (privateExcerptNeeded(document, font)) {
+        const auto lines = privateExcerptLines(document, font, width, 0, nullptr, maximum);
+        return lines.isEmpty() ? 0 : lines.last().top + lines.last().height;
+    }
+    if (document.textWidth() != width)
+        document.setTextWidth(width);
+    qreal bottom = document.size().height();
+    for (auto block = document.begin(); block.isValid() && bottom <= maximum;
+         block = block.next()) {
+        const auto *layout = block.layout();
+        for (int i = 0; i < layout->lineCount() && bottom <= maximum; ++i)
+            bottom = qMax(bottom, excerptLineBottom(*layout, layout->lineAt(i)));
+    }
+    return bottom;
+}
+} // namespace
+
 qreal excerptTextHeight(const QString &html, const QFont &font, int width)
 {
     QTextDocument document;
     document.setDefaultFont(font);
     document.setDocumentMargin(0);
     document.setHtml(html);
-    if (privateExcerptNeeded(document, font)) {
-        const auto lines = privateExcerptLines(document, font, width);
-        return lines.isEmpty() ? 0 : lines.last().top + lines.last().height;
-    }
-    document.setTextWidth(width);
-    qreal bottom = document.size().height();
-    for (auto block = document.begin(); block.isValid(); block = block.next()) {
-        const auto *layout = block.layout();
-        for (int i = 0; i < layout->lineCount(); ++i) {
-            bottom = qMax(bottom, excerptLineBottom(*layout, layout->lineAt(i)));
+    return excerptHeight(document, font, width, std::numeric_limits<qreal>::infinity());
+}
+
+QString searchExcerptBlock(const QString &html)
+{
+    return QStringLiteral("<div style=\"line-height:%1%\">%2</div>")
+            .arg(metrics::search::excerptLineHeight)
+            .arg(html);
+}
+
+QString fitSearchExcerpt(const QString &before, const QString &match, const QString &after,
+                         const QFont &font, const QSize &bounds)
+{
+    QString left = before.trimmed().isEmpty() ? QString() : before;
+    QString right = after.trimmed().isEmpty() ? QString() : after;
+    const QString marked = "<b><u>" + match.toHtmlEscaped() + "</u></b>";
+    const auto isSpace = [](QChar ch) { return ch.isSpace(); };
+    // Context without a word boundary always produces the marked match alone.
+    if (std::none_of(left.cbegin(), left.cend(), isSpace)
+        && std::none_of(right.cbegin(), right.cend(), isSpace))
+        return searchExcerptBlock(marked);
+    const QChar ellipsis(0x2026);
+    const auto html = [&] {
+        return searchExcerptBlock(
+                (left.isEmpty() ? QString() : ellipsis + left.toHtmlEscaped()) + marked
+                + (right.isEmpty() ? QString() : right.toHtmlEscaped() + ellipsis));
+    };
+    QTextDocument document;
+    document.setUndoRedoEnabled(false);
+    document.setDefaultFont(font);
+    document.setDocumentMargin(0);
+    const auto parse = [&] {
+        document.setHtml(html());
+        // HTML folds whitespace. Cursor offsets are valid only while the
+        // parsed block has the same text as the three source strings.
+        return document.blockCount() == 1
+                && document.begin().text()
+                == (left.isEmpty() ? QString() : ellipsis + left) + match
+                        + (right.isEmpty() ? QString() : right + ellipsis);
+    };
+    bool editable = parse();
+    // Measure every candidate in order. Removing a character can change the
+    // shaping of the surrounding text as well as its line breaks.
+    while ((!left.isEmpty() || !right.isEmpty())
+           && excerptHeight(document, font, bounds.width(), bounds.height()) > bounds.height()) {
+        const bool leading = left.size() >= right.size();
+        const int units = leading ? (left.at(0).isHighSurrogate() ? 2 : 1)
+                                  : (right.at(right.size() - 1).isLowSurrogate() ? 2 : 1);
+        if (leading)
+            left.remove(0, units);
+        else
+            right.chop(units);
+        // With no context on this side, its ellipsis goes too. HTML can now
+        // strip whitespace from the exposed edge of the match.
+        if (!editable || (leading ? left.isEmpty() : right.isEmpty())) {
+            editable = parse();
+            continue;
         }
+        QTextCursor cursor(&document);
+        // The last document character is a paragraph separator.
+        const int start = leading ? 1 : document.characterCount() - 2 - units;
+        cursor.setPosition(start);
+        cursor.setPosition(start + units, QTextCursor::KeepAnchor);
+        cursor.removeSelectedText();
     }
-    return bottom;
+    // The engine can supply partial words even before we trim. Keep all
+    // spacing and punctuation next to the match, and drop the outer words.
+    int first = 0;
+    while (first < left.size() && !left.at(first).isSpace())
+        ++first;
+    while (first < left.size() && left.at(first).isSpace())
+        ++first;
+    left.remove(0, first);
+    int end = right.size();
+    while (end > 0 && !right.at(end - 1).isSpace())
+        --end;
+    while (end > 0 && right.at(end - 1).isSpace())
+        --end;
+    right.truncate(end);
+    return html();
 }
 
 void WholeLineLabel::paintEvent(QPaintEvent *)

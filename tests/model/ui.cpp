@@ -262,6 +262,90 @@ void dismissedContent()
     require(note->pages() == notePages, "Footnote failed to reopen the same content");
 }
 
+// The original search row measured the full label again after removing each
+// character. Keep that simple rule as the reference for the faster fitter.
+QString referenceSearchExcerpt(QString before, const QString &match, QString after,
+                               const QFont &font, const QSize &bounds)
+{
+    if (before.trimmed().isEmpty())
+        before.clear();
+    if (after.trimmed().isEmpty())
+        after.clear();
+    const auto html = [&] {
+        const auto left =
+                before.isEmpty() ? QString() : QStringLiteral("…") + before.toHtmlEscaped();
+        const auto right =
+                after.isEmpty() ? QString() : after.toHtmlEscaped() + QStringLiteral("…");
+        return QString("<div style=\"line-height:%1%\">%2</div>")
+                .arg(kobalt::ui::metrics::search::excerptLineHeight)
+                .arg(left + "<b><u>" + match.toHtmlEscaped() + "</u></b>" + right);
+    };
+    while ((!before.isEmpty() || !after.isEmpty())
+           && kobalt::ui::excerptTextHeight(html(), font, bounds.width()) > bounds.height()) {
+        if (before.size() >= after.size())
+            before.remove(0, before.front().isHighSurrogate() ? 2 : 1);
+        else
+            after.chop(after.back().isLowSurrogate() ? 2 : 1);
+    }
+    int start = 0;
+    while (start < before.size() && !before.at(start).isSpace())
+        ++start;
+    while (start < before.size() && before.at(start).isSpace())
+        ++start;
+    before = before.mid(start);
+    int end = after.size();
+    while (end > 0 && !after.at(end - 1).isSpace())
+        --end;
+    while (end > 0 && after.at(end - 1).isSpace())
+        --end;
+    after.truncate(end);
+    return html();
+}
+
+void checkSearchExcerptFit(bool privateText)
+{
+    QFont font("IBM Plex Sans");
+    font.setPixelSize(24);
+    require(kobalt::ui::needsPrivateText("match", font) == privateText,
+            "Search excerpt fixture selected the wrong renderer");
+
+    struct Hit
+    {
+        QString before, match, after;
+    };
+
+    const Hit hits[] = {
+        { "A partial beginning with a few words ", "match", " and a few words at the end" },
+        { "left ", "  two   words  ", " right" },
+        { QStringLiteral("brûlant <été> & فصل "), "<b> & 50%",
+          QStringLiteral(" τέλος & <fin> maintenant") },
+        { QStringLiteral("Un mot : «"), QStringLiteral("réponse"), QStringLiteral("», dit-elle.") },
+        { QStringLiteral("كلمات تسبق "), QStringLiteral("النص"),
+          QStringLiteral("، ثم كلمات أخرى") },
+        { QStringLiteral("a\tand\u00a0  b "), "M", QStringLiteral(" c\u202f d\nend") },
+        { QStringLiteral(" \u00a0\t"), "alone", QStringLiteral("\u202f\n") },
+        { QStringLiteral("星空🌕夜空"), QStringLiteral("月"), QStringLiteral("光🌙明亮") },
+        { QStringLiteral("🌱 two 🌱 "), "same", QStringLiteral(" 🌱 two 🌱") },
+        { {}, "one side", " all the context is after the match" },
+        { "all the context is before the match ", "one side", {} },
+        { "short ", QStringLiteral("unbroken-long-match").repeated(4), " end" },
+    };
+    for (const auto &hit : hits) {
+        for (const auto &bounds : { QSize(102, 34), QSize(175, 76), QSize(410, 105) }) {
+            const auto expected =
+                    referenceSearchExcerpt(hit.before, hit.match, hit.after, font, bounds);
+            const auto actual =
+                    kobalt::ui::fitSearchExcerpt(hit.before, hit.match, hit.after, font, bounds);
+            require(actual == expected,
+                    qPrintable(QString("%1 search excerpt at %2x%3: expected %4, got %5")
+                                       .arg(privateText ? "Private" : "Qt")
+                                       .arg(bounds.width())
+                                       .arg(bounds.height())
+                                       .arg(expected, actual)));
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
 #ifdef Q_OS_LINUX
@@ -291,6 +375,13 @@ int main(int argc, char **argv)
     QTemporaryDir diagnosticDirectory;
     require(diagnosticDirectory.isValid(), "Cannot create font diagnostic directory");
     kobalt::initializeDiagnostics(diagnosticDirectory.path());
+    // Linux runs this process without system fonts. Give Qt a known face
+    // before the opening view initializes the private renderer.
+    const auto qtFont = QFontDatabase::addApplicationFontFromData(
+            kobalt::test::readerAssets().manifestFontData("IBMPlexSans-Regular.ttf"));
+    require(qtFont >= 0, "Cannot register the Qt search excerpt font");
+    checkSearchExcerptFit(false);
+    QFontDatabase::removeApplicationFont(qtFont);
     {
         // The loading view is built before the whole bundle is verified. A
         // font used before then must not stop the faces registering later.
@@ -316,6 +407,7 @@ int main(int argc, char **argv)
                     && QFontInfo(kobalt::ui::brandFont(32)).family() == "Instrument Serif",
             "Component font substitution");
     dismissedContent();
+    checkSearchExcerptFit(true);
     {
         int loads = 0;
         kobalt::setDiagnosticObserver([&](const QJsonObject &event) {

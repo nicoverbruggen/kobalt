@@ -57,6 +57,10 @@ void drawWrappedInterfaceText(QPainter &painter, const QRect &bounds, const QStr
                               QVector<QRect> *lineRectangles = nullptr);
 // Uses the same font backend and wrapping as WholeLineLabel.
 qreal excerptTextHeight(const QString &html, const QFont &font, int width);
+// Search results use book line spacing and keep the marked match intact.
+QString searchExcerptBlock(const QString &html);
+QString fitSearchExcerpt(const QString &before, const QString &match, const QString &after,
+                         const QFont &font, const QSize &bounds);
 
 // Search excerpts end between complete lines, even when their context wraps.
 class WholeLineLabel : public QLabel

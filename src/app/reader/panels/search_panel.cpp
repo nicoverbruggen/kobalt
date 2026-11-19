@@ -585,21 +585,19 @@ void SearchPanel::redraw()
 {
     const int first = resultPage * pageSize, textWidth = qMax(1, width() - 2 * chrome::inset);
     const auto font = excerptFont();
-    // Book text keeps a reading line height rather than the tight UI default.
-    const QString excerptBlock = QString("<div style=\"line-height:%1%\">%2</div>")
-                                         .arg(metrics::search::excerptLineHeight);
     if (!rowHeight || measuredWidth != width()) {
         measuredWidth = width();
         // Room for two excerpt lines, or for a long bold match on its own.
         QStringList sample;
         for (int line = 0; line < metrics::search::excerptLines; ++line)
             sample.append("M");
-        qreal lines = ui::excerptTextHeight(excerptBlock.arg(sample.join("<br>")), font, textWidth);
-        lines = qMax(
-                lines,
-                ui::excerptTextHeight(
-                        excerptBlock.arg("<b><u>" + submittedQuery.toHtmlEscaped() + "</u></b>"),
-                        font, textWidth));
+        qreal lines =
+                ui::excerptTextHeight(ui::searchExcerptBlock(sample.join("<br>")), font, textWidth);
+        lines = qMax(lines,
+                     ui::excerptTextHeight(ui::searchExcerptBlock("<b><u>"
+                                                                  + submittedQuery.toHtmlEscaped()
+                                                                  + "</u></b>"),
+                                           font, textWidth));
         rowHeight = qMax(int(metrics::list::threeLines),
                          metrics::search::excerptTop + qCeil(lines) + metrics::search::rowBottom);
     }
@@ -752,45 +750,8 @@ void SearchPanel::redraw()
         renderedSizes[row] = labels[row]->size();
         metadata[row]->setText(
                 ui::elideInterfaceText(caption(hit), metadata[row]->font(), textWidth));
-        // The engine keeps a space at the edges of its context only where the
-        // book has one, so punctuation stays attached to the match.
-        QString before = hit.before, after = hit.after;
-        if (before.trimmed().isEmpty())
-            before.clear();
-        if (after.trimmed().isEmpty())
-            after.clear();
-        auto excerpt = [&] {
-            return excerptBlock.arg(
-                    (before.isEmpty() ? QString() : QStringLiteral("…") + before.toHtmlEscaped())
-                    + "<b><u>" + hit.text.toHtmlEscaped() + "</u></b>"
-                    + (after.isEmpty() ? QString() : after.toHtmlEscaped() + QStringLiteral("…")));
-        };
-        // Trim context, never the match, using the same rich-text width as the label.
-        while (ui::excerptTextHeight(excerpt(), font, labels[row]->width()) > labels[row]->height()
-               && (!before.isEmpty() || !after.isEmpty())) {
-            if (before.size() >= after.size())
-                before.remove(0, before.at(0).isHighSurrogate() ? 2 : 1);
-            else
-                after.chop(after.at(after.size() - 1).isLowSurrogate() ? 2 : 1);
-        }
-        // Engine context can already end mid-word; keep whole words at the outer ends.
-        if (!before.isEmpty()) {
-            int boundary = 0;
-            while (boundary < before.size() && !before.at(boundary).isSpace())
-                ++boundary;
-            before = before.mid(boundary);
-            while (!before.isEmpty() && before.at(0).isSpace())
-                before.remove(0, 1);
-        }
-        if (!after.isEmpty()) {
-            int boundary = after.size() - 1;
-            while (boundary >= 0 && !after.at(boundary).isSpace())
-                --boundary;
-            after = after.left(qMax(0, boundary));
-            while (!after.isEmpty() && after.at(after.size() - 1).isSpace())
-                after.chop(1);
-        }
-        labels[row]->setText(excerpt());
+        labels[row]->setText(
+                ui::fitSearchExcerpt(hit.before, hit.text, hit.after, font, labels[row]->size()));
         buttons[row]->setAccessibleName(
                 hit.page >= 0 || hit.chapter.isEmpty()
                         ? strings::get("search_panel.page_detail").arg(hit.page + 1).arg(hit.text)

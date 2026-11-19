@@ -29,3 +29,5 @@ Worker budgets are checked between logical text blocks. A single unusually large
 The reader checks verify zero, one and grouped match counts in every scope, localized number grouping, exact result-page totals at completion and partial totals after cancellation. They also check that the single-page counter stays visible and the zero-match counter stays hidden.
 
 Search uses the existing Settings status strip. The reader checks cover its clock and battery, and the Zen menu check verifies that Search uses the full-width strip.
+
+`component.ui` compares fitted search excerpts with the original character-by-character trim at different row widths and heights. It checks both the Qt and private renderers, including right-to-left text, punctuation next to the match, nonbreaking spaces, supplementary characters and a match too large for the row.

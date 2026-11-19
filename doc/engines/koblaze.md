@@ -24,7 +24,7 @@ Each font face owns a word cache. The [cache](../../src/engine/blaze/extensions/
 
 For a change to text layout, check both the inherited `lvtextfm.cpp` and [Blaze’s vertical formatter](../../src/engine/blaze/extensions/vertical/lvtextfm_vert.cpp). They still compile together because the vertical formatter uses the private formatter class. The [vertical box painter](../../src/engine/blaze/extensions/vertical/vertical_boxes.cpp) maps borders, fills and background images into screen coordinates. The inherited renderer selects it using the writing mode of the current box and page. Both writing modes use the image sizing, positioning and tiling code in `drawutil.cpp`. Vertical pages supply their painted rectangle and clip on all four sides. Bold Reading and ordinary text use the same [font variation settings](../../src/engine/blaze/extensions/font_selection.cpp). Changes to block layout or the DOM also need testing with a chapter window and a complete document. Use the [layout regressions](../validation/layout.md) to compare them.
 
-The CSS parser keeps the selector grammar and cascade order. The [ancestor filter](../../src/engine/blaze/extensions/css_ancestors.cpp) records the requirements of a parsed selector and checks ancestor element names and classes before a full match.
+The CSS parser keeps the selector grammar and cascade order. The [ancestor filter](../../src/engine/blaze/extensions/css_ancestors.cpp) records the requirements of a parsed selector and checks ancestor element names and classes before a full match. Active stylesheets also index universal selectors that require a class. The matcher merges the candidates in cascade order.
 
 ## Cache compatibility
 

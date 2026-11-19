@@ -3982,6 +3982,9 @@ lxmlDocBase::lxmlDocBase( int /*dataBufSize*/ )
     // Style tweaks may contain @font-face rule, be sure we notice any change
     _ua_stylesheet.enableFontFaceDeclTracking();
     _stylesheet.setDocument( this );
+    // Blaze: cached imports are only merged, so index just the applied sheets.
+    _ua_stylesheet.enableClassIndex();
+    _stylesheet.enableClassIndex();
 }
 
 /// Destructor

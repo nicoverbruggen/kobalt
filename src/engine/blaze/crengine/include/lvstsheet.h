@@ -50,6 +50,8 @@
 #include "cssdef.h"
 #include "lvstyles.h"
 #include "textlang.h"
+#include "../../extensions/css_class_index.h"
+#include <memory>
 #include <vector>
 
 class lxmlDocBase;
@@ -169,8 +171,6 @@ public:
     LVCssSelectorRef getSubSelectors() const { return _subSelectors; }
     void setSubSelectors(LVCssSelectorRef subSelectors) { _subSelectors = subSelectors; }
     ~LVCssSelectorRule() { if (_next) delete _next; }
-    // A fail-fast check, returning false to rule out a match.
-    bool quickClassCheck(const lUInt32 *classHashes, size_t size) const;
     /// check condition for node
     bool check( const ldomNode * & node, bool allow_cache=true ) const;
     /// check next rules for node
@@ -217,6 +217,14 @@ public:
     lUInt16 getElementNameId() const { return _id; }
     bool check( const ldomNode * node, bool allow_cache=true ) const;
     bool quickClassCheck(const lUInt32 *classHashes, size_t size) const;
+    // Blaze: pseudo-element rules may test the originating element's class.
+    // Only a direct class check on this node may select an index bucket.
+    bool requiredClassHash( lUInt32 & hash ) const {
+        if ( !_rules || _pseudo_elem || _rules->getType() != cssrt_class )
+            return false;
+        hash = _rules->getValueHash();
+        return true;
+    }
     /// Blaze: false when the ancestors of the node lack an element name
     /// or a class that the selector requires of them, so it cannot match.
     bool quickAncestorCheck( LVCssAncestors & ancestors ) const;
@@ -311,6 +319,12 @@ private:
     }
 
     void set(LVPtrVector<LVCssSelector> & v );
+    // Blaze: only the live document sheets build a class index.
+    std::unique_ptr<LVCssClassIndex> _classIndex;
+    void rebuildClassIndex() {
+        if ( _classIndex )
+            _classIndex->rebuild( _selectors.length() ? _selectors[0] : NULL );
+    }
 
     LVArray<LVFontFaceDecl> _fontFaceDecls;
     // Off by default. Two distinct consumers opt a given LVStyleSheet
@@ -340,6 +354,11 @@ public:
     /// enable recording of @font-face decls added via addFontFaceDecl()/merge()
     void enableFontFaceDeclTracking() { _trackFontFaceDecls = true; }
 
+    void enableClassIndex() {
+        _classIndex = std::make_unique<LVCssClassIndex>();
+        rebuildClassIndex();
+    }
+
     // save current state of stylesheet
     void push()
     {
@@ -368,6 +387,7 @@ public:
         _selector_count = 0;
         _selector_count_stack.clear();
         _selectors.clear();
+        rebuildClassIndex();
         _stack.clear();
         _fontFaceDecls.clear();
     }

@@ -55,6 +55,7 @@ set(CRE_SRCS
     crengine/src/wordfmt.cpp
     extensions/chapter_layout.cpp
     extensions/css_ancestors.cpp
+    extensions/css_class_index.cpp
     extensions/document_fonts.cpp
     extensions/font_selection.cpp
     extensions/layout_control.cpp

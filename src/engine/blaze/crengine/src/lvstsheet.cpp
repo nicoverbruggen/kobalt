@@ -7125,16 +7125,6 @@ bool LVCssSelectorRule::checkInnerText( const ldomNode * & node ) const {
     return false;
 }
 
-bool LVCssSelectorRule::quickClassCheck(const lUInt32 *classHashes, size_t size) const {
-    if (_type != cssrt_class)
-        return true;
-    for (size_t i = 0; i < size; ++i) {
-        if (classHashes[i] == _valueHash)
-            return true;
-    }
-    return false;
-}
-
 static bool getOriginalFragmentAttributeValue(const ldomNode *node, lUInt16 attrid, lString32 &original_value) {
     // EPUB/CHM documents are merged into a single DOM, and ldomDocumentFragmentWriter
     // rewrites some attributes with a "_doc_fragment_N_ " prefix so they stay unique.
@@ -7874,8 +7864,14 @@ bool LVCssSelector::check( const ldomNode * node, bool allow_cache ) const
 }
 
 bool LVCssSelector::quickClassCheck(const lUInt32 *classHashes, size_t size) const {
-    // pseudo_elem: `LVCssSelector::check()` may move the check to its parent node
-    return !_rules || _pseudo_elem || _rules->quickClassCheck(classHashes, size);
+    lUInt32 hash;
+    if ( !requiredClassHash(hash) )
+        return true;
+    for ( size_t i = 0; i < size; ++i ) {
+        if ( classHashes[i] == hash )
+            return true;
+    }
+    return false;
 }
 
 bool parse_attr_value( const char * &str, char * buf, bool &parse_trailing_i, char stop_char=']' )
@@ -8544,8 +8540,6 @@ LVCssSelector::LVCssSelector( LVCssSelector & v )
 void LVStyleSheet::set(LVPtrVector<LVCssSelector> & v  )
 {
     _selectors.clear();
-    if ( !v.size() )
-        return;
     _selectors.reserve( v.size() );
     for ( int i=0; i<v.size(); i++ ) {
         LVCssSelector * selector = v[i];
@@ -8554,6 +8548,7 @@ void LVStyleSheet::set(LVPtrVector<LVCssSelector> & v  )
         else
             _selectors.add( NULL );
     }
+    rebuildClassIndex();
 }
 
 LVStyleSheet::LVStyleSheet( LVStyleSheet & sheet )
@@ -8562,6 +8557,8 @@ LVStyleSheet::LVStyleSheet( LVStyleSheet & sheet )
 ,   _fontFaceDecls( sheet._fontFaceDecls )
 ,   _trackFontFaceDecls( sheet._trackFontFaceDecls )
 {
+    if ( sheet._classIndex )
+        _classIndex = std::make_unique<LVCssClassIndex>();
     set( sheet._selectors );
     _selector_count = sheet._selector_count;
 }
@@ -8668,33 +8665,32 @@ void LVStyleSheet::apply( const ldomNode * node, css_style_rec_t * style ) const
             selector->apply( node, style );
     };
 
-    for (;;)
-    {
-        if (selector_0!=NULL)
-        {
-            if (selector_id==NULL || selector_0->getSpecificity() < selector_id->getSpecificity() )
-            {
-                // step by sel_0
-                apply_selector( selector_0 );
-                selector_0 = selector_0->getNext();
+    // Blaze: both traversals use the same cascade merge. Tagged selectors
+    // precede universal selectors of equal specificity, including zero weight.
+    auto apply_chains = [&]( auto next_universal ) {
+        const LVCssSelector * universal = next_universal();
+        while ( universal || selector_id ) {
+            if ( !selector_id || ( universal && universal->getSpecificity() < selector_id->getSpecificity() ) ) {
+                apply_selector( universal );
+                universal = next_universal();
             }
-            else
-            {
-                // step by sel_id
+            else {
                 apply_selector( selector_id );
                 selector_id = selector_id->getNext();
             }
         }
-        else if (selector_id!=NULL)
-        {
-            // step by sel_id
-            apply_selector( selector_id );
-            selector_id = selector_id->getNext();
-        }
-        else
-        {
-            break; // end of chains
-        }
+    };
+    if ( _classIndex && _classIndex->hasClasses() ) {
+        LVCssClassIndex::Cursor cursor( *_classIndex, class_hash_array.ptr(), class_hash_array.length() );
+        apply_chains( [&]() { return cursor.next(); } );
+    }
+    else {
+        apply_chains( [&]() {
+            auto * current = selector_0;
+            if ( current )
+                selector_0 = current->getNext();
+            return current;
+        } );
     }
 }
 
@@ -8851,6 +8847,7 @@ bool LVStyleSheet::parseAndAdvance( const char * &str, bool useragent_sheet, lSt
             else if ( *str == '}' && _nested ) {
                 // We're done parsing this nested CSS block
                 str++; // skip it so upper stylesheet can continue from there
+                rebuildClassIndex();
                 return true;
             }
             else {
@@ -8868,6 +8865,7 @@ bool LVStyleSheet::parseAndAdvance( const char * &str, bool useragent_sheet, lSt
             }
         }
     }
+    rebuildClassIndex();
     return _selectors.length() > 0;
 }
 
@@ -8972,6 +8970,7 @@ void LVStyleSheet::merge(const LVStyleSheet &other) {
             prev = item;
         }
     }
+    rebuildClassIndex();
     _selector_count += other._selector_count;
     // Propagate @font-face declarations so they are preserved in cache entries
     // up the @import chain and can be replayed for subsequent DocFragments --

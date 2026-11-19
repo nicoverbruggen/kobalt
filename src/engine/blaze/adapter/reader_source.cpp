@@ -1555,6 +1555,32 @@ bool EngineDocument::fullDocumentReady() const
     return full_ && fullSize_ == size_ && fullKey_ == fullDocumentKey(settingsState());
 }
 
+bool EngineDocument::prepareMatchingSpread()
+{
+    if (columns_ != 2)
+        return true;
+    if (!full_)
+        return false;
+    // A decorative column can borrow a nearby bookmark. Check that go()
+    // saved a passage on the requested spread's first column.
+    const auto place = position();
+    const auto anchor = engine_->getDocument()->createXPointer(cre(place));
+    const int y = anchor.isNull() ? -1 : anchor.toPoint().y;
+    const int screen = page();
+    if (y < 0 || engine_->getPageList()->FindNearestPage(y, 0) != engine_->firstColumn(screen)
+        || !full_->goTo(place))
+        return false;
+    auto &whole = *full_->engine_;
+    const int spread = full_->page();
+    if (whole.getCurPage(true) != whole.firstColumn(spread)
+        || whole.columnCount(spread) != engine_->columnCount(screen))
+        return false;
+    // Publisher CSS can change the rest of the spread even when its first
+    // column agrees. Both images are cached for the frame that wins.
+    const auto requested = image(screen);
+    return !requested.isNull() && requested == full_->image(spread);
+}
+
 int EngineDocument::preparedSpreadTurn(int direction, bool *continues) const
 {
     if (continues)

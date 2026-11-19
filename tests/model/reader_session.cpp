@@ -231,7 +231,7 @@ static void hybridFontEdits(const QString &path, quint16 port)
 
 // Trevelyan's cover is one column. The whole book pairs it with the title,
 // the chapter shows it alone.
-static void mixedSpreadHandoff()
+static void mixedSpreadHandoff(const QDir &fixtures)
 {
     const QString path =
             QStringLiteral(KOBALT_TEST_FIXTURES) + "/trevelyans-type-tester.kepub.epub";
@@ -239,7 +239,7 @@ static void mixedSpreadHandoff()
     const QJsonObject settings{ { "two_columns_landscape", true }, { "font_pixels", 28 } };
     QEventLoop frame;
     openedEngine = nullptr;
-    const auto open = [&](ReaderSession &reader, bool hybrid) {
+    const auto open = [&](ReaderSession &reader, bool hybrid, const QString &book) {
         renderingMode::setOverride(hybrid ? 2 : 0);
         auto lease = std::make_shared<SourceLease>();
         PositionCodec positions{ [](const Engine &, const QString &anchor, QString *) {
@@ -252,8 +252,8 @@ static void mixedSpreadHandoff()
                 openedEngine = const_cast<Engine *>(&engine);
                 return engine.position();
             };
-        OpenRequest request{ path,     path, landscape, {},
-                             {},       {},   lease,     localResourceFactory(path, lease),
+        OpenRequest request{ book,     book, landscape, {},
+                             {},       {},   lease,     localResourceFactory(book, lease),
                              positions };
         request.appearanceDefaults = settings;
         reader.open(std::move(request), [&](OpeningResult result) {
@@ -266,17 +266,7 @@ static void mixedSpreadHandoff()
                 frame.quit();
         };
     };
-    ReaderSession whole(test::readerFonts(), test::readerPlaceholder());
-    open(whole, false);
-    const auto coverAndTitle = whole.image();
-    const QString coverPosition = whole.state().value("position").toString();
-    for (int direction : { 1, -1 }) {
-        ReaderSession hybrid(test::readerFonts(), test::readerPlaceholder());
-        open(hybrid, true);
-        if (direction < 0) {
-            require(hybrid.turn(1), "Cannot open the title before a reverse handoff");
-            frame.exec();
-        }
+    const auto prepare = [&](ReaderSession &hybrid) {
         qt::invoke(
                 engineWorker(),
                 [&] {
@@ -289,6 +279,19 @@ static void mixedSpreadHandoff()
                 Qt::QueuedConnection);
         frame.exec();
         ReaderLocationProbe::offer(hybrid, ReaderLocationProbe::revision(hybrid));
+    };
+    ReaderSession whole(test::readerFonts(), test::readerPlaceholder());
+    open(whole, false, path);
+    const auto coverAndTitle = whole.image();
+    const QString coverPosition = whole.state().value("position").toString();
+    for (int direction : { 1, -1 }) {
+        ReaderSession hybrid(test::readerFonts(), test::readerPlaceholder());
+        open(hybrid, true, path);
+        if (direction < 0) {
+            require(hybrid.turn(1), "Cannot open the title before a reverse handoff");
+            frame.exec();
+        }
+        prepare(hybrid);
         const QSize bounds(536, 379);
         QImage thumbnail;
         bool bookmarked = false;
@@ -314,7 +317,15 @@ static void mixedSpreadHandoff()
                         == hybrid.image().scaled(bounds, Qt::KeepAspectRatio,
                                                  Qt::SmoothTransformation),
                 "Navigate showed another page than the turn at the handoff");
-        // A jump has no screens to continue, so it adopts the whole book.
+        if (direction < 0) {
+            const auto cover = hybrid.image();
+            ReaderLocationProbe::offer(hybrid, ReaderLocationProbe::revision(hybrid));
+            require(hybrid.go(hybrid.page()), "Cannot select the chapter's cover by page number");
+            frame.exec();
+            require(hybrid.state().contains("book_fraction") && hybrid.image() == cover,
+                    "A numbered jump to a one-column cover must keep the title off screen");
+        }
+        // A passage jump can adopt the cover and title together.
         ReaderLocationProbe::offer(hybrid, ReaderLocationProbe::revision(hybrid));
         require(hybrid.goTo(coverPosition), "Cannot jump to the cover");
         frame.exec();
@@ -343,6 +354,41 @@ static void mixedSpreadHandoff()
             require(whole.go(0), "Cannot restore the reference cover");
             frame.exec();
         }
+    }
+    for (const auto &jump : { qMakePair(3, 2), qMakePair(4, 2), qMakePair(4, 3) }) {
+        const int before = jump.first, page = jump.second;
+        const auto book = fixtures.filePath(QString("column-pairs-%1.epub").arg(before));
+        ReaderSession hybrid(test::readerFonts(), test::readerPlaceholder());
+        open(hybrid, true, book);
+        require(hybrid.goTo("/body/DocFragment[2]/body/p[1]/text().0"),
+                "Cannot open the second chapter of the column-pairs book");
+        frame.exec();
+        require(hybrid.go(page), "Cannot select the requested spread of the chapter");
+        frame.exec();
+        const QImage requested = hybrid.image();
+        const auto position = hybrid.state().value("position");
+        if (page == 3) {
+            ReaderSession reference(test::readerFonts(), test::readerPlaceholder());
+            open(reference, false, book);
+            require(reference.goTo(position.toString()),
+                    "Cannot locate the spread in the whole book");
+            frame.exec();
+            const QRect first(0, 0, landscape.width() / 2, landscape.height());
+            require(reference.image().copy(first) == requested.copy(first)
+                            && reference.image() != requested,
+                    "The whole-book stylesheet must change only the second column of this spread");
+            renderingMode::setOverride(2);
+        }
+        require(hybrid.go(0), "Cannot return to the start of the chapter");
+        frame.exec();
+        prepare(hybrid);
+        require(hybrid.go(page), "Cannot jump to the requested spread during handoff");
+        frame.exec();
+        require(hybrid.image() == requested, "A numbered jump changed the requested column pair");
+        require(hybrid.state().value("position") == position,
+                "A numbered jump changed the saved passage");
+        require(hybrid.state().contains("book_fraction") == (before % 2 != 0 || page == 3),
+                "A numbered jump must adopt the whole book when its column pairs match");
     }
     renderingMode::setOverride(-1);
 }
@@ -832,7 +878,7 @@ int run(int argc, char **argv)
             opened.exec();
             servedPath = path;
         }
-        mixedSpreadHandoff();
+        mixedSpreadHandoff(QFileInfo(path).dir());
         chapterNavigation(path);
         positionImportTransitions(path, publisherPath);
         hybridFontEdits(path, server.serverPort());

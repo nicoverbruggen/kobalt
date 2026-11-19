@@ -331,6 +331,9 @@ public:
     // True while a document from prepareFullDocument() waits to be shown.
     virtual bool fullDocumentReady() const { return false; }
 
+    // After a numbered jump, can the prepared layout show the same spread?
+    virtual bool prepareMatchingSpread() { return true; }
+
     // The whole-book screen for an adopting turn. -1 uses the ordinary turn
     // from the adopted position. Set *continues to false if a switch would
     // repeat or skip a column and the turn must stay in the chapter.

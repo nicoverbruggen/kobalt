@@ -2954,11 +2954,12 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                 bool continues = true;
                 const int spreadTurn =
                         readyToSwap && delta ? engine->preparedSpreadTurn(delta, &continues) : -1;
+                // Page numbers address the displayed chapter. Check the requested
+                // spread after moving there, while its column pair is still known.
+                const bool numberedHandoff = readyToSwap && target >= 0;
+                if (numberedHandoff)
+                    continues = engine->go(target) && engine->prepareMatchingSpread();
                 const bool swap = readyToSwap && continues;
-                // A numbered jump addresses the displayed chapter. Move there
-                // before adoption so the whole book restores that passage.
-                if (swap && target >= 0)
-                    engine->go(target);
                 const int mode = swap ? 0 : chapterMode;
                 const bool modeChanged = mode >= 0 && engine->partOfBook() != (mode > 0);
                 const bool unchanged =
@@ -3000,7 +3001,7 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                         && !(chapter >= 0 ? engine->goToChapter(chapter, anchor)
                                           : engine->goTo(anchor)))
                         result.error = strings::get("error.could_not_find_that_passage");
-                    else if (target >= 0 && !swap)
+                    else if (target >= 0 && !numberedHandoff)
                         engine->go(target);
                     else if (fraction >= 0)
                         engine->goToFraction(fraction);

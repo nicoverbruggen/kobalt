@@ -201,6 +201,25 @@ private:
 
 using test::writeBook;
 
+test::BookFiles columnPairsBook(int before)
+{
+    // One paragraph is one column. The second chapter is large enough to
+    // be loaded by itself, so it pairs its columns from its own start.
+    const auto columns = [](const QByteArray &name, int count, const QByteArray &padding) {
+        QByteArray body;
+        for (int column = 0; column < count; ++column)
+            body += "<p style='page-break-before:always'>" + name + ' ' + QByteArray::number(column)
+                    + ". " + QByteArray("A short column. ").repeated(3) + "</p>";
+        return test::publisherHtml(body + padding);
+    };
+    return test::publisherPackage(
+            "en", "Column pairs",
+            { { "first.xhtml", columns("First", before, {}) },
+              { "second.xhtml",
+                columns("Second", 16, "<!--" + QByteArray("padding ").repeated(40000) + "-->") } },
+            "<itemref idref='first.xhtml'/><itemref idref='second.xhtml'/>");
+}
+
 bool createBook(const QString &directory, const QString &filename = "text.epub")
 {
     // A small, offline EPUB with the same text used by the former desktop tests.
@@ -10009,24 +10028,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QFETCH(int, before);
         Fixture fixture(false);
         QVERIFY(fixture.prepared);
-        // One paragraph is one column. The second chapter is large enough to
-        // be loaded by itself, so it pairs its columns from its own start.
-        const auto columns = [](const QByteArray &name, int count, const QByteArray &padding) {
-            QByteArray body;
-            for (int column = 0; column < count; ++column)
-                body += "<p style='page-break-before:always'>" + name + ' '
-                        + QByteArray::number(column) + ". "
-                        + QByteArray("A short column. ").repeated(3) + "</p>";
-            return test::publisherHtml(body + padding);
-        };
-        const auto files = test::publisherPackage(
-                "en", "Column pairs",
-                { { "first.xhtml", columns("First", before, {}) },
-                  { "second.xhtml",
-                    columns("Second", 16,
-                            "<!--" + QByteArray("padding ").repeated(40000) + "-->") } },
-                "<itemref idref='first.xhtml'/><itemref idref='second.xhtml'/>");
-        QVERIFY(writeBook(fixture.directory.path(), "column-pairs.epub", files));
+        QVERIFY(writeBook(fixture.directory.path(), "column-pairs.epub", columnPairsBook(before)));
         auto preferences = storage::readJson(fixture.paths.preferences());
         preferences["two_columns_landscape"] = true;
         QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
@@ -20266,6 +20268,20 @@ int main(int argc, char **argv)
                                       "publisher-non-linear.epub" })
                 if (!createBook(fixtureDirectory.path(), name))
                     return 2;
+            for (const int before : { 3, 4 }) {
+                auto files = columnPairsBook(before);
+                // The preceding chapter is a placeholder in chapter mode.
+                // Its class hides only the eighth column in the whole book.
+                for (const auto *name : { "first.xhtml", "second.xhtml" })
+                    files[name].replace("<html ", "<html class='chapter' ");
+                files["second.xhtml"].replace("'>Second 7.", "' class='optional'>Second 7.");
+                files["second.xhtml"].replace(
+                        "</head>",
+                        "<style>.chapter + .chapter .optional {display:none}</style></head>");
+                if (!writeBook(fixtureDirectory.path(), QString("column-pairs-%1.epub").arg(before),
+                               files))
+                    return 2;
+            }
             inputs.append(fixtureDirectory.path() + "/publisher-non-linear.epub");
         }
         child.start(arguments.at(2), inputs);

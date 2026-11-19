@@ -8,6 +8,7 @@
 #include "reading/header_footer.h"
 #include "support/strings.h"
 #include <QAbstractTextDocumentLayout>
+#include <QCache>
 #include <QFontInfo>
 #include <QFontMetrics>
 #include <QHash>
@@ -192,6 +193,40 @@ QString interfaceHtml(const QString &text)
 {
     return text.toHtmlEscaped().replace('\n', "<br/>");
 }
+
+struct WrappedLines
+{
+    QVector<ExcerptLine> lines;
+    bool overflow = false;
+};
+
+// Panels measure wrapped descriptions in every layout pass and break them
+// again in every paint. Breaking a paragraph parses it and shapes several
+// candidate lines, so keep recent results. They depend only on the text, the
+// width, the line limit and what privateLayoutKey() covers.
+WrappedLines wrappedInterfaceLines(const QString &text, const QFont &font, int width,
+                                   int maximumLines)
+{
+    // Notes and excerpts use this path too. Keep only short interface text.
+    const auto layoutKey = text.size() <= 512 ? privateLayoutKey(font) : QString();
+    static QCache<QString, WrappedLines> cache(512);
+    QString key;
+    if (!layoutKey.isEmpty()) {
+        key = layoutKey + '\n' + QString::number(width) + ':' + QString::number(maximumLines) + '\n'
+                + text;
+        if (const auto *found = cache.object(key))
+            return *found;
+    }
+    QTextDocument document;
+    document.setDefaultFont(font);
+    document.setDocumentMargin(0);
+    document.setHtml(interfaceHtml(text));
+    WrappedLines result;
+    result.lines = privateExcerptLines(document, font, width, maximumLines, &result.overflow);
+    if (!key.isEmpty())
+        cache.insert(key, new WrappedLines(result));
+    return result;
+}
 } // namespace
 
 namespace {
@@ -199,10 +234,7 @@ QStringList interfaceLines(const QString &text, const QFont &font, int width, in
 {
     QStringList result;
     if (needsPrivateText(text, font)) {
-        QTextDocument document;
-        document.setDefaultFont(font);
-        document.setHtml(interfaceHtml(text));
-        for (const auto &line : privateExcerptLines(document, font, width, limit))
+        for (const auto &line : wrappedInterfaceLines(text, font, width, limit).lines)
             result.append(line.text.trimmed());
     } else {
         QTextLayout layout(text, font);
@@ -291,10 +323,7 @@ int wrappedInterfaceTextHeight(const QString &text, const QFont &font, int width
         return QFontMetrics(font)
                 .boundingRect(QRect(0, 0, qMax(1, width), 0), Qt::TextWordWrap, text)
                 .height();
-    QTextDocument document;
-    document.setDefaultFont(font);
-    document.setHtml(interfaceHtml(text));
-    const auto lines = privateExcerptLines(document, font, qMax(1, width), maximumLines);
+    const auto lines = wrappedInterfaceLines(text, font, qMax(1, width), maximumLines).lines;
     const int count = maximumLines > 0 ? qMin(int(lines.size()), maximumLines) : int(lines.size());
     return count ? qCeil(lines[count - 1].top + lines[count - 1].height) : 0;
 }
@@ -358,14 +387,9 @@ void drawWrappedInterfaceText(QPainter &painter, const QRect &bounds, const QStr
         painter.drawText(bounds, alignment | Qt::TextWordWrap, text);
         return;
     }
-    QTextDocument document;
-    document.setDefaultFont(painter.font());
-    document.setDocumentMargin(0);
-    document.setHtml(interfaceHtml(text));
-    bool overflow = false;
-    auto lines =
-            privateExcerptLines(document, painter.font(), bounds.width(), maximumLines, &overflow);
-    if (overflow) {
+    auto wrapped = wrappedInterfaceLines(text, painter.font(), bounds.width(), maximumLines);
+    auto &lines = wrapped.lines;
+    if (wrapped.overflow) {
         auto &last = lines.last();
         last.text =
                 elidePrivateText(last.text + QStringLiteral(" …"), painter.font(), bounds.width());
@@ -909,17 +933,33 @@ QFont fontSample(const QString &face)
     font.setHintingPreference(QFont::PreferNoHinting);
     font.setPixelSize(128);
     if (needsPrivateText(QStringLiteral("Hox"), font)) {
-        const auto rendered = renderPrivateText(QStringLiteral("Hox"), font);
-        int first = rendered.image.height(), last = -1;
-        for (int y = 0; y < rendered.image.height(); ++y) {
-            for (int x = 0; x < rendered.image.width(); ++x) {
-                if (qAlpha(rendered.image.pixel(x, y)) >= 128) {
-                    first = qMin(first, y);
-                    last = y;
-                    break;
+        // Settings shows several samples each time it opens. The ink rows of
+        // a face change only with the faces behind it, so measure them once.
+        static QHash<QString, QPair<int, int>> inkRows;
+        const auto key = privateLayoutKey(font);
+        QPair<int, int> rows;
+        if (!key.isEmpty() && inkRows.contains(key)) {
+            rows = inkRows.value(key);
+        } else {
+            const auto rendered = renderPrivateText(QStringLiteral("Hox"), font);
+            rows = { rendered.image.height(), -1 };
+            for (int y = 0; y < rendered.image.height(); ++y) {
+                for (int x = 0; x < rendered.image.width(); ++x) {
+                    if (qAlpha(rendered.image.pixel(x, y)) >= 128) {
+                        rows.first = qMin(rows.first, y);
+                        rows.second = y;
+                        break;
+                    }
                 }
             }
+            if (!key.isEmpty()) {
+                // Keys of replaced faces stay behind; a few faces fill this.
+                if (inkRows.size() >= 256)
+                    inkRows.clear();
+                inkRows.insert(key, rows);
+            }
         }
+        const int first = rows.first, last = rows.second;
         const int size = last >= first
                 ? qRound(128.0 * metrics::choices::sampleInkHeight / (last - first + 1))
                 : metrics::choices::sampleBase;

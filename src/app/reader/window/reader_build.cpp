@@ -2009,6 +2009,8 @@ void Reader::buildSettings(QWidget *parent)
         connect(settings->debugProgress, &QPushButton::clicked, this,
                 [this] { showProgressDebug(); });
     connect(settingsPages, &QStackedWidget::currentChanged, this, [this](int) {
+        if (openingSettings)
+            return;
         fitSettings();
         refresh();
     });

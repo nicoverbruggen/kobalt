@@ -413,6 +413,7 @@ void Reader::openSettings()
     kobalt::ui::PanelTiming timing("settings");
     ensureSettings();
     timing.stage("build");
+    openingSettings = true;
     kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(),
                            kosyncClient->signedIn(), kosyncClient->automatic());
     kosyncPage->setLastSync(kosyncClient->lastSync());
@@ -536,13 +537,17 @@ void Reader::openSettings()
     showScreenRefresh();
     static_cast<SettingsPanel *>(general)->setZenLayout(zenMode());
     timing.stage("controls");
+    openingSettings = false;
     fitSettings();
     general->show();
     general->raise();
     // A panel that was never shown measures its word-wrapped rows too tall,
     // so fit it again now that it shows. The first fit chose the list or a
     // section; nothing paints before the event loop runs.
-    fitSettings();
+    if (!settingsPagesShown.contains(settingsPages->currentWidget())) {
+        settingsPagesShown.insert(settingsPages->currentWidget());
+        fitSettings();
+    }
     timing.stage("fit");
     // open_ms, below, is the reader's refresh.
     refresh();
@@ -844,9 +849,11 @@ bool Reader::writePreferences(const QJsonObject &next)
     // loses the other's change.
     if (next.value("zen_stats") != preferences.value("zen_stats"))
         ++zenStatsWrite;
-    if (!preferencesWriter.writeNow([path = book->paths().preferences(), before, global] {
-            return kobalt::storage::updatePreferences(path, before, global);
-        })) {
+    // Closing Settings without a change must not wait for the file.
+    if (global != before
+        && !preferencesWriter.writeNow([path = book->paths().preferences(), before, global] {
+               return kobalt::storage::updatePreferences(path, before, global);
+           })) {
         showSettingsWriteError();
         return false;
     }

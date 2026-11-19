@@ -631,6 +631,12 @@ private:
     // Settings > Defaults > Restore default presets was confirmed. It applies
     // when Settings closes.
     bool restoringPresets = false;
+    // openSettings() selects the first page itself and fits once at its end,
+    // so a page change while it runs needs no fit of its own.
+    bool openingSettings = false;
+    // Settings pages that have shown in this window. Their rows measure
+    // correctly before Settings shows again.
+    QSet<const QWidget *> settingsPagesShown;
     kobalt::ui::FontButton *fontButton = nullptr;
     QVector<QPushButton *> alignmentButtons, hyphenButtons;
     // Header and footer. The preset is saved per book; the Custom layout is

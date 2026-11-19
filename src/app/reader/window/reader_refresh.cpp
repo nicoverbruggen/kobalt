@@ -156,6 +156,11 @@ void Reader::refresh()
         // They sync when they open; see syncStaleControls().
         controlsStale = true;
         syncReadingState();
+    } else if (settingsVisible() && !menu->isVisible()) {
+        // Settings covers the Text and Layout controls, and each of its tab
+        // switches and refits refreshes. Those controls sync when they show.
+        controlsStale = true;
+        syncReadingControls();
     } else {
         controlsStale = false;
         syncAppearanceControls(pickingFont);

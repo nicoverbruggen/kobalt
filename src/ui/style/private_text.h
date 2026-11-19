@@ -85,6 +85,11 @@ struct PrivateTextStyle
 // All application text uses private painting once font sources are initialized.
 bool needsPrivateText(const QString &text, const QFont &font);
 bool privateFontFixedPitch(const QFont &font);
+// Everything besides the text and its ranges that decides how private text in
+// this font lays out when no weight is named: the font, the interface weight
+// and the faces registered so far. Layouts kept outside this file include it
+// in their key. Empty while a font preview renders, which keeps none.
+QString privateLayoutKey(const QFont &font);
 PrivateText renderPrivateText(const QString &text, const QFont &font, int weight = -1,
                               const QVector<QPair<int, int>> &boldRanges = {},
                               const QVector<QPair<int, int>> &underlineRanges = {},

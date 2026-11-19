@@ -200,6 +200,9 @@ struct Fonts
     QMap<QString, QVector<RegisteredFace>> registered;
     // Registrations already made, by path and expected family.
     QSet<QString> registrations;
+    // Changes whenever shaped text is cleared, so layouts that callers keep
+    // can tell that the faces behind them changed.
+    quint64 layoutGeneration = 0;
 
     ~Fonts()
     {
@@ -214,6 +217,7 @@ struct Fonts
     {
         layouts.clear();
         primaries.clear();
+        ++layoutGeneration;
     }
 
     void clearFaces()
@@ -832,6 +836,34 @@ bool needsPrivateText(const QString &text, const QFont &)
     return fonts().library && !text.isEmpty();
 }
 
+namespace {
+// The weight steps of private text with this font when the caller names none.
+int defaultWeightSteps(const QFont &font)
+{
+    const bool interface = !previewFonts
+            && (interfaceFamily(font) || font.family() == interfaceFont().family()
+                || font.family() == chromeFont().family()
+                || font.family() == headerFooterFont().family());
+    return interface ? interfaceWeight() : 0;
+}
+} // namespace
+
+QString privateLayoutKey(const QFont &font)
+{
+    // A font preview has its own faces on its own thread.
+    if (previewFonts || !fonts().library)
+        return {};
+    auto &state = fonts();
+    // Qt 5.2's font description leaves out the case and spacing fields.
+    return QString::number(state.layoutGeneration) + ':' + state.description(font) + ':'
+            + QString::number(defaultWeightSteps(font)) + ':'
+            + QString::number(font.capitalization()) + ':'
+            + QString::number(font.letterSpacingType()) + ':'
+            + QString::number(font.letterSpacing(), 'g', 16) + ':'
+            + QString::number(font.wordSpacing(), 'g', 16) + ':' + QString::number(font.stretch())
+            + ':' + QString::number(font.kerning());
+}
+
 static PrivateText layoutPrivateText(const QString &input, const QFont &font, int weight,
                                      const QVector<QPair<int, int>> &boldRanges, bool rasterize,
                                      const QVector<QPair<int, int>> &underlineRanges = {},
@@ -862,11 +894,7 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
     if (text.isEmpty() || !fonts().library) {
         return result;
     }
-    const bool interface = !previewFonts
-            && (interfaceFamily(font) || font.family() == interfaceFont().family()
-                || font.family() == chromeFont().family()
-                || font.family() == headerFooterFont().family());
-    const int steps = weight < 0 ? (interface ? interfaceWeight() : 0) : qBound(0, weight, 12);
+    const int steps = weight < 0 ? defaultWeightSteps(font) : qBound(0, weight, 12);
     QString cacheKey = fonts().description(font) + ':' + QString::number(steps) + ':'
             + QString::number(rasterize) + ':' + QString::number(font.capitalization()) + ':'
             + QString::number(font.letterSpacingType()) + ':'

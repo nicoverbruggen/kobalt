@@ -30,6 +30,8 @@ Check portrait and landscape with and without a camera cutout. Rotate with Setti
 
 On Android 9 or 10, open Type Tester through the document picker. The loading screen must give way to a rendered page and log `Kobalt frame ready`. Turn a page, return to the Library with Back, and reopen the book. Repeat in landscape and at a tablet size. Legacy fullscreen flags must not retain stable system-bar insets while the opening handoff waits for hidden bars. Check a current Android version too.
 
+On Android 11 or newer, enable three-button navigation and cold-start Kobalt with Type Tester already in the Library. Open the book. After `Kobalt frame ready`, check the `statusBars` and `navigationBars` sources separately in `adb shell dumpsys window displays`. Both must stay hidden after the loading screen is freed. Change brightness with a left-edge swipe and check both bars again. Return to the Library with Back and verify both bars are visible. Reopen the book and verify the saved brightness returns with both bars hidden.
+
 ## Limits
 
 These controlled checks do not establish physical Kobo or Android behavior, device latency, storage behavior or e-ink refresh quality.

@@ -161,10 +161,11 @@ public class KobaltActivity extends QtActivity {
                         if (rounded != null) corner = Math.max(corner, rounded.getRadius());
                     }
                 }
-                // systemBars also includes a caption bar, absent on handhelds.
-                // Its invisibility must not keep the Library handoff waiting.
-                if (Build.VERSION.SDK_INT >= 30) hidden = !insets.isVisible(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                else {
+                // A combined visibility query is false as soon as either bar hides.
+                if (Build.VERSION.SDK_INT >= 30) {
+                    hidden = !insets.isVisible(WindowInsets.Type.statusBars())
+                        && !insets.isVisible(WindowInsets.Type.navigationBars());
+                } else {
                     android.view.DisplayCutout cutout = insets.getDisplayCutout();
                     hidden = insets.getSystemWindowInsetTop() <= (cutout == null ? 0 : cutout.getSafeInsetTop())
                         && insets.getSystemWindowInsetBottom() <= (cutout == null ? 0 : cutout.getSafeInsetBottom());

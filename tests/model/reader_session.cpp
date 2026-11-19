@@ -307,11 +307,15 @@ static void mixedSpreadHandoff(const QDir &fixtures)
         // second time, so the turn stays in the chapter. Navigate shows the
         // page of that turn.
         const auto shown = hybrid.image();
+        const auto layout = hybrid.layoutRevision();
         require(hybrid.turn(direction), "Cannot turn across the prepared two-column handoff");
         frame.exec();
         require(hybrid.state().contains("book_fraction") && hybrid.image() != shown
                         && hybrid.turnDirection() == direction,
                 "A turn with shifted column pairs must stay in the chapter");
+        // The chapter layout stays, so bookmark and page lookups stay valid.
+        require(hybrid.layoutRevision() == layout,
+                "A refused switch to the whole book discarded the chapter's lookups");
         require(bookmarked == (direction < 0), "Navigate showed the wrong bookmark at the handoff");
         require(thumbnail
                         == hybrid.image().scaled(bounds, Qt::KeepAspectRatio,
@@ -322,7 +326,8 @@ static void mixedSpreadHandoff(const QDir &fixtures)
             ReaderLocationProbe::offer(hybrid, ReaderLocationProbe::revision(hybrid));
             require(hybrid.go(hybrid.page()), "Cannot select the chapter's cover by page number");
             frame.exec();
-            require(hybrid.state().contains("book_fraction") && hybrid.image() == cover,
+            require(hybrid.state().contains("book_fraction") && hybrid.image() == cover
+                            && hybrid.layoutRevision() == layout,
                     "A numbered jump to a one-column cover must keep the title off screen");
         }
         // A passage jump can adopt the cover and title together.
@@ -332,6 +337,8 @@ static void mixedSpreadHandoff(const QDir &fixtures)
         require(!hybrid.state().contains("book_fraction") && hybrid.image() == coverAndTitle
                         && hybrid.chapterTitle() == whole.chapterTitle(),
                 "A jump must adopt the whole book with the cover and title together");
+        require(hybrid.layoutRevision() != layout,
+                "Adopting the whole book kept lookups of the chapter layout");
         require(hybrid.turn(1) && whole.turn(1), "Cannot turn beyond the mixed cover spread");
         while (hybrid.busy() || whole.busy())
             frame.exec();

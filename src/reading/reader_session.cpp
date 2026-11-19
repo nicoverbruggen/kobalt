@@ -2888,10 +2888,6 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
     const bool keepLayout = std::exchange(keepDestinationLayout, false) && !destination.isEmpty();
     const bool swapToFull =
             !keepLayout && std::exchange(fullDocumentPending_, false) && desiredChapterMode < 0;
-    // Queries queued before this turn used chapter pagination. Later queries
-    // run behind the swap and see the whole book, or the chapter if it refused.
-    if (swapToFull)
-        newestLayout->fetch_add(1);
     // A ready notification is only a try. Keep it local to this job until
     // adoption succeeds, so a superseded try cannot request a full load.
     const auto chapterMode = desiredChapterMode;
@@ -2906,6 +2902,7 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
     QPointer<ReaderSession> guard(this);
     const auto lease = lease_;
     const auto latest = newest;
+    const auto layouts = newestLayout;
     const auto progress = [guard, job, lease, latest, painted = QElapsedTimer(),
                            previousStage = OpeningStage::Styles,
                            previousPercent = -1](OpeningStage stage, int percent) mutable {
@@ -2946,8 +2943,8 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
     kobalt::qt::invoke(
             engineWorker(),
             [guard, engine, requested, chapterMode, swapToFull, size, anchor, chapter, delta,
-             target, fraction, job, lease, latest, progress, positions, markup, markupGeneration,
-             afterFrame] {
+             target, fraction, job, lease, latest, layouts, progress, positions, markup,
+             markupGeneration, afterFrame] {
                 EngineJob activity;
                 const bool timing = diagnosticsActive();
                 QElapsedTimer timer;
@@ -2968,6 +2965,7 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                 const auto oldImage = engine->cachedImageKey(oldPage);
                 int turned = engine->turnTarget(oldPage, delta);
                 bool windowTurned = false;
+                bool adopted = false;
                 ReaderFrame result;
                 bool appearanceChanged = false;
                 // Turns carry the last requested settings. Only a settings or viewport
@@ -3010,6 +3008,8 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                 // turn or jump of this render goes on there.
                 const bool refused = !applied && swap && modeChanged
                         && appearance::same(before, requested) && oldSize == size;
+                // The engine now pages the whole book, unless it refused.
+                adopted = swap && modeChanged && !refused;
                 if (refused) {
                     applied = true;
                     diagnostic("full-document-refused", { { "render_id", double(job) } },
@@ -3098,7 +3098,16 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                 const bool failed = !result.error.isEmpty();
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, result = std::move(result), job, lease, delta, failed, afterFrame] {
+                        [guard, result = std::move(result), job, lease, delta, failed, afterFrame,
+                         layouts, adopted] {
+                            // Results of queries that ran before this render
+                            // reached the GUI before this frame and describe
+                            // the chapter that is still shown. Once the whole
+                            // book is adopted, every later result must come
+                            // from it. A refused switch keeps the chapter
+                            // layout and its results.
+                            if (adopted)
+                                layouts->fetch_add(1);
                             if (!guard) {
                                 return;
                             }

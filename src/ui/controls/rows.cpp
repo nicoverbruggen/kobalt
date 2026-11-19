@@ -66,7 +66,6 @@ ListRow::ListRow(QWidget *parent) : Button(parent)
         label->setTextFormat(Qt::PlainText);
         label->setAttribute(Qt::WA_TransparentForMouseEvents);
         label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-        label->setStyleSheet("background:transparent;border:none;");
     }
     readerStyle(title,
                 styles::font(metrics::chrome::labelText) + "background:transparent;border:none;");

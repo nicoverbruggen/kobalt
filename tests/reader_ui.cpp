@@ -4615,6 +4615,94 @@ private slots:
         QCOMPARE(calls, 1);
     }
 
+    void pagePaintsPaperAroundBody_data() { variants(); }
+
+    void pagePaintsPaperAroundBody()
+    {
+        QFETCH(bool, dark);
+        QFETCH(int, ppi);
+        ui::setDensity(ppi);
+        ReadingPage page(nullptr, [] { });
+        page.setProperty("reader_dark", dark);
+        page.resize(400, 600);
+        page.slotContents[0].text = "09:00";
+        page.slotContents[4].text = "2 / 10";
+        page.refreshContent();
+        const auto paper = ui::themeColors(dark).paper;
+        const int top = page.topHeight(), bottom = page.bottomHeight();
+        QVERIFY(top > 0 && bottom > 0);
+        const QSize body(page.width(), page.height() - top - bottom);
+        const auto blank = page.snapshot();
+        const auto sleeping = page.snapshot(true);
+        QCOMPARE(blank.pixelColor(0, top), paper);
+        QCOMPARE(sleeping.pixelColor(0, top), paper);
+
+        const auto checkBody = [&](QImage image) {
+            page.image = image;
+            page.refreshContent();
+            for (const bool sleep : { false, true }) {
+                // The old paint order put opaque paper under the body. The
+                // empty page supplies the same header and footer for each case.
+                auto expected = sleep ? sleeping : blank;
+                QPainter painter(&expected);
+                painter.drawImage(0, top, image);
+                painter.end();
+                QCOMPARE(page.snapshot(sleep), expected);
+            }
+        };
+        for (const auto format : { QImage::Format_RGB32, QImage::Format_RGBX8888 }) {
+            QImage image(body, format);
+            image.fill(QColor(137, 85, 63));
+            checkBody(image);
+        }
+        QImage shortBody(body - QSize(3, 5), QImage::Format_RGB32);
+        shortBody.fill(Qt::red);
+        checkBody(shortBody);
+        QImage translucent(body, QImage::Format_ARGB32_Premultiplied);
+        translucent.fill(QColor(23, 120, 180, 104));
+        checkBody(translucent);
+        QImage retina(body, QImage::Format_RGB32);
+        retina.fill(Qt::blue);
+        retina.setDevicePixelRatio(2);
+        checkBody(retina);
+
+        QImage opaque(body, QImage::Format_RGB32);
+        opaque.fill(Qt::green);
+        checkBody(opaque);
+        // Keep a sentinel outside a clipped, mirrored widget render. The
+        // clip crosses both strips and the body.
+        QImage actual(page.size() + QSize(14, 16), QImage::Format_RGB32);
+        actual.fill(Qt::magenta);
+        auto expected = actual;
+        const auto prepare = [&](QPainter &painter) {
+            painter.translate(page.width() + 7, 8);
+            painter.scale(-1, 1);
+            painter.setClipRect(23, 3, page.width() / 2, page.height() - 6);
+        };
+        {
+            QPainter painter(&expected);
+            prepare(painter);
+            painter.drawImage(0, 0, page.snapshot());
+        }
+        {
+            QPainter painter(&actual);
+            prepare(painter);
+            page.render(&painter);
+        }
+        QCOMPARE(actual, expected);
+
+        page.reflowLayout.margins = QMargins(22, 25, 22, 25);
+        page.setReflowText("A few words to draw while the viewport changes.");
+        page.setViewportTransition(true);
+        const auto transition = page.snapshot();
+        QCOMPARE(transition.pixelColor(0, top), paper);
+        QVERIFY(transition.copy(0, top, body.width(), body.height())
+                != blank.copy(0, top, body.width(), body.height()));
+        page.image = {};
+        page.refreshContent();
+        QCOMPARE(page.snapshot(), transition);
+    }
+
     // Checks that strip changes leave the reading body unpainted, strip captures match full-page crops and a rejected BOOX frame retries unchanged.
     void readingStripChangesLeaveBodyUnpainted_data() { variants(); }
 

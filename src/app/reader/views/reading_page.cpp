@@ -1127,19 +1127,37 @@ void ReadingPage::setStripsHidden(bool hidden)
 
 void ReadingPage::paintContents(QPainter &painter, bool sleeping) const
 {
-    painter.fillRect(rect(), pagePaper());
+    const int top = topHeight(), bottom = bottomHeight();
+    const auto transform = painter.deviceTransform();
+    const auto format = renderedBody.format();
+    const bool opaqueBody = !changingViewport
+            && (format == QImage::Format_RGB32 || format == QImage::Format_RGBX8888)
+            && renderedBody.size() == QSize(width(), height() - top - bottom)
+            && renderedBody.devicePixelRatio() == 1 && painter.opacity() == 1
+            && painter.compositionMode() == QPainter::CompositionMode_SourceOver
+            && !painter.hasClipping() && transform.type() <= QTransform::TxTranslate
+            && transform.dx() == std::floor(transform.dx())
+            && transform.dy() == std::floor(transform.dy());
+    const auto paper = pagePaper();
+    if (opaqueBody) {
+        // The image supplies every body pixel, including in a fresh sleep snapshot.
+        painter.fillRect(0, 0, width(), top, paper);
+        painter.fillRect(0, height() - bottom, width(), bottom, paper);
+    } else {
+        painter.fillRect(rect(), paper);
+    }
     paintBody(painter);
     if (sleeping) {
         painter.save();
         painter.setFont(font());
         painter.setPen(palette().color(QPalette::WindowText));
         paintHeader(painter, true);
-        painter.translate(0, height() - bottomHeight());
+        painter.translate(0, height() - bottom);
         paintFooter(painter, true);
         painter.restore();
     } else {
         painter.drawImage(0, 0, headerPixels);
-        painter.drawImage(0, height() - bottomHeight(), footerPixels);
+        painter.drawImage(0, height() - bottom, footerPixels);
     }
     if (!changingViewport)
         kobalt::render::paintBookmarkRibbon(painter, renderedRibbon,

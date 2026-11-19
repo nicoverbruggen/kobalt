@@ -4,6 +4,8 @@ Label `display`. Build `mac-tests`, then run `ctest --preset mac -L display` fro
 
 These checks cover page animations, refresh policies and regions, pixel damage, paint batching, the Library theme surface and the BOOX frame transport. `platform.page-animation` and `platform.page-transition-native` check policy and submission with fake display calls. The `boox` checks use the Android frame transport and queue.
 
+`ui.pagePaintsPaperAroundBody` compares reading and sleep snapshots with paper drawn under opaque, undersized, translucent and high-DPI body images. It checks a clipped, mirrored widget render and verifies that a viewport transition covers the old page while the replacement is being laid out.
+
 `ui.navigationPressKeepsDamageInItsTab` checks that pressing or cancelling each bottom tab repaints only that tab's column, with a panel open or closed and in both themes. It uses a native backing store so a graphics proxy cannot hide broad repaint requests.
 
 `ui.navigationRefreshKeepsOverlayAndPanelPolicies` checks that a combined panel and navigation update keeps full refresh outside the visible tabs. Overlays and hidden navigation do not receive the tabs' partial policy. On MediaTek the adapter then submits the frame as one partial update; the Qt5 adapter check (`pewter.qt5-refresh`) verifies that through both firmware policy-list ABIs, and that a paint cut into one rectangle per row by a rounded mask is one update too. This optimization applies only to ordinary light-theme controls on MediaTek displays; dark cleanup, page turns and other backends retain their policies.

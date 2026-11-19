@@ -585,6 +585,7 @@ if(BUILD_TESTING)
             openingHandoffLayout
             openingFirstPaintCallback
             openingLogoSplash
+            pagePaintsPaperAroundBody
             readingStripChangesLeaveBodyUnpainted
             navigationPressKeepsDamageInItsTab
             navigationRefreshKeepsOverlayAndPanelPolicies

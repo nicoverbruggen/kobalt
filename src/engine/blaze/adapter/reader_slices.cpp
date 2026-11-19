@@ -296,11 +296,17 @@ QString EngineDocument::estimateKey(const QJsonObject &settings, int slicePages)
     key["registered_fonts"] = layoutFontDigest();
     key["rendering_policy"] = QString::fromLatin1(KOBALT_RENDERING_POLICY);
     key["policy"] = QString::fromUtf8(documentCachePolicy());
-    return QString::fromLatin1(
+    // Every turn asks for the key with the same settings. Hash them only
+    // when they change.
+    if (key == estimateKeyInput_)
+        return estimateKeyValue_;
+    estimateKeyValue_ = QString::fromLatin1(
             QCryptographicHash::hash(QJsonDocument(key).toJson(QJsonDocument::Compact),
                                      QCryptographicHash::Sha1)
                     .toHex()
                     .left(16));
+    estimateKeyInput_ = std::move(key);
+    return estimateKeyValue_;
 }
 
 QString EngineDocument::fullDocumentKey(const QJsonObject &settings) const

@@ -211,6 +211,8 @@ public:
     }
 
     double bookFraction() const override;
+
+    bool partOfBook() const override { return windowFirst_ >= 0 && spineItemCount_ > 0; }
     RoughPages roughPages() const override;
     QVector<int> bookPages(const QStringList &positions, const std::function<bool()> &current = {},
                            bool rangeEndpoints = false) const override;
@@ -742,6 +744,9 @@ private:
     bool refreshImages();
     // Changed rectangle between two cached page images, by sorted cache keys.
     QMap<QPair<qint64, qint64>, QRect> damage_;
+    // The last input of estimateKey() and its key.
+    mutable QJsonObject estimateKeyInput_;
+    mutable QString estimateKeyValue_;
     bool openSource(std::shared_ptr<ReaderSource> source, QSize size, const QJsonObject &saved,
                     QString *error, OpeningProgress progress = {}, OpeningResult *result = nullptr,
                     std::function<void()> coverReady = {}, QSet<QString> skippedFonts = {},

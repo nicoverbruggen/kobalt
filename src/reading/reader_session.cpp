@@ -55,7 +55,7 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
     result.totalWords = engine.totalWords();
     result.contentsSelection = engine.chapterSelection(result.chapters);
     result.graphSelection = engine.chapterSelection(result.chapterGraph);
-    if (engine.bookFraction() >= 0) {
+    if (engine.partOfBook()) {
         const auto bookPages = [&engine, &current](QVector<ChapterLink> &links) {
             QStringList positions;
             for (const auto &link : links)
@@ -173,7 +173,7 @@ void capturePageCoordinates(QJsonObject &state, Engine &engine)
     state["next_page"] = engine.turnTarget(engine.page(), 1);
     state["continues_before"] = engine.continuesBefore();
     state["continues_after"] = engine.continuesAfter();
-    if (engine.bookFraction() >= 0)
+    if (engine.partOfBook())
         state["slice_start"] = engine.pageStart(0);
 }
 
@@ -293,7 +293,7 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
         if (!wanted())
             return Publish::Interrupted;
         estimate.state["page_estimate"] = engine->state().value("page_estimate");
-        if (engine->bookFraction() >= 0)
+        if (engine->partOfBook())
             estimate.state["whole_book_failed"] = engine->fullDocumentFailed();
         kobalt::qt::invoke(
                 qApp,
@@ -1540,7 +1540,7 @@ BookmarkLocations captureBookmarkLocations(Engine &engine, const QStringList &po
     result.pages = engine.pagesOf(positions, rangeEndpoints, sourceOrder ? &result.order : nullptr,
                                   current);
     result.bookPages = result.pages;
-    if (engine.bookFraction() >= 0) {
+    if (engine.partOfBook()) {
         result.bookPages = engine.bookPages(positions, current, rangeEndpoints);
         for (int &page : result.bookPages)
             page = page > 0 ? page - 1 : -1;
@@ -2943,7 +2943,7 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                     engine->go(target);
                 const int spreadTurn = swap && delta ? engine->preparedSpreadTurn(delta) : -1;
                 const int mode = swap ? 0 : chapterMode;
-                const bool modeChanged = mode >= 0 && (engine->bookFraction() >= 0) != (mode > 0);
+                const bool modeChanged = mode >= 0 && engine->partOfBook() != (mode > 0);
                 const bool unchanged =
                         !modeChanged && appearance::same(before, requested) && oldSize == size;
                 bool applied = unchanged
@@ -2995,7 +2995,7 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                         // An engine with the text of only a part of the
                         // book decides each turn itself: the next page can
                         // need text that has no layout yet.
-                        if (to == engine->page() || engine->bookFraction() >= 0)
+                        if (to == engine->page() || engine->partOfBook())
                             windowTurned = engine->turnInWindow(delta);
                         else
                             engine->go(to);

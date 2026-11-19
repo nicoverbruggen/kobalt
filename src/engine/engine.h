@@ -267,6 +267,9 @@ public:
     // book. Negative when the page numbers cover the whole book.
     virtual double bookFraction() const = 0;
 
+    // True when bookFraction() is not negative, without the estimate.
+    virtual bool partOfBook() const { return bookFraction() >= 0; }
+
     // Rough page numbers for an engine with the text of only a part of the
     // book: the page in the book and in the spine item, counted from one,
     // and the pages of each. They come from an estimate of each spine item,

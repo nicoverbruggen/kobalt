@@ -965,12 +965,19 @@ void EngineDocument::carryTextKnowledge(EngineDocument &next) const
         map.setPrior(from.pageEstimate.map.model());
         map.takeMeasurements(from.pageEstimate.map);
     }
-    for (auto it = from.textFractions.cbegin(); it != from.textFractions.cend(); ++it)
-        to.textFractions.insert(it.key(), it.value());
-    for (auto it = from.textWordPrefixes.cbegin(); it != from.textWordPrefixes.cend(); ++it)
-        to.textWordPrefixes.insert(it.key(), it.value());
-    for (auto it = from.linkTargets.cbegin(); it != from.linkTargets.cend(); ++it)
-        to.linkTargets.insert(it.key(), it.value());
+    // A new document usually knows nothing yet: it shares the tables then,
+    // so that the turn that adopts the whole book copies nothing.
+    const auto merge = [](auto &into, const auto &known) {
+        if (into.isEmpty()) {
+            into = known;
+            return;
+        }
+        for (auto it = known.cbegin(); it != known.cend(); ++it)
+            into.insert(it.key(), it.value());
+    };
+    merge(to.textFractions, from.textFractions);
+    merge(to.textWordPrefixes, from.textWordPrefixes);
+    merge(to.linkTargets, from.linkTargets);
     if (to.searchTexts.isEmpty())
         to.searchTexts = from.searchTexts;
 }
@@ -999,20 +1006,14 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
 #if __has_include(<koblaze.h>)
     if (!source_ || !engine_ || (current && !current()))
         return false;
-    auto saved = state();
-    for (auto it = patch.fields().begin(); it != patch.fields().end(); ++it)
-        saved[it.key()] = it.value();
-    saved.remove("page_estimate");
-    const int item = fast ? qMax(0, spineItemIndex(position())) : -1;
-    saved["koblaze_first_spine_item"] = item;
-    saved["koblaze_last_spine_item"] = item;
     // Hybrid rendering prepared the whole book for this appearance: show
-    // that document. Nothing is loaded and nothing moves on the page.
+    // that document. Nothing is loaded and nothing moves on the page. The
+    // appearance compares without the page estimate, which costs more to
+    // make.
     bool prepared = false;
-    if (!fast && full_ && fullSize_ == (size.isValid() ? size : size_)
-        && fullKey_ == fullDocumentKey(settingsState())) {
-        const auto before = state();
-        prepared = true;
+    if (!fast && full_ && fullSize_ == (size.isValid() ? size : size_)) {
+        const auto before = settingsState();
+        prepared = fullKey_ == fullDocumentKey(before);
         for (auto it = patch.fields().begin(); it != patch.fields().end() && prepared; ++it)
             prepared = !before.contains(it.key()) || before.value(it.key()) == it.value();
     }
@@ -1035,6 +1036,13 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
         retire(std::move(full));
         return false;
     }
+    auto saved = state();
+    for (auto it = patch.fields().begin(); it != patch.fields().end(); ++it)
+        saved[it.key()] = it.value();
+    saved.remove("page_estimate");
+    const int item = fast ? qMax(0, spineItemIndex(position())) : -1;
+    saved["koblaze_first_spine_item"] = item;
+    saved["koblaze_last_spine_item"] = item;
     EngineDocument next(fonts_);
     next.openingFontSource_ =
             source_->parent ? source_->parent->fontIdentity : source_->fontIdentity;

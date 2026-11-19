@@ -220,6 +220,8 @@ struct PageEstimateRecord
     // the read spine items are valid only for the same digest.
     QString layout;
     int spineItems = 0;
+    // Total spreads in the whole-book layout. Chapter spreads can overlap them.
+    int wholeSpreads = 0;
     // The shown page: its spine item, the first character of its slice, its
     // page in that part and the pages of the part, and the book page and the
     // page in the spine item that were shown there. A negative item means
@@ -307,7 +309,9 @@ public:
     // contain them. A later layout of a part of such an item replaces them
     // there, and the restored pages stay the item's pages until every part
     // of the item has a layout.
-    void restore(const QMap<int, int> &pages);
+    void restore(const QMap<int, int> &pages, int wholeSpreads = 0);
+
+    int wholeSpreads() const { return wholeSpreads_; }
     // The parts of the spine items of completeItems() that have several.
     QVector<PageEstimateRecord::Part> completeParts() const;
     // Gives the parts of spine items from an earlier reading. They replace
@@ -399,6 +403,7 @@ private:
     // The restored pages of the items that a layout of a part replaced, by
     // item. They count for the item until all its parts have a layout.
     QMap<int, int> restoredPages_;
+    int wholeSpreads_ = 0;
     PageEstimateLayout layout_;
     PageEstimateModel prior_ = PageEstimateModel::reference(), model_ = prior_;
     int sliceCharacters_ = 0, measuredCount_ = 0;

@@ -599,6 +599,7 @@ void PageMap::reset(const QVector<qint64> &bytes)
         items_[i].bytes = qMax<qint64>(0, bytes[i]);
     observed_.clear();
     restoredPages_.clear();
+    wholeSpreads_ = 0;
     measuredCount_ = 0;
     model_ = prior_;
     kept_ = false;
@@ -684,6 +685,7 @@ bool PageMap::setLayout(const PageEstimateLayout &layout, int sliceCharacters)
     sliceCharacters_ = sliceCharacters;
     observed_.clear();
     restoredPages_.clear();
+    wholeSpreads_ = 0;
     kept_ = false;
     for (auto &item : items_) {
         if (item.measured)
@@ -792,15 +794,23 @@ void PageMap::restoreKept(const QVector<double> &pages)
     ++generation_;
 }
 
-void PageMap::restore(const QMap<int, int> &pages)
+void PageMap::restore(const QMap<int, int> &pages, int wholeSpreads)
 {
+    wholeSpreads_ = wholeSpreads;
     for (auto it = pages.cbegin(); it != pages.cend(); ++it) {
         if (it.key() < 0 || it.key() >= items_.size() || it.value() < 0)
             continue;
         // These pages replace what parts of the item showed so far.
         const qint64 first = qint64(it.key()) << 32;
-        for (auto part = observed_.lowerBound(first);
-             part != observed_.end() && part.key() >> 32 == it.key();)
+        auto part = observed_.lowerBound(first);
+        // A chapter pairs columns from its own start. Keep its observed parts when
+        // the whole book supplies a count that includes a shared spread.
+        if (wholeSpreads > 0 && part != observed_.end() && part.key() >> 32 == it.key()
+            && !part->restored) {
+            restoredPages_.insert(it.key(), it.value());
+            continue;
+        }
+        for (; part != observed_.end() && part.key() >> 32 == it.key();)
             part = observed_.erase(part);
         Observed observed;
         observed.last = observed.characters = 1;
@@ -1121,6 +1131,8 @@ QJsonObject PageEstimateRecord::toJson() const
     object["weights"] = weights;
     object["layout"] = layout;
     object["spine_items"] = spineItems;
+    if (wholeSpreads > 0)
+        object["whole_spreads"] = wholeSpreads;
     writePlace(object);
     if (!runs.isEmpty())
         object["read"] = runs;
@@ -1190,6 +1202,7 @@ bool PageEstimateRecord::fromJson(const QJsonValue &value, PageEstimateRecord *r
     result.layout = object.value("layout").toString().left(64);
     if (!integer(object.value("spine_items"), 0, 1000000, &result.spineItems))
         result.spineItems = 0;
+    integer(object.value("whole_spreads"), 1, 10000000, &result.wholeSpreads);
     const auto place = object.value("place").toArray();
     int item = -1, first = 0, page = 0, partPages = 0, shown = 0, itemShown = 0;
     if (place.size() == 4 && integer(place[0], 0, 1000000, &item)

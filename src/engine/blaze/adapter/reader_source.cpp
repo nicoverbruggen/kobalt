@@ -1814,7 +1814,7 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
         PageEstimateRecord whole;
         if (PageEstimateRecord::fromJson(full_->wholeBookEstimateRecord(settings), &whole)
             && whole.spineItems == spineItemCount_ && whole.layout == estimateKey(settings))
-            pageMap().restore(whole.read);
+            pageMap().restore(whole.read, whole.wholeSpreads);
     }
     // Ready: the next turn shows it.
     progress->setBuildProgress(100);

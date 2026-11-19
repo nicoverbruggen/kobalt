@@ -341,6 +341,7 @@ QJsonObject EngineDocument::pageEstimateRecord(const QJsonObject &settings) cons
         record.layout = key;
         record.spineItems = spineItemCount_;
         record.read = map.completeItems();
+        record.wholeSpreads = map.wholeSpreads();
         if (map.keeping())
             record.kept = map.keptPages();
         // The parts of the spine items that stay in the record, the nearest
@@ -428,6 +429,8 @@ QJsonObject EngineDocument::wholeBookEstimateRecord(const QJsonObject &settings)
         record.layout = key;
         record.spineItems = spineItemCount_;
         record.wholeBook = true;
+        if (columns_ == 2)
+            record.wholeSpreads = pages();
         for (int i = 0; i < starts.size(); ++i) {
             const int end = i + 1 < starts.size() ? starts[i + 1] : pages();
             if (starts[i] >= 0 && end >= starts[i])
@@ -462,15 +465,21 @@ void EngineDocument::restorePageEstimate(const QJsonValue &saved)
     map.setPrior(record.model);
     if (record.spineItems != spineItemCount_ || record.layout != estimateKey(settingsState()))
         return;
-    map.restore(record.read);
+    map.restore(record.read, record.wholeSpreads);
     map.restoreParts(record.parts);
     map.restoreKept(record.kept);
     auto &estimate = source_->pageEstimate;
     estimate.key = record.layout;
     if (record.item < 0)
         return;
-    estimate.book.restore(record.shown);
-    estimate.item.restore(record.itemShown);
+    // The whole book and the chapter can pair their columns differently.
+    // Let the chapter place its own page within the item. At the book end
+    // its first column can also precede the last whole-book screen.
+    const bool wholeSpread = record.wholeBook && columns_ == 2;
+    if (!wholeSpread || record.shown != record.wholeSpreads)
+        estimate.book.restore(record.shown);
+    if (!wholeSpread)
+        estimate.item.restore(record.itemShown);
     estimate.lastItem = record.item;
     estimate.lastFirst = record.first;
     // The record does not hold the end of the slice. A turn from the saved
@@ -695,6 +704,22 @@ Engine::RoughPages EngineDocument::roughPages() const
             rough.page = whole.screenOfColumn(whole.getPageList()->FindNearestPage(y, 0)) + 1;
             rough.pages = full_->pages();
             rough.pagesEstimated = false;
+            // Turns and checkpoints follow the first column, even when reading
+            // the last spread shows the whole-book total below.
+            if (map.wholeSpreads() > 0)
+                estimate.book.restore(rough.page);
+        }
+    }
+    // The last chapter spread can end one column past the whole-book screen
+    // containing its first column. It still shows the end of the book.
+    if (map.wholeSpreads() > 0) {
+        if (windowLast_ + 1 == spineItemCount_ && page() + 1 == pages()
+            && (!slices() || sliceEnd_ >= spineItemText()))
+            rough.page = map.wholeSpreads();
+        if (rough.page > 0) {
+            rough.pages = map.wholeSpreads();
+            rough.pagesEstimated = false;
+            rough.page = qMin(rough.page, rough.pages);
         }
     }
     estimate.lastWhole = false;

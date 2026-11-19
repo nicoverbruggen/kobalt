@@ -41,10 +41,11 @@ struct Book
     QByteArray bytes;
     test::BookFiles files;
 
-    bool open(EngineDocument &model, const QJsonObject &saved, QString *error) const
+    bool open(EngineDocument &model, const QJsonObject &saved, QString *error,
+              QSize size = viewport) const
     {
         if (!bytes.isEmpty())
-            return model.open(bytes, viewport, saved, error);
+            return model.open(bytes, size, saved, error);
         QMap<QString, qint64> sizes;
         for (auto it = files.cbegin(); it != files.cend(); ++it)
             sizes[it.key()] = it.value().size();
@@ -56,7 +57,7 @@ struct Book
                     return sink(data.constData(), data.size());
                 },
                 std::make_shared<std::atomic_bool>(false));
-        return model.openResources(source, sizes, viewport, saved, error);
+        return model.openResources(source, sizes, size, saved, error);
     }
 };
 
@@ -120,7 +121,8 @@ void verticalOrnamentTurns()
 // switch waits for a turn where the pairs agree.
 void twoColumnSwapPairs()
 {
-    for (const int before : { 3, 4 }) {
+    for (const auto &counts : { qMakePair(3, 8), qMakePair(4, 8), qMakePair(3, 3) }) {
+        const int before = counts.first, after = counts.second;
         const auto columns = [](const QByteArray &name, int count) {
             QByteArray body;
             for (int column = 0; column < count; ++column)
@@ -133,23 +135,23 @@ void twoColumnSwapPairs()
         book.files = test::publisherPackage(
                 "en", "Column pairs",
                 { { "first.xhtml", columns("First", before) },
-                  { "second.xhtml", columns("Second", 8) } },
+                  { "second.xhtml", columns("Second", after) } },
                 "<itemref idref='first.xhtml'/><itemref idref='second.xhtml'/>");
         auto options = settings;
         options["two_columns_landscape"] = true;
         auto window = options;
-        window["koblaze_first_spine_item"] = 1;
-        window["koblaze_last_spine_item"] = 1;
+        window["koblaze_first_spine_item"] = 0;
+        window["koblaze_last_spine_item"] = 0;
         EngineDocument whole(test::readerFonts()), chapter(test::readerFonts());
         QString error;
+        const QSize landscape(1072, 758);
         setChapterModeOverride(0);
-        require(book.open(whole, options, &error), qPrintable(error));
+        require(book.open(whole, options, &error, landscape), qPrintable(error));
         setChapterModeOverride(-1);
         chapter.setChapterSlices(25);
-        require(book.open(chapter, window, &error), qPrintable(error));
-        const QSize landscape(1072, 758);
-        require(chapter.applyAppearance({}, landscape) && whole.applyAppearance({}, landscape),
-                "Cannot lay out the column pairs");
+        require(book.open(chapter, window, &error, landscape), qPrintable(error));
+        // The first chapter has already supplied its own spread count.
+        require(chapter.showSpineItems(1, 1, &error) && chapter.go(0), qPrintable(error));
         require(chapter.prepareFullDocument({}) == Engine::FullDocument::Ready,
                 "Cannot prepare the whole book of column pairs");
         // The first screen of the chapter is a whole-book screen only when
@@ -184,6 +186,58 @@ void twoColumnSwapPairs()
             if (!chapter.turnInWindow(1) || chapter.page() == page)
                 break;
         }
+        const auto checkEnd = [&](const EngineDocument &reader) {
+            const auto end = reader.roughPages();
+            require(end.page == whole.pages() && end.pages == whole.pages()
+                            && end.itemPage == (after + 1) / 2 && end.itemPages == end.itemPage
+                            && !end.pagesEstimated && !end.itemPagesEstimated,
+                    qPrintable(QString("%1+%2 columns: book %3/%4, chapter %5/%6")
+                                       .arg(before)
+                                       .arg(after)
+                                       .arg(end.page)
+                                       .arg(end.pages)
+                                       .arg(end.itemPage)
+                                       .arg(end.itemPages)));
+        };
+        checkEnd(chapter);
+        const auto saved = chapter.state();
+        const auto reopen = [&](EngineDocument &reader, QJsonObject state) {
+            state["koblaze_first_spine_item"] = 1;
+            state["koblaze_last_spine_item"] = 1;
+            reader.setChapterSlices(25);
+            require(book.open(reader, state, &error, landscape), qPrintable(error));
+        };
+        EngineDocument reopened(test::readerFonts());
+        reopen(reopened, saved);
+        require(reopened.position() == chapter.position(), "Reopening moved the last spread");
+        checkEnd(reopened);
+
+        // A checkpoint at its size limit drops the individual spine-item counts.
+        auto trimmed = saved;
+        auto estimate = trimmed.value("page_estimate").toObject();
+        estimate.remove("read");
+        trimmed["page_estimate"] = estimate;
+        EngineDocument withoutItems(test::readerFonts());
+        reopen(withoutItems, trimmed);
+        const auto final = withoutItems.roughPages();
+        require(final.page == whole.pages() && final.pages == whole.pages()
+                        && !final.pagesEstimated,
+                "A trimmed checkpoint lost the known final book spread");
+
+        // The last column lies on the last screen in both pairings.
+        const auto lastColumn = QString("/body/DocFragment[2]/body/p[%1]/text().0").arg(after);
+        require(whole.goTo(lastColumn) && whole.page() == whole.pages() - 1,
+                "Cannot select the last column in the whole book");
+        EngineDocument fromWhole(test::readerFonts());
+        reopen(fromWhole, whole.state());
+        checkEnd(fromWhole);
+
+        require(chapter.turnInWindow(-1) && reopened.turnInWindow(-1)
+                        && chapter.position() == reopened.position(),
+                "Cannot compare the preceding chapter spreads");
+        const auto previous = chapter.roughPages(), restored = reopened.roughPages();
+        require(restored.page == previous.page && restored.pages == previous.pages,
+                "Reopening changed the book number on the first backward turn");
     }
 }
 

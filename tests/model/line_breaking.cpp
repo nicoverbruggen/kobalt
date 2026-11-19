@@ -1,6 +1,8 @@
 #include "reader_inputs.h"
 #include "support/qt_compat.h"
 #include "engine/blaze/adapter/engine_document.h"
+#include <lvtinydom.h>
+#include <textlang.h>
 #include <QDir>
 #include <QGuiApplication>
 #include <cstdio>
@@ -11,6 +13,34 @@ struct Layout
     QImage image;
     QRect iterationMark;
 };
+
+static void checkParagraphBreaks()
+{
+    ldomDocument document;
+    auto *node = document.getRootNode()->insertChildText(lString32(U"fixture"));
+    auto checkBreak = [&](const lString32 &text, const lChar32 *tag, css_line_break_t lineBreak,
+                          css_word_break_t wordBreak, int position, bool allowed) {
+        auto *language = TextLangMan::getTextLangCfg(lString32(tag), true);
+        for (int visit = 0; visit < 2; ++visit) {
+            const auto *breaks = document.paragraphBreaks(node, text.c_str(), text.length(),
+                                                          language, lineBreak, wordBreak);
+            require(breaks && (breaks[position] == LINEBREAK_ALLOWBREAK) == allowed,
+                    "Cached paragraph break does not match its text, language and CSS");
+        }
+    };
+    // Every request uses the same slot. Change one input at a time.
+    checkBreak(U"字々字", U"ja", css_lb_loose, css_wb_normal, 1, true);
+    checkBreak(U"字々字", U"ja", css_lb_strict, css_wb_normal, 1, false);
+    checkBreak(U"字字字", U"ja", css_lb_strict, css_wb_normal, 1, true);
+    checkBreak(U"abc", U"en", css_lb_auto, css_wb_normal, 1, false);
+    checkBreak(U"abc", U"en", css_lb_auto, css_wb_break_all, 1, true);
+    checkBreak(U"x a t", U"en", css_lb_auto, css_wb_normal, 4, true);
+    checkBreak(U"x a t", U"pl", css_lb_auto, css_wb_normal, 4, false);
+    checkBreak(U"x  y", U"en", css_lb_auto, css_wb_normal, 3, true);
+    checkBreak(U"x\u00a0y", U"en", css_lb_auto, css_wb_normal, 2, false);
+    checkBreak(U"x\u00a0y", U"en", css_lb_cr_loose, css_wb_normal, 2, true);
+    checkBreak(U"x \u2060y", U"en", css_lb_auto, css_wb_normal, 3, false);
+}
 
 static Layout render(const QByteArray &mode)
 {
@@ -42,6 +72,8 @@ static Layout render(const QByteArray &mode)
                     resources, sizes, QSize(122, 480),
                     kobalt::qt::object({ { "margin_pixels", 0 }, { "font_pixels", 32 } }), &error),
             qPrintable(error));
+    if (mode == "strict")
+        checkParagraphBreaks();
     QVector<kobalt::SearchHit> hits;
     for (int page = 0; page < model.pages(); ++page)
         hits += model.searchPage("々", page).hits;

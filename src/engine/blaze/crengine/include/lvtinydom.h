@@ -2767,6 +2767,8 @@ public:
     }
 };
 
+class TextLangCfg;
+
 class ldomDocument : public lxmlDocBase
 {
     friend class ldomDocumentWriter;
@@ -2802,6 +2804,16 @@ private:
     std::unordered_map<lUInt32, lUInt8> _koblazeChangedMethods;
     bool _koblazeChangedMethodsKnown = false;
     bool _koblazeRelayout = false;
+#if USE_LIBUNIBREAK == 1
+    struct ParagraphBreaks {
+        lString32 language;
+        css_line_break_t lineBreak;
+        css_word_break_t wordBreak;
+        std::vector<lChar32> text;
+        std::vector<lUInt8> decisions;
+    };
+    std::vector<ParagraphBreaks> _paragraphBreaks;
+#endif
     bool _just_rendered_from_cache;
 
     // One alternate layout of this document, never another DOM or view.
@@ -2914,6 +2926,12 @@ public:
     int  getParsingDocFragmentIdx() const  { return _parsingDocFragmentIdx; }
 
 #if BUILD_LITE!=1
+#if USE_LIBUNIBREAK == 1
+    // The returned decisions belong to this document until its next lookup.
+    const lUInt8 *paragraphBreaks(ldomNode *node, const lChar32 *text, int length,
+                                  TextLangCfg *language, css_line_break_t lineBreak,
+                                  css_word_break_t wordBreak);
+#endif
     lUInt32 getDocumentRenderingHash() { return _doc_rendering_hash; }
     /// Blaze: lay out only a slice of the text of each spine item in the
     /// layouts that follow. A block is in the slice when the number of

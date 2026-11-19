@@ -50,6 +50,55 @@ static inline hb_script_t koblazeUnicodeScript( hb_unicode_funcs_t * funcs, lCha
 #include <fribidi.h>
 #endif
 
+#if USE_LIBUNIBREAK == 1
+static int nextLineBreak(LineBreakContext *ctx, TextLangCfg *language, const lChar32 *text,
+                         int pos, int remaining, css_line_break_t lineBreak,
+                         css_word_break_t wordBreak, bool cssTweaks)
+{
+    lChar32 ch = text[pos];
+    if (language->hasLBCharSubFunc())
+        ch = language->getLBCharSubFunc()(ctx, text, pos, remaining);
+    if (cssTweaks)
+        ch = language->getCssLbCharSub(lineBreak, wordBreak, ctx, text, pos, remaining, ch);
+    return lb_process_next_char(ctx, (utf32_t)ch);
+}
+
+const lUInt8 *ldomDocument::paragraphBreaks(ldomNode *node, const lChar32 *text, int length,
+                                            TextLangCfg *language, css_line_break_t lineBreak,
+                                            css_word_break_t wordBreak)
+{
+    // Use a prime slot count because a node index also carries type bits.
+    // A collision replaces a slot. Each document retains at most 127 x 2048 characters.
+    if (length <= 0 || length > 2048 || !node->isText())
+        return NULL;
+    if (_paragraphBreaks.empty())
+        _paragraphBreaks.resize(127);
+    auto &entry = _paragraphBreaks[(lUInt32)node->getDataIndex() % _paragraphBreaks.size()];
+    // TextLangCfg builds its line-break table, CJK classification and substitution
+    // function once from this tag. Hyphenation and quote nesting are independent.
+    const lString32 tag = language->getLangTag();
+    if (entry.text.size() == (size_t)length && entry.language == tag &&
+        entry.lineBreak == lineBreak && entry.wordBreak == wordBreak &&
+        memcmp(entry.text.data(), text, length * sizeof(lChar32)) == 0) {
+        return entry.decisions.data();
+    }
+
+    entry.decisions.resize(length);
+    entry.text.assign(text, text + length);
+    entry.language = tag;
+    entry.lineBreak = lineBreak;
+    entry.wordBreak = wordBreak;
+    LineBreakContext ctx;
+    lb_init_break_context(&ctx, 0x200D, NULL);
+    ctx.lbpLang = language->getLBProps();
+    const bool cssTweaks = lineBreak > css_lb_auto || wordBreak > css_wb_break_word;
+    for (int i = 0; i < length; ++i)
+        entry.decisions[i] = nextLineBreak(&ctx, language, text, i, length - 1 - i,
+                                          lineBreak, wordBreak, cssTweaks);
+    return entry.decisions.data();
+}
+#endif
+
 #define SPACE_WIDTH_SCALE_PERCENT 100
 #define MIN_SPACE_CONDENSING_PERCENT 50
 #define UNUSED_SPACE_THRESHOLD_PERCENT 5
@@ -1491,6 +1540,19 @@ public:
 
                 int len = src->t.len - src->t.offset;
                 lStr_ncpy( m_text+pos, src->t.text + src->t.offset, len );
+                #if USE_LIBUNIBREAK == 1
+                // One fragment starts at pos 0 with the initial joiner. The loop
+                // below marks controls and collapsed spaces in m_flags but does
+                // not change m_text. Contextual substitutions therefore see the
+                // same preceding and following characters in both paths. A later
+                // fragment would also need the final libunibreak state.
+                const lUInt8 *breaks = NULL;
+                if (end == start + 1 && src->object) {
+                    ldomNode *node = (ldomNode *)src->object;
+                    breaks = node->getDocument()->paragraphBreaks(node, m_text, len, src->lang_cfg,
+                                                                  css_linebreak, css_wordbreak);
+                }
+                #endif
                 if ( i==0 || (src->flags & LTEXT_FLAG_NEWLINE) )
                     m_flags[pos] = LCHAR_MANDATORY_NEWLINE;
 
@@ -1716,20 +1778,9 @@ public:
                             m_flags[pos] |= LCHAR_DEPRECATED_WRAP_AFTER;
                         }
                     }
-                    lChar32 ch = m_text[pos];
-                    if ( src->lang_cfg->hasLBCharSubFunc() ) {
-                        // Lang specific function may want to substitute char (for
-                        // libunibreak only) to tweak line breaking around it
-                        ch = src->lang_cfg->getLBCharSubFunc()(&lbCtx, m_text, pos, len-1 - k);
-                        // We do this before the following, to allow this lang specific function
-                        // to possibly tweak the more generic getCssLbCharSub()
-                    }
-                    if ( has_css_line_breaking_tweaks ) {
-                        // CSS line breaking tweaks by char substitution (we need to provide our 'ch'
-                        // as it may have been tweaked and differ from m_text[pos]...)
-                        ch = src->lang_cfg->getCssLbCharSub(css_linebreak, css_wordbreak, &lbCtx, m_text, pos, len-1 - k, ch);
-                    }
-                    int brk = lb_process_next_char(&lbCtx, (utf32_t)ch);
+                    int brk = breaks ? breaks[k] :
+                            nextLineBreak(&lbCtx, src->lang_cfg, m_text, pos, len - 1 - k,
+                                          css_linebreak, css_wordbreak, has_css_line_breaking_tweaks);
                     if ( pos > 0 ) {
                         // printf("between <%c%c>: brk %d\n", m_text[pos-1], m_text[pos], brk);
                         // printf("between <%x.%x>: brk %d\n", m_text[pos-1], m_text[pos], brk);

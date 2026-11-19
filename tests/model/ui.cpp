@@ -582,7 +582,7 @@ static void checkPreparedOpeningFonts()
     changedFace.close();
     require(!bundle.verify() && !initializeInterfaceFonts(bundle),
             "A corrupt required face passed verification or full initialization");
-    auto document = storage::readJson(manifest);
+    auto document = storage::readJsonFile(manifest, 64 * 1024).object;
     auto entries = document.value("files").toArray();
     require(changedFace.open(QIODevice::ReadOnly), "Cannot read changed face");
     const auto bytes = changedFace.readAll();

@@ -9,6 +9,7 @@
 #include "support/diagnostics.h"
 
 #include <QCache>
+#include <QDataStream>
 #include <QFontMetrics>
 #include <QFile>
 #include <QFileInfo>
@@ -344,6 +345,15 @@ Fonts &fonts()
         return *previewFonts;
     static Fonts value;
     return value;
+}
+
+void cacheLayout(const QString &key, const PrivateText &text)
+{
+    const int cost = cacheCost(qint64(text.image.bytesPerLine()) * text.image.height()
+                               + qint64(key.size()) * 2 + qint64(sizeof(PrivateText)));
+    auto &cache = fonts().layouts;
+    if (cost <= cache.maxCost())
+        cache.insert(key, new PrivateText(text), cost);
 }
 
 // The same glyph at the same size renders the same mask on every line, so
@@ -1289,10 +1299,7 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
     }
     result.advance = int(qMin<qint64>(2147483647, qMax<qint64>(0, (pen + 63) / 64)));
     if (!rasterize) {
-        const int cost = cacheCost(qint64(cacheKey.size()) * 2 + qint64(sizeof(PrivateText)));
-        if (cost <= fonts().layouts.maxCost()) {
-            fonts().layouts.insert(cacheKey, new PrivateText(result), cost);
-        }
+        cacheLayout(cacheKey, result);
         return result;
     }
     bounds = bounds.united(QRect(0, -pixels, result.advance, pixels));
@@ -1318,12 +1325,31 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
         painter.fillRect(underline.first.translated(-bounds.topLeft()), underline.second);
     }
     painter.end();
-    const int cost = cacheCost(qint64(result.image.bytesPerLine()) * result.image.height()
-                               + qint64(cacheKey.size()) * 2 + qint64(sizeof(PrivateText)));
-    if (cost <= fonts().layouts.maxCost()) {
-        fonts().layouts.insert(cacheKey, new PrivateText(result), cost);
-    }
+    cacheLayout(cacheKey, result);
     return result;
+}
+
+QImage tintedPrivateText(const QImage &image, const QColor &color)
+{
+    if (image.isNull())
+        return {};
+    // Keep the full QColor precision, including alpha. Hex keys cannot collide
+    // with shaped layout keys, which always contain colon separators.
+    QByteArray bytes;
+    QDataStream stream(&bytes, QIODevice::WriteOnly);
+    stream << image.cacheKey() << color;
+    const auto key = QString::fromLatin1(bytes.toHex());
+    if (const auto *cached = fonts().layouts.object(key))
+        return cached->image;
+
+    PrivateText result;
+    result.image = image;
+    QPainter painter(&result.image);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    painter.fillRect(result.image.rect(), color);
+    painter.end();
+    cacheLayout(key, result);
+    return result.image;
 }
 
 PrivateText renderPrivateText(const QString &text, const QFont &font, int weight,

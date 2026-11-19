@@ -302,6 +302,64 @@ QString referenceSearchExcerpt(QString before, const QString &match, QString aft
     return html();
 }
 
+void checkWrappedLineTint()
+{
+    using namespace kobalt::ui;
+    const auto font = interfaceFont(28);
+    const QString text = QStringLiteral("Text size");
+    require(needsPrivateText(text, font), "Wrapped line tint fixture needs the private renderer");
+    const auto line = renderPrivateText(text, font);
+    require(!line.image.isNull(), "Private label produced no coverage mask");
+
+    // Reproduce the old per-paint tint without changing the cached coverage mask.
+    const auto reference = [](QImage mask, const QColor &ink) {
+        QPainter painter(&mask);
+        painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        painter.fillRect(mask.rect(), ink);
+        painter.end();
+        return mask;
+    };
+    const QColor darkInk = themeColors(true).secondaryInk;
+    const QColor lightInk = themeColors(false).secondaryInk;
+    const auto first = tintedPrivateText(line.image, darkInk);
+    for (const auto &ink :
+         { darkInk, lightInk, QColor(53, 81, 127, 1), QColor(53, 81, 127, 128) }) {
+        const auto expected = reference(line.image, ink);
+        require(tintedPrivateText(line.image, ink) == expected, "Cached tint changed glyph pixels");
+
+        QImage frame(230, 75, QImage::Format_ARGB32_Premultiplied);
+        frame.fill(Qt::transparent);
+        auto actual = frame;
+        {
+            QPainter painter(&frame);
+            painter.drawImage(line.origin + QPoint(0, line.lineAscent), expected);
+        }
+        {
+            QPainter painter(&actual);
+            painter.setFont(font);
+            painter.setPen(ink);
+            drawWrappedInterfaceText(painter, actual.rect(), text);
+        }
+        require(actual == frame, "Wrapped label changed the tint or placement of its line");
+    }
+    require(first.constBits() == tintedPrivateText(line.image, darkInk).constBits(),
+            "Repainting the label in its original theme allocated another tinted line");
+    auto differentMask = line.image.copy();
+    differentMask.fill(Qt::transparent);
+    differentMask.setPixelColor(0, 0, Qt::black);
+    require(tintedPrivateText(differentMask, darkInk) == reference(differentMask, darkInk),
+            "Another mask of the same size reused the previous line's ink");
+
+    QImage oversized(2049, 256, QImage::Format_ARGB32_Premultiplied);
+    oversized.fill(Qt::black);
+    const auto large = tintedPrivateText(oversized, darkInk);
+    require(large == reference(oversized, darkInk), "Oversized tint changed glyph pixels");
+    require(large.constBits() != tintedPrivateText(oversized, darkInk).constBits(),
+            "Tint larger than the private layout cache was retained");
+    require(first.constBits() == tintedPrivateText(line.image, darkInk).constBits(),
+            "Oversized tint evicted the cached label");
+}
+
 void checkSearchExcerptFit(bool privateText)
 {
     QFont font("IBM Plex Sans");
@@ -408,6 +466,7 @@ int main(int argc, char **argv)
             "Component font substitution");
     dismissedContent();
     checkSearchExcerptFit(true);
+    checkWrappedLineTint();
     {
         int loads = 0;
         kobalt::setDiagnosticObserver([&](const QJsonObject &event) {
@@ -3591,14 +3650,18 @@ int main(int argc, char **argv)
             QFont changed(family);
             changed.setPixelSize(36);
             require(registerPrivateInterfaceFont(path, family), "Cannot register refresh fixture");
-            QImage previous;
+            QImage previous, tinted;
             if (loaded) {
                 require(nativeEditorFontData(changed) == regular,
                         "Cannot load original font bytes");
                 previous = renderPrivateText("iiiiWWWW", changed).image;
+                tinted = tintedPrivateText(previous, Qt::gray);
             }
             replace(bold);
             forgetPrivateInterfaceFonts(folder.path());
+            if (loaded)
+                require(tintedPrivateText(previous, Qt::gray).constBits() != tinted.constBits(),
+                        "Forgetting a font retained its tinted line");
             require(nativeEditorFontData(changed).isEmpty(),
                     "Removed font registration survived refresh");
             require(registerPrivateInterfaceFont(path, family)

@@ -98,6 +98,8 @@ PrivateText renderPrivateText(const QString &text, const QFont &font, int weight
                               PrivateTextEmphasis emphasis = PrivateTextEmphasis::Synthetic,
                               Qt::LayoutDirection direction = Qt::LayoutDirectionAuto,
                               const QVector<PrivateTextStyle> &styles = {});
+// Paints the source coverage with this ink and shares the result across repaints.
+QImage tintedPrivateText(const QImage &image, const QColor &color);
 int measurePrivateText(const QString &text, const QFont &font,
                        const QVector<QPair<int, int>> &boldRanges = {},
                        PrivateTextEmphasis emphasis = PrivateTextEmphasis::Synthetic,

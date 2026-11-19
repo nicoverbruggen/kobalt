@@ -4,6 +4,8 @@ Label `fonts`. Build `mac-tests`, then run `ctest --preset mac -L fonts` from `p
 
 These checks cover font sources, system and embedded fonts, the font pickers, Publisher Fonts as the default, optical size, KF variants and the font memory limits. `resource.resource-provider` and `engine.reader` check embedded publisher fonts. The reader opens two books with different fonts at the same path and byte length, then reopens the first book and compares the rendered pages. `component.ui`, in [Settings and controls](settings.md), checks font previews, their cache and fallback faces.
 
+`component.ui` compares the private renderer's wrapped label with the original SourceIn tint, including low-opacity ink and theme changes. It checks that a repeat paint reuses the tinted image, a different coverage mask draws its own pixels, and forgetting a font releases its cached tint. An image larger than the cache must render without evicting the label.
+
 `platform.font-sources` uses the pinned Amstelvar font for source precedence, because its family is absent from the bundled reader catalogue. Bundled Bitter would test duplicate-family precedence instead. `platform.system-fonts` uses synthetic plain, compressed and encrypted wrappers in temporary directories.
 
 The KF variant fixtures keep the original glyphs and metrics. They test catalogue names, not Kobo font transformations. KF variants need no saved-data or rendering-cache format change. Physical-device behavior remains separate validation.

@@ -415,14 +415,11 @@ void drawWrappedInterfaceText(QPainter &painter, const QRect &bounds, const QStr
                                                      : 0);
     painter.save();
     painter.setClipRect(bounds, Qt::IntersectClip);
+    const auto ink = painter.pen().color();
     for (const auto &line : lines) {
-        auto rendered = renderPrivateText(line.text, painter.font());
+        const auto rendered = renderPrivateText(line.text, painter.font());
         if (rendered.image.isNull())
             continue;
-        QPainter color(&rendered.image);
-        color.setCompositionMode(QPainter::CompositionMode_SourceIn);
-        color.fillRect(rendered.image.rect(), painter.pen().color());
-        color.end();
         const auto visual = QStyle::visualAlignment(line.direction, alignment);
         const qreal x = bounds.x()
                 + (visual & Qt::AlignHCenter         ? (bounds.width() - line.advance) / 2
@@ -430,7 +427,7 @@ void drawWrappedInterfaceText(QPainter &painter, const QRect &bounds, const QStr
                                                      : 0);
         painter.drawImage(QPointF(x + rendered.origin.x(),
                                   top + line.top + line.ascent + rendered.origin.y()),
-                          rendered.image);
+                          tintedPrivateText(rendered.image, ink));
         if (lineRectangles)
             lineRectangles->append(
                     QRectF(x, top + line.top, line.advance, line.height).toAlignedRect());

@@ -784,6 +784,10 @@ public:
     virtual LVFontRef GetFallbackFont(int /*size*/) { return LVFontRef(); }
     /// returns fallback font for specified size, weight and italic
     virtual LVFontRef GetFallbackFont(int size, int weight=400, bool italic=false, lString8 forFaceName=lString8::empty_str ) { return LVFontRef(); }
+    // Blaze: vertical text requests fallback faces at their nominal size.
+    virtual LVFontRef GetNominalFallbackFont(int size, int weight, bool italic, lString8 after=lString8::empty_str) {
+        return GetFallbackFont(size, weight, italic, after);
+    }
     /// registers font by name
     virtual bool RegisterFont( lString8 name ) = 0;
     /// Registers known static face metadata without opening the font file.

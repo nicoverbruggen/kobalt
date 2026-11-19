@@ -51,6 +51,7 @@
 #if (USE_FREETYPE==1)
 
 #include "../../extensions/embedded_font_cache.h"
+#include <vector>
 #include <ft2build.h>
 #include <freetype/freetype.h>
 #include <freetype/ftoutln.h>    // for FT_Outline_Embolden()
@@ -78,7 +79,6 @@
 #include "../../extensions/word_cache.h"
 #include <hb-ot.h>
 #include <unordered_map>
-#include <vector>
 #include <cstdlib>
 #include <cstdio>
 #include "lvhashtable.h"
@@ -1828,7 +1828,7 @@ public:
         // while the slot advance stays unchanged, exaggerating and varying
         // the visible gaps between consecutive Japanese glyphs.
         if ( preserve_size )
-            return fontMan->GetFallbackFont(_size, getWeight(), _italic!=0);
+            return fontMan->GetNominalFallbackFont(_size, getWeight(), _italic!=0);
         if ( _fallbackFontIsSet )
             return _fallbackFont;
         _fallbackFont = fontMan->GetFallbackFont(_size, getWeight(), _italic!=0);
@@ -1849,7 +1849,7 @@ public:
     /// get next fallback font for this font (when it is already used as a fallback font)
     LVFontRef getNextFallbackFont(bool preserve_size=false) {
         if ( preserve_size )
-            return fontMan->GetFallbackFont(
+            return fontMan->GetNominalFallbackFont(
                 _size, getWeight(), _italic!=0, _faceName);
         if ( _nextFallbackFontIsSet )
             return _nextFallbackFont;
@@ -7567,6 +7567,19 @@ private:
     LVFontInstanceCache _instance_cache;   // exact-match instance cache
     lString8 _preferred_family;            // primary reading font - step-2 fallback for any generic family
     lString8 _preferred_by_css_family[9];  // per-css-family overrides; indexed by css_font_family_t (max=8)
+    // One slot per face in the ordered fallback chain. The registry chooses
+    // the instance, including synthetic styles and variable font axes.
+    struct NominalFallback {
+        int size = 0;
+        int weight = 0;
+        bool italic = false;
+        LVFontRef font;
+
+        bool matches(int px, int wght, bool slanted) const {
+            return !font.isNull() && size == px && weight == wght && italic == slanted;
+        }
+    };
+    std::vector<NominalFallback> _nominalFallback;
     FT_Library  _library;
     LVFontGlobalGlyphCache _globalCache;
     lString32 _requiredChars;
@@ -7687,6 +7700,14 @@ public:
 
     /// returns fallback font for specified size, weight and italic
     virtual LVFontRef GetFallbackFont(int size, int weight=400, bool italic=false, lString8 forFaceName=lString8::empty_str) {
+        return resolveFallbackFont(size, weight, italic, forFaceName, false);
+    }
+
+    LVFontRef GetNominalFallbackFont(int size, int weight, bool italic, lString8 after) override {
+        return resolveFallbackFont(size, weight, italic, after, true);
+    }
+
+    LVFontRef resolveFallbackFont(int size, int weight, bool italic, const lString8 & forFaceName, bool cache) {
         FONT_MAN_GUARD
         if ( _fallbackFontFaces.length() == 0 )
             return LVFontRef();
@@ -7717,7 +7738,20 @@ public:
         // assuming the fallback font is a standalone regular font
         // without any bold/italic sibling.
         // GetFont() works just as fine when we need specified weigh and italic.
-        return GetFont(size, weight, italic, css_ff_sans_serif, _fallbackFontFaces[idx], 0, -1);
+        if ( !cache )
+            return GetFont(size, weight, italic, css_ff_sans_serif, _fallbackFontFaces[idx], 0, -1);
+
+        // Blaze: cache one result per chain position. Deep fallback runs can
+        // revisit each face at the same nominal size on the next character.
+        if ( (size_t)idx < _nominalFallback.size() && _nominalFallback[idx].matches(size, weight, italic) )
+            return _nominalFallback[idx].font;
+        LVFontRef font = GetFont(size, weight, italic, css_ff_sans_serif, _fallbackFontFaces[idx], 0, -1);
+        if ( !font.isNull() ) {
+            if ( _nominalFallback.size() <= (size_t)idx )
+                _nominalFallback.resize(idx + 1);
+            _nominalFallback[idx] = { size, weight, italic, font };
+        }
+        return font;
     }
 
     bool isBitmapModeForSize( int size )
@@ -8067,6 +8101,7 @@ public:
         // hold the first one again. Such a ring keeps itself alive after
         // the cache lets go of it. Take the links apart first.
         _instance_cache.forEachFont([](LVFontRef & font) { font->clearFontRefs(); });
+        _nominalFallback.clear();
         _instance_cache.clearAll();
         _globalCache.clear();
         if ( _library )
@@ -8106,6 +8141,7 @@ public:
     virtual void gc() // garbage collector
     {
         FONT_MAN_GUARD
+        _nominalFallback.clear();
         _instance_cache.gc();
     }
 
@@ -8195,6 +8231,7 @@ public:
     virtual void RegularizeRegisteredFontsWeights(bool print_updates)
     {
         FONT_MAN_GUARD
+        _nominalFallback.clear();
         _registry.regularizeWeights(print_updates);
     }
 
@@ -8616,6 +8653,7 @@ public:
             }
             LVFontFace newDef = def;
             newDef.addDocFragment(docFragmentIdx);
+            _nominalFallback.clear();
             _registry.registerFace(newDef);
             return true;
         }
@@ -8624,6 +8662,7 @@ public:
             CRLog::trace("font definition is duplicate");
             return false;
         }
+        _nominalFallback.clear();
         _registry.registerFace(def);
         return true;
     }
@@ -8639,6 +8678,7 @@ public:
         FONT_MAN_GUARD
         if (!_registry.findFamily(localName))
             return false;
+        _nominalFallback.clear();
         _registry.registerAlias(alias, localName, documentId, docFragmentIdx);
         return true;
     }
@@ -9005,6 +9045,7 @@ public:
                     face_ids.add(face.id());
             }
         }
+        _nominalFallback.clear();
         _instance_cache.evictFaces(face_ids);
         _registry.removeFonts(documentId);
     }

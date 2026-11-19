@@ -1,11 +1,13 @@
 #include "reader_inputs.h"
 #include "check.h"
 #include "engine/blaze/adapter/engine_document.h"
+#include <lvfntman.h>
 #include <QGuiApplication>
 #include <QBuffer>
 #include <QColor>
 #include <cstdio>
 #include "engine/blaze/extensions/vertical/lvfntman_vert_buffer.h"
+#include "engine/blaze/extensions/vertical/lvtextfm_vert_diag.h"
 
 using namespace kobalt;
 
@@ -19,6 +21,43 @@ static QRect ink(const QImage &image)
                 box = box.united(QRect(x, y, 1, 1));
         }
     return box;
+}
+
+static void checkNominalFallback()
+{
+    const auto original = fontMan->GetFallbackFontFaces();
+    const lString8 serif("Noto Serif"), japanese("Noto Serif CJK JP");
+    require(fontMan->SetFallbackFontFaces(serif + "|" + japanese),
+            "Cannot select the vertical fallback fixture");
+    auto check = [&](int px, int weight, bool italic, const lString8 &after,
+                     const lString8 &family) {
+        auto expected = fontMan->GetFallbackFont(px, weight, italic, after);
+        require(!expected.isNull() && expected->getTypeFace() == family
+                        && expected->getSize() == px,
+                "Vertical fallback fixture selected the wrong face");
+        for (int i = 0; i < 2; ++i)
+            require(fontMan->GetNominalFallbackFont(px, weight, italic, after).get()
+                            == expected.get(),
+                    "Vertical fallback changed the selected font instance");
+    };
+    for (int px : { 31, 32 }) {
+        for (bool italic : { false, true }) {
+            for (int weight : { 400, 700 }) {
+                check(px, weight, italic, lString8(), serif);
+                check(px, weight, italic, serif, japanese);
+                require(fontMan->GetNominalFallbackFont(px, weight, italic, japanese).isNull(),
+                        "Vertical fallback continued beyond the final face");
+            }
+        }
+    }
+    require(fontMan->SetFallbackFontFaces(japanese + "|" + serif), "Cannot reorder fallback fonts");
+    check(32, 700, true, lString8(), japanese);
+    check(32, 700, true, japanese, serif);
+    require(fontMan->GetNominalFallbackFont(32, 700, true, serif).isNull(),
+            "Vertical fallback retained a previous next face");
+    fontMan->gc();
+    check(32, 700, true, japanese, serif);
+    require(fontMan->SetFallbackFontFaces(original), "Cannot restore the fallback chain");
 }
 
 // Checks vertical Japanese text: column layout, page progression, selection, reflow, mixed writing modes and combined underline and overline.
@@ -70,8 +109,22 @@ int main(int argc, char **argv)
                 std::make_shared<std::atomic_bool>(false));
         return reader.openResources(resources, sizes, QSize(600, 800), {}, error);
     };
-    EngineDocument model(test::readerFonts());
     QString error;
+    {
+        const auto originalChapter = data["v.xhtml"];
+        data["v.xhtml"].replace("Noto Serif CJK JP", "Instrument Serif");
+        EngineDocument reader(test::readerFonts());
+        require(open(reader, &error), qPrintable(error));
+        ltext_reset_vert_fallback_size();
+        for (int page = 0; page < reader.pages(); ++page)
+            require(!reader.image(page).isNull(), "Cannot draw the vertical fallback fixture");
+        int samples, mismatches, difference;
+        ltext_get_vert_fallback_size(&samples, &mismatches, &difference);
+        require(samples > 0 && mismatches == 0, "Japanese fallback used the wrong nominal size");
+        checkNominalFallback();
+        data["v.xhtml"] = originalChapter;
+    }
+    EngineDocument model(test::readerFonts());
     require(open(model, &error), qPrintable(error));
     require(model.pages() == 2, "Separate writing modes must occupy separate pages");
     const auto v = model.image(0), h = model.image(1);

@@ -80,6 +80,13 @@ bool NativeLifecycle::powerAvailable()
     return powerApi().available();
 }
 
+bool NativeLifecycle::deviceSleeping()
+{
+    const auto &api = powerApi();
+    const auto *power = api.available() ? api.manager() : nullptr;
+    return power && api.sleeping(power);
+}
+
 bool NativeLifecycle::pinScreenActive()
 {
     const auto &api = powerApi();
@@ -507,12 +514,22 @@ bool NativeLifecycle::canSuspend()
     // Active storage work must finish before standby. Only low battery
     // requests a new reading save here; ordinary activity can stay in memory.
     // An opening book also keeps the device awake between its engine jobs.
-    return !active
-            || (!active->sleepViewCheck.isActive() && !active->draining && !active->usbPending
-                && !active->poweringOff && engineActivity().quiescent()
-                && (!active->openingWorkPending || !active->openingWorkPending())
-                && (!active->sleepWorkPending || !active->sleepWorkPending())
-                && (!active->beforeStandby || active->beforeStandby()));
+    if (!active)
+        return true;
+    if (active->sleepViewCheck.isActive() || active->usbPending || active->poweringOff
+        || !engineActivity().quiescent())
+        return false;
+    const bool opening = active->openingWorkPending && active->openingWorkPending();
+    if (opening || active->draining) {
+        // A failed save can retain its opening reader until unlock. It has
+        // no work to run in standby, but every other drain must finish.
+        if (!opening || !active->draining || !active->asleep || active->storageBlocked()
+            || active->removalPending || !active->openingSaveParked || !active->openingSaveParked()
+            || !deviceSleeping())
+            return false;
+    }
+    return (!active->sleepWorkPending || !active->sleepWorkPending())
+            && (!active->beforeStandby || active->beforeStandby());
 }
 
 bool NativeLifecycle::interceptShutdown(QObject *manager, Shutdown mode)
@@ -521,8 +538,15 @@ bool NativeLifecycle::interceptShutdown(QObject *manager, Shutdown mode)
         stockHandoff().begin(StockStorageHandoff::State::Shutdown);
         return false;
     }
-    if (active->poweringOff)
+    if (active->poweringOff) {
+        if (mode == Shutdown::BatteryLow && !active->batteryLow_ && active->criticalBatteryShutdown
+            && nativeSessionSaveAllowed()) {
+            active->batteryLow_ = true;
+            const auto escalate = active->criticalBatteryShutdown;
+            escalate();
+        }
         return true;
+    }
     if (!active->storageBlocked() && active->preparePowerScreen)
         active->preparePowerScreen(mode);
     active->poweringOff = true;
@@ -558,10 +582,10 @@ bool NativeLifecycle::interceptShutdown(QObject *manager, Shutdown mode)
         // The event log is written on its own thread. Let it finish the
         // last events, briefly, before Nickel freezes its threads.
         flushDiagnostics(1000);
-        if (mode == Shutdown::Reboot)
+        if (mode == Shutdown::Reboot && !lifecycle->batteryLowShutdown())
             nativeReboot(guard.data());
         else
-            nativePowerOff(guard.data(), mode == Shutdown::BatteryLow);
+            nativePowerOff(guard.data(), lifecycle->batteryLowShutdown());
     };
     active->prepareShutdown([finish] { storage::afterSleepSnapshotWork(finish); });
     return true;
@@ -692,6 +716,7 @@ void NativeLifecycle::disconnected()
         return; // Wait for remount, or leave storage closed for shutdown.
     // USB ended before export. The profile may already have been released
     // while waiting for the gadget, so restore that lifecycle state too.
+    const bool preparing = active->usbPending;
     const bool released = active->storageReady;
     storage::reopenProfile();
     sessionStorageAvailable.store(true);
@@ -702,6 +727,8 @@ void NativeLifecycle::disconnected()
     active->pendingWorkflow.clear();
     if (released && active->storageRestored)
         active->storageRestored();
+    if (preparing && active->usbCancelled)
+        active->usbCancelled();
     active->wakeRetry.start(0);
 }
 

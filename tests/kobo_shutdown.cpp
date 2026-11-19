@@ -349,6 +349,37 @@ private slots:
         QCOMPARE(powerOffs + reboots, 1);
     }
 
+    void lowBatteryDuringPendingPowerOff()
+    {
+        using namespace kobalt;
+        QTemporaryDir profile;
+        profilePath = profile.path();
+        QVERIFY(storage::profileTransaction(profilePath, [](QSqlDatabase &) { return true; }));
+        NativeLifecycle lifecycle(nullptr);
+        int requests = 0, escalations = 0;
+        std::function<void()> drained;
+        lifecycle.prepareShutdown = [&](std::function<void()> ready) {
+            ++requests;
+            drained = std::move(ready);
+        };
+        lifecycle.criticalBatteryShutdown = [&] { ++escalations; };
+        QObject manager;
+        QVERIFY(NativeLifecycle::interceptShutdown(&manager, NativeLifecycle::Shutdown::PowerOff));
+        QVERIFY(drained);
+        for (int i = 0; i < 2; ++i)
+            QVERIFY(NativeLifecycle::interceptShutdown(&manager,
+                                                       NativeLifecycle::Shutdown::BatteryLow));
+        QCOMPARE(requests, 1);
+        QCOMPARE(escalations, 1);
+        QCOMPARE(powerOffs, 0);
+        QVERIFY(NativeLifecycle::nativeSessionSaveAllowed());
+        drained();
+        drained();
+        QCOMPARE(powerOffs, 1);
+        QVERIFY(batteryLow);
+        QVERIFY(profileClosedAtHandoff);
+    }
+
     void sleepingShutdown_data()
     {
         QTest::addColumn<int>("mode");

@@ -275,6 +275,49 @@ int main(int argc, char **argv)
         require(kobalt::NativeLifecycle::canSuspend(), "Finished save held sleep awake");
         wake();
     }
+    // A failed opening save can wait in memory only while Nickel owns sleep.
+    {
+        opening = lifecycle.draining = true;
+        bool parked = false, writerBusy = false;
+        int wakeups = 0;
+        lifecycle.openingSaveParked = [&] { return parked; };
+        lifecycle.sleepWorkPending = [&] { return writerBusy; };
+        lifecycle.wake = [&] { ++wakeups; };
+        power->asleep = power->visible = true;
+        emit power->aboutToSleep();
+        QCoreApplication::processEvents();
+        require(!kobalt::NativeLifecycle::canSuspend(), "A running opening save permitted standby");
+        parked = true;
+        writerBusy = true;
+        require(!kobalt::NativeLifecycle::canSuspend(), "A parked opening hid an active writer");
+        writerBusy = false;
+        opening = false;
+        require(!kobalt::NativeLifecycle::canSuspend(),
+                "A different cleanup borrowed the opening save exception");
+        opening = true;
+        require(kobalt::NativeLifecycle::canSuspend(), "An idle failed save kept Nickel awake");
+        power->asleep = power->visible = false;
+        power->pin = true;
+        emit power->resumingFromSleep();
+        QCoreApplication::processEvents();
+        require(wakeups == 0 && !kobalt::NativeLifecycle::canSuspend(),
+                "The native PIN unlocked the pending save or released its standby gate");
+        // Relocking before PIN entry cancels that wake. The next unlock is the first recovery.
+        power->asleep = power->visible = true;
+        emit power->aboutToSleep();
+        emit power->resumedFromSleep();
+        QCoreApplication::processEvents();
+        require(wakeups == 0, "A late resume signal retried a save during the next sleep");
+        wake();
+        emit power->resumedFromSleep();
+        QCoreApplication::processEvents();
+        require(wakeups == 1 && !kobalt::NativeLifecycle::canSuspend(),
+                "A genuine wake must deliver the paused opening once and restore the standby gate");
+        lifecycle.draining = false;
+        lifecycle.openingSaveParked = {};
+        lifecycle.sleepWorkPending = {};
+        lifecycle.wake = {};
+    }
     // An opening must not prevent Nickel from showing its sleep screen.
     opening = true;
     for (int cycle = 0; cycle < 2; ++cycle) {
@@ -354,9 +397,25 @@ int main(int argc, char **argv)
     QCoreApplication::processEvents();
     require(sleepHandoffs == 3, "A queued sleep handoff crossed USB preparation");
     const auto cancelledSleepUsb = drains.takeLast();
+    int cancellations = 0, usbWakeups = 0;
+    lifecycle.usbCancelled = [&] { ++cancellations; };
+    lifecycle.wake = [&] { ++usbWakeups; };
+    power->asleep = power->visible = false;
+    power->pin = true;
+    emit power->resumingFromSleep();
+    QCoreApplication::processEvents();
+    require(!kobalt::NativeLifecycle::canSuspend() && usbWakeups == 0,
+            "A pending USB workflow or PIN allowed a reader wake");
+    kobalt::NativeLifecycle::disconnected();
     kobalt::NativeLifecycle::disconnected();
     cancelledSleepUsb();
+    QCoreApplication::processEvents();
+    require(cancellations == 1 && usbWakeups == 0,
+            "A cancelled USB workflow fired twice or resumed the reader behind the PIN");
     wake();
+    require(usbWakeups == 1, "Unlock did not deliver the wake after USB cancellation");
+    lifecycle.wake = {};
+    lifecycle.usbCancelled = {};
     int assetReleases = 0, assetRestores = 0;
     lifecycle.storageReleased = [&] {
         require(!available() && !kobalt::NativeLifecycle::nativeSessionSaveAllowed(),

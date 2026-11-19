@@ -47,6 +47,7 @@ public:
     explicit NativeLifecycle(QObject *parent);
     static bool powerAvailable();
     static bool suspended();
+    static bool deviceSleeping();
     // PIN entry can own native rotation while the reader remains suspended.
     static bool pinScreenActive();
     static bool sleepSaveAllowed();
@@ -78,13 +79,17 @@ public:
     bool storageBlocked() const { return usbPending || exported || stockStorageBlocked(); }
 
     bool draining = false;
+
+    bool sleepRequested() const { return asleep; }
+
     std::function<void(Shutdown)> preparePowerScreen;
     std::function<void()> sleep, sleepViewReady, wake, beforeWake, cancelWake, usbPrompt;
     std::function<bool()> sleepWorkPending;
     // True while a book opens, from the request until the reader is shown.
     // canSuspend then answers false. A dialog that waits for the user is not
     // opening work.
-    std::function<bool()> openingWorkPending;
+    std::function<bool()> openingWorkPending, openingSaveParked;
+    std::function<void()> usbCancelled, criticalBatteryShutdown;
     static void finishSleepView();
     std::function<void(std::function<void()>)> prepareUsb;
     std::function<void()> storageReleased, storageRestored;

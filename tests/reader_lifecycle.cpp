@@ -10,6 +10,7 @@
 #include "storage/sleep_snapshot.h"
 #include "reading/session_timeout.h"
 #include "platforms/kobo/common/last_read_book.h"
+#include "platforms/kobo/common/reader_coordinator.h"
 #include "platforms/kobo/common/sync_exclusion.h"
 #include "platforms/kobo/common/browser_handoff.h"
 #include "support/paint_regions.h"
@@ -11552,6 +11553,204 @@ private slots:
             QVERIFY(file.open(QIODevice::ReadOnly));
             QCOMPARE(file.readAll(), QByteArray("archive"));
         }
+    }
+
+    void sleepOpeningSaveFailure_data()
+    {
+        QTest::addColumn<QString>("handoff");
+        for (const auto *value :
+             { "ordinary-sleep", "recovered", "persistent", "sleep-during-retry", "required",
+               "repaired-before-usb", "low-battery" })
+            QTest::newRow(value) << QString::fromLatin1(value);
+    }
+
+    void sleepOpeningSaveFailure()
+    {
+        QFETCH(QString, handoff);
+        auto paths = testPaths();
+        bool suspended = false, saved = true;
+        int completions = 0;
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.suspended = [&] { return suspended; };
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        auto *reader = host.window();
+        QTRY_VERIFY(!host.session()->busy());
+        const auto identity = host.book()->identity();
+        const auto position = [&] {
+            return storage::readBookState(paths, identity).object.value("position").toString();
+        };
+        const auto before = host.session()->state().value("position").toString();
+        QVERIFY(!before.isEmpty());
+        bool checkpointed = false;
+        host.book()->checkpointForClose([&](bool ok) { checkpointed = ok; });
+        QTRY_VERIFY(checkpointed);
+        QCOMPARE(position(), before);
+        const auto sql = [&](const QString &statement) {
+            return storage::profileTransaction(paths.directory, [&](QSqlDatabase &db) {
+                return QSqlQuery(db).exec(statement);
+            });
+        };
+        const auto repair = [&] { return sql("DROP TRIGGER IF EXISTS refuse_sleep_checkpoint"); };
+        const auto restore = qScopeGuard([&] {
+            repair();
+            suspended = false;
+        });
+        QVERIFY(sql("CREATE TRIGGER refuse_sleep_checkpoint BEFORE UPDATE ON book_state "
+                    "BEGIN SELECT RAISE(ABORT,'sleep checkpoint'); END"));
+        QVERIFY(host.session()->go(1));
+        QTRY_VERIFY(!host.session()->busy());
+        const auto after = host.session()->state().value("position").toString();
+        QVERIFY(!after.isEmpty() && after != before);
+        suspended = true;
+        const auto retry = [&] { return reader->findChild<QPushButton *>("rrCloseSaveRetry"); };
+        if (handoff == "ordinary-sleep") {
+            reader->sleepReader();
+            QTRY_VERIFY(reader->flushBeforeStandby() && !reader->pendingStorageSave());
+            QVERIFY(!reader->property("reader_transition_save_failed").toBool());
+            QVERIFY(!retry() || !retry()->isVisible());
+            QCOMPARE(position(), before);
+            return;
+        }
+
+        std::atomic_int failures{ 0 };
+        initializeDiagnostics(paths.directory + "/diagnostics", false);
+        pauseDiagnostics(false);
+        setDiagnosticObserver([&](const QJsonObject &event) {
+            if (event.value("event") == QLatin1String("local-close-save-failed"))
+                ++failures;
+        });
+        const auto resetDiagnostics = qScopeGuard([] {
+            setDiagnosticObserver({});
+            pauseDiagnostics(true);
+        });
+        reader->hide(); // The opening view still owns the screen.
+        reader->setOpeningSaveState(OpeningSaveState::Sleeping);
+        reader->finishStorageSave([&](bool ok) {
+            ++completions;
+            saved = ok;
+        });
+        QVERIFY(reader->pendingStorageSave());
+        QVERIFY(!reader->flushBeforeStandby());
+        QTRY_VERIFY(reader->openingSaveParked());
+        QVERIFY(reader->property("reader_transition_save_failed").toBool());
+        QTRY_VERIFY(!reader->pendingStorageSave() && reader->flushBeforeStandby());
+        QCOMPARE(failures.load(), 3);
+        QCOMPARE(completions, 0);
+        QCOMPARE(position(), before);
+        if (handoff == "recovered") {
+            // A later routine write can leave the profile WAL unsynced even
+            // when the failed reader checkpoint has finished all its attempts.
+            const QString other = "standby-wal";
+            {
+                storage::RoutineWrites routine;
+                QVERIFY(storage::writeBookState(paths, other, { { "book", other } }));
+            }
+            QVERIFY(storage::profileCheckpointDue());
+            QVERIFY(nickel::readerStandbyCheck(nullptr)());
+            const auto beforeStandby = nickel::readerStandbyCheck(reader);
+            {
+                QSemaphore release;
+                storage::RecordWriter blocker;
+                const auto unblock = qScopeGuard([&] { release.release(); });
+                // Keep the shared writer ahead of the checkpoint until both standby checks run.
+                blocker.post(
+                        [&] {
+                            release.acquire();
+                            return true;
+                        },
+                        {});
+                QVERIFY(!beforeStandby());
+                QVERIFY(storage::profileCheckpointPending());
+                QVERIFY(!beforeStandby());
+            }
+            QTRY_VERIFY(beforeStandby());
+            QVERIFY(!storage::profileHasUnsyncedWrites());
+        }
+        QVERIFY(!retry());
+        QVERIFY(!reader->isVisible());
+        reader->setOpeningSaveState(OpeningSaveState::Sleeping);
+        const bool repaired = handoff == "recovered" || handoff == "repaired-before-usb";
+        if (repaired)
+            QVERIFY(repair());
+        if (handoff == "required" || handoff == "repaired-before-usb") {
+            reader->setOpeningSaveState(OpeningSaveState::Required);
+            reader->setOpeningSaveState(OpeningSaveState::Required);
+        } else if (handoff == "low-battery") {
+            reader->setOpeningSaveState(OpeningSaveState::LowBatteryShutdown);
+            QTRY_COMPARE(completions, 1);
+            QVERIFY(!saved);
+            QCOMPARE(position(), before);
+            QVERIFY(!reader->pendingStorageSave());
+            return;
+        } else {
+            suspended = false;
+            reader->setOpeningSaveState(OpeningSaveState::Awake);
+            reader->setOpeningSaveState(OpeningSaveState::Awake);
+        }
+        if (handoff == "sleep-during-retry") {
+            QTRY_VERIFY(retry() && retry()->isVisible());
+            {
+                QSemaphore entered, release;
+                storage::RecordWriter blocker;
+                const auto unblock = qScopeGuard([&] { release.release(); });
+                blocker.post(
+                        [&] {
+                            entered.release();
+                            return release.tryAcquire(1, 5000);
+                        },
+                        {});
+                QVERIFY(entered.tryAcquire(1, 5000));
+                retry()->click();
+                QVERIFY(reader->pendingStorageSave());
+                suspended = true;
+                reader->setOpeningSaveState(OpeningSaveState::Sleeping);
+                QVERIFY(!reader->isVisible());
+                QVERIFY(!reader->openingSaveParked());
+                QCOMPARE(completions, 0);
+            }
+            QTRY_VERIFY(reader->openingSaveParked());
+            QVERIFY(!reader->isVisible());
+            QVERIFY(!retry() || !retry()->isVisible());
+            QCOMPARE(position(), before);
+            QCOMPARE(completions, 0);
+            QVERIFY(repair());
+            suspended = false;
+            reader->setOpeningSaveState(OpeningSaveState::Awake);
+        } else if (!repaired) {
+            QTRY_VERIFY(retry() && retry()->isVisible());
+            QCOMPARE(completions, 0);
+            QCOMPARE(position(), before);
+            QCOMPARE(failures.load(), 4); // Three at sleep and one on wake or required handoff.
+            // This is a second sleep after wake, or USB cancellation while still asleep.
+            suspended = true;
+            reader->setOpeningSaveState(OpeningSaveState::Sleeping);
+            QTRY_VERIFY(reader->openingSaveParked() && !reader->isVisible());
+            QTRY_VERIFY(!retry() || !retry()->isVisible());
+            suspended = false;
+            reader->setOpeningSaveState(OpeningSaveState::Awake);
+            QTRY_VERIFY(retry() && retry()->isVisible());
+            QCOMPARE(failures.load(), 5);
+            QVERIFY(!reader->close());
+            QCoreApplication::processEvents();
+            QVERIFY(host.window() == reader && reader->isVisible());
+            QVERIFY(retry() && retry()->isVisible());
+            QCOMPARE(completions, 0);
+            QCOMPARE(position(), before);
+            QVERIFY(repair());
+            QTest::mouseClick(retry(), Qt::LeftButton);
+        }
+        QTRY_COMPARE(completions, 1);
+        QVERIFY(saved);
+        QCOMPARE(position(), after);
     }
 
     void usbFinalSave_data()

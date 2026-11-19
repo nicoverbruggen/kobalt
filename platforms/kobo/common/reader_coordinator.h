@@ -28,6 +28,14 @@ class SourceLease;
 enum class ReaderBookRoute;
 
 namespace nickel {
+// Nickel can request standby before a reader exists or after its window closes.
+inline std::function<bool()> readerStandbyCheck(ReaderWindow *reader)
+{
+    return [window = QPointer<ReaderWindow>(reader)] {
+        return !window || window->flushBeforeStandby();
+    };
+}
+
 struct ReaderEnvironment;
 class HomeSleepScreen;
 // Every accepted native opening invalidates a closed reader snapshot.
@@ -124,6 +132,8 @@ private:
         int openingPercent = -1;
         qint64 progressPainted = -1000;
     } run;
+    // A cancelled opening can retain its reader and failed checkpoint until unlock.
+    QPointer<kobalt::ReaderWindow> sleepingOpening;
 
     void updateOpening(kobalt::OpeningStage stage, int percent);
     unsigned generation = 0;

@@ -114,6 +114,8 @@ public:
     kobalt::SaveWait saveWait{ this };
     void revokeNativeReading() override;
     void finishStorageSave(std::function<void(bool)> finished, bool nativeAllowed = true) override;
+    void setOpeningSaveState(OpeningSaveState state) override;
+    bool openingSaveParked() const override;
     void prepareUsb(std::function<void()> finished) override;
     void prepareShutdown(std::function<void()> finished, bool allowFailedSave = false) override;
     sleep::Snapshot powerScreenSnapshot() override;
@@ -1183,8 +1185,12 @@ private:
     void finishExitSaved(quint64 request);
     void saveTransition(quint64 request, bool usb, const QString &location, const QString &error,
                         bool mapped, std::function<void()> finished, int failures = 0);
-    void finishStorageData(std::function<void(bool)> finished, bool nativeAllowed,
-                           int failures = 0);
+    void finishStorageData(std::function<void(bool)> finished, bool nativeAllowed, int failures = 0,
+                           bool retriedAnnotations = false);
+    OpeningSaveState openingSaveState = OpeningSaveState::Inactive;
+    std::function<void(int)> retryDisposal;
+    void handleDisposalFailure();
+    void resumeDisposalSave(int failures);
     bool allowFailedTransition = false;
     void transitionSaveError(std::function<void()> retry, std::function<void()> discard);
     void failExit(quint64 request, const QString &error = {},

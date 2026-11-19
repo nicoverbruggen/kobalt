@@ -6,6 +6,8 @@ Asset verification uses the actual USB handoff and completed remount. The lifecy
 
 `lifecycle.readerStandbySetting` checks the default, disabled, invalid and unsupported preference states. It verifies that explicit sleep and a hidden or closed reader are not held awake by the preference. These controlled host checks do not measure hardware standby or battery life.
 
+`lifecycle.sleepOpeningSaveFailure` saves one reading position, moves to a different page, and rejects the SQLite checkpoint for that page. It checks the last durable position during sleep, recovery on wake, a second sleep while Retry is visible, and the different outcomes for required saves and low-battery shutdown. It also checks ordinary reader sleep with the same storage failure. When the opening is parked, the standby callback starts a due SQLite WAL checkpoint and waits for it to finish. `platform.native-lifecycle` drives sleep, PIN, unlock and cancelled USB through Nickel signals. It checks that only an idle, parked opening save permits standby while the opening is still being cleaned up. `platform.shutdown` raises a battery-low request during a held power-off and checks that the original drain releases Nickel exactly once.
+
 Label `sleep`. Build `mac-tests`, then run `ctest --preset mac -L sleep` from `platforms/desktop/`. `ctest --preset mac -N -L sleep` lists its tests.
 
 These checks cover sleep screens and snapshots, sleep and wake, session timeouts, USB export, shutdown, power-off screens and the native lifecycle adapter. The `lifecycle` checks drive the production reader with controlled host callbacks and an injected clock. The `platform` checks drive the production Kobo adapters with controlled Nickel signals, substitute native window types and a real profile database.

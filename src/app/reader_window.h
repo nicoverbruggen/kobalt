@@ -11,6 +11,7 @@ class ReaderOrientation;
 class ReadingBook;
 struct ReaderHostServices;
 struct ReaderNotice;
+enum class OpeningSaveState { Inactive, Sleeping, Awake, Required, LowBatteryShutdown };
 
 // The firmware controller owns opening, authorization and publication lifetime.
 // The window returns a retained engine session only after a normal close.
@@ -49,6 +50,11 @@ public:
         (void)nativeAllowed;
         finished(true);
     }
+
+    // Sleep cancelled an opening whose reader still owns its final save.
+    virtual void setOpeningSaveState(OpeningSaveState) { }
+
+    virtual bool openingSaveParked() const { return false; }
 
     // Limit the native-position wait to two seconds before file release.
     virtual void prepareUsb(std::function<void()> finished) = 0;

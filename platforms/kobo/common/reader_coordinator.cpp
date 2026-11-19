@@ -237,9 +237,6 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         disposeForTransition([this] { status("authorization-lost"); }, false);
     };
     lifecycle->readerInputActive = [this] { return run.reader && run.reader->isVisible(); };
-    lifecycle->beforeStandby = [this] {
-        return busy || !run.reader || run.reader->flushBeforeStandby();
-    };
     lifecycle->afterStandby = [this] {
         if (!busy && run.reader)
             run.reader->resumeReadingClock();
@@ -247,6 +244,9 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     // busy covers the whole opening, also before and after its engine jobs.
     // A fallback or error dialog also sets busy, but waits for the user.
     lifecycle->openingWorkPending = [this] { return busy && !run.fallbackAlert; };
+    lifecycle->openingSaveParked = [this] {
+        return sleepingOpening && sleepingOpening->openingSaveParked();
+    };
     lifecycle->sleepWorkPending = [this] {
         return homeSleep->waitingForFonts()
                 || (run.reader
@@ -270,6 +270,9 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         homeAfterClose = false;
         authorization->setBlocked(true);
         timer.stop();
+        // Hide a retry notice from the previous wake before capturing Home.
+        if (sleepingOpening && !lifecycle->storageBlocked())
+            sleepingOpening->setOpeningSaveState(OpeningSaveState::Sleeping);
         const bool browser = run.reader && BrowserHandoff::activeFor(run.reader);
         const bool homeOwnsSleep = busy || !run.reader || browser;
         // A preparing reader can outlive asynchronous disposal. Prepare its
@@ -278,7 +281,8 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         if (bindings_.enabled() && homeOwnsSleep)
             homeSleep->prepareHomeScreen(false, busy || run.reader ? run.identity : QString());
         if (busy) {
-            disposeForTransition([] { });
+            if (!lifecycle->draining)
+                disposeForTransition([] { });
         } else if (run.reader) {
             // The browser owns the screen while this reader is already
             // hidden. Keep its saved position without creating a sleep cover.
@@ -310,6 +314,10 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     };
     lifecycle->wake = [this] {
         homeSleep->clear();
+        if (sleepingOpening) {
+            sleepingOpening->setOpeningSaveState(OpeningSaveState::Awake);
+            return;
+        }
         if (lifecycle->draining || busy) {
             return;
         }
@@ -341,9 +349,16 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
                 busy ? nullptr : run.reader.data(), cleanupCallbacks,
                 [this] {
                     kobalt::diagnostic("usb-release-start");
+                    if (sleepingOpening)
+                        sleepingOpening->setOpeningSaveState(OpeningSaveState::Required);
                     disposeForTransition([] { });
                 },
                 std::move(ready));
+    };
+    lifecycle->usbCancelled = [this] {
+        if (sleepingOpening && (lifecycle->sleepRequested() || NativeLifecycle::suspended()))
+            sleepingOpening->setOpeningSaveState(OpeningSaveState::Sleeping);
+        // finishWake resumes an awake reader once Nickel's views are clear.
     };
     lifecycle->storageReleased = [this] {
         environment_.invalidateAssets();
@@ -375,7 +390,12 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
             kobalt::storage::closeProfile(true);
             ready();
         });
-        if (run.reader && !busy)
+        if (sleepingOpening) {
+            // The original disposal already owns the reader and its completion.
+            sleepingOpening->setOpeningSaveState(lifecycle->batteryLowShutdown()
+                                                         ? OpeningSaveState::LowBatteryShutdown
+                                                         : OpeningSaveState::Required);
+        } else if (run.reader && !busy)
             run.reader->prepareShutdown([this] { disposeForTransition([] { }); },
                                         lifecycle->batteryLowShutdown());
         else
@@ -442,6 +462,11 @@ bool ReaderCoordinator::handleHomeKey(QKeyEvent *event)
     }
     const bool readerVisible =
             run.reader && run.reader->isVisible() && !BrowserHandoff::activeFor(run.reader);
+    if (readerVisible && sleepingOpening) {
+        // Only Retry or Quit may resolve the failed opening save.
+        event->accept();
+        return true;
+    }
     const bool openingVisible =
             (run.loading && run.loading->window() && run.loading->window()->isVisible())
             || (run.fallbackAlert && run.fallbackAlert->isVisible());
@@ -831,6 +856,16 @@ void ReaderCoordinator::disposeForTransition(std::function<void()> finished, boo
     if (lifecycle->draining)
         return;
     lifecycle->draining = true;
+    if (busy && run.reader && nativeAllowed && !lifecycle->storageBlocked()
+        && !lifecycle->shuttingDown()
+        && (lifecycle->sleepRequested() || NativeLifecycle::deviceSleeping())) {
+        sleepingOpening = run.reader;
+        sleepingOpening->setOpeningSaveState(OpeningSaveState::Sleeping);
+        lifecycle->criticalBatteryShutdown = [reader = sleepingOpening] {
+            if (reader)
+                reader->setOpeningSaveState(OpeningSaveState::LowBatteryShutdown);
+        };
+    }
     const QString finalStatus = busy ? "cancelled" : "closed";
     ++generation;
     if (run.sourceLease)
@@ -844,18 +879,24 @@ void ReaderCoordinator::finishDisposal(const QString &finalStatus, bool nativeAl
 {
     if (run.reader) {
         const QPointer<ReaderCoordinator> guard(this);
-        run.reader->finishStorageSave(
-                [guard, finalStatus, nativeAllowed](bool saved) {
-                    if (!guard || !NativeLifecycle::nativeSessionSaveAllowed())
+        const auto reader = run.reader;
+        reader->finishStorageSave(
+                [guard, reader, finalStatus, nativeAllowed](bool saved) {
+                    if (!guard || !reader || guard->run.reader != reader
+                        || !NativeLifecycle::nativeSessionSaveAllowed())
                         return;
                     // Reader completion means every in-flight write has ended, even
                     // when the bounded save job failed. Do not renew its budget here.
                     if (!saved)
                         kobalt::diagnostic("reader-disposed-unsaved", {},
                                            kobalt::DiagnosticSeverity::Error);
-                    delete guard->run.reader.data();
-                    guard->run.reader.clear();
-                    guard->finishDisposal(finalStatus, nativeAllowed);
+                    if (reader == guard->sleepingOpening) {
+                        guard->sleepingOpening.clear();
+                        guard->lifecycle->criticalBatteryShutdown = {};
+                    }
+                    delete reader.data();
+                    if (guard)
+                        guard->finishDisposal(finalStatus, nativeAllowed);
                 },
                 nativeAllowed);
         return;
@@ -1221,6 +1262,7 @@ void ReaderCoordinator::showReader()
     QElapsedTimer creating;
     creating.start();
     run.reader = createReader(koboCloud);
+    lifecycle->beforeStandby = readerStandbyCheck(run.reader);
     const double created = creating.nsecsElapsed() / 1e6;
     if (run.loading)
         run.loading->setProgress(kobalt::openingBarWindow);

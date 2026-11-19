@@ -1669,6 +1669,12 @@ void Reader::resizeEvent(QResizeEvent *)
 
 void Reader::closeEvent(QCloseEvent *event)
 {
+    // The host disposes this window from the opening save's completion.
+    // A window close during the save or its Retry prompt must not hand off the book.
+    if (openingSaveState != OpeningSaveState::Inactive) {
+        event->ignore();
+        return;
+    }
     if (imageViewer && imageViewer->isVisible())
         imageViewer->closeImage();
     session->cancelPendingTurn();
@@ -3230,19 +3236,21 @@ void Reader::transitionSaveError(std::function<void()> retry, std::function<void
         closeSaveError.clear();
         setEnabled(false);
     };
-    connect(notice->primaryButton(), &QPushButton::clicked, this, [this, request, dismiss, retry] {
-        if (request != closeRequest)
-            return;
-        dismiss();
-        retry();
-    });
-    connect(notice->quitButton(), &QPushButton::clicked, this, [this, request, dismiss, discard] {
-        if (request != closeRequest)
-            return;
-        closeWithoutSaving = true;
-        dismiss();
-        discard();
-    });
+    connect(notice->primaryButton(), &QPushButton::clicked, this,
+            [this, notice, request, dismiss, retry] {
+                if (request != closeRequest || closeSaveError != notice)
+                    return;
+                dismiss();
+                retry();
+            });
+    connect(notice->quitButton(), &QPushButton::clicked, this,
+            [this, notice, request, dismiss, discard] {
+                if (request != closeRequest || closeSaveError != notice)
+                    return;
+                closeWithoutSaving = true;
+                dismiss();
+                discard();
+            });
     show();
     notice->show();
     notice->raise();
@@ -3436,11 +3444,63 @@ void Reader::revokeNativeReading()
     book->releaseNative(false);
 }
 
-void Reader::finishStorageData(std::function<void(bool)> finished, bool nativeAllowed, int failures)
+static constexpr int disposalSaveAttempts = 3;
+
+bool Reader::openingSaveParked() const
+{
+    return openingSaveState == OpeningSaveState::Sleeping && retryDisposal && !pendingStorageSave();
+}
+
+void Reader::setOpeningSaveState(OpeningSaveState state)
+{
+    const auto previous = std::exchange(openingSaveState, state);
+    const bool dismissError = retryDisposal && closeSaveError
+            && (state == OpeningSaveState::Sleeping
+                || state == OpeningSaveState::LowBatteryShutdown);
+    if (dismissError) {
+        closeSaveError->hide();
+        closeSaveError->deleteLater();
+        closeSaveError.clear();
+        setEnabled(false);
+    }
+    // Retry dismisses the notice before its write finishes. The disabled
+    // reader can still be visible when Nickel begins the next sleep.
+    if (state == OpeningSaveState::Sleeping || dismissError)
+        hide();
+    if (previous == state || !retryDisposal)
+        return;
+    if (previous == OpeningSaveState::Sleeping
+        && (state == OpeningSaveState::Awake || state == OpeningSaveState::Required))
+        resumeDisposalSave(disposalSaveAttempts - 1);
+    else
+        handleDisposalFailure();
+}
+
+void Reader::resumeDisposalSave(int failures)
+{
+    auto retry = std::exchange(retryDisposal, {});
+    if (retry)
+        retry(failures);
+}
+
+void Reader::handleDisposalFailure()
+{
+    if (allowFailedTransition || openingSaveState == OpeningSaveState::LowBatteryShutdown) {
+        closeWithoutSaving = true;
+        resumeDisposalSave(0);
+    } else if (openingSaveState != OpeningSaveState::Sleeping) {
+        // The notice records an explicit Quit before invoking this continuation.
+        const auto resume = [this] { resumeDisposalSave(0); };
+        transitionSaveError(resume, resume);
+    }
+}
+
+void Reader::finishStorageData(std::function<void(bool)> finished, bool nativeAllowed, int failures,
+                               bool retriedAnnotations)
 {
     if (pendingStorageSave()) {
-        saveWait.after([this, finished, nativeAllowed, failures] {
-            finishStorageData(finished, nativeAllowed, failures);
+        saveWait.after([this, finished, nativeAllowed, failures, retriedAnnotations] {
+            finishStorageData(finished, nativeAllowed, failures, retriedAnnotations);
         });
         return;
     }
@@ -3448,20 +3508,19 @@ void Reader::finishStorageData(std::function<void(bool)> finished, bool nativeAl
         finished(false);
         return;
     }
-    if (failures >= 3) {
+    const bool annotationsFailed = bookmarks->hasFailedSave() || highlights->hasFailedSave();
+    if (retriedAnnotations && annotationsFailed)
+        ++failures;
+    if (failures >= disposalSaveAttempts) {
         setProperty("reader_transition_save_failed", true);
         kobalt::diagnostic("disposal-save-failed", { { "attempts", failures } },
                            kobalt::DiagnosticSeverity::Error);
-        if (allowFailedTransition || closeWithoutSaving) {
-            closeWithoutSaving = true;
-            finished(false);
-        } else
-            transitionSaveError(
-                    [this, finished, nativeAllowed] {
-                        book->retryFailedReadingSave();
-                        finishStorageData(finished, nativeAllowed);
-                    },
-                    [finished] { finished(false); });
+        retryDisposal = [this, finished, nativeAllowed](int failures) {
+            if (!closeWithoutSaving)
+                book->retryFailedReadingSave();
+            finishStorageData(finished, nativeAllowed, failures);
+        };
+        handleDisposalFailure();
         return;
     }
     const auto retry = [this, finished, nativeAllowed, failures] {
@@ -3469,10 +3528,14 @@ void Reader::finishStorageData(std::function<void(bool)> finished, bool nativeAl
             finishStorageData(finished, nativeAllowed, failures + 1);
         });
     };
-    if (bookmarks->hasFailedSave() || highlights->hasFailedSave()) {
+    if (annotationsFailed) {
         bookmarks->retryFailedSave();
         highlights->retryFailedSave();
-        retry();
+        // A repaired annotation still needs the checkpoint and native finish
+        // from this attempt, including the single retry after wake.
+        qt::later(100, this, [this, finished, nativeAllowed, failures] {
+            finishStorageData(finished, nativeAllowed, failures, true);
+        });
         return;
     }
     const QPointer<Reader> guard(this);

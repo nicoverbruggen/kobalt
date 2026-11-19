@@ -432,7 +432,7 @@ if(BUILD_TESTING)
             appearanceSleepRetainsDraft appearanceFailedPreviewDismisses appearanceApplyFailureCanExit
             appearanceCloseDuringPreview appearanceSleepDuringFirstEdit appearanceDragsDuringPreview
             pageTurnsResumeWhenReaderIsShownAfterSleep sleepFinishesHighlightSave clockUpdatesOnlyReadingStrips clockStopsWhileReaderIsHidden preloadedBookOpensWithFreshHost closeWithPendingBookmark
-            progressExitDuringSync slowCloseSave sleepCancelsPendingExit preSleepCloseAcknowledgedAfterWake retryFailedSaveAfterWake layoutTimeEndsWhenWholeBookIsReady closeWaitsForLocalSave closeRetriesRequiredNativeSaves quitAfterFailedLocalSaveRetry closeWritesPositionBeforeNativeTime sleepWritesPositionBeforeNativeTime revokedNativeDrainRetainsLocalSave
+            progressExitDuringSync slowCloseSave sleepCancelsPendingExit sleepOpeningSaveFailure preSleepCloseAcknowledgedAfterWake retryFailedSaveAfterWake layoutTimeEndsWhenWholeBookIsReady closeWaitsForLocalSave closeRetriesRequiredNativeSaves quitAfterFailedLocalSaveRetry closeWritesPositionBeforeNativeTime sleepWritesPositionBeforeNativeTime revokedNativeDrainRetainsLocalSave
             pageTurnTimingIgnoresNoopNavigation pageButtonsAfterTouchUseDeliveryTime pageFrameDuringHold pageImageDuringHold pageGestureBurstIgnoresRapidTurns exitThroughReaderAndReopen closeGuardUsesTapTime staleSearchReplyIgnored searchScopesAndPagination searchSurvivesReflow
             searchHighlightClearsOnReflow
             settingsOrientationHandoff exactRotationLock rotationRoundTripKeepsReadingResponsive sleepRequestFreezesOrientationBeforeHandoff closePublishesHeldOrientationBeforeBackgroundPaint

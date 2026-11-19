@@ -258,13 +258,6 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
                            { { "status", kobalt::storage::readStatusName(savedSettings.status) } },
                            false);
     preferences = appearance::readerPreferences(savedSettings.object, book->layoutPreferences());
-    // activate() remembers this book's layout. A damaged settings file is left
-    // for the next explicit settings save to replace.
-    if (savedSettings.status == kobalt::storage::ReadStatus::Ok
-        || savedSettings.status == kobalt::storage::ReadStatus::Missing) {
-        storedSettings = savedSettings.object;
-        storedSettingsReadable = true;
-    }
     if (kobalt::annotationDatabaseEnabled())
         savedWords = std::make_unique<kobalt::SavedWords>(book->paths().directory);
     bookmarks = std::make_unique<kobalt::BookmarkSession>(
@@ -410,10 +403,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
                     setGeometry(geometry);
             });
     resize(QGuiApplication::primaryScreen()->size());
-    // A quiet window decodes its sleep images when it is activated; they are
-    // large and not needed before the book shows.
-    if (!services.quiet)
-        prepareSleepImages();
+    prepareSleepImages();
     book->onPositionSaved([this](const QString &position, quint64 epoch) {
         if (sleepSave == SleepSave::Idle || epoch != wakePositionEpoch || lifecycleHidden || closing
             || exitPending || position.isEmpty() || position == sleepSavePosition)
@@ -427,8 +417,26 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     book->onCheckpointFailed([this] { localSaveDue = true; });
     connectPageInput();
     openingStages["build_ms"] = building.nsecsElapsed() / 1e6;
-    if (!services.quiet)
-        start();
+    kobalt::platform::setReaderRefreshWindow(this);
+    qApp->installEventFilter(this);
+    // Remember this book's layout as the last layout in the shared profile.
+    if ((savedSettings.status == kobalt::storage::ReadStatus::Ok
+         || savedSettings.status == kobalt::storage::ReadStatus::Missing)
+        && !session->temporaryTypography()) {
+        auto global = appearance::globalPreferences(preferences);
+        appearance::rememberTextLayout(global, session->state());
+        appearance::rememberPageMargins(global, session->state());
+        if (global != savedSettings.object) {
+            // The shared settings must be on disk before the reader uses them.
+            // The window is not shown yet, so no input can arrive.
+            mainthread::AllowBlocking allow("remembered layout before reader input");
+            if (!kobalt::storage::updatePreferences(book->paths().preferences(),
+                                                    savedSettings.object, global))
+                kobalt::diagnostic("last-appearance-unsaved", {},
+                                   kobalt::DiagnosticSeverity::Error);
+        }
+    }
+    startDeviceObservers();
 }
 
 void Reader::prepareSleepImages()
@@ -440,30 +448,8 @@ void Reader::prepareSleepImages()
     prepareSleepWallpapers();
 }
 
-// Everything that acts outside the window: input, the clock, the shared
-// settings and the host's observers. A quiet window waits for activate().
-void Reader::start()
+void Reader::startDeviceObservers()
 {
-    started = true;
-    kobalt::platform::setReaderRefreshWindow(this);
-    qApp->installEventFilter(this);
-    // Remember this book's layout as the last layout in the shared profile.
-    if (storedSettingsReadable && !session->temporaryTypography()) {
-        auto global = appearance::globalPreferences(preferences);
-        appearance::rememberTextLayout(global, session->state());
-        appearance::rememberPageMargins(global, session->state());
-        if (global != storedSettings) {
-            // The shared settings must be on disk before the reader uses them.
-            // The window is not shown yet, so no input can arrive.
-            mainthread::AllowBlocking allow("remembered layout before reader input");
-            if (!kobalt::storage::updatePreferences(book->paths().preferences(), storedSettings,
-                                                    global))
-                kobalt::diagnostic("last-appearance-unsaved", {},
-                                   kobalt::DiagnosticSeverity::Error);
-        }
-    }
-    storedSettings = {};
-    storedSettingsReadable = false;
     startClock();
     if (services.observeBluetooth)
         services.observeBluetooth(this, [this](bool enabled) {
@@ -500,27 +486,6 @@ void Reader::start()
         if (services.suspended())
             book->checkpointReadingHistory();
     });
-}
-
-void Reader::activate(const kobalt::ReaderNotice &notice, const QString &coverImagePath)
-{
-    if (started)
-        return;
-    services.startupNotice = notice;
-    services.coverImagePath = coverImagePath;
-    prepareSleepImages();
-    // The KOSync interval counts from the opening, not from the build.
-    kosyncIntervalClock.start();
-    start();
-}
-
-std::unique_ptr<kobalt::ReaderSession> Reader::releaseQuiet()
-{
-    if (started)
-        return {};
-    // Nothing of this window reached storage, Nickel or the screen.
-    closeWithoutSaving = true;
-    return session->retained();
 }
 
 void Reader::buildReadingPage()

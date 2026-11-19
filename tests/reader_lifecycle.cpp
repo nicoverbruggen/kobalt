@@ -386,7 +386,8 @@ public:
     ReadingTimer::Clock readingClock;
     std::function<void(ReaderHostServices &)> configureServices;
 
-    void open(const QString &path, QSize size = nativeSize)
+    void open(const QString &path, QSize size = nativeSize,
+              std::unique_ptr<ReaderSession> kept = {})
     {
         Q_ASSERT(idle());
         source = native::openLocalPublication(path);
@@ -406,7 +407,7 @@ public:
         for (const auto *key : appearance::normalizationKeys)
             saved[key] = appearance::normalizationSettings(preferences).value(key);
         (rotation ? rotation : &orientation)->configure(preferences);
-        opening = std::make_unique<ReaderSession>(fonts, placeholder);
+        opening = kept ? std::move(kept) : std::make_unique<ReaderSession>(fonts, placeholder);
         session_ = opening.get();
         OpenRequest request{ identity,
                              path,
@@ -418,42 +419,44 @@ public:
                              source->resources(lease) };
         request.appearanceDefaults = appearance::bookDefaults(preferences);
         request.positions = positions;
-        session_->open(std::move(request),
-                       [this, identity, statePath, size](OpeningResult outcome) {
-                           if (closing)
-                               return;
-                           if (!outcome.ready()) {
-                               emit failed("Cannot prepare publication");
-                               shutdown();
-                               return;
-                           }
-                           const auto hash = session_->sourceHash();
-                           const auto baseline = progress ? progress->current : ReadingProgress{};
-                           auto book = std::make_unique<ReadingBook>(
-                                   std::move(opening), statePath, paths, identity, hash,
-                                   progress ? test::hostReadingBridge(progress) : nullptr, baseline,
-                                   baseline, QString(), utc, readingClock);
-                           book_ = book.get();
-                           auto services = desktop::readerHostServices();
-                           services.desktopUi = false;
-                           services.suspended = [] { return false; };
-                           services.clock = [] { return QStringLiteral("09:00"); };
-                           services.openBrowser = [](const QUrl &, QWidget *) { return false; };
-                           services.inputMilliseconds = test::inputMilliseconds;
-                           if (configureServices)
-                               configureServices(services);
-                           window_ = createReaderWindow(std::move(book),
-                                                        rotation ? rotation : &orientation,
-                                                        std::move(services));
-                           window_->setAttribute(Qt::WA_DeleteOnClose, false);
-                           window_->setWindowFlags(Qt::Widget);
-                           window_->setWindowModality(Qt::NonModal);
-                           window_->resize(size);
-                           window_->finished = [this](std::unique_ptr<ReaderSession>) {
-                               QTimer::singleShot(0, this, [this] { shutdown(); });
-                           };
-                           emit opened();
-                       });
+        session_->open(
+                std::move(request),
+                [this, identity, statePath, size](OpeningResult outcome) {
+                    if (closing)
+                        return;
+                    if (!outcome.ready()) {
+                        emit failed("Cannot prepare publication");
+                        shutdown();
+                        return;
+                    }
+                    const auto hash = session_->sourceHash();
+                    const auto baseline = progress ? progress->current : ReadingProgress{};
+                    auto book = std::make_unique<ReadingBook>(
+                            std::move(opening), statePath, paths, identity, hash,
+                            progress ? test::hostReadingBridge(progress) : nullptr, baseline,
+                            baseline, QString(), utc, readingClock);
+                    book_ = book.get();
+                    auto services = desktop::readerHostServices();
+                    services.desktopUi = false;
+                    services.suspended = [] { return false; };
+                    services.clock = [] { return QStringLiteral("09:00"); };
+                    services.openBrowser = [](const QUrl &, QWidget *) { return false; };
+                    services.inputMilliseconds = test::inputMilliseconds;
+                    if (configureServices)
+                        configureServices(services);
+                    window_ =
+                            createReaderWindow(std::move(book), rotation ? rotation : &orientation,
+                                               std::move(services));
+                    window_->setAttribute(Qt::WA_DeleteOnClose, false);
+                    window_->setWindowFlags(Qt::Widget);
+                    window_->setWindowModality(Qt::NonModal);
+                    window_->resize(size);
+                    window_->finished = [this](std::unique_ptr<ReaderSession>) {
+                        QTimer::singleShot(0, this, [this] { shutdown(); });
+                    };
+                    emit opened();
+                },
+                {}, {}, [this] { emit reused(); });
     }
 
     void shutdown()
@@ -475,6 +478,7 @@ public:
     }
 
 signals:
+    void reused();
     void opened();
     void closed();
     void failed(QString error);
@@ -1197,54 +1201,79 @@ private slots:
         QVERIFY(paints.painted.isEmpty());
     }
 
-    // Checks that hiding the reader stops its clock and that showing it restarts the clock without changing the page.
-    // A window built ahead of its opening observes nothing, starts no clock
-    // and saves nothing until it is activated. Dropped instead, it returns
-    // its book for the next opening and leaves the saved state alone.
-    void quietWindowWaitsForActivation_data()
+    void preloadedBookOpensWithFreshHost_data()
     {
-        QTest::addColumn<bool>("activated");
-        QTest::newRow("activated") << true;
-        QTest::newRow("dropped") << false;
+        QTest::addColumn<bool>("dark");
+        QTest::newRow("matching-layout") << false;
+        QTest::newRow("changed-layout") << true;
     }
 
-    void quietWindowWaitsForActivation()
+    void preloadedBookOpensWithFreshHost()
     {
-        QFETCH(bool, activated);
+        QFETCH(bool, dark);
         const auto paths = testPaths();
-        const auto identity =
-                QUrl::fromLocalFile(QFileInfo(fixture()).absoluteFilePath()).toString();
-        const auto statePath = paths.bookState(identity);
-        QFile::remove(statePath);
+        const auto path = fixture();
+        const auto identity = QUrl::fromLocalFile(QFileInfo(path).absoluteFilePath()).toString();
+        {
+            ReaderFixture previous(paths, testFonts, testPlaceholder);
+            CloseHost cleanup{ previous };
+            QSignalSpy opened(&previous, &ReaderFixture::opened);
+            previous.open(path);
+            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+            previous.shutdown();
+            QTRY_VERIFY_WITH_TIMEOUT(previous.idle(), 10000);
+        }
+        const auto saved = storage::readBookState(paths, identity);
+        QCOMPARE(saved.status, storage::ReadStatus::Ok);
+        const auto preferences = appearance::readerPreferences(
+                storage::readPreferences(paths.preferences()).object, saved.object);
+        auto source = native::openLocalPublication(path);
+        QVERIFY(source);
+        auto lease = std::make_shared<SourceLease>();
+        ReaderSession preload(testFonts, testPlaceholder);
+        std::unique_ptr<ReaderSession> kept;
+        bool completed = false;
+        OpenRequest request{ identity,
+                             path,
+                             readerInterface().readingViewport(nativeSize, preferences),
+                             saved.object,
+                             {},
+                             paths.layoutCache(),
+                             lease,
+                             source->resources(lease) };
+        request.appearanceDefaults = appearance::bookDefaults(preferences);
+        preload.open(std::move(request), [&](OpeningResult result) {
+            if (result.ready())
+                kept = preload.retained();
+            completed = true;
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(completed, 30000);
+        QVERIFY(kept);
+        QVERIFY(lease->revoked());
+        source.reset();
+        QCOMPARE(storage::readBookState(paths, identity).object, saved.object);
+
+        // An opening must use the settings and device services from the tap.
+        if (dark) {
+            auto changed = storage::readPreferences(paths.preferences()).object;
+            changed["dark_mode"] = true;
+            QVERIFY(storage::writePreferences(paths.preferences(), changed));
+        }
+        int observers = 0;
         ReaderFixture host(paths, testFonts, testPlaceholder);
         CloseHost cleanup{ host };
-        int observers = 0;
         host.configureServices = [&](ReaderHostServices &services) {
-            services.quiet = true;
             services.observeBattery = [&](QObject *, std::function<void()>) { ++observers; };
             services.holdWifiOff = [&](QObject *, std::function<bool()>) { ++observers; };
         };
+        QSignalSpy reused(&host, &ReaderFixture::reused);
         QSignalSpy opened(&host, &ReaderFixture::opened);
-        host.open(fixture(), nativeSize);
+        host.open(path, nativeSize, std::move(kept));
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
-        auto *clock = host.window()->findChild<QTimer *>("rrClockTimer");
-        QVERIFY(clock);
-        QVERIFY(!clock->isActive());
-        QCOMPARE(observers, 0);
-        if (!activated) {
-            auto kept = host.window()->releaseQuiet();
-            QVERIFY(kept);
-            host.shutdown();
-            QTRY_VERIFY_WITH_TIMEOUT(host.idle(), 10000);
-            QVERIFY(!QFileInfo::exists(statePath));
-            return;
-        }
-        host.window()->activate({}, {});
+        QCOMPARE(reused.count(), dark ? 0 : 1);
+        QCOMPARE(host.session()->state().value("dark_mode").toBool(), dark);
+        QVERIFY(!host.session()->image().isNull());
         QCOMPARE(observers, 2);
-        // An active window is not quiet any more.
-        host.window()->activate({}, {});
-        QCOMPARE(observers, 2);
-        QVERIFY(!host.window()->releaseQuiet());
     }
 
     void clockStopsWhileReaderIsHidden_data()

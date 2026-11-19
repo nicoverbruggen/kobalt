@@ -104,8 +104,6 @@ public:
     void refreshRenderNotice();
     bool readyForPresentation() const override;
     void preparePresentation(std::function<void(bool)> finished) override;
-    void activate(const kobalt::ReaderNotice &notice, const QString &coverImagePath) override;
-    std::unique_ptr<kobalt::ReaderSession> releaseQuiet() override;
     void checkpoint() override;
     bool flushBeforeStandby() override;
     bool pendingStorageSave() const override;
@@ -346,15 +344,9 @@ private:
     std::function<void(bool)> annotationPresentationReady;
     kobalt::ui::ModalOverlay *annotationPopover = nullptr;
     void startClockTimer();
-    // Starts what acts outside the window; see ReaderWindow::activate().
-    void start();
+    void startDeviceObservers();
     // The sleep cover, overlay and wallpapers, and today's reading for them.
     void prepareSleepImages();
-    bool started = false;
-    // The shared settings as read when building, so start() can remember this
-    // book's layout in them. Unreadable settings are left alone.
-    QJsonObject storedSettings;
-    bool storedSettingsReadable = false;
     void buildToolbar();
     void buildBottomControls();
     kobalt::reader::AppearanceLayout buildMenu();

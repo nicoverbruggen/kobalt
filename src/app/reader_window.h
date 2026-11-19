@@ -25,16 +25,6 @@ public:
     // Empty preparation completes synchronously. Cancellation destroys the window.
     virtual void preparePresentation(std::function<void(bool)> finished) { finished(true); }
 
-    // A window built with ReaderHostServices::quiet takes no input, starts no
-    // clock, writes nothing and observes no host state until it is activated.
-    // The host activates it when the opening it was built for is accepted,
-    // with that opening's startup notice and cover. An active window ignores it.
-    virtual void activate(const ReaderNotice &notice, const QString &coverImagePath) = 0;
-    // Drops a quiet window that was never activated without saving anything,
-    // and returns its session for a later opening of the same book. The host
-    // deletes the window afterwards.
-    virtual std::unique_ptr<ReaderSession> releaseQuiet() = 0;
-
     virtual void checkpoint() = 0;
 
     // Asked before the device enters standby. False means reading-position

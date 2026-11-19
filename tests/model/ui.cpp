@@ -15,6 +15,7 @@
 #include "assets/assets.h"
 #include "assets/font_catalog.h"
 #include "reader_inputs.h"
+#include "font_fixtures.h"
 #include "app/reader/views/opening.h"
 #include "app/reader/views/appearance_preview.h"
 #include "app/reader/settings/settings_panel.h"
@@ -27,6 +28,8 @@
 #include <QFontInfo>
 #include <QFontDatabase>
 #include <QJsonObject>
+#include <QJsonArray>
+#include <QCryptographicHash>
 #include <QLabel>
 #include <QLocale>
 #include <QLineEdit>
@@ -404,6 +407,93 @@ void checkSearchExcerptFit(bool privateText)
     }
 }
 
+static void checkPreparedOpeningFonts()
+{
+    using namespace kobalt;
+    using namespace kobalt::ui;
+    QTemporaryDir directory;
+    const auto fonts = directory.filePath("fonts");
+    const auto &installed = test::readerAssets();
+    require(directory.isValid(), "Cannot create the opening font fixture");
+    const auto faces = test::copyOpeningFontFixture(installed.root(), directory.path());
+    require(!faces.isEmpty(), "Cannot copy the opening font fixture");
+    const auto manifest = directory.filePath("manifest.json");
+    qint64 faceBytes = 0;
+    for (const auto &name : faces)
+        faceBytes += QFileInfo(fonts + '/' + name).size();
+    AssetBundle bundle(directory.path(), QStringLiteral(KOBALT_VERSION),
+                       AssetBundle::Verification::Explicit);
+    require(bundle.verify(), "Cannot verify the opening font fixture");
+    const auto prepared = readOpeningFonts(bundle);
+    require(bool(prepared), "Cannot prepare the verified opening faces");
+    AssetBundle other(directory.path(), QStringLiteral(KOBALT_VERSION),
+                      AssetBundle::Verification::Explicit);
+    require(other.verify(), "Cannot verify the second owner of the same path");
+    setPreparedOpeningFonts(other, prepared);
+    require(!initializeOpeningFonts(other), "Another bundle accepted prepared faces");
+    setPreparedOpeningFonts(bundle, prepared);
+    for (const auto &name : faces)
+        require(QFile::rename(fonts + '/' + name, fonts + '/' + name + ".away"),
+                "Cannot move a prepared face");
+    require(initializeOpeningFonts(bundle), "Opening reread a prepared face");
+    bool changed = true;
+    require(initializeInterfaceFonts(bundle, &changed) && !changed,
+            "Full init reread or replaced the opening faces");
+    require(privateInterfaceFontBytes() == 0, "Full init eagerly retained private font bytes");
+    for (const auto &name : faces) {
+        auto font = name.startsWith("Instrument") ? brandFont(24)
+                : name.contains("Mono")           ? chromeFont(24)
+                                                  : interfaceFont(24);
+        font.setBold(name.contains("Bold"));
+        font.setItalic(name.contains("Italic"));
+        const auto sample = renderPrivateText("Kobalt", font);
+        require(!sample.image.isNull() && !sample.missingGlyphs,
+                "Private text lost its prepared face");
+    }
+    require(privateInterfaceFontBytes() == faceBytes,
+            "Private text did not reuse exactly the seven prepared faces");
+    for (const auto &name : faces)
+        require(QFile::rename(fonts + '/' + name + ".away", fonts + '/' + name),
+                "Cannot restore a prepared face");
+
+    bundle.invalidate();
+    setPreparedOpeningFonts(bundle, prepared);
+    require(!initializeOpeningFonts(bundle) && !initializeInterfaceFonts(bundle),
+            "USB invalidation left fonts ready");
+    const QString relative = "fonts/IBMPlexSans-Regular.ttf";
+    QFile changedFace(directory.filePath(relative));
+    require(changedFace.open(QIODevice::Append) && changedFace.write("x") == 1,
+            "Cannot alter the font fixture");
+    changedFace.close();
+    require(!bundle.verify() && !initializeInterfaceFonts(bundle),
+            "A corrupt required face passed verification or full initialization");
+    auto document = storage::readJson(manifest);
+    auto entries = document.value("files").toArray();
+    require(changedFace.open(QIODevice::ReadOnly), "Cannot read changed face");
+    const auto bytes = changedFace.readAll();
+    for (int i = 0; i < entries.size(); ++i) {
+        auto entry = entries[i].toObject();
+        if (entry.value("path").toString() == relative) {
+            entry["size"] = bytes.size();
+            entry["sha256"] = QString::fromLatin1(
+                    QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+            entries[i] = entry;
+            break;
+        }
+    }
+    document["files"] = entries;
+    require(storage::writeJson(manifest, document) && bundle.verify(),
+            "Cannot verify changed manifest");
+    setPreparedOpeningFonts(bundle, prepared);
+    require(!initializeOpeningFonts(bundle),
+            "A later verification accepted a stale prepared result");
+    setPreparedOpeningFonts(bundle, readOpeningFonts(bundle));
+    require(initializeInterfaceFonts(bundle, &changed) && changed,
+            "Full init missed a changed face");
+    require(initializeInterfaceFonts(bundle, &changed) && !changed,
+            "Unchanged full init replaced faces");
+}
+
 int main(int argc, char **argv)
 {
 #ifdef Q_OS_LINUX
@@ -464,6 +554,9 @@ int main(int argc, char **argv)
                     && QFontInfo(kobalt::ui::chromeFont()).family() == "IBM Plex Mono"
                     && QFontInfo(kobalt::ui::brandFont(32)).family() == "Instrument Serif",
             "Component font substitution");
+    checkPreparedOpeningFonts();
+    require(kobalt::ui::initializeInterfaceFonts(kobalt::test::readerAssets()),
+            "Cannot restore the component fonts");
     dismissedContent();
     checkSearchExcerptFit(true);
     checkWrappedLineTint();

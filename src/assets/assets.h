@@ -17,6 +17,9 @@ public:
     AssetBundle(const AssetBundle &) = delete;
     AssetBundle &operator=(const AssetBundle &) = delete;
     bool available() const;
+    Verification verification() const;
+    // Identifies this bundle and its current storage lifecycle.
+    quint64 generation() const;
     // Explicit bundles remain unavailable until this full check succeeds.
     // Run at storage lifecycle boundaries, on a worker, never on book opening.
     bool verify(const std::function<bool()> &current = {});
@@ -34,10 +37,12 @@ public:
     // Verify the whole bundle once for a batch. Each reader still verifies its
     // own file when called. A set-aside member is left out of the result; any
     // other missing member rejects the complete batch.
-    QMap<QString, std::function<QByteArray()>> deferredFontData(const QStringList &names) const;
+    // When requested, digests records the SHA-256 each reader must match.
+    QMap<QString, std::function<QByteArray()>>
+    deferredFontData(const QStringList &names, QMap<QString, QByteArray> *digests = nullptr) const;
     // Checks one font against the manifest without verifying the whole bundle
     // first. After a full verification, this is the same as fontData().
-    QByteArray manifestFontData(const QString &name) const;
+    QByteArray manifestFontData(const QString &name, QByteArray *digest = nullptr) const;
     // Retain an independent manifest reader for text shown before full verification.
     std::function<QByteArray()> deferredManifestFontData(const QString &name) const;
     const QString &root() const;

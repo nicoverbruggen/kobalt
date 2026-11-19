@@ -1,10 +1,14 @@
 #include "platforms/kobo/common/native_lifecycle.h"
+#include "platforms/kobo/common/reader_environment.h"
+#include "support/font_fixtures.h"
 #include "platforms/kobo/common/screensaver_compatibility.h"
 #include "storage/profile_database.h"
 #include <QAbstractEventDispatcher>
 #include <QCoreApplication>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QSemaphore>
+#include <QThread>
 #include <QTimer>
 #include <QLibrary>
 #include <chrono>
@@ -173,6 +177,86 @@ private slots:
     {
         kobalt::storage::reopenProfile();
         kobalt::storage::closeProfile();
+    }
+
+    void stockRemountAfterBootDelivery()
+    {
+        using namespace kobalt;
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const auto faces =
+                test::copyOpeningFontFixture(QStringLiteral(KOBALT_TEST_ASSET_ROOT), root.path());
+        QVERIFY(!faces.isEmpty());
+        nickel::ReaderEnvironment environment(root.path());
+        QList<bool> results;
+        const auto start = [&] {
+            environment.verifyAssets(
+                    this, "boot", [&](bool valid) { results.append(valid); },
+                    NativeLifecycle::stockStorageGeneration);
+        };
+        start();
+        QTRY_COMPARE(results, QList<bool>{ true });
+        QVERIFY(environment.assetsAvailable());
+        const auto boot = NativeLifecycle::stockStorageGeneration();
+        QVERIFY(environment.verificationForStorage(boot));
+        auto *usb = PlugWorkflowManager::sharedInstance();
+        QVERIFY(!NativeLifecycle::interceptUsb(usb));
+        const bool availableOnUsb = environment.assetsAvailable();
+        const bool removed = QFile::remove(root.filePath("fonts/" + faces.first()));
+        emit usb->aboutToUnplug();
+        emit usb->doneProcessing();
+        QVERIFY(removed);
+        QVERIFY(!availableOnUsb);
+        const auto mounted = NativeLifecycle::stockStorageGeneration();
+        QVERIFY(mounted && mounted != boot);
+        QVERIFY(!environment.verificationForStorage(mounted));
+        QVERIFY(!environment.assetsAvailable());
+        start();
+        QTRY_COMPARE(results.size(), 2);
+        QVERIFY(!results.last());
+        QVERIFY(!environment.assetsAvailable());
+    }
+
+    void stockUsbWaitsForAssetVerification()
+    {
+        using namespace kobalt;
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const auto faces =
+                test::copyOpeningFontFixture(QStringLiteral(KOBALT_TEST_ASSET_ROOT), root.path());
+        QVERIFY(!faces.isEmpty());
+        const auto face = root.filePath("fonts/" + faces.first());
+        QVERIFY(QFile::rename(face, root.filePath("fonts/FSCK0001.000")));
+        nickel::ReaderEnvironment environment(root.path());
+        QSemaphore insideVerification, returned;
+        bool handedOffDuringVerification = false;
+        int checks = 0;
+        const auto permit = [&] {
+            if (QThread::currentThread() != thread() && ++checks == 2) {
+                // verifyFiles has recovered the face. Stay inside verify until the
+                // stock hook revokes storage, then see whether it returns early.
+                insideVerification.release();
+                while (NativeLifecycle::stockStorageGeneration())
+                    QThread::yieldCurrentThread();
+                handedOffDuringVerification = returned.tryAcquire(1, 100);
+            }
+            return NativeLifecycle::stockStorageGeneration();
+        };
+        QList<bool> results;
+        environment.verifyAssets(this, "boot", [&](bool valid) { results.append(valid); }, permit);
+        QVERIFY(insideVerification.tryAcquire(1, 5000));
+        auto *usb = PlugWorkflowManager::sharedInstance();
+        const bool stock = !NativeLifecycle::interceptUsb(usb);
+        returned.release();
+        QTRY_COMPARE(results.size(), 1);
+        const bool blocked = !environment.assetsAvailable();
+        emit usb->aboutToUnplug();
+        emit usb->doneProcessing();
+        QVERIFY(stock);
+        QVERIFY(!handedOffDuringVerification);
+        QVERIFY(QFile::exists(face));
+        QVERIFY(!results.first());
+        QVERIFY(blocked);
     }
 
     void timerCheckSeesDeadlines()
@@ -443,5 +527,11 @@ private:
         }
     }
 };
-QTEST_GUILESS_MAIN(ShutdownTests)
+int main(int argc, char **argv)
+{
+    QCoreApplication app(argc, argv);
+    ShutdownTests tests;
+    QTimer::singleShot(0, &app, [&] { app.exit(QTest::qExec(&tests, argc, argv)); });
+    return app.exec();
+}
 #include "kobo_shutdown.moc"

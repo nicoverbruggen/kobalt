@@ -55,6 +55,10 @@ public:
     // handed to USB or Nickel begins its final shutdown.
     static bool nativeSessionSaveAllowed();
     static bool stockStorageBlocked();
+    // A boot worker may read through this generation. A stock handoff retires
+    // it, even when storage returns before the worker reports its result.
+    // Zero means USB or shutdown currently owns storage.
+    static quint64 stockStorageGeneration();
     // GUI-thread permission for progress writes, including a held shutdown
     // while Nickel's sleep or PIN screen is still visible.
     static bool nativeProgressSaveAllowed();

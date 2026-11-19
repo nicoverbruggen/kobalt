@@ -663,13 +663,19 @@ bool initializePrivateInterfaceText(const AssetBundle &assets, bool opening,
     state.pending = pending;
     for (auto it = pending.cbegin(); it != pending.cend(); ++it) {
         const auto path = assets.file("fonts/" + it.key());
-        state.sizes.insert(it.key(), QFileInfo(path).size());
-        state.bundledPaths.insert(QFileInfo(path).absoluteFilePath(), it.key());
-        state.pendingPaths.insert(it.key(), QFileInfo(path).absoluteFilePath());
+        const QFileInfo info(path);
+        state.bundledPaths.insert(info.absoluteFilePath(), it.key());
+        const auto bytes = checked.value(it.key());
+        if (!bytes.isEmpty()) {
+            // Qt already owns these checked bytes. Count them against the
+            // private budget only when FreeType needs this face.
+            state.pending[it.key()] = [bytes] { return bytes; };
+            state.sizes.insert(it.key(), bytes.size());
+        } else {
+            state.sizes.insert(it.key(), info.size());
+            state.pendingPaths.insert(it.key(), info.absoluteFilePath());
+        }
     }
-    for (auto it = checked.cbegin(); it != checked.cend(); ++it)
-        if (pending.contains(it.key()) && !it.value().isEmpty())
-            state.sources.insert(it.key(), it.value());
     setDiagnosticFontBytes(state.bytes());
     return true;
 }

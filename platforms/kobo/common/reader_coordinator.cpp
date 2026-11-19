@@ -248,17 +248,21 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     // A fallback or error dialog also sets busy, but waits for the user.
     lifecycle->openingWorkPending = [this] { return busy && !run.fallbackAlert; };
     lifecycle->sleepWorkPending = [this] {
-        return run.reader && (run.reader->pendingNetworkSync() || run.reader->pendingStorageSave());
+        return homeSleep->waitingForFonts()
+                || (run.reader
+                    && (run.reader->pendingNetworkSync() || run.reader->pendingStorageSave()));
     };
     // Outside the reader, Kobalt's screen still uses its own type. The fonts
     // load with the first book otherwise. Load them once, only when the home
     // screen draws, and never while a reader owns them. Input cannot arrive
     // while the device sleeps or powers off.
-    homeSleep->prepareFonts = [this] {
-        if (interfaceFontsLoaded || busy || run.reader || !environment_.assets.available())
-            return;
-        interfaceFontsLoaded = kobalt::ui::initializeInterfaceFonts(environment_.assets);
-    };
+    homeSleep->setFontSource(environment_, [this] {
+        if (!environment_.assetsAvailable())
+            return false;
+        if (!interfaceFontsLoaded && !run.reader && !lifecycle->storageBlocked())
+            interfaceFontsLoaded = kobalt::ui::initializeInterfaceFonts(environment_.assets);
+        return interfaceFontsLoaded;
+    });
     lifecycle->sleep = [this] {
         if (lifecycle->shuttingDown())
             return;
@@ -347,10 +351,7 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         interfaceFontsLoaded = false;
     };
     lifecycle->storageRestored = [this] {
-        environment_.verifyAssets(this, "usb", [this](bool valid) {
-            if (valid)
-                kobalt::ui::prepareOpeningFonts(environment_.assets);
-        });
+        environment_.verifyAssets(this, "usb", {}, NativeLifecycle::stockStorageGeneration);
     };
     lifecycle->preparePowerScreen = [this](NativeLifecycle::Shutdown mode) {
         homeSleep->clear();
@@ -394,11 +395,7 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     timer.setInterval(65000);
     if (!lifecycle->blocked())
         timer.start();
-    // Read and check the interface faces on a worker thread before any tap,
-    // so the first opening view does not wait for storage.
     if (!NativeLifecycle::stockStorageBlocked() && available()) {
-        if (environment_.assets.available())
-            kobalt::ui::prepareOpeningFonts(environment_.assets);
         openingDark = storage::readPreferences(environment_.paths.preferences())
                               .object.value("dark_mode")
                               .toBool(false);
@@ -495,7 +492,7 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
 {
     QElapsedTimer openingStarted;
     openingStarted.start();
-    if (!available() || !environment_.assets.available())
+    if (!available() || !environment_.assetsAvailable())
         return false;
     if (lifecycle->blocked() || lifecycle->draining)
         return true;
@@ -535,7 +532,12 @@ bool ReaderCoordinator::begin(const RetainOpening &retainOpening)
         const auto elapsed = run.openingTimer.elapsed();
         run.openingTimings["first_frame_ms"] = double(elapsed);
         diagnostic("opening-first-frame", { { "elapsed_ms", double(elapsed) } });
-        prepareOpeningControls();
+        const QPointer<ReaderCoordinator> guard(this);
+        environment_.whenOpeningFontsReady([guard, epoch] {
+            if (guard && epoch == guard->generation && guard->busy && guard->run.opening
+                && guard->run.loading)
+                guard->prepareOpeningControls();
+        });
     });
     run.loading->window()->show();
     run.loading->window()->raise();
@@ -566,11 +568,8 @@ void ReaderCoordinator::prepareOpeningControls()
     // storage commit or live widget layout can hold up that first feedback.
     kobalt::markMemoryBase();
     if (!kobalt::ui::initializeOpeningFonts(environment_.assets)) {
-        const bool assetsReady = environment_.assets.available();
-        if (!assetsReady || !kobalt::ui::initializeInterfaceFonts(environment_.assets)) {
-            missingAssets(assetsReady);
-            return;
-        }
+        missingAssets(environment_.assetsAvailable());
+        return;
     }
     // Each step until the book work starts, to find time spent outside Kobalt.
     const auto step = [this](const char *name) {
@@ -721,7 +720,7 @@ void ReaderCoordinator::prepareOpening(kobalt::ReaderBookRoute candidate)
         }
     }
     status("loading");
-    const bool assetsReady = environment_.assets.available();
+    const bool assetsReady = environment_.assetsAvailable();
     bool fontsChanged = false;
     // Loaded faces stay valid until USB releases the assets. Loading them again
     // would read and hash the same files and reset the private text caches.
@@ -823,6 +822,7 @@ void ReaderCoordinator::drainReadingJobs(std::function<void()> finished)
 
 void ReaderCoordinator::disposeForTransition(std::function<void()> finished, bool nativeAllowed)
 {
+    environment_.cancelOpeningFontWait();
     cancelPreload();
     authorization->end();
     if (run.fallbackAlert)
@@ -895,6 +895,7 @@ void ReaderCoordinator::finishDisposal(const QString &finalStatus, bool nativeAl
 
 void ReaderCoordinator::release(bool endAuthorization)
 {
+    environment_.cancelOpeningFontWait();
     cancelPreload();
     if (endAuthorization)
         authorization->end();
@@ -1363,7 +1364,7 @@ void ReaderCoordinator::preloadLastBook()
 {
     if (!bindings_.enabled() || busy || run.reader || run.session || preload.session
         || lifecycle->blocked() || lifecycle->draining || NativeLifecycle::suspended()
-        || !environment_.assets.available())
+        || !environment_.assetsAvailable())
         return;
     if (!lastBook)
         lastBook = std::make_unique<storage::RecordWriter>();

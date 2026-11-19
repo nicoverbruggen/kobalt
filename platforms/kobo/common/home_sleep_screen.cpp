@@ -1,5 +1,7 @@
 #include "home_sleep_screen.h"
+#include <utility>
 #include "last_read_book.h"
+#include "reader_environment.h"
 #include "native_ui.h"
 #include "window_presentation.h"
 #include "app/reader/views/sleep_screen.h"
@@ -321,11 +323,8 @@ bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &opening
     if (source.privateBook && source.design == sleep::Design::Overlay
         && sleep::design(preferences) == sleep::Design::Overlay && !source.image.isNull())
         snapshot.image = source.image;
-    // The neutral screen draws its status with Kobalt's fonts too.
-    if (prepareFonts)
-        prepareFonts();
     poweredOff = powerOff;
-    compose();
+    composeHome();
     return true;
 }
 
@@ -423,11 +422,9 @@ bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIde
         shot.image = QImage(size, QImage::Format_RGB32);
         shot.image.fill(shot.dark ? Qt::black : Qt::white);
     }
-    if (prepareFonts)
-        prepareFonts();
     snapshot = std::move(shot);
     poweredOff = powerOff;
-    compose();
+    composeHome();
     diagnostic("home-sleep-screen",
                { { "design", sleep::value(snapshot.design) },
                  { "mode", sleep::value(snapshot.mode) },
@@ -493,6 +490,39 @@ bool HomeSleepScreen::eventFilter(QObject *object, QEvent *event)
     return false;
 }
 
+void HomeSleepScreen::setFontSource(ReaderEnvironment &environment, std::function<bool()> install)
+{
+    prepareFonts = [this, &environment, install] {
+        const QPointer<HomeSleepScreen> guard(this);
+        if (environment.deferHomeFonts([guard, install](bool prepared) {
+                if (guard && guard->waitingForFonts())
+                    guard->finishFonts(prepared && install());
+            }))
+            return true;
+        install();
+        return false;
+    };
+}
+
+void HomeSleepScreen::composeHome()
+{
+    if (prepareFonts && prepareFonts())
+        fontBackdrop = snapshot;
+    compose();
+}
+
+void HomeSleepScreen::finishFonts(bool ready)
+{
+    auto backdrop = std::exchange(fontBackdrop, {});
+    if (!ready || backdrop.image.isNull())
+        return;
+    // Repaint the same privacy-checked frame from its clean backdrop. If
+    // Nickel has not shown its power view yet, present() will use the result.
+    snapshot = std::move(backdrop);
+    compose();
+    presentation->updateSleepScreen(snapshot.image, snapshot.image.rect());
+}
+
 void HomeSleepScreen::compose()
 {
     if (snapshot.image.isNull())
@@ -520,6 +550,7 @@ void HomeSleepScreen::clear()
     snapshot = {};
     underlay.clear();
     shutdownBackdrop = {};
+    fontBackdrop = {};
     poweredOff = false;
 }
 

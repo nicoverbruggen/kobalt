@@ -20,6 +20,8 @@
 
 namespace kobalt {
 namespace {
+std::atomic<quint64> nextGeneration{ 1 };
+
 struct Entry
 {
     QString path;
@@ -152,6 +154,7 @@ struct AssetBundle::Data
     QSet<QString> setAside;
     Verification verification = Verification::OnDemand;
     std::atomic_bool verified{ false };
+    std::atomic<quint64> generation{ nextGeneration++ };
 };
 
 AssetBundle::AssetBundle(QString root, QString expectedVersion, Verification verification)
@@ -169,8 +172,19 @@ const QString &AssetBundle::root() const
     return data->root;
 }
 
+AssetBundle::Verification AssetBundle::verification() const
+{
+    return data->verification;
+}
+
+quint64 AssetBundle::generation() const
+{
+    return data->generation.load();
+}
+
 void AssetBundle::invalidate()
 {
+    data->generation.store(nextGeneration++);
     data->verified.store(false);
     QMutexLocker lock(&data->mutex);
     data->checked.clear();
@@ -228,6 +242,7 @@ bool AssetBundle::available() const
 bool AssetBundle::verify(const std::function<bool()> &current)
 {
     QMutexLocker lock(&data->mutex);
+    data->generation.store(nextGeneration++);
     data->verified.store(false);
     data->checked.clear();
     const bool valid = verifyFiles() && (!current || current());
@@ -251,6 +266,8 @@ bool AssetBundle::verifyFiles() const
     }
     if (unchanged)
         return true;
+    if (!checked.isEmpty())
+        data->generation.store(nextGeneration++);
     checked.clear();
     data->setAside.clear();
     QFile manifest(data->root + "/manifest.json");
@@ -336,8 +353,10 @@ QByteArray AssetBundle::fontData(const QString &name) const
     return read ? read() : QByteArray();
 }
 
-QByteArray AssetBundle::manifestFontData(const QString &name) const
+QByteArray AssetBundle::manifestFontData(const QString &name, QByteArray *digest) const
 {
+    if (digest)
+        digest->clear();
     {
         QMutexLocker lock(&data->mutex);
         if (data->checked.isEmpty()) {
@@ -360,17 +379,25 @@ QByteArray AssetBundle::manifestFontData(const QString &name) const
                     || !font.open(QIODevice::ReadOnly) || font.size() != size)
                     return {};
                 const auto bytes = font.readAll();
-                return bytes.size() == size
-                                && QCryptographicHash::hash(bytes, QCryptographicHash::Sha256)
-                                                .toHex()
-                                        == entry.value("sha256").toString().toLatin1()
-                        ? bytes
-                        : QByteArray();
+                const auto expected = entry.value("sha256").toString().toLatin1();
+                if (bytes.size() != size
+                    || QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()
+                            != expected)
+                    return {};
+                if (digest)
+                    *digest = expected;
+                return bytes;
             }
             return {};
         }
     }
-    return fontData(name);
+    QMap<QString, QByteArray> digests;
+    const auto read =
+            deferredFontData(QStringList{ name }, digest ? &digests : nullptr).value(name);
+    const auto bytes = read ? read() : QByteArray();
+    if (digest && !bytes.isEmpty())
+        *digest = digests.value(name);
+    return bytes;
 }
 
 std::function<QByteArray()> AssetBundle::deferredManifestFontData(const QString &name) const
@@ -387,12 +414,15 @@ std::function<QByteArray()> AssetBundle::deferredFontData(const QString &name) c
 }
 
 QMap<QString, std::function<QByteArray()>>
-AssetBundle::deferredFontData(const QStringList &names) const
+AssetBundle::deferredFontData(const QStringList &names, QMap<QString, QByteArray> *digests) const
 {
+    if (digests)
+        digests->clear();
     if (!available())
         return {};
     QMutexLocker lock(&data->mutex);
     QMap<QString, std::function<QByteArray()>> readers;
+    QMap<QString, QByteArray> expected;
     for (const auto &name : names) {
         // An optional font that failed its check is simply left out.
         if (data->setAside.contains("fonts/" + name))
@@ -404,6 +434,8 @@ AssetBundle::deferredFontData(const QStringList &names) const
                 });
         if (found == data->checked.cend())
             return {};
+        if (digests)
+            expected.insert(name, found->digest);
         readers.insert(name, [root = data->root, entry = *found] {
             if (!regularMember(root, entry.path))
                 return QByteArray();
@@ -418,6 +450,8 @@ AssetBundle::deferredFontData(const QStringList &names) const
                     : QByteArray();
         });
     }
+    if (digests)
+        *digests = std::move(expected);
     return readers;
 }
 

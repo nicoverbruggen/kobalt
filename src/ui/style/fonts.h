@@ -1,6 +1,8 @@
 #pragma once
 #include "metrics.h"
 #include <QFont>
+#include <functional>
+#include <memory>
 
 class QWidget;
 class QLineEdit;
@@ -22,11 +24,13 @@ bool initializeInterfaceFonts(const AssetBundle &assets, bool *changed = nullptr
 // manifest, so the opening view draws in its own fonts before the whole
 // bundle is verified. Later openings reuse the registered faces.
 bool initializeOpeningFonts(const AssetBundle &assets);
-// Reads the interface faces and checks them against the manifest on a worker
-// thread. The next initializeOpeningFonts() takes the result, so the first
-// opening view does no storage reads for them. Call on the GUI thread. The
-// worker keeps its own asset readers, so `assets` need not outlive it.
-void prepareOpeningFonts(const AssetBundle &assets);
+struct OpeningFontData;
+using OpeningFonts = std::shared_ptr<const OpeningFontData>;
+// Read and check the interface faces on the storage worker after bundle verification.
+// A superseded storage operation stops before reading the next face.
+OpeningFonts readOpeningFonts(const AssetBundle &assets, const std::function<bool()> &current = {});
+// On the GUI thread, stage the result for this bundle. An empty result releases it.
+void setPreparedOpeningFonts(const AssetBundle &assets, OpeningFonts fonts);
 // Register bundled faces; never change Nickel's application font.
 QFont interfaceFont(int pixels = -1);
 // Empty families restore the bundled interface and strip defaults.

@@ -6,6 +6,10 @@ These checks cover font sources, system and embedded fonts, the font pickers, Pu
 
 `component.ui` compares the private renderer's wrapped label with the original SourceIn tint, including low-opacity ink and theme changes. It checks that a repeat paint reuses the tinted image, a different coverage mask draws its own pixels, and forgetting a font releases its cached tint. An image larger than the cache must render without evicting the label.
 
+`component.ui` moves all seven interface font files out of a verified fixture after preparing them. A cold full verification still hashes the bundle before font preparation. Opening and full initialization must still succeed. The private renderer must retain no font bytes until a draw and render all seven styles from the prepared bytes. A second bundle at the same path and a new USB verification must reject the old result. The test also checks that a corrupt required face fails verification and that registering a changed face reports the change only once.
+
+`platform.kobo-power-screen` checks delivery of prepared opening fonts on the Kobo adapter. It holds the queued startup result until USB replaces it, then checks that only the latest opening request runs. Cancelling an opening before delivery drops its callback. If stock USB export takes storage before delivery, an opening must wait for a fresh verification after remount.
+
 `platform.font-sources` uses the pinned Amstelvar font for source precedence, because its family is absent from the bundled reader catalogue. Bundled Bitter would test duplicate-family precedence instead. `platform.system-fonts` uses synthetic plain, compressed and encrypted wrappers in temporary directories.
 
 The KF variant fixtures keep the original glyphs and metrics. They test catalogue names, not Kobo font transformations. KF variants need no saved-data or rendering-cache format change. Physical-device behavior remains separate validation.

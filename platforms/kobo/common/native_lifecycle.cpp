@@ -37,6 +37,7 @@ namespace kobalt {
 namespace {
 QPointer<NativeLifecycle> active;
 std::atomic_bool sessionStorageAvailable{ true };
+std::atomic<quint64> stockGeneration{ 1 };
 
 StockStorageHandoff &stockHandoff()
 {
@@ -106,10 +107,12 @@ bool NativeLifecycle::usbSaveAllowed()
 void StockStorageHandoff::begin(State next)
 {
     // Native workflow and gadget hooks can call each other. Only the first
-    // handoff drains the stock opening's queued invalidation.
+    // handoff drains asset verification and the stock opening's queued invalidation.
     if (state == State::Available) {
         mainthread::AllowBlocking allow("host checkpoint");
         sessionStorageAvailable.store(false);
+        ++stockGeneration;
+        nickel::ReaderEnvironment::finishStockAssetWork();
         storage::finishSleepSnapshotWork();
     }
     if (state != State::Shutdown && (state == State::Available || next != State::Preparing))
@@ -151,6 +154,11 @@ void StockStorageHandoff::processingDone()
 bool NativeLifecycle::stockStorageBlocked()
 {
     return stockHandoff().blocked();
+}
+
+quint64 NativeLifecycle::stockStorageGeneration()
+{
+    return sessionStorageAvailable.load() ? stockGeneration.load() : 0;
 }
 
 bool NativeLifecycle::nativeSessionSaveAllowed()

@@ -16,7 +16,6 @@
 #include "platforms/kobo/common/native_ui.h"
 #include "platforms/kobo/common/crash_reports.h"
 #include "support/diagnostics.h"
-#include "ui/style/fonts.h"
 #include "platforms/kobo/common/native_startup.h"
 #include "platforms/kobo/common/native_startup_wait.h"
 #include "platforms/kobo/common/reader_environment.h"
@@ -116,7 +115,7 @@ bool enabled()
 bool readerAvailable()
 {
     return !kobalt::NativeLifecycle::stockStorageBlocked() && enabled()
-            && environment().assets.available();
+            && environment().assetsAvailable();
 }
 
 #if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
@@ -342,25 +341,27 @@ public:
 
     void attempt(bool fromOpener)
     {
-        if (controller || rejected || initializing
-            || kobalt::NativeLifecycle::stockStorageBlocked())
+        if (rejected || initializing || kobalt::NativeLifecycle::stockStorageBlocked())
             return;
-        if (!bootAssetsRequested) {
-            bootAssetsRequested = true;
-            environment().verifyAssets(this, "boot", [this](bool valid) {
-                if (kobalt::NativeLifecycle::stockStorageBlocked()) {
-                    bootAssetsRequested = false;
-                    return;
-                }
-                if (valid)
-                    kobalt::ui::prepareOpeningFonts(environment().assets);
-                attempt(false);
-                // The preload at ready skips while the assets are unchecked,
-                // which on a device often outlasts Nickel's startup.
-                if (valid && controller)
-                    controller->preloadLastBook();
-            });
+        const auto storage = kobalt::NativeLifecycle::stockStorageGeneration();
+        if (!storage)
+            return;
+        if (!environment().verificationForStorage(storage)) {
+            environment().verifyAssets(
+                    this, "boot",
+                    [this](bool valid) {
+                        if (kobalt::NativeLifecycle::stockStorageBlocked())
+                            return;
+                        attempt(false);
+                        // The preload at ready skips while the assets are unchecked,
+                        // which on a device often outlasts Nickel's startup.
+                        if (valid && controller)
+                            controller->preloadLastBook();
+                    },
+                    kobalt::NativeLifecycle::stockStorageGeneration);
         }
+        if (controller)
+            return;
         if (!nativeInitialized && !nativeFinishing && kobalt::nickel::nativeStartupReady()) {
             nativeInitialized = true;
             kobalt::diagnostic("startup-recovered",
@@ -502,7 +503,6 @@ private:
     QElapsedTimer elapsed;
     kobalt::nickel::NativeStartupWait nativeWait;
     QString lastWait;
-    bool bootAssetsRequested = false;
     bool initializing = false, reentered = false, rejected = false;
     int ticks = 0;
 #ifndef KOBALT_READER_HARDWARE

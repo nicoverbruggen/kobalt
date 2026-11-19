@@ -1,8 +1,25 @@
 #pragma once
 #include <QFile>
+#include <QDir>
 #include <QString>
 
 namespace kobalt::test {
+// Keep the seven interface faces and the required serif fallbacks. The full
+// manifest lets verification set aside the absent optional assets normally.
+inline QStringList copyOpeningFontFixture(const QString &installed, const QString &root)
+{
+    const QDir source(installed + "/fonts");
+    const auto fonts = root + "/fonts";
+    const auto faces = source.entryList({ "IBMPlex*.ttf", "InstrumentSerif*.ttf" }, QDir::Files);
+    if (faces.size() != 7 || !QDir().mkpath(fonts)
+        || !QFile::copy(installed + "/manifest.json", root + "/manifest.json"))
+        return {};
+    for (const auto &name : faces + source.entryList({ "NotoSerif-*.ttf" }, QDir::Files))
+        if (!QFile::copy(source.filePath(name), fonts + '/' + name))
+            return {};
+    return faces;
+}
+
 // Name-only catalog fixtures retain the source glyphs and metrics. Equal-length
 // names keep the SFNT table offsets intact; FreeType does not require checksums.
 inline bool renamedFontFixture(const QString &source, const QString &destination,

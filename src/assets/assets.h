@@ -50,7 +50,8 @@ public:
     const QString &root() const;
 
 private:
-    bool verifyFiles() const;
+    // `current` returning false stops the check before the next file or block.
+    bool verifyFiles(const std::function<bool()> &current = {}) const;
     struct Data;
     std::unique_ptr<Data> data;
 };

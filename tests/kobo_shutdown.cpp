@@ -233,7 +233,7 @@ private slots:
         int checks = 0;
         const auto permit = [&] {
             if (QThread::currentThread() != thread() && ++checks == 2) {
-                // verifyFiles has recovered the face. Stay inside verify until the
+                // verifyFiles is at its first file. Stay inside verify until the
                 // stock hook revokes storage, then see whether it returns early.
                 insideVerification.release();
                 while (NativeLifecycle::stockStorageGeneration())
@@ -254,9 +254,18 @@ private slots:
         emit usb->doneProcessing();
         QVERIFY(stock);
         QVERIFY(!handedOffDuringVerification);
-        QVERIFY(QFile::exists(face));
+        // The check stopped at the next file, before it restored the recovered
+        // face. The verification after remount restores it.
+        QVERIFY(!QFile::exists(face));
+        QVERIFY(QFile::exists(root.filePath("fonts/FSCK0001.000")));
         QVERIFY(!results.first());
         QVERIFY(blocked);
+        environment.verifyAssets(this, "usb", [&](bool valid) { results.append(valid); }, permit);
+        QTRY_COMPARE(results.size(), 2);
+        QVERIFY(results.last());
+        QVERIFY(QFile::exists(face));
+        QVERIFY(!QFile::exists(root.filePath("fonts/FSCK0001.000")));
+        QVERIFY(environment.assetsAvailable());
     }
 
     void timerCheckSeesDeadlines()

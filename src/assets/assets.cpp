@@ -30,10 +30,13 @@ struct Entry
     QByteArray digest;
 };
 
-QByteArray digest(QFile &file)
+// An empty result is a failed read, or `current` returning false.
+QByteArray digest(QFile &file, const std::function<bool()> &current = {})
 {
     QCryptographicHash hash(QCryptographicHash::Sha256);
     while (!file.atEnd()) {
+        if (current && !current())
+            return {};
         const auto bytes = file.read(64 * 1024);
         if (bytes.isEmpty() && file.error() != QFile::NoError)
             return {};
@@ -68,7 +71,7 @@ bool recoveryName(const QString &name)
 }
 
 bool restoreRecoveredAsset(const QString &root, const QString &path, qint64 size,
-                           const QByteArray &hash)
+                           const QByteArray &hash, const std::function<bool()> &current)
 {
     const QFileInfo target(path);
     if (target.exists() || target.isSymLink())
@@ -79,7 +82,7 @@ bool restoreRecoveredAsset(const QString &root, const QString &path, qint64 size
             || !regularMember(root, candidate.absoluteFilePath()))
             continue;
         QFile recovered(candidate.absoluteFilePath());
-        if (!recovered.open(QIODevice::ReadOnly) || digest(recovered) != hash)
+        if (!recovered.open(QIODevice::ReadOnly) || digest(recovered, current) != hash)
             continue;
         recovered.close();
         // QFile::rename refuses an existing destination. Never replace another
@@ -260,12 +263,12 @@ bool AssetBundle::verify(const std::function<bool()> &current)
     data->generation.store(nextGeneration++);
     data->verified.store(false);
     data->checked.clear();
-    const bool valid = verifyFiles() && (!current || current());
+    const bool valid = verifyFiles(current) && (!current || current());
     data->verified.store(valid);
     return valid;
 }
 
-bool AssetBundle::verifyFiles() const
+bool AssetBundle::verifyFiles(const std::function<bool()> &current) const
 {
     if (data->root.isEmpty())
         return false;
@@ -303,6 +306,11 @@ bool AssetBundle::verifyFiles() const
     QStringList setAside;
     int hashed = 0;
     for (const auto &value : entries) {
+        // USB can revoke the storage while a cold check hashes the fonts. The
+        // main thread then waits for this check, so stop at the next file or
+        // block of a file.
+        if (current && !current())
+            return false;
         const auto entry = value.toObject();
         const auto name = entry.value("path").toString();
         const auto path = this->file(name);
@@ -318,7 +326,7 @@ bool AssetBundle::verifyFiles() const
             setAside.append(name);
             return true;
         };
-        restoreRecoveredAsset(data->root, path, size, hash);
+        restoreRecoveredAsset(data->root, path, size, hash, current);
         if (!regularMember(data->root, path)) {
             if (!failed())
                 return false;
@@ -340,7 +348,9 @@ bool AssetBundle::verifyFiles() const
             return false;
         }
         ++hashed;
-        if (file.size() != size || digest(file) != hash) {
+        if (file.size() != size || digest(file, current) != hash) {
+            if (current && !current())
+                return false;
             if (!failed())
                 return false;
             continue;

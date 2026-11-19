@@ -8,6 +8,8 @@ Website targets preserve encoded path and query separators when the reader prepa
 
 `desktop.tappableLinks` checks every direct-tap mode in both themes with Highlight links shown and hidden. It also checks that actual Settings hides the discovery controls. `desktop.settingsFeatures` toggles the feature through the checklist and checks the action after saving and reopening.
 
+`desktop.linkDiscoveryStrip` checks that a linked page and its open toolbar need no overlay. When neither strip fits, the scrubber still exposes the links and an unlinked tap exits. After strip sizes change, the revealed bar must use the active header or footer geometry, text size and theme color in both themes.
+
 The native suite launches no external browser. Physical touch accuracy still needs device validation.
 
 `desktop.links` opens short, long and legacy footnotes in the book, then returns to the reference. It checks the exact source position and rendered page pixels. Run it with `KOBALT_CHAPTER_MODE=0`, `1` or `2` to cover Accurate, Fast or Hybrid rendering.

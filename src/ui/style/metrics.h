@@ -423,7 +423,7 @@ inline constexpr Px choiceHeight{ 72 };
 
 namespace links {
 inline constexpr Px returnWidth{ 400 }, returnHeight{ 120 }, popupWidth{ 440 }, actionHeight{ 96 };
-// Link discovery above the tabs uses the same row height as the return row.
+// Space between the two labels in the link reveal hint.
 inline constexpr Px hintGap{ 24 };
 // Revealed links: a tint and an outline around each link rectangle. Stacked
 // links keep a gap between their outlines.

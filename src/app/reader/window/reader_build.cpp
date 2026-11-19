@@ -1024,30 +1024,6 @@ kobalt::reader::AppearanceLayout Reader::buildMenu()
 
 void Reader::buildOverlays()
 {
-    // Link discovery takes its styles in syncLinkDiscovery: they follow the
-    // place it occupies and the reading strip's text size.
-    linkDiscovery = new kobalt::ui::Panel(this);
-    linkDiscovery->setObjectName("rrLinkDiscovery");
-    linkDiscovery->setEdgeWidth(metrics::chrome::heavyRule);
-    auto *linkRow = new QHBoxLayout(linkDiscovery);
-    linkRow->setSpacing(metrics::links::hintGap);
-    linkDiscoveryIcon = new ui::InterfaceLabel(linkDiscovery);
-    // The link glyph has more space around it than the undo icon in the return
-    // row: a larger drawing in the same column matches its size.
-    linkDiscoveryIcon->setFixedSize(metrics::chrome::cellIcon, metrics::control::iconSize);
-    linkDiscoveryIcon->setAlignment(Qt::AlignCenter);
-    linkRow->addWidget(linkDiscoveryIcon);
-    linkDiscoveryHint =
-            new ui::InterfaceLabel(strings::get("reader.long_press_link"), linkDiscovery);
-    linkDiscoveryHint->setObjectName("rrLinkDiscoveryHint");
-    linkRow->addWidget(linkDiscoveryHint, 1);
-    linkDiscoveryToggle = makeButton(linkDiscovery, linkRow, "rrRevealLinks", {},
-                                     [this] { showRevealedLinks(); });
-    linkDiscoveryExit = new ui::InterfaceLabel(
-            strings::get("reader.tap_elsewhere_to_exit").toUpper(), linkDiscovery);
-    linkDiscoveryExit->setObjectName("rrLinkDiscoveryExit");
-    linkRow->addWidget(linkDiscoveryExit);
-    linkDiscovery->hide();
     chapterGraph = new kobalt::ChapterGraph(this, services.phoneLayout);
     chapterGraph->changed = [this] { saveSoon(); };
     chapterGraph->denseChanged = [this](bool dense) { setDenseGraph(dense); };
@@ -1561,10 +1537,10 @@ void Reader::ensureSettings()
         return;
     buildSettings(this);
     general->hide();
-    prepareSettingsWidgets(general);
+    prepareNewWidgets(general);
 }
 
-void Reader::prepareSettingsWidgets(QWidget *root)
+void Reader::prepareNewWidgets(QWidget *root)
 {
     const auto prepare = [this](QWidget *widget) {
         widget->ensurePolished();
@@ -1629,7 +1605,7 @@ void Reader::buildSettings(QWidget *parent)
     };
     // A dialog that the panel makes later gets the reader's text, as the
     // widgets built with the window did.
-    settings->widgetCreated = [this](QWidget *widget) { prepareSettingsWidgets(widget); };
+    settings->widgetCreated = [this](QWidget *widget) { prepareNewWidgets(widget); };
     connect(settingsPages, &QStackedWidget::currentChanged, this, [this](int) {
         if (openingSettings)
             return;
@@ -1639,7 +1615,7 @@ void Reader::buildSettings(QWidget *parent)
     settings->pageBuilt = [this](SettingsPage section, QWidget *content) {
         connectSettingsPage(section);
         showSettingsPage(section);
-        prepareSettingsWidgets(content);
+        prepareNewWidgets(content);
     };
 }
 

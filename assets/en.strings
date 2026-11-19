@@ -1415,7 +1415,6 @@
 
 /* Arguments: %1 = number of links */
 "reader.highlight_links" = "Highlight links · %1";
-"reader.long_press_link" = "Long press a link to see its options.";
 "reader.tap_revealed_link" = "Tap a highlighted link to follow it";
 "reader.tap_elsewhere_to_exit" = "Tap elsewhere to exit";
 

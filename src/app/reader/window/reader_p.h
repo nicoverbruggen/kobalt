@@ -371,7 +371,7 @@ private:
     // Builds Settings into `parent`; ensureSettings moves it into the window.
     void buildSettings(QWidget *parent);
     void connectSettingsPage(SettingsPage section);
-    void prepareSettingsWidgets(QWidget *root);
+    void prepareNewWidgets(QWidget *root);
     void showZenSettings();
     void showSettingsPage(SettingsPage section);
     void ensureSettings();
@@ -795,9 +795,7 @@ private:
     // dictionary, search, acknowledgments, a link or a pending lookup.
     bool readingToolOpen() const;
     kobalt::ui::Panel *linkDiscovery = nullptr;
-    QLabel *linkDiscoveryIcon = nullptr, *linkDiscoveryHint = nullptr;
-    QPushButton *linkDiscoveryToggle = nullptr;
-    QLabel *linkDiscoveryExit = nullptr;
+    QLabel *linkDiscoveryHint = nullptr, *linkDiscoveryExit = nullptr;
     bool revealingLinks = false;
     QString revealedPosition;
     void syncLinkDiscovery();

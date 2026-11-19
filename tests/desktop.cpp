@@ -11357,6 +11357,94 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(qGray(page.snapshot().pixel(90, 116 + top)), 255);
     }
 
+    void linkDiscoveryStrip_data() { bookmarks_data(); }
+
+    void linkDiscoveryStrip()
+    {
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        auto chrome = headerfooter::presetLayout(headerfooter::Preset::Default);
+        chrome.headerEnabled = chrome.footerEnabled = chrome.progressBar = false;
+        auto saved = storage::readJson(fixture.paths.preferences());
+        saved[headerfooter::presetKey] = "custom";
+        saved[headerfooter::customKey] = headerfooter::toJson(chrome);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
+        QVERIFY(writeBook(fixture.directory.path(), "links.epub", test::linkBook()));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(fixture.directory.filePath("links.epub"));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page);
+        if (fixture.visible("rrControlsTop"))
+            QVERIFY(fixture.press("rrPage"));
+        const auto position = fixture.state().value("position");
+        QVERIFY(!fixture.visible("rrScrubberLinks"));
+        QVERIFY(!fixture.widget("rrLinkDiscovery"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrScrubberLinks"));
+        QVERIFY(!fixture.widget("rrLinkDiscovery"));
+
+        // The scrubber can still reveal links with neither reading strip enabled.
+        QCOMPARE(page->topHeight() + page->bottomHeight(), 0);
+        const auto link = fixture.coordinateQuery(
+                fixture.directory.filePath("links.epub"), QRect{}, [](EngineDocument &document) {
+                    for (const auto &link : document.pageLinks())
+                        if (document.linkDetails(link.source).label == "website"
+                            && !link.rectangles.isEmpty())
+                            return link.rectangles.first();
+                    return QRect{};
+                });
+        QVERIFY(!link.isEmpty());
+        const int pad = ui::metrics::links::revealPadding + ui::metrics::control::border;
+        const QRect region = link.adjusted(-pad, -pad, pad, pad);
+        const auto linkPixels = [&] { return page->snapshot().copy(region); };
+        const auto plain = linkPixels();
+        QVERIFY(fixture.press("rrScrubberLinks"));
+        QVERIFY(linkPixels() != plain);
+        QVERIFY(!fixture.visible("rrControlsTop") && !fixture.widget("rrLinkDiscovery"));
+        QVERIFY(fixture.click(page, QPoint(2, 2)));
+        QTRY_COMPARE(linkPixels(), plain);
+        QVERIFY(!fixture.visible("rrControlsTop"));
+        QCOMPARE(fixture.state().value("position"), position);
+
+        // Change the strip metrics while the overlay is hidden. Each reveal
+        // must use the current strip rather than the previous one's geometry.
+        for (bool top : { false, true }) {
+            QVERIFY(fixture.press("rrPage"));
+            QTRY_VERIFY(fixture.visible("rrScrubberLinks"));
+            page->chrome = chrome;
+            page->chrome.headerEnabled = top;
+            page->chrome.footerEnabled = !top;
+            page->chrome.headerSize = headerfooter::maximumSize;
+            page->chrome.footerSize = headerfooter::smallSize;
+            const int height = top ? page->topHeight() : page->bottomHeight();
+            const int pixels = top ? page->headerTextPixels() : page->footerTextPixels();
+            QVERIFY(height >= ui::interfaceLineHeight(ui::headerFooterFont(pixels)));
+            QVERIFY(fixture.press("rrScrubberLinks"));
+            QTRY_VERIFY(fixture.visible("rrLinkDiscovery"));
+            auto *bar = fixture.widget("rrLinkDiscovery");
+            auto *hint = fixture.widget("rrLinkDiscoveryHint");
+            auto *exit = fixture.widget("rrLinkDiscoveryExit");
+            QVERIFY(hint && exit && hint->isVisible() && exit->isVisible());
+            const auto bounds = bar->parentWidget()->rect();
+            QCOMPARE(bar->geometry(),
+                     QRect(0, top ? 0 : bounds.height() - height, bounds.width(), height));
+            QCOMPARE(hint->font().pixelSize(), pixels);
+            QCOMPARE(exit->font().pixelSize(), pixels);
+            QCOMPARE(hint->palette().color(QPalette::WindowText),
+                     bar->parentWidget()->palette().color(QPalette::WindowText));
+            QVERIFY(bar->testAttribute(Qt::WA_TransparentForMouseEvents));
+            QVERIFY(!fixture.visible("rrScrubberLinks"));
+            QVERIFY(fixture.click(page, QPoint(2, 2)));
+            QTRY_VERIFY(!fixture.visible("rrLinkDiscovery"));
+            QVERIFY(!fixture.visible("rrControlsTop"));
+            QCOMPARE(fixture.state().value("position"), position);
+        }
+        page->chrome = chrome;
+    }
+
     // Checks the gray press on revealed links, release and cancellation, and holds and swipes in and after reveal mode.
     void revealedLinkPress_data() { bookmarks_data(); }
 

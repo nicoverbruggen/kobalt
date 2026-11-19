@@ -4,7 +4,7 @@
 #include "render/page_content.h"
 #include "reading/remaining_time.h"
 #include "ui/controls/buttons.h"
-#include "ui/controls/icons.h"
+#include "ui/controls/text.h"
 #include "ui/controls/paging.h"
 #include "ui/controls/panels.h"
 #include "ui/dialogs/modals.h"
@@ -1906,7 +1906,9 @@ void Reader::updateLinkReturn()
 {
     if (!linkReturn)
         return;
-    syncLinkDiscovery();
+    // Cancelling reveal can restore the controls used by the Return action.
+    if (revealingLinks)
+        syncLinkDiscovery();
     const bool available = !linkHistory.isEmpty() && !session->busy() && !lifecycleHidden
             && !closing && !linksActive() && !lookupPending && !settingsVisible()
             && !acknowledgmentsVisible() && !bookmarkList->isVisible() && !lightPopup->isVisible()
@@ -2299,7 +2301,11 @@ void Reader::syncStatusBoundary()
 
 void Reader::hideRevealedLinks(bool restoreControls)
 {
-    if (revealingLinks && restoreControls && !lifecycleHidden && !closing) {
+    if (!revealingLinks)
+        return;
+    if (linkDiscovery)
+        linkDiscovery->hide();
+    if (restoreControls && !lifecycleHidden && !closing) {
         topControls->show();
         bottomControls->show();
     }
@@ -2326,110 +2332,87 @@ void Reader::leaveRevealedLinks()
 
 void Reader::syncLinkDiscovery()
 {
-    if (!linkDiscovery)
+    if (!pageScrubber)
         return;
-    const bool blocked = !features::enabled(preferences, features::HighlightLinks) || annotationMode
-            || session->busy() || lifecycleHidden || closing || services.suspended() || sheetOpen()
-            || readingToolOpen() || positionPromptOpen() || menu->isVisible()
-            || bookmarkList->isVisible();
-    if (blocked
-        || (revealingLinks && revealedPosition != session->state().value("position").toString()))
-        hideRevealedLinks();
-    const int count = session->pageLinks().size();
-    if (!count)
-        hideRevealedLinks();
-    const bool controls = topControls->isVisible() || revealingLinks;
-    const bool linksAvailable = !blocked && controls && count > 0;
-    pageScrubber->setLinksAction(linksAvailable && !revealingLinks
-                                         ? strings::get("reader.highlight_links").arg(count)
-                                         : QString());
-    linkDiscovery->setVisible(linksAvailable && revealingLinks);
-    QVector<QRect> rectangles, footnotes;
-    if (revealingLinks)
-        for (const auto &link : session->pageLinks()) {
-            rectangles += link.rectangles;
-            if (link.kind == LinkKind::Footnote)
-                for (const auto &rect : link.rectangles)
-                    if (narrowFootnote(rect))
-                        footnotes += rect;
-        }
-    page->revealLinks(rectangles, footnotes);
-    if (blocked || !count)
+    if (!revealingLinks && !topControls->isVisible()) {
+        pageScrubber->setLinksAction({});
         return;
-
-    namespace styles = kobalt::ui::styles;
-    const QColor ink = palette().color(QPalette::WindowText);
-    // Styles change only with the place and the strip text size, so skip
-    // unchanged ones: this runs on every navigation update.
-    const auto restyle = [](QWidget *widget, const QString &style) {
-        if (widget->property("link_style").toString() == style)
-            return;
-        widget->setProperty("link_style", style);
-        kobalt::ui::readerStyle(widget, style);
-    };
-    const auto fits = [](int strip, int text) {
-        return strip >= ui::interfaceLineHeight(ui::headerFooterFont(text));
-    };
-
-    const QString label = strings::get("reader.highlight_links").arg(count);
-    auto *row = static_cast<QHBoxLayout *>(linkDiscovery->layout());
-    linkDiscoveryIcon->setVisible(!revealingLinks);
-    linkDiscoveryToggle->setVisible(!revealingLinks);
-    linkDiscoveryExit->setVisible(revealingLinks);
-    linkDiscoveryHint->setText(revealingLinks ? strings::get("reader.tap_revealed_link").toUpper()
-                                              : strings::get("reader.long_press_link"));
-    // In reveal mode the bar only labels the mode. Taps pass to the page, so
-    // anything but a link leaves, the strip included.
-    linkDiscovery->setAttribute(Qt::WA_TransparentForMouseEvents, revealingLinks);
-    linkDiscoveryHint->setWordWrap(!revealingLinks);
-    linkDiscoveryHint->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    if (revealingLinks) {
-        // The label replaces the header or footer strip, never the book text,
-        // in the strip's own face and size. Without a strip that fits, a tap on
-        // unlinked text still leaves.
-        const bool top = fits(page->topHeight(), page->headerTextPixels());
-        const int strip = top ? page->topHeight() : page->bottomHeight();
-        const int text = top ? page->headerTextPixels() : page->footerTextPixels();
-        linkDiscovery->setVisible(top || fits(strip, text));
-        linkDiscovery->setEdges({});
-        linkDiscovery->setDividers(top ? Qt::BottomEdge : Qt::TopEdge);
-        // Children paint their own background, so keep them off the divider.
-        const int border = metrics::control::border;
-        row->setContentsMargins(metrics::reading::headerSide, top ? 0 : border,
-                                metrics::reading::headerSide, top ? border : 0);
-        const QString stripText = QString("QLabel{font-family:'%1';%2color:%3;}")
-                                          .arg(kobalt::ui::headerFooterFont().family())
-                                          .arg(styles::font(text))
-                                          .arg(ink.name());
-        restyle(linkDiscoveryHint, stripText);
-        restyle(linkDiscoveryExit, stripText);
-        linkDiscovery->setGeometry(0, top ? 0 : height() - strip, width(), strip);
-    } else {
-        // Above the tabs the row matches the return row: the same height, the
-        // icon in the same column and a divider instead of a second heavy rule.
-        const int rule = metrics::chrome::heavyRule;
-        linkDiscovery->setEdges(Qt::TopEdge);
-        linkDiscovery->setDividers(navigation ? Qt::BottomEdge : kobalt::ui::Edges());
-        row->setContentsMargins(metrics::chrome::inset, rule, metrics::chrome::inset,
-                                metrics::control::border);
-        linkDiscoveryIcon->setPixmap(
-                kobalt::ui::controlIcon(kobalt::ui::ControlIcon::Link, ink)
-                        .pixmap(metrics::control::iconSize, metrics::control::iconSize));
-        restyle(linkDiscoveryHint,
-                QString("QLabel{%1color:%2;}")
-                        .arg(styles::font(metrics::chrome::labelText))
-                        .arg(ink.name()));
-        restyle(linkDiscoveryToggle,
-                styles::outlined() + "QPushButton{" + styles::font(metrics::chrome::labelText)
-                        + "}");
-        linkDiscoveryToggle->setText(label);
-        // Cover the navigation's own heavy rule, so its tabs start below this divider.
-        const int bottom = navigation ? navigation->navigationTop() + rule : bottomControls->y();
-        const int rowHeight = metrics::links::returnHeight + rule;
-        linkDiscovery->setGeometry(0, qMax(0, bottom - rowHeight), width(), rowHeight);
     }
-    if (linkDiscovery->isVisible())
-        linkDiscovery->raise();
+    const auto &links = session->pageLinks();
+    const bool available = !links.isEmpty()
+            && features::enabled(preferences, features::HighlightLinks) && !annotationMode
+            && !session->busy() && !lifecycleHidden && !closing && !services.suspended()
+            && !sheetOpen() && !readingToolOpen() && !positionPromptOpen() && !menu->isVisible()
+            && !bookmarkList->isVisible();
+    if (revealingLinks
+        && (!available || revealedPosition != session->state().value("position").toString()))
+        hideRevealedLinks();
+    pageScrubber->setLinksAction(available && !revealingLinks && topControls->isVisible()
+                                         ? strings::get("reader.highlight_links").arg(links.size())
+                                         : QString());
+    if (!revealingLinks)
+        return;
+
+    QVector<QRect> rectangles, footnotes;
+    for (const auto &link : links) {
+        rectangles += link.rectangles;
+        if (link.kind == LinkKind::Footnote)
+            for (const auto &rect : link.rectangles)
+                if (narrowFootnote(rect))
+                    footnotes += rect;
+    }
+    page->revealLinks(rectangles, footnotes);
+
+    // The hint replaces a reading strip that fits its own font. Without
+    // one, the highlights and the tap to leave are still available.
+    const auto fits = [](int strip, int text) {
+        return strip > 0 && strip >= ui::interfaceLineHeight(ui::headerFooterFont(text));
+    };
+    const bool top = fits(page->topHeight(), page->headerTextPixels());
+    const int strip = top ? page->topHeight() : page->bottomHeight();
+    const int text = top ? page->headerTextPixels() : page->footerTextPixels();
+    if (!top && !fits(strip, text)) {
+        if (linkDiscovery)
+            linkDiscovery->hide();
+        return;
+    }
+
+    const bool first = !linkDiscovery;
+    if (first) {
+        linkDiscovery = new ui::Panel(this);
+        linkDiscovery->setObjectName("rrLinkDiscovery");
+        // Tapping the hint leaves reveal mode just like tapping unlinked text.
+        linkDiscovery->setAttribute(Qt::WA_TransparentForMouseEvents);
+        auto *row = new QHBoxLayout(linkDiscovery);
+        row->setSpacing(metrics::links::hintGap);
+        linkDiscoveryHint = new ui::InterfaceLabel(
+                strings::get("reader.tap_revealed_link").toUpper(), linkDiscovery);
+        linkDiscoveryHint->setObjectName("rrLinkDiscoveryHint");
+        linkDiscoveryHint->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        row->addWidget(linkDiscoveryHint, 1);
+        linkDiscoveryExit = new ui::InterfaceLabel(
+                strings::get("reader.tap_elsewhere_to_exit").toUpper(), linkDiscovery);
+        linkDiscoveryExit->setObjectName("rrLinkDiscoveryExit");
+        row->addWidget(linkDiscoveryExit);
+    }
+    linkDiscovery->setDividers(top ? Qt::BottomEdge : Qt::TopEdge);
+    // Keep the opaque labels off the divider.
+    const int border = metrics::control::border;
+    linkDiscovery->layout()->setContentsMargins(metrics::reading::headerSide, top ? 0 : border,
+                                                metrics::reading::headerSide, top ? border : 0);
+    const QString style = QString("QLabel{font-family:'%1';%2color:%3;}")
+                                  .arg(ui::headerFooterFont().family())
+                                  .arg(ui::styles::font(text))
+                                  .arg(palette().color(QPalette::WindowText).name());
+    if (linkDiscoveryHint->property("reader_style").toString() != style) {
+        ui::readerStyle(linkDiscoveryHint, style);
+        ui::readerStyle(linkDiscoveryExit, style);
+    }
+    if (first)
+        prepareNewWidgets(linkDiscovery);
+    linkDiscovery->setGeometry(0, top ? 0 : height() - strip, width(), strip);
+    linkDiscovery->show();
+    linkDiscovery->raise();
 }
 
 void Reader::syncNavigation()
@@ -2575,7 +2558,6 @@ void Reader::syncNavigation()
         page->setStripsHidden(zen && topControls->isVisible());
     };
     update();
-    syncLinkDiscovery();
     if (choosingTypography && choices->isVisible()) {
         if (choices->isFontPicker()) {
             const int bottom = navigation->contentBottom(size());

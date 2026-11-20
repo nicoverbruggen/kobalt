@@ -107,6 +107,10 @@
       "sha256": "e02a080c3d1a758de5c5fd41abd913dec4cffbc70fe1e9637dbf7ce35f377055"
     },
     {
+      "file": "clock-countdown.svg",
+      "sha256": "7c244c61bd1dbecc02d89ba2aed311b9ee0b24208ec5d21c8fa38194eba7ba19"
+    },
+    {
       "file": "clock.svg",
       "sha256": "b8c6c2899d2b9af48a55ba02ba6d7faf89b757915772dd24f5397f7b0d02aa5c"
     },
@@ -117,6 +121,10 @@
     {
       "file": "compass.svg",
       "sha256": "00c7e42415f795fcea90bd9dc0b2c8266b4e9601d2937cb122cd03b7e9e9e198"
+    },
+    {
+      "file": "cpu.svg",
+      "sha256": "fd4084e582bc555e794d82934ee90330542a837d56a9f3fb365aa0b9f2e0d599"
     },
     {
       "file": "crown.svg",
@@ -153,6 +161,10 @@
     {
       "file": "export.svg",
       "sha256": "b3323cae86c93d7a4d344e921dc1500f97a73c66e5d9f0e6c46aab64e4a6f616"
+    },
+    {
+      "file": "eye-closed.svg",
+      "sha256": "2d926529e76db403f372ec80e93606828eaa012fb8645ce28b22e95a16fa87e4"
     },
     {
       "file": "eye-slash.svg",
@@ -199,12 +211,20 @@
       "sha256": "36b164dda05b50eaecd3325301032e46c61f0eefb566eea97e2247ef87438274"
     },
     {
+      "file": "gauge.svg",
+      "sha256": "053e22a3b54c3baa7997bd0fddbf2cc35cbdd2662842b553d13d9f2a58c67f4a"
+    },
+    {
       "file": "gear-fine.svg",
       "sha256": "ca000a36662d0049d39ea5cbe44a0133960d791dd95dd1929692211355fac4e0"
     },
     {
       "file": "globe.svg",
       "sha256": "3b53d207c09fc72de699c8b2149892e065b570b3ae144412ae53244b0a0f7977"
+    },
+    {
+      "file": "hand-tap.svg",
+      "sha256": "32c4c4f80fbbe5ee6bf45a6769da96466dcafddf79965c2bbdb7635fab405409"
     },
     {
       "file": "heart.svg",
@@ -263,6 +283,10 @@
       "sha256": "5a068d1cfd707fde5ddb0ce0623958123b6a5afba98401318983aeb0fdad6382"
     },
     {
+      "file": "moon-stars.svg",
+      "sha256": "a87d9314c9313a719a3297985a9d8cd1c4aa4602490b9286d8caf5bec82c466d"
+    },
+    {
       "file": "moon.svg",
       "sha256": "5c91f82aea4e7b53305bf29628caebc22a1198ba9fa46c62eef13fb8b3c3f21d"
     },
@@ -283,6 +307,10 @@
       "sha256": "f91cd53b559766993b6b10111077ac90024c9a36fbc8ce4d9c4b2458b4265dba"
     },
     {
+      "file": "palette.svg",
+      "sha256": "f16925171ff434d8e8768da0d06867d77cd50d9e78932ab12af65bccac7a1375"
+    },
+    {
       "file": "paragraph.svg",
       "sha256": "62f5329938f7bc1d4885b28fcd700d349eadfcfe1b160c9c52eed98608f8933a"
     },
@@ -293,6 +321,10 @@
     {
       "file": "pencil-simple.svg",
       "sha256": "999530da442f44d8cf0054364373d16150f3e082c2ac294a4988a9c3a4295c28"
+    },
+    {
+      "file": "percent.svg",
+      "sha256": "cecdfcc7cd23ecb3bf55290121336c081762dc1bfee7dab42c0f28646271e0e7"
     },
     {
       "file": "planet.svg",
@@ -313,6 +345,10 @@
     {
       "file": "rocket.svg",
       "sha256": "c7f97a562b9da6b8c05e6e6ca7f0af5c63a3bbb93b56d468a58955b70efa651d"
+    },
+    {
+      "file": "rows.svg",
+      "sha256": "746ea88f9c58e378af7d4ce442d7e79f2d994e26aa72889d6d2d81c08c8edecc"
     },
     {
       "file": "scroll.svg",
@@ -363,6 +399,14 @@
       "sha256": "172ac521a002019c6898b16f9a4a0e4930a3eb1f9275044312d4de6acc84f0f6"
     },
     {
+      "file": "text-t-slash.svg",
+      "sha256": "729de4ce0080024e30bc0516d1efae72df192ef4b8f997e4e2c59383cbf25bbe"
+    },
+    {
+      "file": "text-t.svg",
+      "sha256": "00f5cc0ddab2aacaf377ffe956e2ee5375ec3395043d468cbb5937251df7fc69"
+    },
+    {
       "file": "toolbox.svg",
       "sha256": "1bc3a40ba89821d9defb144b0fa4ae3f40aefcda58b62216c7f30a5d64e7144e"
     },
@@ -373,6 +417,10 @@
     {
       "file": "trash.svg",
       "sha256": "e6a830c0409f9e101e3695c981eef98427d39fd01f502b9cbd6900930b01f19c"
+    },
+    {
+      "file": "tree-view.svg",
+      "sha256": "9194545aba68a72264379c280be1b96e75ac9fc7d21a6c47fa29cc8c85f78290"
     },
     {
       "file": "tree.svg",

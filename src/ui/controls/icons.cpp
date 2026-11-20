@@ -191,6 +191,17 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         const char *names[] = { "book-open-text", "arrow-line-left", "arrow-line-right" };
         phosphorGeometry(QString::fromLatin1(names[int(icon) - int(ControlIcon::SearchChapter)]),
                          path);
+    } else if (icon >= ControlIcon::ClockCountdown && icon <= ControlIcon::TextTSlash) {
+        static const char *const names[] = { "clock-countdown", "cpu",         "eye-closed",
+                                             "moon-stars",      "palette",     "percent",
+                                             "text-t",          "text-t-slash" };
+        static_assert(
+                sizeof(names) / sizeof(*names)
+                == size_t(int(ControlIcon::TextTSlash) - int(ControlIcon::ClockCountdown) + 1));
+        result.canvas = 256;
+        result.filled = true;
+        phosphorGeometry(QString::fromLatin1(names[int(icon) - int(ControlIcon::ClockCountdown)]),
+                         path);
     } else if (icon == ControlIcon::WidowsOrphans) {
         line(11, 18, 34, 18);
         line(11, 32, 37, 32);
@@ -213,14 +224,20 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         dot.addEllipse(QPointF(49, 20), 3.5, 3.5);
         path = stroke.createStroke(path).united(dot);
         result.filled = true;
-    } else if (icon == ControlIcon::Lotus || icon == ControlIcon::TextB
-               || icon == ControlIcon::Refresh) {
+    } else if (icon >= ControlIcon::Lotus && icon <= ControlIcon::Gauge) {
+        static const char *const names[] = { "flower-lotus", "text-b",   "arrow-clockwise",
+                                             "rows",         "hand-tap", "tree-view",
+                                             "gauge" };
+        static_assert(sizeof(names) / sizeof(*names)
+                      == size_t(int(ControlIcon::Gauge) - int(ControlIcon::Lotus) + 1));
         result.canvas = 256;
         result.filled = true;
-        phosphorGeometry(icon == ControlIcon::Lotus           ? QStringLiteral("flower-lotus")
-                                 : icon == ControlIcon::TextB ? QStringLiteral("text-b")
-                                                              : QStringLiteral("arrow-clockwise"),
-                         path);
+        phosphorGeometry(QString::fromLatin1(names[int(icon) - int(ControlIcon::Lotus)]), path);
+        if (icon == ControlIcon::HardwareButtons) {
+            QTransform turn;
+            turn.translate(result.canvas, 0);
+            path = turn.rotate(90).map(path);
+        }
     } else if (icon == ControlIcon::FitImage) {
         line(22, 9, 9, 9);
         line(9, 9, 9, 22);
@@ -890,9 +907,10 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons)
             && icon != ControlIcon::Bold && icon != ControlIcon::WordsAdd
             && icon != ControlIcon::WordsSaved && icon != ControlIcon::DeviceRotate
             && icon != ControlIcon::ZoomIn && icon != ControlIcon::ZoomOut
-            && icon != ControlIcon::LockOpen && icon != ControlIcon::Lotus
-            && icon != ControlIcon::TextB && icon != ControlIcon::Refresh
+            && icon != ControlIcon::LockOpen
+            && (icon < ControlIcon::Lotus || icon > ControlIcon::Gauge)
             && (icon < ControlIcon::SearchChapter || icon > ControlIcon::SearchAfter)
+            && (icon < ControlIcon::ClockCountdown || icon > ControlIcon::TextTSlash)
             && (icon < ControlIcon::Rows || icon > ControlIcon::Export)
             && (icon < ControlIcon::KeyboardShift || icon > ControlIcon::KeyboardReturn)
             && (icon < ControlIcon::SpreadHorizontal || icon > ControlIcon::Diamond)))

@@ -876,6 +876,20 @@ void SettingsPanel::buildControls(QWidget *controlsPage)
             strings::get("settings.light_gesture_feedback_description"));
     lightGestureFeedbackOption->setEnabled(lightSupported);
     controlsRows->addWidget(lightGestureFeedbackOption);
+    for (const auto &[button, icon] :
+         { std::pair{ pageNavigationButton, ui::ControlIcon::SpreadHorizontal },
+           std::pair{ buttonControlsButton, ui::ControlIcon::HardwareButtons },
+           std::pair{ tapZonesButton, ui::ControlIcon::HandTap },
+           std::pair{ chapterGroupsButton, ui::ControlIcon::ChapterTree },
+           std::pair{ tappableLinksButton, ui::ControlIcon::Link },
+           std::pair{ annotationInteractionButton, ui::ControlIcon::Annotate },
+           std::pair{ menuViewButton, ui::ControlIcon::Layout },
+           std::pair{ navigationBarButton, ui::ControlIcon::SearchAfter } }) {
+        button->setIconVisible(true);
+        ui::buttonIcon(button, icon);
+    }
+    edgeLightOption->setLeadingIcon(ui::ControlIcon::Light);
+    lightGestureFeedbackOption->setLeadingIcon(ui::ControlIcon::Gauge);
     controlsRows->addStretch(1);
 }
 
@@ -1026,6 +1040,7 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
                     : strings::get("settings.unsupported_description"));
     automaticOpeningOption->setEnabled(inputs.automaticBookOpeningSupported);
     automaticOpeningOption->setVisible(inputs.showNativeReaderOptions);
+    automaticOpeningOption->setLeadingIcon(ui::ControlIcon::Dictionary);
     systemRows->addWidget(automaticOpeningOption);
     if (inputs.automaticBookOpeningSupported) {
         // Turning automatic opening off sends every later book to Kobo's
@@ -1054,6 +1069,7 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
                            strings::get("settings.hide_book_on_sleep_screen"),
                            strings::get("settings.hide_book_on_sleep_screen_description"));
     hideBookOnSleepOption->setEnabled(inputs.sleepScreenSupported);
+    hideBookOnSleepOption->setLeadingIcon(ui::ControlIcon::EyeClosed);
     systemRows->addWidget(hideBookOnSleepOption);
     sleepScreenButton = listAction(systemPage, nullptr, "rrSleepScreen",
                                    strings::get("settings.sleep_screen"), [] { });
@@ -1069,6 +1085,7 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
                 settingsOption(systemPage, "rrDisableReaderStandby",
                                strings::get("settings.disable_reader_standby"),
                                strings::get("settings.disable_reader_standby_description"));
+        disableStandbyOption->setLeadingIcon(ui::ControlIcon::Coffee);
         systemRows->addWidget(disableStandbyOption);
         connect(disableStandbyOption, &QCheckBox::clicked, this, [this](bool checked) {
             if (!checked)
@@ -1084,6 +1101,7 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
         wifiPowerSaverOption = settingsOption(
                 systemPage, "rrWifiPowerSaver", strings::get("settings.wifi_power_saver"),
                 strings::get("settings.wifi_power_saver_description"));
+        wifiPowerSaverOption->setLeadingIcon(ui::ControlIcon::WifiHigh);
         systemRows->addWidget(wifiPowerSaverOption);
     }
     section(systemPage, systemRows, "rrSystemNitpicksSection",
@@ -1097,12 +1115,14 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
     openingCoverOption =
             settingsOption(systemPage, "rrHideOpeningCover", strings::get("settings.opening_cover"),
                            strings::get("settings.opening_cover_description"));
+    openingCoverOption->setLeadingIcon(ui::ControlIcon::Image);
     systemRows->addWidget(openingCoverOption);
     section(systemPage, systemRows, "rrSystemInterfaceSection",
             strings::get("settings.section_user_interface"));
     hideTabLabelsOption =
             settingsOption(systemPage, "rrHideTabLabels", strings::get("settings.hide_tab_labels"),
                            strings::get("settings.hide_tab_labels_description"));
+    hideTabLabelsOption->setLeadingIcon(ui::ControlIcon::TextTSlash);
     systemRows->addWidget(hideTabLabelsOption);
     themingButton =
             listAction(systemPage, systemRows, "rrTheming", strings::get("settings.theming"),
@@ -1113,6 +1133,7 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
             strings::get("settings.section_dictionary_ui"));
     saveWordsOption = settingsOption(systemPage, "rrSaveWords", strings::get("settings.save_words"),
                                      strings::get("settings.save_words_description"));
+    saveWordsOption->setLeadingIcon(ui::ControlIcon::Bookmark);
     systemRows->addWidget(saveWordsOption);
     dictionaryFontButton = listAction(systemPage, nullptr, "rrDictionaryFont",
                                       strings::get("settings.dictionary_font"), [] { });
@@ -1130,8 +1151,22 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
             strings::get("settings.section_developer"));
     debugModeOption = settingsOption(systemPage, "rrDebugMode", strings::get("settings.debug_mode"),
                                      strings::get("settings.debug_mode_description"));
+    debugModeOption->setLeadingIcon(ui::ControlIcon::Debug);
     systemRows->addWidget(debugModeOption);
     connect(debugModeOption, &QCheckBox::toggled, this, [this](bool on) { showDebug(on); });
+    for (const auto &[button, icon] :
+         { std::pair{ disabledFeaturesButton, ui::ControlIcon::Hidden },
+           std::pair{ sleepScreenButton, ui::ControlIcon::MoonStars },
+           std::pair{ sessionTimeoutButton, ui::ControlIcon::ClockCountdown },
+           std::pair{ timeRemainingFormatButton, ui::ControlIcon::Clock },
+           std::pair{ percentageFormatButton, ui::ControlIcon::Percent },
+           std::pair{ themingButton, ui::ControlIcon::Palette },
+           std::pair{ dictionaryFontButton, ui::ControlIcon::TextT },
+           std::pair{ dictionaryFontSizeButton, ui::ControlIcon::Typography },
+           std::pair{ renderingButton, ui::ControlIcon::Cpu } }) {
+        button->setIconVisible(true);
+        ui::buttonIcon(button, icon);
+    }
     systemRows->addStretch(1);
 }
 

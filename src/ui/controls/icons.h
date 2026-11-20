@@ -150,7 +150,19 @@ enum class ControlIcon {
     LockOpen,
     Lotus,
     TextB,
-    Refresh
+    Refresh,
+    HardwareButtons,
+    HandTap,
+    ChapterTree,
+    Gauge,
+    ClockCountdown,
+    Cpu,
+    EyeClosed,
+    MoonStars,
+    Palette,
+    Percent,
+    TextT,
+    TextTSlash
 };
 enum class IconStyle { Monochrome, Color, Pastel, Rings };
 QString iconStyleId(IconStyle style);

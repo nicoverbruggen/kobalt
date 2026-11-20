@@ -54,7 +54,7 @@ Development progress controls are supplied by the host. Lifecycle checks cover a
 
 `lifecycle.progressExitDuringSync` checks the toolbar exit during Kobo sync, automatic close, conflict resolution, cancellation and a local save without a Nickel position write.
 
-`engine.epub-compatibility` opens an EPUB with a glossary inside a chapter and a separate glossary at the end of the book. The publication glossary supplies the end of the main text.
+`engine.epub-compatibility` opens an EPUB with a glossary inside a chapter and a separate glossary at the end of the book. The publication glossary supplies the end of the main text. The test also checks the order of two boundaries in an unloaded chapter when a position omits first-child indices.
 
 `desktop.mainTextHybridRanges` opens left-to-right and right-to-left EPUBs in two columns before Hybrid finishes whole-book pagination. It checks the first page label and the word count for the publisher’s main text. A front-matter-only EPUB uses the whole volume.
 

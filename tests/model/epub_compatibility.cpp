@@ -77,6 +77,33 @@ void checkChapterGlossary()
             "A glossary inside a chapter hid later text and the publication glossary");
 }
 
+void checkUnloadedMainTextRange()
+{
+    auto files = test::publisherPackage(
+            "en", "Main text",
+            { { "front.xhtml", test::publisherHtml("<p>Front</p>") },
+              { "body.xhtml",
+                test::publisherHtml("<section epub:type='bodymatter'><p>Main</p></section>"
+                                    "<section epub:type='backmatter'><p>Notes</p></section>") } },
+            "<itemref idref='front.xhtml'/><itemref idref='body.xhtml'/>");
+    EngineDocument model(test::readerFonts());
+    openPublication(model, files);
+    const auto hints = model.mainTextHints();
+    const QString root = "/body/DocFragment[2]/body";
+    const auto start = root + "/section.0", end = root + "/section[2]";
+    require(!hints.first.isEmpty() && !hints.second.isEmpty(),
+            "Missing source boundaries in the second spine item");
+    require(model.validMainTextRange(start, end), "The loaded chapter rejected its main text");
+    QString error;
+    require(model.showSpineItems(0, 0, &error), qPrintable(error));
+    require(model.validMainTextRange(hints.first, hints.second),
+            "The source boundaries were lost outside the chapter window");
+    require(model.validMainTextRange(start, end),
+            "Omitting first-child indices invalidated the unloaded chapter range");
+    require(!model.validMainTextRange(end, start) && !model.validMainTextRange(start, hints.first),
+            "Equivalent first-child positions changed the order of the boundaries");
+}
+
 void checkUnresolvedSpineFallbacks()
 {
     auto files = test::engineBook(false, 4, 2);
@@ -501,6 +528,7 @@ int main(int argc, char **argv)
     checkCodecs();
     checkChapterImageWrappers();
     checkChapterGlossary();
+    checkUnloadedMainTextRange();
     checkUnresolvedSpineFallbacks();
     checkNavigation(false);
     checkNavigation(true);

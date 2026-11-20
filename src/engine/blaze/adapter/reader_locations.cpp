@@ -256,7 +256,20 @@ bool EngineDocument::validMainTextRange(const QString &first, const QString &aft
             position.chop(2);
         if (position.section('/', -1).startsWith("DocFragment"))
             return 0;
-        return source_ ? source_->boundaryElementOrder.value(position, -1) : -1;
+        if (!source_)
+            return -1;
+        const auto &anchors = source_->boundaryElementOrder;
+        const auto known = anchors.constFind(position);
+        if (known != anchors.constEnd())
+            return known.value();
+
+        // The source scan indexes every step below /body. CREngine can omit
+        // [1] for the first element of a given name.
+        auto steps = position.split('/');
+        for (int i = 2; i < steps.size(); ++i)
+            if (!steps[i].isEmpty() && !steps[i].contains('['))
+                steps[i] += QStringLiteral("[1]");
+        return anchors.value(steps.join('/'), -1);
     };
     const int begin = first.isEmpty() ? 0 : order(first), stop = order(after);
     if (begin >= 0 && stop >= 0)

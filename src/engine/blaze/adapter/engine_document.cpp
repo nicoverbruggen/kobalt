@@ -1148,14 +1148,6 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
                                      OpeningProgress progress)
 {
     const auto &settings = patch.fields();
-    if (windowFirst_ >= 0 && !inpageFootnotes_ && settings.value("inpage_footnotes").toBool()) {
-        const auto layout = pageNoteLayout();
-        if (layout == PageNoteLayout::Interrupted)
-            return false;
-        if (layout == PageNoteLayout::WholeBook)
-            return setChapterMode(false, patch, size, std::move(progress),
-                                  [this] { return !interrupt_ || !interrupt_(); });
-    }
     const int pixels = settings.value("font_pixels").toInt(pixels_);
     const int spacing = settings.value("line_spacing").toInt(spacing_);
     const int paragraphSpacing = settings.contains("paragraph_spacing")
@@ -1183,24 +1175,6 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     const int weight = settings.value("weight_steps").toInt(weight_);
     const auto bionic = settings.value("bold_reading").toString(bionic_);
     const auto face = settings.value("font_face").toString(face_);
-    // A part of a book is loaded without what the settings of that moment
-    // did not need: the publisher's fonts while a reading font replaces
-    // them, and the beautifier's marks while every beautifier setting is
-    // off. Load the part again when a new setting needs one of them.
-    const bool needsFonts = fontsSkipped_ && face.isEmpty();
-    const bool needsBeautifier =
-            beautifierSkipped_ && (beautifierInitials || beautifierSpacing || beautifierIndent);
-    if ((needsFonts || needsBeautifier) && source_ && windowFirst_ >= 0) {
-        auto saved = windowSettings(windowFirst_, windowLast_);
-        saved["font_face"] = face;
-        saved["beautifier_initials"] = beautifierInitials;
-        saved["beautifier_spacing"] = beautifierSpacing;
-        saved["beautifier_indent"] = beautifierIndent;
-        dropSideDocuments();
-        QString error;
-        if (!openSource(source_, size_, saved, &error))
-            return false;
-    }
     const auto defaultFace = settings.value("default_font_face").toString(defaultFace_);
     auto fallbackFaces = fallbackFaces_;
     for (size_t index = 0; index < fallbackFaces.size(); ++index) {
@@ -1268,6 +1242,32 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
         || (bionic != "off" && bionic != "bold") || (!face.isEmpty() && !fontFaces().contains(face))
         || !fontFaces().contains(defaultFace))
         return false;
+    if (windowFirst_ >= 0 && !inpageFootnotes_ && inpageFootnotes) {
+        const auto layout = pageNoteLayout();
+        if (layout == PageNoteLayout::Interrupted)
+            return false;
+        if (layout == PageNoteLayout::WholeBook)
+            return setChapterMode(false, patch, size, std::move(progress),
+                                  [this] { return !interrupt_ || !interrupt_(); });
+    }
+    // A part of a book is loaded without what the settings of that moment
+    // did not need: the publisher's fonts while a reading font replaces
+    // them, and the beautifier's marks while every beautifier setting is
+    // off. Load the part again when a new setting needs one of them.
+    const bool needsFonts = fontsSkipped_ && face.isEmpty();
+    const bool needsBeautifier =
+            beautifierSkipped_ && (beautifierInitials || beautifierSpacing || beautifierIndent);
+    if ((needsFonts || needsBeautifier) && source_ && windowFirst_ >= 0) {
+        auto saved = windowSettings(windowFirst_, windowLast_);
+        saved["font_face"] = face;
+        saved["beautifier_initials"] = beautifierInitials;
+        saved["beautifier_spacing"] = beautifierSpacing;
+        saved["beautifier_indent"] = beautifierIndent;
+        dropSideDocuments();
+        QString error;
+        if (!openSource(source_, size_, saved, &error))
+            return false;
+    }
     const bool bionicChanged = bionic != bionic_;
     // Outline thickness changes pixels only. Keep the formatted page and its anchors.
     const bool thicknessChanged = weight != weight_;

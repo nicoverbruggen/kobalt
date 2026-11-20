@@ -217,6 +217,9 @@ void chapterPageNotes()
             require(document.open(book, { 600, 800 }, settings, &error), qPrintable(error));
             const auto anchor = document.position();
             if (enableAfterOpen) {
+                require(!document.applyAppearance(appearance::Patch(
+                                { { "inpage_footnotes", true }, { "margin_pixels", -1 } })),
+                        "Enabling page notes accepted a negative margin");
                 require(document.applyAppearance(
                                 appearance::Patch({ { "inpage_footnotes", true } })),
                         "Cannot turn on chapter notes");

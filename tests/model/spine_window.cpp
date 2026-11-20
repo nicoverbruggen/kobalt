@@ -68,6 +68,12 @@ int main(int argc, char **argv)
 
     QString error;
     require(model.showSpineItems(3, 5, &error), qPrintable(error));
+    const auto face = model.fontFace();
+    require(!face.isEmpty(), "The chapter must open with a reading font");
+    require(!model.applyAppearance(
+                    appearance::Patch({ { "font_face", "" }, { "margin_pixels", -1 } })),
+            "A negative margin must reject the appearance change");
+    require(model.fontFace() == face, "A rejected margin switched the chapter to publisher fonts");
     const auto window = pages(model);
     require(window.items == whole.items.mid(3, 3), "Only the three spine items must have pages");
     for (const auto &item : window.items)

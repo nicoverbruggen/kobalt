@@ -1233,7 +1233,7 @@
 "activity.close" = "Close Activity";
 /* The alert the first time Activity opens. */
 "activity.welcome_title" = "Welcome to Activity";
-"activity.welcome_description" = "Activity shows your reading time and reading stats on this device. It doesn't sync, so if you also read on another device, your streaks and totals here won't include that reading.";
+"activity.welcome_description" = "Activity only counts time you spend reading books in Kobalt on this device. Your streaks and totals are based on those sessions. Reading history doesn’t sync between devices.";
 "activity.loading" = "Loading reading history…";
 "activity.unavailable" = "Reading history is unavailable right now.";
 "activity.change_not_saved" = "Could not save the change to your reading history.";

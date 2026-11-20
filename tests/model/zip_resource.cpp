@@ -211,12 +211,25 @@ int main(int argc, char **argv)
     const auto path = dir.path() + "/book.zip";
     ZipResourceIndex index;
     checkDirectoryReuse();
-    auto unsupported = zip("chapter", false);
-    replace16(unsupported, 4, 46);
-    save(path, unsupported);
-    ZipResource unsupportedMember;
-    if (unsupportedMember.open(path, "image.png", index))
-        qFatal("Unsupported OCF extraction version");
+    // The low byte is the version; the high byte names the writer's system.
+    for (const quint16 version : { 46, 0x032e }) {
+        auto unsupported = zip("chapter", false);
+        replace16(unsupported, 4, version);
+        const auto unsupportedPath = dir.path() + QString("/version-%1.zip").arg(version);
+        save(unsupportedPath, unsupported);
+        ZipResource unsupportedMember;
+        if (unsupportedMember.open(unsupportedPath, "image.png", index))
+            qFatal("Unsupported OCF extraction version");
+    }
+    for (const quint16 version : { 0, 14, 0x0314 }) {
+        auto supported = zip("chapter", false);
+        replace16(supported, 4, version);
+        const auto supportedPath = dir.path() + QString("/version-%1.zip").arg(version);
+        save(supportedPath, supported);
+        ZipResource supportedMember;
+        if (!supportedMember.open(supportedPath, "image.png", index))
+            qFatal("Supported OCF extraction version");
+    }
 
     for (bool deflated : { false, true })
         for (int length : { 0, 1, 65535, 65536, 65537, 196608, 2097171 }) {

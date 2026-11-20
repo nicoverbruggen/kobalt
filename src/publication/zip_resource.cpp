@@ -216,8 +216,9 @@ bool ZipResource::open(QIODevice &source, const QString &name, ZipResourceIndex 
         || u16(header, 8) != method || u16(header, 26) != wanted.size()) {
         return false;
     }
-    const auto version = u16(header, 4);
-    if (version != 10 && version != 20 && version != 45)
+    // Writers choose any version up to 4.5 for stored, deflated and ZIP64
+    // members; the high byte names their system.
+    if ((u16(header, 4) & 0xff) > 45)
         return false;
     const quint64 start = local + 30 + u16(header, 26) + u16(header, 28);
     if (start > directoryOffset || member.packed > directoryOffset - start

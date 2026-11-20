@@ -432,10 +432,13 @@ public:
         return {};
     }
 
-    // Opens the scenario's book unless it is the open one.
-    QString book(const QString &key)
+    // An inherited book has no known rendering mode until the player opens it.
+    QString book(const QString &key, const QString &rendering)
     {
-        if (key.isEmpty() || (key == current && host.reader && host.reader()))
+        requestedRendering = rendering;
+        if (key.isEmpty()
+            || (key == current && host.reader && host.reader()
+                && (rendering.isEmpty() || rendering == openedRendering)))
             return {};
         return open(key, false);
     }
@@ -469,6 +472,7 @@ public:
         if (!ready)
             return key + " did not open";
         current = key;
+        openedRendering = requestedRendering;
         return {};
     }
 
@@ -608,6 +612,7 @@ private:
     QMap<QString, int> markCounts, endCounts;
     // The key of the open book, if the player knows it.
     QString current;
+    QString requestedRendering, openedRendering;
 };
 
 // Qt 5.2's QJsonArray cannot search itself.
@@ -795,7 +800,8 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
             renderingMode::setOverride(mode == "hybrid" ? 2 : mode == "fast" ? 1 : 0);
         }
         runner.unsupported = false;
-        QString failure = runner.book(scenario.value("book").toString());
+        QString failure = runner.book(scenario.value("book").toString(),
+                                      scenario.value("rendering").toString());
         if (failure.isEmpty()) {
             runner.reset();
             failure = runner.steps(scenario.value("setup").toArray(), 0);

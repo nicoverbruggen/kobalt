@@ -1,6 +1,7 @@
 #include "scenario/player.h"
 #include "support/diagnostics.h"
-#include <QCoreApplication>
+#include <QApplication>
+#include <QWidget>
 #include <QElapsedTimer>
 #include <QJsonArray>
 #include <QTimer>
@@ -78,7 +79,7 @@ void require(bool condition, const char *message)
 // Checks the scenario player's sleep benchmark, KOSync account, `native-sync`, `wifi` and event steps, real-time waits, keep-awake and resource samples, with a controlled host.
 int main(int argc, char **argv)
 {
-    QCoreApplication app(argc, argv);
+    QApplication app(argc, argv);
     auto scenario = QJsonObject{
         { "id", "sleep.test" },
         { "opt_in", true },
@@ -433,4 +434,36 @@ int main(int argc, char **argv)
                     && results[0].value("counts").toArray() == QJsonArray({ "ends", "writes" })
                     && results[0].value("expect").toObject() == QJsonObject{ { "writes", 0 } },
             "the result names its counts and limits for the comparison");
+    // The first scenario inherits an already open book. Only reuse a book
+    // for an explicit rendering mode after opening it in that mode.
+    QWidget reader;
+    reader.show();
+    QVector<int> openedModes;
+    kobalt::scenario::Host library;
+    library.reader = [&] { return reader.isVisible() ? &reader : nullptr; };
+    library.busy = [] { return false; };
+    library.open = [&](const QString &) {
+        openedModes.append(kobalt::renderingMode::overrides.last());
+        reader.show();
+        return true;
+    };
+    QJsonObject turn{ { "id", "turn" },
+                      { "book", "test" },
+                      { "repeat", 1 },
+                      { "steps",
+                        QJsonArray{ QJsonObject{ { "mark", true } },
+                                    QJsonObject{ { "mark_end", true } } } },
+                      { "sample", QJsonObject{ { "timer", true } } } };
+    QJsonArray turns;
+    for (auto mode : { "accurate", "hybrid", "hybrid" }) {
+        turn["rendering"] = mode;
+        turns.append(turn);
+    }
+    options.filter = "turn";
+    options.openBook = "test";
+    results = kobalt::scenario::run(QJsonObject{ { "scenarios", turns } }, library, options);
+    for (const auto &result : results)
+        require(result.value("status") == "completed", "rendering scenario did not complete");
+    require(openedModes == QVector<int>({ 0, 2 }),
+            "scenario reused an unknown or different rendering mode, or reopened a matching book");
 }

@@ -11913,6 +11913,9 @@ void setNodeStyle( ldomNode * enode, css_style_ref_t parent_style, LVFontRef par
     case css_val_q:
         // absolute size, nothing to do
         break;
+    case css_val_screen_px_hanging:
+        // Blaze: this computed unit is used only for text-indent.
+        break;
     case css_val_unspecified:
     case css_val_color:
         // not supported: use inherited value

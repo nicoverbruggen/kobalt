@@ -28,6 +28,18 @@
 #include "reading/reading_density.h"
 
 namespace kobalt {
+QString elideBookmarkExcerpt(const QString &text, int minimum, int maximum)
+{
+    if (text.size() <= maximum)
+        return text;
+    auto prefix = text.left(maximum);
+    if (minimum < maximum)
+        prefix.truncate(qMax(minimum, int(prefix.lastIndexOf(' '))));
+    if (!prefix.isEmpty() && prefix.at(prefix.size() - 1).isHighSurrogate())
+        prefix.chop(1);
+    return prefix + QString::fromUtf8("…");
+}
+
 namespace chrome = ui::metrics::chrome;
 
 BookmarkList::BookmarkList(QWidget *parent, KeyboardFactory factory)

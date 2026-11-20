@@ -558,10 +558,7 @@ void Reader::askRemoveBookmark(const QString &position)
             excerpt = row.excerpt;
             break;
         }
-    if (excerpt.size() > 80) {
-        excerpt = excerpt.left(80);
-        excerpt = excerpt.left(qMax(40, excerpt.lastIndexOf(' '))) + QString::fromUtf8("…");
-    }
+    excerpt = elideBookmarkExcerpt(excerpt, 40, 80);
     const auto detail = number >= 0
             ? strings::get("bookmarks.remove_detail").arg(number + 1).arg(excerpt)
             : excerpt;

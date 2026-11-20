@@ -13,6 +13,9 @@
 #include "storage/custom_pins.h"
 
 namespace kobalt {
+// Prefer a space between the minimum and maximum excerpt lengths.
+QString elideBookmarkExcerpt(const QString &text, int minimum, int maximum);
+
 struct BookmarkRow
 {
     QString position, chapter, excerpt;

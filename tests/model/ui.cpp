@@ -40,6 +40,7 @@
 #include "ui/style/metrics.h"
 #include "ui/style/styles.h"
 #include "ui/controls/paged_text.h"
+#include "app/reader/panels/bookmark_list.h"
 #include "app/reader/panels/dictionary_panel.h"
 #include "app/reader/settings/dictionaries_page.h"
 #include "app/reader/panels/link_panel.h"
@@ -611,6 +612,25 @@ static void checkPreparedOpeningFonts()
 
 int main(int argc, char **argv)
 {
+    {
+        const QString emoji = QString::fromUtf8("📚");
+        const QString ellipsis = QString::fromUtf8("…");
+        for (const int limit : { 36, 40 }) {
+            const int maximum = limit == 36 ? 36 : 80;
+            const QString prefix(limit - 1, 'a');
+            const QString tail(81, 'b');
+            require(kobalt::elideBookmarkExcerpt(prefix + emoji + tail, limit, maximum)
+                            == prefix + ellipsis,
+                    "Truncating a bookmark or annotation excerpt split a surrogate pair");
+            const QString complete = prefix.mid(1) + emoji;
+            require(kobalt::elideBookmarkExcerpt(complete + tail, limit, maximum)
+                            == complete + ellipsis,
+                    "An excerpt dropped a complete supplementary character");
+            require(kobalt::elideBookmarkExcerpt(emoji, limit, maximum) == emoji,
+                    "A short excerpt lost its supplementary character");
+        }
+    }
+
 #ifdef Q_OS_LINUX
     // Noto Sans Math may be installed system-wide. This fixture must begin
     // without it in Qt, then prove the private face is registered on demand.

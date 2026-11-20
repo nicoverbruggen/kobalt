@@ -1680,11 +1680,9 @@ void Reader::showAnnotationMatches(QVector<QString> ids, QRect anchor, int listP
             if (item.id != ids[i]) {
                 continue;
             }
-            QString excerpt = item.text.simplified();
-            if (excerpt.size() > 36) {
-                excerpt = excerpt.left(36) + QString::fromUtf8("…");
-            }
-            excerpt = QString::number(i + 1) + ". " + excerpt;
+            const auto excerpt = strings::get("common.numbered_title")
+                                         .arg(i + 1)
+                                         .arg(elideBookmarkExcerpt(item.text.simplified(), 36, 36));
             const QString name = QString("rrAnnotationMatch%1").arg(i);
             const QString id = item.id;
             actions.append({ name, ui::ControlIcon::Annotate, excerpt,
@@ -1726,10 +1724,7 @@ void Reader::removeAnnotation(const QString &id)
     }
     if (excerpt.isEmpty())
         return;
-    if (excerpt.size() > 80) {
-        excerpt = excerpt.left(80);
-        excerpt = excerpt.left(qMax(40, excerpt.lastIndexOf(' '))) + QString::fromUtf8("…");
-    }
+    excerpt = elideBookmarkExcerpt(excerpt, 40, 80);
     const auto detail = number >= 0
             ? strings::get("bookmarks.remove_detail").arg(number + 1).arg(excerpt)
             : excerpt;

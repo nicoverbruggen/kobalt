@@ -830,7 +830,7 @@ void searchUnopenedChapter()
                     .toUtf8());
     book.files["OEBPS/c2.xhtml"] =
             test::publisherHtml("<p>Andr&eacute;nav</p>"
-                                + QByteArray("<p>Intervening chapter text.</p>").repeated(800));
+                                + QByteArray("<p>Intervening page text.</p>").repeated(800));
     QString error;
     EngineDocument whole(test::readerFonts()), chapters(test::readerFonts());
     require(book.open(whole, settings, &error) && book.open(chapters, settings, &error),
@@ -838,6 +838,24 @@ void searchUnopenedChapter()
     chapters.setChapterSlices(2);
     require(chapters.showSpineItems(0, 0), "Cannot open the first chapter");
     chapters.go(chapters.pages() - 1);
+    const auto origin = chapters.position();
+    chapters.setChapters({ { "Opening", "/body/DocFragment[1]", -1, 0 },
+                           { "Next", "/body/DocFragment[2]", -1, 0 } },
+                         {});
+    for (auto scope : { SearchScope::Before, SearchScope::Chapter }) {
+        SearchBatch batch;
+        bool openedNext = false;
+        int matches = 0;
+        do {
+            batch = chapters.searchText("page", batch.cursor, 1, scope, origin, false, [&] {
+                openedNext |= ReaderSourceIndexProbe::lookupIncludes(chapters, 1);
+                return true;
+            });
+            matches += batch.hits.size();
+        } while (!batch.done);
+        require(matches == 1, "Bounded search lost the opening match or included a later page");
+        require(!openedNext, "Search opened the chapter after its exclusive upper bound");
+    }
     chapters.prepareAhead();
     const auto *prepared = ReaderSourceIndexProbe::preparedView(chapters);
     require(prepared, "Fixture must prepare the next chapter before search");

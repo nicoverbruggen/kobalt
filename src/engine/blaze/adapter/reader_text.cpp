@@ -1986,13 +1986,6 @@ bool searchKeyMayHold(const QString &key, const QString &pattern)
     return false;
 }
 
-// The spine item of an engine position, counted from zero, or -1.
-int positionItem(const QString &position)
-{
-    static const QRegularExpression fragment(QStringLiteral("/DocFragment(?:\\[(\\d+)\\])?"));
-    const auto match = fragment.match(position);
-    return match.hasMatch() ? qMax(1, match.captured(1).toInt()) - 1 : -1;
-}
 } // namespace
 
 bool EngineDocument::mayContain(int item, const QString &pattern) const
@@ -2087,13 +2080,15 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
         return result;
     }
     const int firstItem = spineItemIndex(bounds.lower);
-    const int lastItem = spineItemIndex(bounds.upper);
+    bool atStart = false;
+    const int upperItem = spineItemIndex(bounds.upper, &atStart);
+    const int endItem =
+            upperItem < 0 ? spineItemCount_ : qMin(spineItemCount_, upperItem + (atStart ? 0 : 1));
     const auto pattern = searchKey(query);
     cursor.item = qMax(cursor.item, firstItem);
     QElapsedTimer budget;
     budget.start();
-    while (cursor.item < spineItemCount_ && (lastItem < 0 || cursor.item <= lastItem)
-           && result.hits.size() < maximum && budget.elapsed() < 8) {
+    while (cursor.item < endItem && result.hits.size() < maximum && budget.elapsed() < 8) {
         if (current && !current())
             break;
         const bool loaded = cursor.item >= windowFirst_ && cursor.item <= windowLast_;
@@ -2106,10 +2101,12 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
                 || (cursor.firstItem == windowFirst_ && cursor.lastItem == windowLast_);
         // Search may move through the slices. Keep both the displayed slice
         // and the one prepared for the next turn at their reading positions.
-        auto *document = loaded && sameWindow && !slices()
-                ? this
-                : openLookupUnit(cursor.firstItem >= 0 ? cursor.firstItem : cursor.item, current,
-                                 cursor.lastItem);
+        auto *document = this;
+        if (!loaded || !sameWindow || slices()) {
+            const int first = cursor.firstItem >= 0 ? cursor.firstItem : cursor.item;
+            const int last = cursor.lastItem >= 0 ? cursor.lastItem : unitFrom(first).second;
+            document = openLookupUnit(first, current, qMin(last, endItem - 1));
+        }
         if (!document) {
             if (current && !current())
                 break;
@@ -2158,7 +2155,7 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
         else
             batch.done = true;
         for (auto &hit : batch.hits) {
-            const int item = positionItem(hit.start);
+            const int item = spineItemIndex(hit.start);
             if (item < cursor.item || item > last)
                 continue;
             // A part also lays out some text of the next part, which that
@@ -2197,7 +2194,7 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
         }
     }
     result.cursor = cursor;
-    result.done = cursor.item >= spineItemCount_ || (lastItem >= 0 && cursor.item > lastItem);
+    result.done = cursor.item >= endItem;
     if (result.done)
         lookupUnit_ = {};
     result.nextPage = result.done ? pages() : 0;
@@ -2219,7 +2216,7 @@ QVector<SearchHit> EngineDocument::searchDetails(QVector<SearchHit> hits, Search
                                        : QVector<SearchHit>();
     QVector<SearchHit> result;
     for (const auto &hit : hits) {
-        const int item = positionItem(hit.start);
+        const int item = spineItemIndex(hit.start);
         auto *document =
                 item >= windowFirst_ && item <= windowLast_ ? this : openLookupUnit(item, {});
         // A long spine item has a layout for one part at a time, and only

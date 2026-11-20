@@ -450,10 +450,16 @@ int chapterSlicePages()
                                      : 25;
 }
 
-int spineItemIndex(const QString &position)
+int spineItemIndex(const QString &position, bool *atStart)
 {
     static const QRegularExpression fragment(QStringLiteral("/DocFragment(?:\\[(\\d+)\\])?"));
     const auto match = fragment.match(position);
+    if (atStart) {
+        const auto end = match.capturedEnd();
+        *atStart = match.hasMatch()
+                && (end == position.size()
+                    || (end + 2 == position.size() && position.endsWith(".0")));
+    }
     return match.hasMatch() ? qMax(1, match.captured(1).toInt()) - 1 : -1;
 }
 

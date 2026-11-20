@@ -114,8 +114,8 @@ struct ReaderSource
 };
 
 // The spine item that a position names as DocFragment[n], counted from zero,
-// or -1.
-int spineItemIndex(const QString &position);
+// or -1. atStart reports whether the position names the fragment itself at its start.
+int spineItemIndex(const QString &position, bool *atStart = nullptr);
 // The pages of one slice in chapter mode. Zero lays out three spine items
 // as a whole.
 int chapterSlicePages();

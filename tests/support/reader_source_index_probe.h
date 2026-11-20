@@ -29,6 +29,12 @@ struct ReaderSourceIndexProbe
         return model.ahead_ ? currentView(*model.ahead_) : nullptr;
     }
 
+    static bool lookupIncludes(const EngineDocument &model, int item)
+    {
+        const auto &lookup = model.lookupUnit_.document;
+        return lookup && lookup->windowFirst_ <= item && item <= lookup->windowLast_;
+    }
+
     static bool mayContain(const EngineDocument &model, int item, const QString &pattern)
     {
         return model.mayContain(item, pattern);

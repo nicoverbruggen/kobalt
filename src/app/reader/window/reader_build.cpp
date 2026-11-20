@@ -2189,15 +2189,14 @@ void Reader::connectPageInput()
     page->annotationDragMoved = [this](QPoint point) { moveAnnotationDrag(point); };
     page->annotationDragFinished = [this](bool cancelled) { finishAnnotationDrag(cancelled); };
     page->annotationRequested = [this] {
-        if (!features::enabled(preferences, features::Annotations) || annotationMode
-            || quickAnnotations() || !isEnabled() || !isVisible() || lifecycleHidden || closing
-            || exitPending || exportRunning || services.suspended() || book->deviceTransition()
-            || session->busy() || appearanceEdit.panelOpen() || appearanceEdit.applying()
-            || settingsVisible() || choices->isVisible() || topControls->isVisible()
-            || revealingLinks || dictionaryPanel->isVisible() || searchPanel->isVisible()
-            || linksActive() || lookupPending || acknowledgmentsVisible()
-            || bookmarkList->isVisible() || lightPopup->isVisible() || chapterGraph->isVisible()
-            || !highlights->writable()) {
+        if (!usesAnnotationToggle() || annotationMode || !isEnabled() || !isVisible()
+            || lifecycleHidden || closing || exitPending || exportRunning || services.suspended()
+            || book->deviceTransition() || session->busy() || appearanceEdit.panelOpen()
+            || appearanceEdit.applying() || settingsVisible() || choices->isVisible()
+            || topControls->isVisible() || revealingLinks || dictionaryPanel->isVisible()
+            || searchPanel->isVisible() || linksActive() || lookupPending
+            || acknowledgmentsVisible() || bookmarkList->isVisible() || lightPopup->isVisible()
+            || chapterGraph->isVisible() || !highlights->writable()) {
             return;
         }
         const auto *modal = QApplication::activeModalWidget();

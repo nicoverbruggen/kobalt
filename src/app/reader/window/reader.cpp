@@ -2241,8 +2241,7 @@ void Reader::activateNavigation(kobalt::NavigationDestination destination)
         return;
     }
     if (destination == Nav::Annotate) {
-        // Quick annotation mode has no mode to toggle.
-        if (quickAnnotations())
+        if (!usesAnnotationToggle())
             return;
         bookmarkList->hide();
         toolbarComposition.annotate->click();
@@ -2545,7 +2544,7 @@ void Reader::syncNavigation()
                   navigateAvailable(),
                   features::enabled(preferences, features::Stats),
                   zen,
-                  features::enabled(preferences, features::Annotations),
+                  usesAnnotationToggle(),
                   features::enabled(preferences, features::Bookmarks)
                           || features::enabled(preferences, features::Annotations),
                   annotationMode,

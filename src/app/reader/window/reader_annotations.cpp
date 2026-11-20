@@ -271,6 +271,11 @@ bool Reader::quickAnnotations() const
             && preferences.value("annotation_interaction").toString() == QLatin1String("quick");
 }
 
+bool Reader::usesAnnotationToggle() const
+{
+    return features::enabled(preferences, features::Annotations) && !quickAnnotations();
+}
+
 void Reader::settleQuickAnnotations()
 {
     // Wait for the current event: a new hold clears the old draft before it

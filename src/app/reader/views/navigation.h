@@ -65,9 +65,9 @@ struct NavigationState
     bool hideTabLabels = false;
     bool navigateEnabled = true, statsEnabled = true;
     // Zen mode keeps Chapters, Search, Annotate and Bookmarks in centered
-    // groups. Annotate and Bookmarks follow their hidden-feature choices.
+    // groups. Quick annotation mode hides the Annotate toggle.
     bool zen = false;
-    bool annotationsEnabled = true, bookmarksEnabled = true;
+    bool showAnnotate = true, bookmarksEnabled = true;
     bool annotating = false, bookmarksOpen = false;
     // Zen mode's reading stats under the top group. Negative chapter minutes
     // mean no estimate yet. An approximate estimate shows "≈".

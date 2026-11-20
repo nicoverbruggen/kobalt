@@ -765,9 +765,7 @@ void Reader::syncReadingControls()
                     { bookmarksShown ? ui::ControlIcon::Bookmark : ui::ControlIcon::Note,
                       ui::IconRendition::Action });
     }
-    toolbarComposition.annotate->setVisible(!settingsOpen && !zen
-                                            && features::enabled(preferences, features::Annotations)
-                                            && !quickAnnotations());
+    toolbarComposition.annotate->setVisible(!settingsOpen && !zen && usesAnnotationToggle());
     toolbarComposition.bookmarks->setVisible(!settingsOpen && !zen
                                              && (bookmarksShown || annotationsShown || wordsShown));
     toolbarComposition.formattingWarning->setVisible(!settingsOpen && !zen

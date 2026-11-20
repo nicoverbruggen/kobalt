@@ -8990,8 +8990,16 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!fixture.visible("rrAnnotationEditNote"));
     }
 
+    void quickAnnotations_data()
+    {
+        QTest::addColumn<bool>("zen");
+        QTest::newRow("regular") << false;
+        QTest::newRow("zen") << true;
+    }
+
     void quickAnnotations()
     {
+        QFETCH(bool, zen);
         Fixture fixture(false);
         QVERIFY(fixture.prepared);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
@@ -9018,11 +9026,20 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.visible("rrAnnotationInteractionPopup"));
         QCOMPARE(storage::readJson(fixture.paths.preferences()).value("annotation_interaction"),
                  QJsonValue("quick"));
+        if (zen) {
+            QVERIFY(fixture.press("rrSettingsDisplay"));
+            QTRY_VERIFY(fixture.visible("rrZenMode"));
+            QVERIFY(fixture.press("rrZenMode"));
+        }
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
         if (!fixture.visible("rrSettings"))
             QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(fixture.visible("rrSettings"));
+        if (zen) {
+            QVERIFY(fixture.visible("rrNavBookmarks"));
+            QVERIFY(!fixture.visible("rrNavAnnotate"));
+        }
         QVERIFY(!fixture.visible("rrAnnotate"));
         QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(!fixture.visible("rrControlsTop"));

@@ -1200,7 +1200,7 @@ void Navigation::update(QSize size, const NavigationState &state)
             && !state.chaptersOpen && !settingsOpen && !state.appearance->isVisible()
             && !state.stats->isVisible() && !state.light->isVisible();
     bar->setReturnLabel(scrubber ? QString() : state.returnLabel, state.returnNote);
-    bar->setZen(state.zen, state.annotationsEnabled, state.bookmarksEnabled, state.annotating,
+    bar->setZen(state.zen, state.showAnnotate, state.bookmarksEnabled, state.annotating,
                 state.bookmarksOpen, annotate && annotate->isEnabled(),
                 bookmarks && bookmarks->isEnabled(), state.annotationsOnly);
     // Under Chapters and Bookmarks the Zen tabs attach to the view.

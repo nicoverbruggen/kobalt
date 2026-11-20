@@ -1009,6 +1009,7 @@ private:
     // Quick annotation mode enters annotation mode for each held selection
     // and leaves it when that selection ends.
     bool quickAnnotations() const;
+    bool usesAnnotationToggle() const;
     void settleQuickAnnotations();
     void showMenuView();
     void openMenuView();

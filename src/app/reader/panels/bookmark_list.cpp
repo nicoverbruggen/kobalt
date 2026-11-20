@@ -780,6 +780,7 @@ void BookmarkList::hideEvent(QHideEvent *event)
             row->setNote({}, 0);
             row->setAccessibleName({});
             row->setEnabled(false);
+            removes[i]->setAccessibleName({});
             removes[i]->setEnabled(false);
         }
     }
@@ -1072,6 +1073,7 @@ void BookmarkList::redraw()
         if (!shown) {
             if (lazy) {
                 buttons[row]->setEnabled(false);
+                removes[row]->setAccessibleName({});
                 removes[row]->setEnabled(false);
             }
             continue;
@@ -1111,10 +1113,29 @@ void BookmarkList::redraw()
         button->setObjectName(QString(annotations ? "rrAnnotation%1" : "rrBookmark%1").arg(index));
         removes[row]->setObjectName(
                 QString(annotations ? "rrAnnotationRemove%1" : "rrBookmarkMore%1").arg(index));
+        const auto title = item.pinName.isEmpty() ? chapter : item.pinName;
+        QStringList description;
+        if (item.page >= 0) {
+            description << (annotations && item.endPage > item.page
+                                    ? strings::get("marks.page_range")
+                                              .arg(item.page + 1)
+                                              .arg(item.endPage + 1)
+                                    : strings::get("search_panel.page_number").arg(item.page + 1));
+        }
+        if (!title.isEmpty())
+            description << title;
+        if (!detailsReady || (description.isEmpty() && excerpt.isEmpty()))
+            description << strings::get(annotations ? "annotations.numbered_entry"
+                                                    : "bookmarks.numbered_entry")
+                                   .arg(index + 1);
+        if (!excerpt.isEmpty())
+            description << (detailsReady ? elideBookmarkExcerpt(excerpt.simplified(), 40, 80)
+                                         : excerpt);
+        const auto name = description.join(QStringLiteral(", "));
         removes[row]->setAccessibleName(
-                strings::get(annotations ? "annotations.remove" : "bookmarks.actions"));
-
-        button->setAccessibleName(chapter);
+                strings::get("marks.row_action")
+                        .arg(strings::get(annotations ? "annotations.remove" : "bookmarks.actions"),
+                             name));
         button->setEnabled((item.page >= 0 || item.pagePending) && detailsReady);
         removes[row]->setEnabled(detailsReady);
         button->setGeometry(0, y, width(), itemHeight);
@@ -1122,7 +1143,8 @@ void BookmarkList::redraw()
         itemRow->setActionIcon(annotations ? ui::ControlIcon::Trash : ui::ControlIcon::More);
         itemRow->setDetailFont(excerptFont());
         itemRow->setMetadataFont(ui::interfaceFont(chrome::captionText));
-        itemRow->setTitle(item.pinName.isEmpty() ? chapter : item.pinName);
+        itemRow->setTitle(title);
+        itemRow->setAccessibleName(name);
         itemRow->setTitlePixels(ui::px(24));
         itemRow->setTitleIcon(ui::ControlIcon::Pin, !annotations && !item.pinIcon.isEmpty(),
                               !annotations);

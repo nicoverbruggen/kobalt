@@ -1695,6 +1695,10 @@
 "marks.sort_newest_description" = "Recently created items come first.";
 "marks.sort_oldest" = "Oldest first";
 "marks.sort_oldest_description" = "Items created longest ago come first.";
+"marks.row_action" = "%1: %2";
+"marks.page_range" = "Pages %1 to %2";
+"annotations.numbered_entry" = "Annotation %1";
+"bookmarks.numbered_entry" = "Bookmark %1";
 "marks.sort_position" = "Book order";
 "marks.sort_position_description" = "Earlier passages in the book come first.";
 "marks.sort_title" = "Sort by";

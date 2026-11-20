@@ -3289,6 +3289,26 @@ private slots:
         QVERIFY(row());
         row()->click();
         QCOMPARE(selected, QString("first"));
+        const auto checkNames = [&](const QString &prefix, const QString &actionPrefix,
+                                    const QString &title, const QString &actionLabel) {
+            QStringList names;
+            for (int i = 0; i < 2; ++i) {
+                auto *entry = list.findChild<QWidget *>(prefix + QString::number(i));
+                auto *action = list.findChild<QWidget *>(actionPrefix + QString::number(i));
+                QVERIFY(entry && action);
+                const auto name = entry->accessibleName();
+                QVERIFY2(name.contains("Page 3"), qPrintable(name));
+                QVERIFY(name.contains(i ? b.chapter : title));
+                QVERIFY(name.contains(i ? b.excerpt : QStringLiteral("A lengthy quotation")));
+                QVERIFY(!name.contains(a.excerpt));
+                QVERIFY(action->accessibleName().contains(actionLabel));
+                QVERIFY(action->accessibleName().contains(name));
+                names.append(name);
+            }
+            QVERIFY(names[0] != names[1]);
+        };
+        checkNames("rrAnnotation", "rrAnnotationRemove", a.chapter,
+                   strings::get("annotations.remove"));
         QCOMPARE(row()->detailLabel()->text(), a.excerpt);
         QVERIFY(row()->titleLabel()->font().pixelSize() < row()->detailLabel()->font().pixelSize());
         // A small gap separates the chapter from the excerpt.
@@ -3304,7 +3324,9 @@ private slots:
         auto pinned = a;
         pinned.pinName = "Reference";
         pinned.pinIcon = "map";
-        list.showBookmarks({ pinned });
+        list.showBookmarks({ pinned, b });
+        checkNames("rrBookmark", "rrBookmarkMore", pinned.pinName,
+                   strings::get("bookmarks.actions"));
         list.showAnnotations({ c, b, a });
         QCoreApplication::processEvents();
         QCOMPARE(row()->grab().toImage(), annotationImage);
@@ -3670,6 +3692,9 @@ private slots:
             auto *row = static_cast<ui::ListRow *>(list.findChild<QWidget *>("rrAnnotation0"));
             auto *remove = list.findChild<QPushButton *>("rrAnnotationRemove0");
             QVERIFY(row && remove && !row->isEnabled() && !remove->isEnabled());
+            QVERIFY(row->accessibleName().contains("Page 1"));
+            QVERIFY(row->accessibleName().contains(strings::get("annotations.load_failed")));
+            QVERIFY(remove->accessibleName().contains(row->accessibleName()));
             QCOMPARE(
                     row->detailLabel()->text(),
                     QStringLiteral(

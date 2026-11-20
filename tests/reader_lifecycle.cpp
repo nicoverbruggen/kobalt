@@ -8454,6 +8454,7 @@ private slots:
         QCOMPARE(host.session()->state().value("position"), position);
     }
 
+    // An invalid remote position keeps the local position even if disabling automatic sync fails.
     void kosyncInvalidPosition_data()
     {
         QTest::addColumn<bool>("saveFails");

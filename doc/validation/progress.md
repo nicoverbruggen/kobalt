@@ -52,6 +52,6 @@ Development progress controls are supplied by the host. Lifecycle checks cover a
 
 `lifecycle.progressExitDuringSync` checks the toolbar exit during Kobo sync, automatic close, conflict resolution, cancellation and a local save without a Nickel position write.
 
-`desktop.mainTextBoundaries` checks the Stats scope picker and both word totals across intra-chapter boundaries. `desktop.mainTextChapterAnchors` checks a range within one spine item in Fast mode. `desktop.mainTextSplitChapterEnd` checks that marking the end of a chapter keeps its unlisted split files in the main text.
+`desktop.mainTextBoundaries` checks the Stats scope picker and both word totals across intra-chapter boundaries. `desktop.mainTextChapterAnchors` checks a range within one spine item in Fast mode.
 
 `desktop.mainTextBoundaries` opens EPUBs with explicit structural markup, guide references and a nested TOC without either. It exercises marking and resetting boundaries through Chapters, secondary page labels, reflow and reopening in the appendix.

@@ -70,7 +70,9 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
         bookPages(result.chapters);
         bookPages(result.chapterGraph);
     }
-    const auto hints = engine.mainTextHints();
+    auto hints = engine.mainTextHints();
+    if (!engine.validMainTextRange(hints.first, hints.second))
+        hints.second.clear();
     QString first = hints.first, after = hints.second;
     const auto &marks = engine.mainTextMarks;
     for (bool start : { true, false }) {
@@ -87,28 +89,41 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
                 continue;
             // An unloaded spine item can have one placeholder for several TOC entries.
             // Resolve the selected entry against the source before retaining its anchor.
-            mark["anchor"] = start ? engine.chapterBoundaryPosition(result.chapters, i)
-                                   : engine.afterChapter(result.chapters, i);
+            const auto anchor = start ? engine.chapterBoundaryPosition(result.chapters, i)
+                                      : engine.afterChapter(result.chapters, i);
+            if (anchor.isNull() || (start && anchor.isEmpty())) {
+                engine.mainTextMarks.remove(key);
+                continue;
+            }
+            mark["anchor"] = anchor;
             engine.mainTextMarks[key] = mark;
         }
         // An empty exclusive end explicitly includes the last spine item.
         (start ? first : after) = mark.value("anchor").toString();
     }
+    // Older versions allowed crossed marks. Restore the offending side to its
+    // publication default before computing words or pages, including on reopen.
+    if (!engine.validMainTextRange(first, after)) {
+        if (marks.contains("end")) {
+            engine.mainTextMarks.remove("end");
+            after = hints.second;
+        }
+        if (!engine.validMainTextRange(first, after) && marks.contains("start")) {
+            engine.mainTextMarks.remove("start");
+            first = hints.first;
+        }
+        if (!engine.validMainTextRange(first, after))
+            after.clear();
+    }
     result.state["main_text_marks"] = marks;
     QVector<int> bounds;
     if (!first.isEmpty() || !after.isEmpty())
         bounds = engine.bookPages({ first, after }, current, true);
-    int firstPage = first.isEmpty() ? -1 : bounds.value(0, -1);
+    const int firstPage = first.isEmpty() ? -1 : bounds.value(0, -1);
     int lastPage = after.isEmpty() ? -1 : bounds.value(1, -1);
-    if (firstPage > 0 && lastPage > 0 && firstPage > lastPage) {
-        if (marks.contains("start")) {
-            after.clear();
-            lastPage = -1;
-        } else {
-            first.clear();
-            firstPage = -1;
-        }
-    }
+    // A short interval can round to a single estimated page. Keep its source anchors.
+    if (lastPage > 0)
+        lastPage = qMax(firstPage, lastPage);
     result.state["main_text_bounded"] = !first.isEmpty() || !after.isEmpty() || !marks.isEmpty();
     result.mainWords = engine.wordsInMainText(first, after, current);
     result.state["main_text_first"] = firstPage;
@@ -2719,24 +2734,86 @@ QString ReaderSession::displayBookPosition(const QString &style) const
             .arg(headerfooter::pageTotal(mainPages(), bookPagesEstimated()));
 }
 
-void ReaderSession::markChapter(int index, bool start, bool reset)
+void ReaderSession::chapterBoundaryActions(
+        int index, std::function<void(QVector<ChapterBoundaryAction>)> finished)
 {
-    if (index < 0 || index >= frame.chapters.size() || !lease_ || lease_->revoked())
+    const auto links = frame.chapters;
+    if (index < 0 || index >= links.size() || links[index].position.isEmpty() || !lease_)
         return;
-    const auto &entry = frame.chapters[index];
-    if (entry.position.isEmpty())
-        return;
-    auto marks = mainTextMarks();
-    const auto key = start ? "start" : "end";
-    if (reset) {
-        marks.remove(key);
-    } else {
-        QJsonObject mark;
-        mark["index"] = index;
-        mark["position"] = entry.position;
-        mark["title"] = entry.title;
-        marks[key] = mark;
-    }
+    const auto engine = engine_;
+    const auto lease = lease_;
+    const auto job = revision;
+    const QPointer<ReaderSession> guard(this);
+    qt::invoke(
+            engineWorker(),
+            [engine, lease, job, guard, links, index, finished] {
+                if (lease->revoked())
+                    return;
+                EngineJob activity;
+                const auto original = engine->mainTextMarks;
+                auto hints = engine->mainTextHints();
+                if (!engine->validMainTextRange(hints.first, hints.second))
+                    hints.second.clear();
+                QVector<ChapterBoundaryAction> actions;
+                for (bool start : { true, false }) {
+                    const auto key = start ? "start" : "end";
+                    for (bool reset : { false, true }) {
+                        auto marks = original;
+                        if (reset) {
+                            if (!marks.contains(key))
+                                continue;
+                            marks.remove(key);
+                        } else {
+                            const auto &link = links[index];
+                            const auto entryStart = engine->chapterBoundaryPosition(links, index);
+                            const auto anchor =
+                                    start ? entryStart : engine->afterChapter(links, index);
+                            if (entryStart.isEmpty() || anchor.isNull()
+                                || (!start && !engine->validMainTextRange(entryStart, anchor)))
+                                continue;
+                            marks[key] = qt::object({ { "index", index },
+                                                      { "title", link.title },
+                                                      { "position", link.position },
+                                                      { "anchor", anchor } });
+                        }
+                        const auto anchor = [&marks](const char *side, const QString &fallback) {
+                            const auto mark = marks.value(side).toObject();
+                            return mark.contains("anchor") ? mark.value("anchor").toString()
+                                                           : fallback;
+                        };
+                        const auto first = anchor("start", hints.first);
+                        if (start && !reset && marks.contains("end")) {
+                            const auto oldStart =
+                                    original.value("start").toObject().value("anchor").toString();
+                            // A later start begins a new range, even inside the previous range.
+                            if ((!oldStart.isEmpty() && engine->validMainTextRange(oldStart, first))
+                                || !engine->validMainTextRange(first, anchor("end", hints.second)))
+                                marks.remove("end");
+                        }
+                        if (!engine->validMainTextRange(first, anchor("end", hints.second)))
+                            continue;
+                        actions.append({ start, reset, [guard, job, original, marks] {
+                                            if (!guard || !guard->currentSourceFrame(job)
+                                                || guard->mainTextMarks() != original)
+                                                return false;
+                                            guard->applyChapterMarks(marks);
+                                            return true;
+                                        } });
+                    }
+                }
+                qt::invoke(
+                        qApp,
+                        [guard, job, actions, finished] {
+                            if (guard && guard->currentSourceFrame(job))
+                                finished(actions);
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+}
+
+void ReaderSession::applyChapterMarks(const QJsonObject &marks)
+{
     frame.state["main_text_marks"] = marks;
     const auto engine = engine_;
     const auto lease = lease_;

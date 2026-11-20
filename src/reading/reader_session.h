@@ -441,7 +441,14 @@ public:
     bool hasMainTextBoundary() const { return frame.state.value("main_text_bounded").toBool(); }
     QJsonObject mainTextMarks() const { return frame.state.value("main_text_marks").toObject(); }
 
-    void markChapter(int index, bool start, bool reset);
+    struct ChapterBoundaryAction
+    {
+        bool start, reset;
+        std::function<bool()> apply;
+    };
+
+    void chapterBoundaryActions(int index,
+                                std::function<void(QVector<ChapterBoundaryAction>)> finished);
 
     // The page a forward turn reaches, or page() on the last page of the text.
     int nextPage() const { return frame.state.value("next_page").toInt(page()); }
@@ -646,6 +653,7 @@ private:
     void searchNext(QString query, SearchCursor cursor, int count, quint64 job,
                     std::shared_ptr<std::atomic_bool> cancelled,
                     std::function<void(SearchBatch)> finished, bool reset);
+    void applyChapterMarks(const QJsonObject &marks);
     void request(bool appearanceChange = false, RenderReason reason = RenderReason::Appearance);
     void dispatch(bool pageTurn = false, std::function<void()> afterFrame = {});
 };

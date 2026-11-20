@@ -46,10 +46,11 @@ struct ReaderSource
 
     struct TocAnchor
     {
-        QString title, path, id, position;
+        QString path, id, position;
     };
 
     QVector<TocAnchor> tocAnchors;
+    QHash<QString, int> boundaryElementOrder;
     bool mainTextChecked = false;
     QPair<QString, QString> mainTextHints;
     // EPUB spine flags, including fragments whose text the chapter window omitted.

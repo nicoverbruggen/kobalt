@@ -1054,6 +1054,7 @@ private:
     void openImagePreview(QPoint point, const QString &resource = {});
     void showChapters(ContentsList mode = ContentsList::Chapters);
     void syncChapterBoundaries();
+    quint64 chapterActionRequest = 0;
     void showChapterActions(int index);
     void toggleGraph();
     void openGraph();

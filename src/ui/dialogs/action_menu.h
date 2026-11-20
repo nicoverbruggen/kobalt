@@ -20,6 +20,7 @@ struct ActionMenuItem
     ControlIcon icon = ControlIcon::More;
     std::function<void()> triggered;
     bool chevron = false;
+    bool startsSection = false;
 };
 
 inline ActionMenuItem actionItem(const QString &text, const QString &name, ControlIcon icon,

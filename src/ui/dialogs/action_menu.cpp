@@ -36,10 +36,13 @@ protected:
         const auto colors = parentWidget() ? parentWidget()->palette() : palette();
         const auto paper = colors.color(QPalette::Window), ink = colors.color(QPalette::WindowText);
         const bool pressed = isEnabled() && isDown();
-        const auto foreground = ink;
+        const auto foreground = isEnabled() ? ink : colors.color(QPalette::Mid);
         painter.fillRect(rect(), pressed ? themeColors(this).pressedPaper : paper);
         if (divider)
-            painter.fillRect(0, 0, width(), metrics::control::border, dividerColor(this));
+            painter.fillRect(0, 0, width(),
+                             item.startsSection ? metrics::chrome::heavyRule
+                                                : metrics::control::border,
+                             item.startsSection ? ink : dividerColor(this));
         const int iconSize = metrics::control::iconSize, left = metrics::chrome::inset;
         if (item.hasIcon)
             controlIcon(item.icon, foreground)
@@ -49,7 +52,7 @@ protected:
                                  iconSize, iconSize));
         const int textLeft = left + iconSize + metrics::chrome::selectorGap;
         painter.setFont(interfaceFont(metrics::chrome::labelText));
-        painter.setPen(isEnabled() ? foreground : colors.color(QPalette::Mid));
+        painter.setPen(foreground);
         const int chevronSpace =
                 item.chevron ? int(metrics::chrome::cellIcon + metrics::chrome::selectorGap) : 0;
         const int available = qMax(1, width() - textLeft - metrics::chrome::inset - chevronSpace);

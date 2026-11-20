@@ -1164,6 +1164,9 @@ bool Reader::eventFilter(QObject *watched, QEvent *event)
     if ((type == QEvent::TouchBegin || type == QEvent::MouseButtonPress || type == QEvent::KeyPress)
         && event->spontaneous())
         lastPressTime = quint32(static_cast<QInputEvent *>(event)->timestamp());
+    if (type == QEvent::MouseButtonPress || type == QEvent::TouchBegin || type == QEvent::KeyPress
+        || (type == QEvent::Hide && watched == choices))
+        ++chapterActionRequest;
     if (watched == bookmarkList && type == QEvent::Hide) {
         closeMarksActions();
         // Bookmarks reopen on their list, not on a word.
@@ -2768,52 +2771,55 @@ void Reader::showChapterActions(int index)
     const auto links = session->chapters();
     if (index < 0 || index >= links.size())
         return;
-    const auto marks = session->mainTextMarks();
-    QVector<ui::ActionMenuItem> actions;
-    for (bool start : { true, false }) {
-        const auto key = start ? "start" : "end";
-        const auto other = marks.value(start ? "end" : "start").toObject();
-        const int otherIndex = other.value("index").toInt(-1);
-        int end = start ? otherIndex : index;
-        while (end >= 0 && end < links.size() - 1
-               && links[end + 1].depth > links[start ? otherIndex : index].depth)
-            ++end;
-        const bool valid = otherIndex < 0 || otherIndex >= links.size()
-                || (start ? index <= end : otherIndex <= end);
-        const auto apply = [this, index, start](bool reset) {
-            session->markChapter(index, start, reset);
-            QJsonObject state;
-            book->checkpoint(&state, true);
-            syncChapterBoundaries();
+    const auto title = links[index].title;
+    const QPointer<Reader> guard(this);
+    const auto request = ++chapterActionRequest;
+    session->chapterBoundaryActions(index, [this, guard, title, request](const auto &available) {
+        if (!guard || request != chapterActionRequest || !choices->isVisible())
+            return;
+        QVector<ui::ActionMenuItem> actions{
+            ui::actionItem(strings::get("chapter_contents.mark_start"), "rrMarkStart",
+                           ui::ControlIcon::BookStart, {}),
+            ui::actionItem(strings::get("chapter_contents.mark_end"), "rrMarkEnd",
+                           ui::ControlIcon::BookEnd, {})
         };
-        if (valid)
-            actions.append(ui::actionItem(strings::get(start ? "chapter_contents.mark_start"
-                                                             : "chapter_contents.mark_end"),
-                                          start ? "rrMarkStart" : "rrMarkEnd",
-                                          start ? ui::ControlIcon::BookStart
-                                                : ui::ControlIcon::BookEnd,
-                                          [apply] { apply(false); }));
-        if (marks.contains(key))
-            actions.append(ui::actionItem(strings::get(start ? "chapter_contents.reset_start"
-                                                             : "chapter_contents.reset_end"),
-                                          start ? "rrResetStart" : "rrResetEnd",
-                                          ui::ControlIcon::PinOff, [apply] { apply(true); }));
-    }
-    ui::ActionMenuHeader header;
-    header.title = links[index].title;
-    auto *actionsMenu = new ui::ActionMenu(this, header, actions);
-    actionsMenu->setObjectName("rrChapterActions");
-    actionsMenu->setProperty("reader_standard_modal", true);
-    actionsMenu->dismissed = [actionsMenu] {
-        actionsMenu->hide();
-        actionsMenu->deleteLater();
-    };
-    actionsMenu->setDimmed(true);
-    actionsMenu->setGeometry(rect());
-    actionsMenu->fitCard();
-    actionsMenu->show();
-    actionsMenu->raise();
-    actionsMenu->setFocus();
+        for (const auto &action : available) {
+            const auto apply = [this, action] {
+                if (action.apply()) {
+                    QJsonObject state;
+                    book->checkpoint(&state, true);
+                    syncChapterBoundaries();
+                }
+            };
+            if (!action.reset) {
+                actions[action.start ? 0 : 1].triggered = apply;
+                continue;
+            }
+            auto restore = ui::actionItem(strings::get(action.start ? "chapter_contents.reset_start"
+                                                                    : "chapter_contents.reset_end"),
+                                          action.start ? "rrResetStart" : "rrResetEnd",
+                                          ui::ControlIcon::PinOff, apply);
+            restore.startsSection = actions.size() == 2;
+            actions.append(restore);
+        }
+        ui::ActionMenuHeader header;
+        header.title = title;
+        auto *actionsMenu = new ui::ActionMenu(this, header, actions);
+        for (const auto &item : actions)
+            actionsMenu->action(item.name)->setEnabled(bool(item.triggered));
+        actionsMenu->setObjectName("rrChapterActions");
+        actionsMenu->setProperty("reader_standard_modal", true);
+        actionsMenu->dismissed = [actionsMenu] {
+            actionsMenu->hide();
+            actionsMenu->deleteLater();
+        };
+        actionsMenu->setDimmed(true);
+        actionsMenu->setGeometry(rect());
+        actionsMenu->fitCard();
+        actionsMenu->show();
+        actionsMenu->raise();
+        actionsMenu->setFocus();
+    });
 }
 
 static bool numericPageLabel(const QString &label)
@@ -2825,6 +2831,7 @@ static bool numericPageLabel(const QString &label)
 
 void Reader::showChapters(ContentsList mode)
 {
+    ++chapterActionRequest;
     session->cancelPendingTurn();
     lightPopup->hide();
     chapterGraph->hide();

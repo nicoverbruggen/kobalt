@@ -300,14 +300,17 @@ public:
         return links[index].position;
     }
 
+    // Null means unresolved. An empty, non-null end includes the last spine item.
     virtual QString afterChapter(const QVector<ChapterLink> &links, int index) const
     {
         const int depth = links[index].depth;
         while (++index < links.size())
             if (links[index].depth <= depth && !links[index].position.isEmpty())
                 return links[index].position;
-        return {};
+        return QStringLiteral("");
     }
+
+    virtual bool validMainTextRange(const QString &first, const QString &after) const = 0;
 
     virtual QPair<QString, QString> mainTextHints() const { return {}; }
 

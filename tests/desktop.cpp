@@ -335,7 +335,7 @@ bool createBook(const QString &directory, const QString &filename = "text.epub")
                 "<item id='nav' properties='nav' media-type='application/xhtml+xml' href='nav.xhtml'/></manifest>");
         files["nav.xhtml"] =
                 "<html xmlns='http://www.w3.org/1999/xhtml' xmlns:e='http://www.idpf.org/2007/ops'><body>"
-                "<nav e:type='toc'><ol><li><a href='c1.xhtml'>First</a></li><li><a href='c3.xhtml'>Last item</a></li><li><a href='c3.xhtml#a1'>Body</a></li><li><a href='c3.xhtml#a2'>Appendix</a></li></ol></nav><nav e:type='landmarks'><ol><li><a e:type='bodymatter' href='c3.xhtml#a1'>Begin</a></li>"
+                "<nav e:type='toc'><ol><li><span>Opening</span><ol><li><a href='c1.xhtml'>First</a></li></ol></li><li><a href='c3.xhtml'>Last item</a></li><li><a href='c3.xhtml#a1'><img src='image.png' alt='Body'/></a></li><li><a href='c3.xhtml#a2'>Appendix</a></li></ol></nav><nav e:type='landmarks'><ol><li><a e:type='bodymatter' href='c3.xhtml#a1'>Begin</a></li>"
                 "<li><a e:type='backmatter' href='c3.xhtml#a2'>End</a></li></ol></nav></body></html>";
     }
     files["toc.ncx"] =
@@ -2175,12 +2175,22 @@ void chapterGroups(Fixture &fixture, const QString &name = {})
         QVERIFY(fixture.press("rrNavChapters"));
         QTRY_VERIFY(fixture.visible("rrContents"));
         QVERIFY(capture(fixture, name + "-chapters-groups"));
-        auto *row = fixture.widget("rrChapter1");
-        QTest::mousePress(row, Qt::LeftButton);
-        QTRY_VERIFY(fixture.visible("rrChapterActions"));
-        QTest::mouseRelease(row, Qt::LeftButton);
+        const auto openBoundaryMenu = [&] {
+            auto *row = fixture.widget("rrChapter1");
+            QTest::mousePress(row, Qt::LeftButton);
+            QTRY_VERIFY(fixture.visible("rrChapterActions"));
+            QTest::mouseRelease(row, Qt::LeftButton);
+        };
+        for (const auto *action : { "rrMarkStart", "rrMarkEnd" }) {
+            openBoundaryMenu();
+            QVERIFY(fixture.press(action));
+            QTRY_VERIFY(!fixture.visible("rrChapterActions")
+                        && !fixture.state().value("busy").toBool());
+        }
+        openBoundaryMenu();
+        QVERIFY(fixture.visible("rrResetStart") && fixture.visible("rrResetEnd"));
         QVERIFY(capture(fixture, name + "-chapters-boundaries"));
-        QVERIFY(fixture.press("rrMarkStart"));
+        QVERIFY(fixture.press("rrResetEnd"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
     }
     QVERIFY(fixture.press("rrChapter0Toggle"));
@@ -5688,9 +5698,22 @@ private slots:
         if (!nested)
             QVERIFY(relative.value("main_first_page").toInt()
                     < initial.value("main_first_page").toInt());
+        const auto later = nested ? "rrChapter3" : "rrChapter2";
+        mark(later, "rrMarkStart");
+        const auto moved = fixture.state().value("main_text_marks").toObject();
+        QCOMPARE(moved.value("start").toObject().value("index").toInt(), nested ? 3 : 2);
+        QVERIFY(!moved.contains("end"));
+        QCOMPARE(fixture.state().value("main_last_page"), initial.value("main_last_page"));
+        QCOMPARE(fixture.state().value("position"), initial.value("position"));
+        mark(middle, "rrMarkStart");
+        mark(middle, "rrMarkEnd");
         mark("rrChapter0", "rrMarkStart");
         QTRY_COMPARE(fixture.state().value("main_first_page").toInt(), 0);
+        QVERIFY(fixture.state().value("main_text_marks").toObject().contains("end"));
         mark(middle, "rrMarkStart");
+        QVERIFY(!fixture.state().value("main_text_marks").toObject().contains("end"));
+        QCOMPARE(fixture.state().value("main_last_page"), initial.value("main_last_page"));
+        mark(middle, "rrMarkEnd");
         QVERIFY(fixture.press(middle));
         QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("1"));
         chapters();
@@ -5769,9 +5792,42 @@ private slots:
         QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("i"));
         QVERIFY(fixture.press("rrPage"));
         QVERIFY(fixture.press("rrNavChapters"));
-        QTRY_VERIFY(fixture.visible("rrChapter2"));
+        QTRY_VERIFY(fixture.visible("rrChapter3"));
+        auto *chooser = dynamic_cast<ChoiceScreen *>(fixture.widget("rrChoices"));
+        QVERIFY(chooser);
+        // Both requests reach the worker before either reply reaches the UI.
+        chooser->boundaryRequested(2);
+        chooser->boundaryRequested(3);
+        QTRY_VERIFY(fixture.visible("rrChapterActions"));
+        auto *actionMenu = fixture.widget("rrChapterActions");
+        auto *heading = actionMenu->findChild<QWidget *>("rrActionMenuHeader");
+        QVERIFY(heading);
+        QTRY_COMPARE(heading->accessibleName(), QString("Body"));
+        QTest::mouseClick(actionMenu, Qt::LeftButton, {}, QPoint(3, 3));
+        QTRY_VERIFY(!fixture.visible("rrChapterActions"));
+        const auto unavailable = [&](const char *name, const char *action) {
+            auto *row = fixture.widget(name);
+            QVERIFY(row && row->isVisible());
+            QTest::mousePress(row, Qt::LeftButton);
+            QTRY_VERIFY(fixture.visible("rrChapterActions"));
+            QTest::mouseRelease(row, Qt::LeftButton);
+            QVERIFY(fixture.visible(action));
+            QVERIFY(!fixture.widget(action)->isEnabled());
+            const int startY = fixture.widget("rrMarkStart")->y();
+            const int endY = fixture.widget("rrMarkEnd")->y();
+            QVERIFY(startY < endY);
+            for (const char *restore : { "rrResetStart", "rrResetEnd" })
+                if (fixture.visible(restore))
+                    QVERIFY(fixture.widget(restore)->y() > endY);
+            QTest::mouseClick(fixture.widget("rrChapterActions"), Qt::LeftButton, {}, QPoint(3, 3));
+            QTRY_VERIFY(!fixture.visible("rrChapterActions"));
+        };
+        // The exclusive end of the preceding entry is exactly the detected start.
+        // Both entries are in the same spine item, outside the current chapter window.
+        unavailable("rrChapter2", "rrMarkEnd");
+        unavailable("rrChapter4", "rrMarkStart");
         for (const char *action : { "rrMarkStart", "rrMarkEnd" }) {
-            auto *row = fixture.widget("rrChapter2");
+            auto *row = fixture.widget("rrChapter3");
             QTest::mousePress(row, Qt::LeftButton);
             QTRY_VERIFY(fixture.visible("rrChapterActions"));
             QTest::mouseRelease(row, Qt::LeftButton);
@@ -5784,6 +5840,8 @@ private slots:
                             .value("end")
                             .toObject()
                             .contains("anchor"));
+        unavailable("rrChapter2", "rrMarkEnd");
+        unavailable("rrChapter4", "rrMarkStart");
         const auto marks = fixture.state().value("main_text_marks").toObject();
         const auto start = marks.value("start").toObject().value("anchor").toString();
         const auto after = marks.value("end").toObject().value("anchor").toString();
@@ -5791,10 +5849,24 @@ private slots:
         QVERIFY(start != after);
         QTRY_COMPARE(fixture.state().value("word_counts").toObject().value("main_words").toInt(),
                      900);
-        QVERIFY(fixture.press("rrChapter2"));
+        QVERIFY(fixture.press("rrChapter3"));
         QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("1"));
         QVERIFY(fixture.state().contains("book_fraction"));
         QVERIFY(!fixture.state().value("whole_book_ready").toBool());
+        // A checkpoint from an older reader can end exactly at the detected start.
+        const auto identity = fixture.state().value("book").toString();
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY(fixture.window.idle());
+        auto saved = storage::readBookState(fixture.paths, identity).object;
+        auto badEnd = marks.value("end").toObject();
+        badEnd["anchor"] = start;
+        saved["main_text_marks"] = QJsonObject{ { "end", badEnd } };
+        QVERIFY(storage::writeBookState(fixture.paths, identity, saved));
+        fixture.window.openBook(fixture.directory.filePath("boundary-anchors.epub"));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
+        QTRY_VERIFY(fixture.state().value("main_text_marks").toObject().isEmpty());
+        QTRY_COMPARE(fixture.state().value("word_counts").toObject().value("main_words").toInt(),
+                     900);
     }
 
     void chapterGroups_data() { variants(); }

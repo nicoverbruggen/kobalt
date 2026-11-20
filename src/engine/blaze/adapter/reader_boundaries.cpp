@@ -102,6 +102,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
     if (!nav.isEmpty()) {
         QXmlStreamReader xml(resource(source, nav));
         bool landmarks = false, toc = false;
+        QVector<int> parents;
         while (!xml.atEnd()) {
             stopPoint();
             xml.readNext();
@@ -114,12 +115,22 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
                 landmarks = xml.isStartElement() && types.contains("landmarks");
                 toc = xml.isStartElement() && types.contains("toc");
             }
-            if (toc && xml.isStartElement() && xml.name() == QStringLiteral("a")
-                && source.tocAnchors.size() < maximumChapterEntries) {
+            if (toc && xml.name() == QStringLiteral("li")) {
+                if (xml.isStartElement()) {
+                    if (source.tocAnchors.size() < maximumChapterEntries) {
+                        parents.append(source.tocAnchors.size());
+                        source.tocAnchors.append(ReaderSource::TocAnchor{});
+                    } else
+                        parents.append(-1);
+                } else if (xml.isEndElement() && !parents.isEmpty())
+                    parents.removeLast();
+            }
+            if (toc && !parents.isEmpty() && parents.last() >= 0 && xml.isStartElement()
+                && xml.name() == QStringLiteral("a")) {
                 const auto ref = reference(nav, xml.attributes().value("href").toString(), 0);
-                const auto title =
-                        xml.readElementText(QXmlStreamReader::IncludeChildElements).simplified();
-                source.tocAnchors.append({ title, ref.path, ref.id, {} });
+                auto &anchor = source.tocAnchors[parents.last()];
+                anchor.path = ref.path;
+                anchor.id = ref.id;
             }
             if (landmarks && xml.isStartElement() && xml.name() == QStringLiteral("a")
                 && semantics(types))
@@ -149,9 +160,6 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
                 parents.removeLast();
             else if (!parents.isEmpty() && xml.isStartElement()) {
                 auto &anchor = source.tocAnchors[parents.last()];
-                if (name == "text")
-                    anchor.title = xml.readElementText(QXmlStreamReader::IncludeChildElements)
-                                           .simplified();
                 if (name == "content") {
                     const auto ref = reference(path, xml.attributes().value("src").toString(), 0);
                     anchor.path = ref.path;
@@ -197,6 +205,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
         QVector<QHash<QString, int>> children;
         QStringList steps;
         const auto before = result;
+        int elementOrder = 0;
         while (!xml.atEnd()) {
             stopPoint();
             xml.readNext();
@@ -204,6 +213,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
             if (xml.isStartElement()) {
                 if (steps.isEmpty() && name != "body")
                     continue;
+                ++elementOrder;
                 const int ordinal = children.isEmpty() ? 1 : ++children.last()[name];
                 steps.append(QString("/%1[%2]").arg(name).arg(ordinal));
                 children.append(QHash<QString, int>());
@@ -226,8 +236,12 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
                     if (types.contains("chapter") || types.contains("part"))
                         result.second.clear();
                 }
-                if (flags)
-                    record(flags, root + steps.join(QString()));
+                if (flags || ids.contains(id)) {
+                    const auto position = root + steps.join(QString());
+                    source.boundaryElementOrder.insert(position, elementOrder);
+                    if (flags)
+                        record(flags, position);
+                }
             } else if (xml.isEndElement() && !steps.isEmpty()) {
                 steps.removeLast();
                 children.removeLast();
@@ -243,13 +257,26 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
 QString EngineDocument::chapterBoundaryPosition(const QVector<ChapterLink> &links, int index) const
 {
     const auto &link = links[index];
-    if (!source_ || index >= source_->tocAnchors.size() || externalChapters_)
+    if (!source_ || source_->tocAnchors.isEmpty() || externalChapters_)
         return link.position;
-    const auto &anchor = source_->tocAnchors[index];
-    if (!anchor.position.isEmpty() && anchor.title == link.title
-        && spineItemIndex(anchor.position) == spineItemIndex(link.position))
-        return anchor.position;
-    return link.position;
+    const int item = spineItemIndex(link.position);
+    const bool unloaded = windowFirst_ >= 0 && (item < windowFirst_ || item > windowLast_);
+    if (source_->tocAnchors.size() == links.size()) {
+        // A group without its own link inherits the destination of its first child.
+        int target = index;
+        while (source_->tocAnchors[target].path.isEmpty() && target + 1 < links.size()
+               && links[target + 1].depth > link.depth)
+            ++target;
+        const auto &anchor = source_->tocAnchors[target];
+        if (!anchor.path.isEmpty() && spineItems().value(item) == anchor.path) {
+            if (!anchor.position.isEmpty())
+                return anchor.position;
+            if (anchor.id.isEmpty())
+                return link.position;
+        }
+    }
+    // A window placeholder cannot establish which fragment the publisher targeted.
+    return unloaded ? QString() : link.position;
 }
 
 QPair<QString, QString> EngineDocument::mainTextHints() const

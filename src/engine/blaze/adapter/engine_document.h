@@ -201,6 +201,7 @@ public:
     // spine item of a position, or -1.
     QStringList spineItems() const;
     QStringList spineLocationNames() const;
+    bool validMainTextRange(const QString &first, const QString &after) const override;
     QPair<QString, QString> mainTextHints() const override;
     QString chapterBoundaryPosition(const QVector<ChapterLink> &links, int index) const override;
     QString afterChapter(const QVector<ChapterLink> &links, int index) const override;

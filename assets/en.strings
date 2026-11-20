@@ -268,8 +268,8 @@
 "chapter_contents.illustrated_entry" = "Illustrated entry %1";
 "chapter_contents.printed_pages" = "Printed pages";
 "chapter_contents.printed_count" = "Printed pages · %1";
-"chapter_contents.mark_start" = "Mark as start of book";
-"chapter_contents.mark_end" = "Mark as end of book";
+"chapter_contents.mark_start" = "Mark as start";
+"chapter_contents.mark_end" = "Mark as end";
 "chapter_contents.reset_start" = "Restore default start";
 "chapter_contents.reset_end" = "Restore default end";
 "chapter_contents.start" = "Start";

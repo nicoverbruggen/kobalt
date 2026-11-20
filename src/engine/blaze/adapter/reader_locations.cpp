@@ -207,7 +207,10 @@ QStringList EngineDocument::spineLocationNames() const
 QString EngineDocument::afterChapter(const QVector<ChapterLink> &links, int index) const
 {
     const int depth = links[index].depth;
-    int lastItem = spineItemIndex(links[index].position);
+    const auto first = chapterBoundaryPosition(links, index);
+    int lastItem = spineItemIndex(first);
+    if (lastItem < 0)
+        return {};
     for (int i = index + 1; i < links.size(); ++i) {
         if (links[i].position.isEmpty())
             continue;
@@ -215,7 +218,9 @@ QString EngineDocument::afterChapter(const QVector<ChapterLink> &links, int inde
         if (links[i].depth <= depth) {
             if (item == lastItem) {
                 const auto next = chapterBoundaryPosition(links, i);
-                if (next != chapterBoundaryPosition(links, index))
+                if (next.isEmpty())
+                    return {};
+                if (next != first)
                     return next;
             }
             if (item > lastItem)
@@ -224,9 +229,47 @@ QString EngineDocument::afterChapter(const QVector<ChapterLink> &links, int inde
         }
         lastItem = qMax(lastItem, item);
     }
-    Location next;
-    next.href = spineLocationNames().value(lastItem + 1);
-    return lastItem >= 0 && next.valid() ? positionOf(next) : QString();
+    if (lastItem + 1 < spineItems().size())
+        return QString("/body/DocFragment[%1]").arg(lastItem + 2);
+    return QStringLiteral("");
+}
+
+bool EngineDocument::validMainTextRange(const QString &first, const QString &after) const
+{
+    if (first.isEmpty() && after.isEmpty())
+        return true;
+    const int count = spineItems().size();
+    const int start = first.isEmpty() ? 0 : spineItemIndex(first);
+    const int end = after.isEmpty() ? count : spineItemIndex(after);
+    if ((!first.isEmpty() && (start < 0 || start >= count))
+        || (!after.isEmpty() && (end < 0 || end >= count)))
+        return false;
+    if (start != end || after.isEmpty())
+        return start < end;
+
+    // The chapter window may contain only placeholders for this spine item.
+    // The source scan recorded the order of its TOC and structural anchors.
+    const auto order = [this](QString position) {
+        if (position.endsWith(".0"))
+            position.chop(2);
+        if (position.section('/', -1).startsWith("DocFragment"))
+            return 0;
+        return source_ ? source_->boundaryElementOrder.value(position, -1) : -1;
+    };
+    const int begin = first.isEmpty() ? 0 : order(first), stop = order(after);
+    if (begin >= 0 && stop >= 0)
+        return begin < stop;
+    if (!engine_ || (windowFirst_ >= 0 && (start < windowFirst_ || start > windowLast_)))
+        return false;
+    const auto pointer = [this](const QString &path) {
+        ldomXPointerEx pos(engine_->getDocument()->createXPointer(cre(path)));
+        if (!pos.isNull() && pos.getOffset() < 0)
+            pos.setOffset(0);
+        return pos;
+    };
+    const auto a = pointer(first.isEmpty() ? QStringLiteral("/body/DocFragment[1]") : first);
+    const auto b = pointer(after);
+    return !a.isNull() && !b.isNull() && a.compare(b) < 0;
 }
 
 int EngineDocument::spineItemOf(const QString &position) const

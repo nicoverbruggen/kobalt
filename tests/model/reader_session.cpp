@@ -1986,6 +1986,40 @@ int run(int argc, char **argv)
                                     } });
                 };
             };
+            // Resolve the pages before the image in another session so seeking
+            // the image does not warm the cache of the reader under test.
+            QStringList beforeImage;
+            {
+                ReaderSession reference(test::readerFonts(), test::readerPlaceholder());
+                auto access = std::make_shared<SourceLease>();
+                reference.open({ colorPath,
+                                 colorPath,
+                                 QSize(758, 900),
+                                 {},
+                                 {},
+                                 {},
+                                 access,
+                                 source(access) },
+                               [&](OpeningResult result) {
+                                   require(result.ready(), qPrintable(openingMessage(result)));
+                                   opened.quit();
+                               });
+                opened.exec();
+                reference.updated = [&] {
+                    if (!reference.busy())
+                        rendered.quit();
+                };
+                require(reference.chapters().size() == 3
+                                && reference.goTo(reference.chapters()[1].position),
+                        "Cannot find the chapter containing the deferred image");
+                rendered.exec();
+                beforeImage.append(reference.state()["position"].toString());
+                for (int step = 1; step <= 3; ++step) {
+                    require(reference.turn(-1), "The deferred image has too few preceding pages");
+                    rendered.exec();
+                    beforeImage.append(reference.state()["position"].toString());
+                }
+            }
             for (const bool image : { false, true }) {
                 ReaderSession idle(test::readerFonts(), test::readerPlaceholder());
                 auto access = std::make_shared<SourceLease>();
@@ -2006,7 +2040,7 @@ int run(int argc, char **argv)
                     if (!idle.busy())
                         rendered.quit();
                 };
-                require(idle.go(idle.chapters()[1].page - (image ? 0 : 3)),
+                require(idle.goTo(beforeImage[image ? 0 : 3]),
                         "Cannot show the idle work test page");
                 rendered.exec();
                 const auto key = idle.image().cacheKey();
@@ -2039,14 +2073,11 @@ int run(int argc, char **argv)
             opened.exec();
             require(illustrated->resourceStats().value("ready_images").toInt() == 0,
                     "Neighbour image regression loaded the future image during opening");
-            const auto chapterLinks = illustrated->chapters();
-            require(chapterLinks.size() == 3 && chapterLinks[1].page > 2,
-                    "Neighbour image fixture has no text before its image");
             illustrated->updated = [&] {
                 if (!illustrated->busy())
                     rendered.quit();
             };
-            require(illustrated->go(chapterLinks[1].page - 2),
+            require(illustrated->goTo(beforeImage[2]),
                     "Cannot jump before the illustrated chapter");
             rendered.exec();
             ReaderSession::drain([&] { drained.quit(); });
@@ -2076,7 +2107,7 @@ int run(int argc, char **argv)
             poll.start(10);
             loaded.exec();
             poll.stop();
-            require(illustrated->page() == chapterLinks[1].page - 1,
+            require(illustrated->state()["position"].toString() == beforeImage[1],
                     "Cancelled image-page turn still ran");
             require(illustrated->cachedPages() > 1,
                     "Cancelling a scheduled turn did not resume deferred images and neighbours");

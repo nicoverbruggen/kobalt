@@ -1464,13 +1464,7 @@ void LibraryView::showMoreSheet()
         return;
     }
     closeOverlay();
-    // My Words is listed while its feature is shown; Settings can change that
-    // while the Library is open in the background.
-    const bool words =
-            savedWords
-            && features::enabled(
-                    storage::readPreferences(savedWordsDirectory + "/reader-settings.json").object,
-                    features::Words);
+    const bool words = savedWords && features::enabled(readerPreferences(), features::Words);
     if (moreSheet && moreSheetWords != words) {
         moreSheet->deleteLater();
         moreSheet = nullptr;
@@ -1615,11 +1609,24 @@ void LibraryView::setWordsDirectory(const QString &directory)
     if (directory.isEmpty() || !annotationDatabaseEnabled())
         return;
     savedWords = std::make_unique<SavedWords>(directory);
+    if (savedWordsDirectory != directory)
+        savedPreferences.reset();
     savedWordsDirectory = directory;
     savedWords->changed = [this] {
         if (wordList && wordList->isVisible())
             showWords();
     };
+}
+
+const QJsonObject &LibraryView::readerPreferences()
+{
+    // A standalone Library without a host snapshot reads its profile once.
+    if (!savedPreferences)
+        savedPreferences = savedWordsDirectory.isEmpty()
+                ? QJsonObject()
+                : storage::readPreferences(storage::Paths{ savedWordsDirectory }.preferences())
+                          .object;
+    return *savedPreferences;
 }
 
 void LibraryView::showWords()
@@ -1650,8 +1657,7 @@ void LibraryView::showWords()
     wordList->setGeometry(rect());
     // Without an open book, words use the default reading font, and their
     // definitions the dictionary font when Settings chose one.
-    const auto preferences =
-            storage::readPreferences(savedWordsDirectory + "/reader-settings.json").object;
+    const auto &preferences = readerPreferences();
     const auto bookFamily =
             preferences.value("default_font_face").toString(QStringLiteral("Libron"));
     const auto dictionaryFamily = preferences.value("dictionary_font_face").toString();

@@ -99,6 +99,7 @@ void StartScreen::applyTextSize()
     // The old view can be running one of its own callbacks, such as a menu
     // action that reports an error, so it is deleted later. Hiding it first
     // also hides its keyboard.
+    const auto preferences = view->readerPreferences();
     view->hide();
     if (auto *proxy = view->graphicsProxyWidget()) {
         canvas->scene()->removeItem(proxy);
@@ -108,6 +109,7 @@ void StartScreen::applyTextSize()
     }
     view = nullptr;
     buildLibrary();
+    view->setReaderPreferences(preferences);
 }
 
 void StartScreen::setResourceFolders(std::function<QStringList()> labels,
@@ -188,6 +190,7 @@ bool StartScreen::libraryShown() const
 
 void StartScreen::applyLibraryTheme(const QJsonObject &preferences, const FontSources &sources)
 {
+    view->setReaderPreferences(preferences);
     const auto style = reader::savedInterfaceStyle(preferences);
     QString mainFace, monoFace;
     const auto mono = preferences.value("ui_mono_font_face").toString();

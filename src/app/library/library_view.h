@@ -3,6 +3,7 @@
 #include "library/library_index.h"
 #include "platform/api/keyboard_controller.h"
 #include <functional>
+#include <optional>
 
 class QLineEdit;
 class QPushButton;
@@ -55,6 +56,11 @@ public:
     std::function<void(const QString &key, const QString &position)> openPassage;
     // Adds My Words to the menu. Words live in the profile database there.
     void setWordsDirectory(const QString &directory);
+
+    // The host supplies the current settings when the reader returns to the Library.
+    void setReaderPreferences(const QJsonObject &preferences) { savedPreferences = preferences; }
+
+    const QJsonObject &readerPreferences();
     // The Library book a saved word came from, found by its path first and
     // then by the content fingerprint of books with the same title. Empty when
     // the book is not in the Library.
@@ -92,6 +98,7 @@ private:
     AboutScreen *about = nullptr;
     std::unique_ptr<SavedWords> savedWords;
     QString savedWordsDirectory;
+    std::optional<QJsonObject> savedPreferences;
     bool moreSheetWords = false;
     WordList *wordList = nullptr;
     WordPage *wordPage = nullptr;

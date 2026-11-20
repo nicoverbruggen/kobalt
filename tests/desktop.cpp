@@ -31,6 +31,7 @@
 #include "support/diagnostics.h"
 #include "support/main_thread.h"
 #include "platforms/standalone/start_screen.h"
+#include "assets/font_catalog.h"
 #include "platforms/standalone/canvas.h"
 #include "platforms/standalone/reader.h"
 #include "platforms/standalone/window_geometry.h"
@@ -6855,7 +6856,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         library::Store store(directory.path(), std::make_shared<library::LocalSource>());
-        standalone::StartScreen start(desktop::readerHostServices().presentation, store);
+        const auto path = storage::Paths{ directory.path() }.preferences();
+        QVERIFY(storage::writePreferences(path, { { "disable_words", true } }));
+        qreal scale = 1;
+        standalone::StartScreen start(desktop::readerHostServices().presentation, store,
+                                      [&] { return scale; });
         start.resize(640, 800);
         start.show();
         QVERIFY(start.libraryShown());
@@ -6879,6 +6884,33 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!view->findChild<QWidget *>("libraryEmpty")->isVisible());
         QVERIFY(view->findChild<QPushButton *>("librarySort")->isVisible());
         QVERIFY(start.libraryShown());
+
+        // Standalone uses its profile until the host supplies settings on return from the reader.
+        view->findChild<QPushButton *>("libraryMore")->click();
+        QVERIFY(!view->findChild<QPushButton *>("libraryMoreWords"));
+        QVERIFY(start.dismissModal());
+        SavedWords words(directory.path());
+        SavedWord word;
+        word.book = word.word = "example";
+        bool saved = false;
+        words.record(word, [&](bool ok) { saved = ok; });
+        QTRY_VERIFY(saved);
+        const QJsonObject current{ { "default_font_face", "NV Ancizar Serif" },
+                                   { "dictionary_font_face", "NV Bitter" } };
+        start.applyLibraryTheme(current, {});
+        scale = 1.25;
+        start.applyTextSize();
+        view = start.library();
+        view->findChild<QPushButton *>("libraryMore")->click();
+        auto *openWords = view->findChild<QPushButton *>("libraryMoreWords");
+        QVERIFY(openWords && openWords->isVisible());
+        openWords->click();
+        QTRY_VERIFY(view->findChild<QWidget *>("rrMyWord0"));
+        auto *row = static_cast<ui::ListRow *>(view->findChild<QWidget *>("rrMyWord0"));
+        QCOMPARE(row->detailLabel()->font().family(), QString("NV Ancizar Serif"));
+        QCOMPARE(row->captionLabel()->font().family(), QString("NV Bitter"));
+        scale = 1;
+        start.applyTextSize();
     }
 
     // Checks that opening a book adds it to the Library once, keeps its cover and returns to the Library on close.

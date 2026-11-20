@@ -213,6 +213,8 @@ public:
     bool turn(int direction);
     bool canTurn() const;
     void cancelPendingTurn();
+    void requestMenuPagination();
+    bool paginationPending() const;
     bool go(int page);
     bool goTo(const QString &anchor, bool keepLayout = false);
     // Goes to the entry `index` of chapters(). See Engine::goToChapter().

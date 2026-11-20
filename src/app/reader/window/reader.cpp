@@ -1193,11 +1193,13 @@ bool Reader::eventFilter(QObject *watched, QEvent *event)
     // page is visible and no field needs them.
     if (type == QEvent::Show && watched == topControls && clockTimer && isVisible()
         && !services.suspended()) {
-        if (!clockTimer->isActive())
-            startClock();
+        session->requestMenuPagination();
+        startClock();
         book->minuteTick();
         updateMenuStatus(true);
     }
+    if (type == QEvent::Hide && watched == topControls && statusTimer)
+        syncStatusTimer();
     // The sheet and the chooser are built separately, on first use. Either
     // can exist without the other.
     if (watched == menu && type == QEvent::Hide) {

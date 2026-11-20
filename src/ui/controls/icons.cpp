@@ -542,6 +542,17 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         phosphorGeometry(icon == ControlIcon::FolderPlus ? QStringLiteral("folder-plus")
                                                          : QStringLiteral("folders"),
                          path);
+    } else if (icon == ControlIcon::Hourglass) {
+        line(12, 8, 52, 8);
+        line(12, 56, 52, 56);
+        path.moveTo(16, 8);
+        path.cubicTo(16, 24, 25, 27, 32, 32);
+        path.cubicTo(39, 37, 48, 40, 48, 56);
+        path.moveTo(48, 8);
+        path.cubicTo(48, 24, 39, 27, 32, 32);
+        path.cubicTo(25, 37, 16, 40, 16, 56);
+        line(24, 18, 40, 18);
+        line(25, 50, 39, 50);
     } else if (icon == ControlIcon::BookStart || icon == ControlIcon::BookEnd) {
         result.filled = true;
         path.setFillRule(Qt::WindingFill);
@@ -921,12 +932,12 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons)
             && icon != ControlIcon::FitImage && icon != ControlIcon::Door
             && icon != ControlIcon::PreviousChapter && icon != ControlIcon::NextChapter
             && icon != ControlIcon::BookStart && icon != ControlIcon::BookEnd
-            && icon != ControlIcon::Sync && icon != ControlIcon::Sort
-            && icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight
-            && icon != ControlIcon::Bold && icon != ControlIcon::WordsAdd
-            && icon != ControlIcon::WordsSaved && icon != ControlIcon::DeviceRotate
-            && icon != ControlIcon::ZoomIn && icon != ControlIcon::ZoomOut
-            && icon != ControlIcon::LockOpen
+            && icon != ControlIcon::Hourglass && icon != ControlIcon::Sync
+            && icon != ControlIcon::Sort && icon != ControlIcon::ArrowDownRight
+            && icon != ControlIcon::EditHighlight && icon != ControlIcon::Bold
+            && icon != ControlIcon::WordsAdd && icon != ControlIcon::WordsSaved
+            && icon != ControlIcon::DeviceRotate && icon != ControlIcon::ZoomIn
+            && icon != ControlIcon::ZoomOut && icon != ControlIcon::LockOpen
             && (icon < ControlIcon::Lotus || icon > ControlIcon::Gauge)
             && (icon < ControlIcon::SearchChapter || icon > ControlIcon::SearchAfter)
             && (icon < ControlIcon::ClockCountdown || icon > ControlIcon::TextTSlash)

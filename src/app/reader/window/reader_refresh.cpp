@@ -232,6 +232,12 @@ bool Reader::publishPendingDarkMode()
 
 void Reader::syncFrameState()
 {
+    // Applying Text or Layout can start a new count while the menu stays open.
+    if (topControls->isVisible() && !session->busy() && !closing && !services.suspended()) {
+        session->requestMenuPagination();
+        if (menuShowsPagination())
+            syncStatusTimer();
+    }
     if (choices->isVisible() && !choosingTypography) {
         QVector<int> pages;
         for (const auto &chapter : session->chapters())
@@ -939,13 +945,7 @@ void Reader::updateMenuStatus(bool refreshDevice)
         const auto battery = services.battery();
         menuBattery->setStatus(battery.percent, battery.charging);
     }
-    const auto reading = book->sessionReadingMilliseconds();
-    const auto session = features::enabled(preferences, features::Stats) && reading > 300000
-            ? strings::get("reader.session_minutes").arg(reading / 60000)
-            : QString();
-    if (menuSession->text() != session)
-        menuSession->setText(session);
-    menuSession->setVisible(nativeStatus && !zenMode() && !session.isEmpty());
+    updateMenuSession();
     if (clockChanged && navigation && topControls->isVisible())
         navigation->updateSessionGeometry();
     // Zen mode centers the clock in its group and shows a low battery, and
@@ -954,6 +954,21 @@ void Reader::updateMenuStatus(bool refreshDevice)
         syncNavigation();
     if (chapterGraph && chapterGraph->isVisible())
         updateReadingStats();
+}
+
+void Reader::updateMenuSession()
+{
+    const auto reading = book->sessionReadingMilliseconds();
+    QString label;
+    const bool counting = menuShowsPagination();
+    menuSession->setCountingPages(counting);
+    if (counting)
+        label = strings::get("reader.counting_pages").arg(session->layoutProgressPercent());
+    else if (features::enabled(preferences, features::Stats) && reading > 300000)
+        label = strings::get("reader.session_minutes").arg(reading / 60000);
+    if (menuSession->text() != label)
+        menuSession->setText(label);
+    menuSession->setVisible(!hideNativeStatus() && !zenMode() && !label.isEmpty());
 }
 
 // Stats and the reading strips use the same platform or session estimates.

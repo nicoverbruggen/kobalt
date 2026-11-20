@@ -767,6 +767,7 @@
 "reader.rotation" = "Rotation";
 "reader.search_book" = "Search book";
 /* Arguments: %1 */
+"reader.counting_pages" = "Counting pages… %1%";
 "reader.session_minutes" = "You've been reading for %1 minutes now";
 "reader.sideloaded_fonts" = "Sideloaded Fonts";
 "reader.simulate_nickel_progress_these_controls_change_only_the_synthetic" = "Simulate Nickel progress. These controls change only the synthetic progress test book. No server sync is performed.";

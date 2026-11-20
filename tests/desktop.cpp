@@ -11051,6 +11051,48 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrHeaderFooterFieldsClose"));
     }
 
+    // Opening Chapters starts Hybrid pagination and returns the status label when it finishes.
+    void menuCountsPagesWithoutTurn()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QVERIFY(test::writeBook(fixture.directory.path(), "menu-count.epub", test::songbook(300)));
+        renderingMode::setOverride(2);
+        const int quiet = renderingMode::buildQuietMilliseconds();
+        renderingMode::setBuildQuietMilliseconds(1500);
+        const auto restore = qScopeGuard([quiet] {
+            renderingMode::setOverride(-1);
+            renderingMode::setBuildQuietMilliseconds(quiet);
+        });
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(fixture.directory.filePath("menu-count.epub"));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto position = fixture.state().value("position");
+        QVERIFY(fixture.press("rrPage"));
+        auto *label = qobject_cast<QLabel *>(fixture.widget("rrMenuSession"));
+        QVERIFY(label && label->isVisible());
+        QVERIFY(label->text().startsWith(QStringLiteral("Counting pages… ")));
+        QVERIFY(label->text().endsWith('%'));
+        auto *timer = fixture.window.readerWindow()->findChild<QTimer *>("rrBookStatusTimer");
+        QVERIFY(timer && timer->isActive());
+        QCOMPARE(timer->interval(), 5000);
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(!timer->isActive());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(timer->isActive());
+        QVERIFY(fixture.press("rrNavChapters"));
+        QVERIFY(label->isVisible());
+        const auto output = qEnvironmentVariable("KOBALT_TEST_CAPTURE_DIR");
+        if (!output.isEmpty()) {
+            QVERIFY(QDir().mkpath(output));
+            QVERIFY(fixture.window.readerWindow()->grab().save(output + "/counting-pages.png"));
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("whole_book_ready").toBool(), 60000);
+        QCOMPARE(fixture.state().value("position"), position);
+        QTRY_VERIFY_WITH_TIMEOUT(label->text().isEmpty() && !timer->isActive(), 10000);
+    }
+
     // The Book status field shows the last turn time and fast with the
     // background layout's progress in Hybrid, then full with how long the
     // whole book took. It follows the build every 5 seconds while it is in a

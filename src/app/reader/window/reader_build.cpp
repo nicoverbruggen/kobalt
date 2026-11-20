@@ -725,6 +725,37 @@ void Reader::startClockTimer()
     });
 }
 
+void MenuSessionLabel::setCountingPages(bool counting)
+{
+    if (countingPages != counting) {
+        countingPages = counting;
+        update();
+    }
+}
+
+void MenuSessionLabel::paintEvent(QPaintEvent *event)
+{
+    if (!countingPages) {
+        InterfaceLabel::paintEvent(event);
+        return;
+    }
+    QPainter painter(this);
+    auto countingFont = font();
+    countingFont.setItalic(false);
+    painter.setFont(countingFont);
+    const auto ink = palette().color(QPalette::WindowText);
+    painter.setPen(ink);
+    const QRect bounds = contentsRect();
+    const int side = qMin(bounds.height(), painter.fontMetrics().height());
+    const int gap = ui::px(6);
+    const int groupWidth = side + gap + ui::interfaceTextWidth(text(), countingFont);
+    const int left = bounds.left() + qMax(0, (bounds.width() - groupWidth) / 2);
+    ui::controlIcon(ControlIcon::Hourglass, ink)
+            .paint(&painter, QRect(left, bounds.y() + (bounds.height() - side) / 2, side, side));
+    const auto caption = bounds.adjusted(left - bounds.x() + side + gap, 0, 0, 0);
+    ui::drawInterfaceText(painter, caption, text(), Qt::AlignLeft | Qt::AlignVCenter);
+}
+
 void Reader::buildToolbar()
 {
     topControls = new kobalt::ui::Panel(this, Qt::BottomEdge);
@@ -746,7 +777,7 @@ void Reader::buildToolbar()
     menuClock->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     readerStyle(menuClock, styles::font(metrics::panel::statusText));
     status->addWidget(menuClock, 0, 0);
-    menuSession = new ui::InterfaceLabel(topControls);
+    menuSession = new MenuSessionLabel(topControls);
     menuSession->setObjectName("rrMenuSession");
     menuSession->setFixedHeight(metrics::panel::statusHeight);
     menuSession->setAlignment(Qt::AlignCenter);

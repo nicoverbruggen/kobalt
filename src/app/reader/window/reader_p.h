@@ -53,6 +53,7 @@
 #include "storage/activity_records.h"
 #include "storage/saved_words.h"
 #include "appearance_edit_session.h"
+#include "ui/controls/text.h"
 #include "app/reader/views/navigation.h"
 #include "platform/api/reader_host_services.h"
 #include "platform/api/reader_orientation.h"
@@ -94,6 +95,19 @@ class ChapterHeader : public QPushButton
 {
 public:
     explicit ChapterHeader(QWidget *parent);
+};
+
+class MenuSessionLabel final : public ui::InterfaceLabel
+{
+public:
+    using ui::InterfaceLabel::InterfaceLabel;
+    void setCountingPages(bool counting);
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    bool countingPages = false;
 };
 
 class Reader : public kobalt::ReaderWindow
@@ -559,7 +573,8 @@ private:
     QString displayedClock;
     bool clockUsesDesktopFill = false;
     const bool liveState = QFile::exists(book->paths().directory + "/live-state");
-    QLabel *menuClock, *menuSession;
+    QLabel *menuClock;
+    MenuSessionLabel *menuSession;
     kobalt::ui::BatteryIndicator *menuBattery;
     kobalt::ui::BluetoothIndicator *menuBluetooth;
     kobalt::ui::WifiIndicator *menuWifi;
@@ -728,6 +743,7 @@ private:
     // shows in a header or footer of the reading page. Without it nothing
     // wakes the reader for it.
     bool bookStatusShown() const;
+    bool menuShowsPagination() const;
     void syncStatusTimer();
     QTimer *statusTimer = nullptr;
     // How long the whole book took after the session's layout start that
@@ -886,6 +902,7 @@ private:
     QDateTime localDateTime() const;
     QString clockText();
     void updateMenuStatus(bool refreshDevice = false);
+    void updateMenuSession();
     void updateBatteryIndicators(const BatteryStatus &battery);
     void updateReadingStats();
     void configureNavigation();

@@ -211,9 +211,19 @@ bool Reader::bookStatusShown() const
     return false;
 }
 
+bool Reader::menuShowsPagination() const
+{
+    return topControls && topControls->isVisible() && !zenMode() && !hideNativeStatus()
+            && session->paginationPending();
+}
+
 void Reader::syncStatusTimer()
 {
-    if (!bookStatusShown() || !isVisible() || lifecycleHidden || closing || services.suspended()) {
+    const auto needed = [this] {
+        return isVisible() && !lifecycleHidden && !closing && !services.suspended()
+                && (bookStatusShown() || menuShowsPagination());
+    };
+    if (!needed()) {
         if (statusTimer)
             statusTimer->stop();
         return;
@@ -222,9 +232,10 @@ void Reader::syncStatusTimer()
         statusTimer = new QTimer(this);
         statusTimer->setObjectName("rrBookStatusTimer");
         statusTimer->setInterval(5000);
-        connect(statusTimer, &QTimer::timeout, this, [this] {
-            if (!bookStatusShown() || !isVisible() || lifecycleHidden || closing
-                || services.suspended()) {
+        connect(statusTimer, &QTimer::timeout, this, [this, needed] {
+            if (takesInput() && topControls->isVisible())
+                updateMenuSession();
+            if (!needed()) {
                 statusTimer->stop();
                 return;
             }

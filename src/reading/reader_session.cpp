@@ -1299,6 +1299,22 @@ bool ReaderSession::canTurn() const
             && pages() > 0 && (!running || turning);
 }
 
+bool ReaderSession::paginationPending() const
+{
+    return renderingMode::countsInBackground() && !preview_ && !retiring && openingResult_.ready()
+            && frame.state.contains("book_fraction")
+            && !frame.state.value("whole_book_ready").toBool()
+            && !frame.state.value("whole_book_failed").toBool();
+}
+
+void ReaderSession::requestMenuPagination()
+{
+    if (!paginationPending() || backgroundCount_->exchange(true))
+        return;
+    // The initial estimate may already have finished and left the worker idle.
+    resumeIdleWork(0, revision);
+}
+
 void ReaderSession::cancelPendingTurn()
 {
     pendingTurn = 0;
@@ -1328,8 +1344,8 @@ bool ReaderSession::turn(int direction)
     cancelSearch();
     // A reader who turns pages has settled on the appearance: the count of
     // the whole book is worth its work from here on.
-    backgroundCount_->store(++quietTurns_ >= backgroundCountTurns
-                            && renderingMode::countsInBackground());
+    if (++quietTurns_ == backgroundCountTurns && renderingMode::countsInBackground())
+        backgroundCount_->store(true);
     ++revision;
     newest->store(revision);
     dispatch(true);

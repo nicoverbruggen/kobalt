@@ -1,6 +1,7 @@
 #pragma once
 #include "scanner.h"
 #include "storage/record_writer.h"
+#include <QSet>
 #include <QTimer>
 
 namespace kobalt::library {
@@ -44,6 +45,7 @@ public:
 private:
     QString directory, coverDirectory;
     Index data;
+    QSet<QString> obsoleteCovers, editedBooks, removedFolders;
     Scanner scanner;
     QTimer saving;
     storage::RecordWriter writer;
@@ -52,6 +54,7 @@ private:
     bool ready = false;
     void touch();
     void queueSave();
+    void retireCover(const QString &name);
 };
 
 // The reading position the reader saved for a book, as a percentage, and

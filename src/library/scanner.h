@@ -1,6 +1,7 @@
 #pragma once
 #include "library_index.h"
 #include <QIODevice>
+#include <QImage>
 #include <QObject>
 #include <QThread>
 #include <atomic>
@@ -30,8 +31,8 @@ public:
 };
 
 bool isBookName(const QString &name);
-// The cover file name for a book key.
-QString coverName(const QString &key);
+// Each replacement has its own file until the new catalogue has been saved.
+QString saveCover(const QString &directory, const QImage &cover);
 
 // Scans on its own thread and reports on the thread that owns it. Results
 // arrive in order: each folder's listing, then the books read from it.
@@ -41,8 +42,9 @@ public:
     Scanner(std::shared_ptr<Source> source, QString coverDirectory, QObject *parent = nullptr);
     ~Scanner() override;
     // `index` is a snapshot: it only decides which files need reading.
-    void start(const Index &index, QVector<Folder> folders);
-    void cancel();
+    void start(const Index &index, QVector<Folder> folders, QStringList singles = {});
+    // Stops the worker and delivers completed reads before the owner saves on close.
+    void finish();
 
     bool running() const { return worker != nullptr; }
 

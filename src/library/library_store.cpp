@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QPointer>
 
 namespace kobalt::library {
 namespace {
@@ -28,17 +29,29 @@ Store::Store(QString directory, std::shared_ptr<Source> source, QObject *parent)
     saving.setSingleShot(true);
     saving.setInterval(500);
     connect(&saving, &QTimer::timeout, this, &Store::queueSave);
-    scanner.listed = [this](const QString &, const QStringList &removed) {
-        for (const auto &key : removed)
-            QFile::remove(coverPath(data.removeBook(key)));
+    scanner.listed = [this](const QString &folder, const QStringList &removed) {
+        if (removedFolders.contains(folder))
+            return;
+        for (const auto &key : removed) {
+            if (!editedBooks.contains(key))
+                retireCover(data.removeBook(key));
+        }
         if (!removed.isEmpty())
             touch();
     };
     scanner.read = [this](const Book &found) {
         auto book = found;
         const auto known = data.books.constFind(book.key);
+        if (editedBooks.contains(book.key) || removedFolders.contains(book.folder)) {
+            if (!book.cover.isEmpty()) {
+                obsoleteCovers.insert(book.cover);
+                saving.start();
+            }
+            return;
+        }
         if (known != data.books.constEnd()) {
             // A changed file keeps its place in the library and its progress.
+            retireCover(known->cover);
             book.added = known->added;
             book.opened = known->opened;
             book.percent = known->percent;
@@ -60,13 +73,14 @@ Store::Store(QString directory, std::shared_ptr<Source> source, QObject *parent)
 
 Store::~Store()
 {
-    scanner.cancel();
+    mainthread::AllowBlocking allow("library save"); // The Library is closing.
+    changed = {};
+    scanner.finished = {};
+    scanner.finish();
     if (saving.isActive())
         queueSave();
-    if (!writer.idle()) {
-        mainthread::AllowBlocking allow("library save"); // The Library is closing.
+    if (!writer.idle())
         writer.flush();
-    }
 }
 
 QString Store::coverPath(const QString &name) const
@@ -88,12 +102,14 @@ void Store::scan()
         rescan = true;
         return;
     }
+    editedBooks.clear();
+    removedFolders.clear();
     readCount = 0;
     bool removed = false;
     QStringList outdated;
     for (auto it = data.books.begin(); it != data.books.end();) {
         if (it->folder.isEmpty() && !QFileInfo(it->key).isFile()) {
-            QFile::remove(coverPath(it->cover));
+            retireCover(it->cover);
             it = data.books.erase(it);
             removed = true;
         } else {
@@ -102,14 +118,11 @@ void Store::scan()
             ++it;
         }
     }
-    // Single books are local files; read them again here, not on the scan thread.
-    for (const auto &key : outdated)
-        addBook(key);
     if (removed)
         touch();
-    if (data.folders.isEmpty())
+    if (data.folders.isEmpty() && outdated.isEmpty())
         return;
-    scanner.start(data, data.folders);
+    scanner.start(data, data.folders, outdated);
     if (changed)
         changed();
 }
@@ -127,8 +140,10 @@ void Store::removeFolder(const QString &key)
 {
     if (!ready)
         return;
+    if (scanning())
+        removedFolders.insert(key);
     for (const auto &cover : data.removeFolder(key))
-        QFile::remove(coverPath(cover));
+        retireCover(cover);
     touch();
 }
 
@@ -160,10 +175,10 @@ bool Store::addBook(const QString &path)
     if (!known)
         book.added = now();
     QDir().mkpath(coverDirectory);
-    const auto name = coverName(key);
-    book.cover = !metadata.cover.isNull() && metadata.cover.save(coverPath(name), "PNG")
-            ? name
-            : QString();
+    if (scanning())
+        editedBooks.insert(key);
+    retireCover(book.cover);
+    book.cover = saveCover(coverDirectory, metadata.cover);
     data.books.insert(key, book);
     touch();
     return true;
@@ -173,7 +188,9 @@ void Store::removeBook(const QString &key)
 {
     if (!ready)
         return;
-    QFile::remove(coverPath(data.removeBook(key)));
+    if (scanning())
+        editedBooks.insert(key);
+    retireCover(data.removeBook(key));
     touch();
 }
 
@@ -227,16 +244,39 @@ void Store::save()
     writer.flush();
 }
 
+void Store::retireCover(const QString &name)
+{
+    if (!name.isEmpty() && QFileInfo(name).fileName() == name)
+        obsoleteCovers.insert(name);
+}
+
 void Store::queueSave()
 {
     if (!ready)
         return;
-    const bool queued = writer.tryPost([directory = directory, index = data] {
-        const bool ok = index.saveDatabase(directory);
-        if (!ok)
-            diagnostic("library-save-failed", {}, kobalt::DiagnosticSeverity::Error);
-        return ok;
-    });
+    const bool queued =
+            writer.tryPost([guard = QPointer<Store>(this), directory = directory, index = data,
+                            covers = obsoleteCovers, coverDirectory = coverDirectory]() mutable {
+                const bool ok = index.saveDatabase(directory);
+                if (!ok)
+                    diagnostic("library-save-failed", {}, kobalt::DiagnosticSeverity::Error);
+                if (ok && !covers.isEmpty()) {
+                    for (const auto &book : std::as_const(index.books))
+                        covers.remove(book.cover);
+                    QSet<QString> removed;
+                    mainthread::blocking("library-cover-cleanup");
+                    for (const auto &name : covers) {
+                        const QString path = coverDirectory + '/' + name;
+                        if (QFile::remove(path) || !QFile::exists(path))
+                            removed.insert(name);
+                    }
+                    QMetaObject::invokeMethod(guard.data(), [guard, removed] {
+                        if (guard)
+                            guard->obsoleteCovers.subtract(removed);
+                    });
+                }
+                return ok;
+            });
     if (!queued)
         diagnostic("library-save-failed", {}, kobalt::DiagnosticSeverity::Error);
 }

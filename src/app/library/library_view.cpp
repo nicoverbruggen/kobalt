@@ -367,8 +367,7 @@ private:
     {
         if (book.cover.isEmpty())
             return nullptr;
-        // A book keeps its cover file name when it changes, so the cache key
-        // also holds the file's date: a changed book reads its new cover.
+        // Older catalogues reused cover file names when a book changed.
         const auto key = book.cover + QLatin1Char(':') + QString::number(book.modified);
         if (auto *image = covers.object(key))
             return image->isNull() ? nullptr : image;

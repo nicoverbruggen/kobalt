@@ -435,6 +435,44 @@ int main(int argc, char **argv)
         require(removed.size() == 1 && removed.first().endsWith("two.EPUB"),
                 "A deleted book was not reported");
     }
+    // An in-flight scan must not put back a folder the user removed.
+    {
+        const auto profile = root.filePath("removed-during-scan");
+        const auto path = root.filePath("late-folder");
+        write(path + "/book.epub", epub("Late entry", "", true));
+        Store store(profile, std::make_shared<LocalSource>());
+        store.addFolder({ path, "Late" });
+        store.removeFolder(path);
+        QElapsedTimer elapsed;
+        elapsed.start();
+        while (store.scanning() && elapsed.elapsed() < 10000)
+            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+        store.save();
+        require(!store.scanning() && store.index().books.isEmpty()
+                        && QDir(profile + "/library-covers").entryList(QDir::Files).isEmpty(),
+                "A late scan restored a removed folder's book or cover");
+    }
+    // Imported books can share a cover name. Keep it until the last reference goes.
+    {
+        const auto profile = root.filePath("shared-legacy-cover");
+        Index seed;
+        require(seed.loadDatabase(profile), "Could not open the shared cover catalogue");
+        for (const auto &key : { "one", "two" }) {
+            auto entry = book(key, key, "", 1);
+            entry.cover = "shared.png";
+            seed.books.insert(key, entry);
+        }
+        require(seed.saveDatabase(profile), "Could not seed books with the same cover");
+        Store store(profile, std::make_shared<LocalSource>());
+        const auto path = store.coverPath("shared.png");
+        write(path, "shared");
+        store.removeBook("one");
+        store.save();
+        require(QFile::exists(path), "Removing one book deleted another book's cover");
+        store.removeBook("two");
+        store.save();
+        require(!QFile::exists(path), "The final book left its shared cover behind");
+    }
     for (const bool escaped : { false, true }) {
         const auto directory = root.filePath(escaped ? "escaped-book-keys" : "literal-book-keys");
         const QString plain = "book.epub";
@@ -578,7 +616,45 @@ int main(int argc, char **argv)
             store.setOpened(key);
             require(store.index().books.value(key).mark == Book::Mark::None,
                     "Opening an unread book did not clear the mark");
+            write(bookPath, epub("Emma", "Jane Austen", true, { 0, 0 }));
+            require(store.addBook(bookPath) && store.index().books.value(key).cover.isEmpty(),
+                    "A revised book with no readable cover stayed linked to the old image");
             store.save();
+            require(!QFile::exists(store.coverPath(added.cover)),
+                    "Replacing a single book left its obsolete cover on disk");
+            write(bookPath, epub("Emma", "Jane Austen", true));
+            require(store.addBook(bookPath), "The replacement cover could not be read");
+            const auto previous = store.index().books.value(key).cover;
+            require(store.addBook(bookPath), "The second replacement cover could not be read");
+            store.save();
+            require(QFile::exists(store.coverPath(store.index().books.value(key).cover)),
+                    "Cleaning up the previous cover removed its replacement");
+            require(!QFile::exists(store.coverPath(previous)),
+                    "The replaced cover was not removed");
+        }
+        Index stale;
+        require(stale.loadDatabase(folder), "Could not open the single book catalogue");
+        auto &oldBook = stale.books[QFileInfo(bookPath).absoluteFilePath()];
+        oldBook.metadata = metadataVersion - 1;
+        require(stale.saveDatabase(folder), "Could not prepare outdated metadata");
+        write(bookPath, epub("Emma revised", "Jane Austen", true, { 0, 0 }));
+        {
+            Store refresh(folder, std::make_shared<LocalSource>());
+            refresh.scan();
+            require(refresh.scanning() && refresh.index().books.value(oldBook.key).title == "Emma",
+                    "Refreshing an outdated single book blocked the caller");
+            QElapsedTimer elapsed;
+            elapsed.start();
+            while (refresh.scanning() && elapsed.elapsed() < 10000)
+                QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+            const auto revised = refresh.index().books.value(oldBook.key);
+            require(!refresh.scanning() && revised.title == "Emma revised"
+                            && revised.cover.isEmpty() && revised.opened == oldBook.opened
+                            && revised.metadata == metadataVersion,
+                    "The background scan failed to refresh the single book or lost its progress");
+            refresh.save();
+            require(!QFile::exists(refresh.coverPath(oldBook.cover)),
+                    "The background scan kept a cover no longer in the catalogue");
         }
         Store reopened(folder, std::make_shared<LocalSource>());
         require(reopened.index().books.size() == 1, "The store did not save its books");

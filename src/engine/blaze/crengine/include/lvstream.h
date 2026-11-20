@@ -82,7 +82,7 @@ class LVContainer;
 class LVStream;
 class LVImageSource;
 class ldomDocument;
-class ldomNode;
+struct ldomNode; // Blaze: match the node definition in lvtinydom.h.
 
 class LVStorageObject : public LVRefCounter
 {

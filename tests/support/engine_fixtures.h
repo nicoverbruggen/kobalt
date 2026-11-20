@@ -122,7 +122,7 @@ inline BookFiles wordCountBook(int repeats = 1)
                     "<p>After inline anchors.</p><p><b>un<span id=\"inside\">break</span>able</b></p></body></html>" },
         { "c2.xhtml",
           "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>Ignored title</title></head><body>"
-          "<h1 id=\"last\">Last chapter</h1><p>one two three</p></body></html>" },
+          "<h1 id=\"last\">Last chapter</h1><p>one two th<span style=\"display:inline-flex\">re</span>e</p></body></html>" },
         { "notes.xhtml",
           "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head/><body><h1>Note</h1><p>Extra note text</p></body></html>" }
     };

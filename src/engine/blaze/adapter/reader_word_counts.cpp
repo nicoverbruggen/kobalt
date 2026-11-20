@@ -18,7 +18,7 @@
 
 namespace kobalt {
 namespace {
-constexpr auto property = "kobalt.word-count-v1";
+constexpr auto property = "kobalt.word-count-v2";
 constexpr int maximumCacheBytes = 512 * 1024;
 constexpr int maximumDepth = 512;
 constexpr int chunkCharacters = 4096;
@@ -33,10 +33,12 @@ bool excluded(ldomNode *node)
 
 bool block(ldomNode *node)
 {
+    // The renderer wraps loose text in anonymous blocks, including inside inline flex boxes.
+    if (node->isNodeName("autoBoxing"))
+        return false;
     return node->isNodeName("br")
             || (!node->getStyle().isNull() && node->getStyle()->display >= css_d_block
-                && node->getStyle()->display != css_d_inline_block
-                && node->getStyle()->display != css_d_inline_table);
+                && !css_is_inline_box(node->getStyle()->display));
 }
 
 QByteArray encode(const DocumentWordCounts &counts)

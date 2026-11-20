@@ -50,6 +50,7 @@ Older parsed caches add the optional page-note markers for labeled Gutenberg not
 ## Word counts and chapters
 
 - Chapter indices are rebuilt from the parsed TOC for each layout. The 10,000-entry chapter limit changes no format.
+- Books counted before inline flex boxes were handled are recounted from the parsed document.
 - Cached word counts are JSON of at most 512 KiB, measured by encoded size. Larger counts stay in memory only.
 - Stored counts with a different number or order of chapter positions are rejected and counted again.
 - Decorative page-spacing records keep prose-gap boundaries and the opening prefix for cache reopening and layout snapshots. A change to them needs a review of both the parser format and the rendering policy.

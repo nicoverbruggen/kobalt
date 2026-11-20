@@ -896,11 +896,20 @@ bool EngineDocument::pageStartsBlock(int page, int *before) const
          child = parent, parent = parent->getParentNode()) {
         // Restarting with only the tail of a flex row changes wrapping and
         // alignment. A slice may start at the first item in the container.
-        if (css_is_flex(parent->getStyle()->display)) {
-            for (int i = 0; i < child->getNodeIndex(); ++i) {
-                auto *sibling = parent->getChildNode(i);
-                if (sibling->isElement() && sibling->getRendMethod() != erm_invisible)
-                    return false;
+        const auto style = parent->getStyle();
+        if (css_is_flex(style->display)) {
+            // A forward column with automatic height and no row gap uses
+            // ordinary block flow. Its later children can begin a slice.
+            const bool plainColumn = style->flex_direction == 1 && !style->justify_content
+                    && style->height.type == css_val_unspecified
+                    && style->min_height.type == css_val_unspecified
+                    && style->max_height.type == css_val_unspecified && !style->row_gap.value;
+            if (!plainColumn) {
+                for (int i = 0; i < child->getNodeIndex(); ++i) {
+                    auto *sibling = parent->getChildNode(i);
+                    if (sibling->isElement() && sibling->getRendMethod() != erm_invisible)
+                        return false;
+                }
             }
         }
         if (parent->getRendMethod() != erm_block || parent->isFloatingBox())

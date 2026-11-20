@@ -124,6 +124,23 @@ int main(int argc, char **argv)
                         && left.first().right() < right.first().left(),
                 "Reformatting the paragraph for display must keep its text beside the float");
     }
+    {
+        QByteArray body = "<div class='column'>";
+        for (int i = 0; i < 100; ++i)
+            body += "<p>" + prose(i, 2) + "</p>";
+        const auto files =
+                styledBook(".column {display:flex;flex-direction:column}", body + "</div>");
+        EngineDocument column(test::readerFonts());
+        open(column, files);
+        const int wholePages = column.pages();
+        require(wholePages > 8, "The flex column must span several slices");
+        column.setChapterSlices(2);
+        QString error;
+        require(column.showSpineItems(0, 0, &error), qPrintable(error));
+        require(column.continuesAfter() && column.pages() < wholePages,
+                "A plain flex column laid out the entire chapter in its first slice");
+        requireWholeBookPages(files, 2, "Slicing a plain flex column changed its pages");
+    }
     const int slicePages = 6;
     EngineDocument model(test::readerFonts());
     open(model, test::engineBook(false, 3, 500));

@@ -2,6 +2,8 @@
 
 The opening bar gives page formatting the largest share. It advances again when the engine finishes and when the window is built. It reaches 100% after presentation preparation. `desktop.openingProgressStages` checks this order. Presentation does not wait for text preset previews. Opening queues neighbour and estimate work after its completion callback. Preview requests can interrupt estimates without changing the session revision; the estimates resume after the preview. Deferred-image completion also resumes this idle work. The focused checks are `lifecycle.appearancePreviewInterruptsEstimate`, `lifecycle.pageImageDuringHold` and `session.reader-session`, including superseded whole-book-ready notifications.
 
+CTest runs the reader, bookmark and highlight session checks in Accurate and Hybrid by default. To run its Hybrid cases alone, use `ctest --preset mac -L session -R "[.]hybrid$"`.
+
 `session.reader-session` parks a whole-book build before each of two font increases and a decrease in the same Hybrid session. It checks that a turn during reflow is refused, then compares the new page, the following turn and the final whole-book handoff with an Accurate session at the same size.
 
 A numbered jump during handoff uses the displayed chapter. A second number can be used once the new pagination is on screen. A buffered reverse turn must return across the chapter boundary to the same pixels. Rotation while a whole-book count is ready keeps the chapter at the new viewport.

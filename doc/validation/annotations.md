@@ -8,7 +8,7 @@ Label `annotations`. Build `mac-tests`, then run `ctest --preset mac -L annotati
 
 These checks cover bookmarks, pinned bookmarks, bookmark returns, highlights, notes, annotation mode, the annotation list, the annotation database and annotation export. The `model` checks hold the stores and the database, the `session` checks run each editing case in separate JSON and SQLite processes, and the `desktop`, `lifecycle` and `ui` checks drive the production reader.
 
-`desktop.customPinnedBookmarks` raises the bookmark list while the custom icon warning is open. After closing the warning, the next tap must reach the pin editor.
+In Accurate and Hybrid, `desktop.customPinnedBookmarks` raises the bookmark list while the custom icon warning is open. After closing the warning, the next tap must reach the pin editor.
 
 `desktop.fastSavedLists` creates saved marks through the reader and visits enough chapters to exceed the retained-document limit. It checks bookmark returns and annotation jumps after reopening in Fast and Hybrid chapter mode, and after Hybrid adopts the whole document. The return action must show the origin's whole-book page number and restore its exact source position. The returned annotation must still open its editor without changing its saved data.
 
@@ -24,7 +24,7 @@ Right-click annotation entry is a host capability. Desktop enables it; other hos
 
 `AnnotationDraft` owns selection endpoints, punctuation policies, the resolved range, viewport identity and draft geometry. The reader owns gestures, popovers and persistence decisions. `model.annotation-draft` checks that overlap rejection preserves the previous selection, reversed endpoints retain resolved policies, old asynchronous responses cannot replace a newer selection, and image decoding keeps current geometry when its markup is older. Save preparation uses a separate revision: sleep invalidates interactive queries but does not abandon a pending save. Abandoned saves cannot clear a newer draft. Existing desktop and lifecycle checks cover dragging across pages, editing, save failures and annotation frames.
 
-The first-paint lifecycle check reopens a book with 256 off-page highlights. It repeats presentation and switches the display to grayscale, checking the saved color and the number of display capability queries. The reader-session check moves a draft without copying its saved ranges and opens an appearance preview with the reopened book's saved highlights and draft in its first frame.
+CTest runs the first-paint lifecycle check in Accurate and Hybrid. Use `lifecycle.annotationFramesKeepFirstPaintComplete.hybrid` to run the Hybrid case alone. The check reopens a book with 256 off-page highlights. It repeats presentation and switches the display to grayscale, checking the saved color and the number of display capability queries. The reader-session check moves a draft without copying its saved ranges and opens an appearance preview with the reopened book's saved highlights and draft in its first frame.
 
 Physical-device touch and e-ink refresh still need device validation.
 

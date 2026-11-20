@@ -315,6 +315,8 @@ if(BUILD_TESTING)
         set(modes default)
         if(check MATCHES "^(settingsTextPresetLatestChoice|advancedText|globalLayout|columns|publisherFontDefault|opticalSize)$")
             list(APPEND modes fast hybrid)
+        elseif(check STREQUAL "customPinnedBookmarks")
+            list(APPEND modes hybrid)
         endif()
         foreach(mode IN LISTS modes)
             set(name desktop.${check})
@@ -427,6 +429,27 @@ if(BUILD_TESTING)
         KOBALT_TEST_ZIP="${KOBALT_TEST_ZIP}"
         KOBALT_FONT_DIRECTORY="${KOBALT_ASSETS}/fonts" KOBALT_INSTALLED_FONTS)
     add_dependencies(kobalt-tests kobalt-reader-lifecycle-tests)
+    function(kobalt_add_regression name executable arguments timeout labels)
+        set(names "${name}")
+        if(name MATCHES "^session[.](bookmark-session|highlight-session|reader-session)$"
+            OR name STREQUAL "lifecycle.lightReplacesDefaultMenu"
+            OR name STREQUAL "lifecycle.annotationFramesKeepFirstPaintComplete"
+            OR name STREQUAL "lifecycle.remoteKeyActivityRequiresActiveReading")
+            list(APPEND names "${name}.hybrid")
+        endif()
+        math(EXPR ctest_timeout "${timeout} + 5")
+        foreach(test IN LISTS names)
+            add_test(NAME ${test} COMMAND "${CMAKE_COMMAND}"
+                "-DTEST_EXECUTABLE=${executable}" "-DTEST_ARGUMENTS=${arguments}"
+                "-DTEST_TIMEOUT=${timeout}" "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake")
+            set_tests_properties(${test} PROPERTIES ENVIRONMENT "${headless_environment}"
+                LABELS "${labels}" TIMEOUT ${ctest_timeout})
+            if(test MATCHES "[.]hybrid$")
+                set_property(TEST ${test} APPEND PROPERTY ENVIRONMENT KOBALT_CHAPTER_MODE=2)
+            endif()
+        endforeach()
+    endfunction()
     foreach(check teardownRemovesApplicationFilter settingsTeardownReleasesConfirmation settingsChoiceSheetReusesRows settingsFontSheetReusesRows settingsChoiceFitsAfterResize appearancePreviewInterruptsEstimate appearanceTeardownStopsPanelCallbacks shutdownFinalSaveTimesOut
             backgroundWriteFailureRetriesWithoutCountingPause backgroundCheckpointStopsBeforeOtherCallbacks standaloneReadingHistory navigationDismissalWaitsForPanel uneditedPanelTransitions lightReplacesDefaultMenu appearanceApplyOnNavigation appearanceRelayoutPreservesPassage
             overflowClosesCurrentPanel appearanceSettingsRetainsDraft appearanceWriteFailureRetainsDraft
@@ -453,12 +476,8 @@ if(BUILD_TESTING)
         if(NOT KOBALT_DESKTOP_SENSORS AND check MATCHES "^(settingsOrientationHandoff|exactRotationLock|rotationRoundTripKeepsReadingResponsive|sleepRequestFreezesOrientationBeforeHandoff|closePublishesHeldOrientationBeforeBackgroundPaint)$")
             continue()
         endif()
-        add_test(NAME lifecycle.${check} COMMAND "${CMAKE_COMMAND}"
-            "-DTEST_EXECUTABLE=$<TARGET_FILE:kobalt-reader-lifecycle-tests>" "-DTEST_ARGUMENTS=${check}"
-            "-DTEST_TIMEOUT=120" "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
-            -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake")
-        set_tests_properties(lifecycle.${check} PROPERTIES ENVIRONMENT "${headless_environment}"
-            LABELS "lifecycle;integration" TIMEOUT 125)
+        kobalt_add_regression(lifecycle.${check} "$<TARGET_FILE:kobalt-reader-lifecycle-tests>"
+            "${check}" 120 "lifecycle;integration")
     endforeach()
     add_executable(kobalt-shutdown-tests "${KOBALT_ROOT}/tests/kobo_shutdown.cpp"
         "${KOBALT_ROOT}/platforms/kobo/common/startup_recovery.c"
@@ -755,14 +774,7 @@ if(BUILD_TESTING)
             if(lane STREQUAL "fast")
                 set(test_timeout 30)
             endif()
-            math(EXPR ctest_timeout "${test_timeout} + 5")
-            add_test(NAME ${group}.${name} COMMAND "${CMAKE_COMMAND}"
-                "-DTEST_EXECUTABLE=${executable}" "-DTEST_ARGUMENTS=${arguments}"
-                "-DTEST_TIMEOUT=${test_timeout}"
-                "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
-                -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake")
-            set_tests_properties(${group}.${name} PROPERTIES
-                ENVIRONMENT "${headless_environment}" LABELS "${group};${lane}" TIMEOUT ${ctest_timeout})
+            kobalt_add_regression(${group}.${name} "${executable}" "${arguments}" ${test_timeout} "${group};${lane}")
         endforeach()
     endfunction()
     kobalt_regressions(model storage_assets android_assets android_light profile_storage record_writer main_thread reading_history bookmark_store custom_pins highlight_store annotation_database appearance_settings text_presets header_footer

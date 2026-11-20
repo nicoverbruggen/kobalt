@@ -2053,7 +2053,7 @@ void swipeChoices(Fixture &fixture, const QString &name = {})
 // Exercises the real EPUB hierarchy, disclosure hit areas, navigation and reopening.
 void illustratedNavigation(Fixture &fixture, const QString &variant = {})
 {
-    auto files = test::engineBook(true, 3, 12);
+    auto files = test::engineBook(true, 18, 12);
     auto &opf = files["OEBPS/book.opf"];
     opf.replace("version=\"2.0\"", "version=\"3.0\"");
     opf.replace(
@@ -2063,10 +2063,22 @@ void illustratedNavigation(Fixture &fixture, const QString &variant = {})
     files["OEBPS/label.png"] = files.value("OEBPS/colors.png");
     files["OEBPS/nav.xhtml"] = test::publisherHtml(
             "<nav epub:type='toc'><ol><li><a href='c1.xhtml'><img src='label.png' alt='Map of the coast'/></a></li>"
-            "<li><a href='c2.xhtml'>The crossing</a></li><li><a href='c3.xhtml'>References</a></li></ol></nav>"
+            "<li><a href='c2.xhtml'>The crossing</a></li><li><a href='c3.xhtml'>Low tide</a></li>"
+            "<li><a href='c4.xhtml'><img src='label.png' alt='The estuary'/></a></li>"
+            "<li><a href='c5.xhtml'><img src='label.png' alt='Harbour chart'/></a></li>"
+            "<li><a href='c6.xhtml'>The soundings</a></li><li><a href='c7.xhtml'>Fog</a></li>"
+            "<li><a href='c8.xhtml'><img src='label.png' alt='The old lighthouse'/></a></li>"
+            "<li><a href='c9.xhtml'>The harbour pilot</a></li><li><a href='c10.xhtml'>Shoal water</a></li>"
+            "<li><a href='c11.xhtml'><img src='label.png' alt='The night watch'/></a></li>"
+            "<li><a href='c12.xhtml'>First light</a></li><li><a href='c13.xhtml'>Offshore</a></li>"
+            "<li><a href='c14.xhtml'><img src='label.png' alt='The islands'/></a></li>"
+            "<li><a href='c15.xhtml'>The return passage</a></li>"
+            "<li><a href='c16.xhtml'><img src='label.png' alt='Harbour lights'/></a></li>"
+            "<li><a href='c17.xhtml'><img src='label.png' alt='Landfall'/></a></li>"
+            "<li><a href='c18.xhtml'>References</a></li></ol></nav>"
             "<nav epub:type='page-list'><ol><li><a href='c1.xhtml'>xiv</a></li><li><a href='c2.xhtml'>42</a></li></ol></nav>"
             "<nav epub:type='landmarks'><ol><li><a epub:type='bodymatter' href='c1.xhtml'>Start of text</a></li>"
-            "<li><a epub:type='bibliography' href='c3.xhtml#kobo.10.1'>Bibliography</a></li></ol></nav>");
+            "<li><a epub:type='bibliography' href='c18.xhtml#kobo.10.1'>Bibliography</a></li></ol></nav>");
     files["OEBPS/c2.xhtml"] = test::publisherHtml(
             "<p><span><img src='label.png' alt='Map of the crossing'/></span></p>");
     QVERIFY(writeBook(fixture.directory.path(), "illustrated.epub", files));
@@ -2087,6 +2099,9 @@ void illustratedNavigation(Fixture &fixture, const QString &variant = {})
     auto *panel = fixture.widget("rrContents");
     auto *otherPreview = fixture.widget("rrChapter1Image");
     QVERIFY(panel && otherPreview);
+    QCOMPARE(otherPreview->x(), preview->x());
+    if (fixture.visible("rrChapter3Image"))
+        QCOMPARE(fixture.widget("rrChapter3Image")->x(), preview->x());
     const auto frame = panel->grab().toImage();
     for (auto *imageButton : { preview, otherPreview }) {
         const auto edge = imageButton->mapTo(panel, QPoint(0, imageButton->height() / 2));
@@ -2099,8 +2114,12 @@ void illustratedNavigation(Fixture &fixture, const QString &variant = {})
     QVERIFY(listSwitch->property("text").toString().isEmpty());
     QCOMPARE(fixture.widget("rrContentsMore")->accessibleName(),
              strings::get("chapter_contents.more"));
-    if (!variant.isEmpty())
-        QVERIFY(capture(fixture, variant + "-illustrated-chapters"));
+    if (!variant.isEmpty()) {
+        capturePages(fixture, variant + "-illustrated-chapters", "rrContents");
+        while (!fixture.visible("rrChapter0Image")) {
+            QVERIFY(fixture.press("rrContentsPrevious"));
+        }
+    }
     const auto position = fixture.state().value("position");
     for (int i = 0; i < 2; ++i) {
         QVERIFY(fixture.press(i ? "rrChapter1Image" : "rrChapter0Image"));

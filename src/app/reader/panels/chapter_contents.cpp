@@ -61,12 +61,16 @@ public:
 
     std::function<void()> held;
 
-    void setBoundaryMarkers(bool start, bool end, int numberWidth)
+    int setBoundaryMarkers(bool start, bool end, int numberWidth, bool hasImage)
     {
         startMarker = start;
         endMarker = end;
-        numberColumn = numberWidth;
+        // A lone flag is centered in the image cell. With an image, the flags
+        // end at the left edge of its tap target.
+        markerRightInset = numberWidth
+                + (hasImage ? int(chrome::cellWidth) : (int(chrome::cellWidth) - markerSize()) / 2);
         update();
+        return start || end ? markerRightInset - numberWidth + markerWidth() : 0;
     }
 
 protected:
@@ -77,8 +81,7 @@ protected:
             return;
         QPainter painter(this);
         const int side = markerSize();
-        int x = trailingLabel()->geometry().right() + 1 - numberColumn
-                - (int(startMarker) + int(endMarker)) * (side + int(chrome::selectorGap));
+        int x = trailingLabel()->geometry().right() + 1 - markerRightInset - markerWidth();
         const auto ink = titleLabel()->palette().color(QPalette::WindowText);
         for (auto icon : { ui::ControlIcon::BookStart, ui::ControlIcon::BookEnd }) {
             if (icon == ui::ControlIcon::BookStart ? !startMarker : !endMarker)
@@ -126,10 +129,16 @@ protected:
     }
 
 private:
+    int markerWidth() const
+    {
+        return (int(startMarker) + int(endMarker)) * markerSize()
+                + (startMarker && endMarker ? int(chrome::selectorGap) : 0);
+    }
+
     int markerSize() const { return titleLabel()->fontMetrics().height(); }
 
     bool startMarker = false, endMarker = false;
-    int numberColumn = 0;
+    int markerRightInset = 0;
     ui::HoldTimer timer;
     QPoint origin;
     bool consumed = false;
@@ -581,6 +590,8 @@ void ChapterContents::redraw()
             && std::any_of(parents.cbegin(), parents.cend(),
                            [](int parent) { return parent >= 0; });
     const int cellWidth = grouped ? int(chrome::cellWidth) : 0;
+    const bool chapter = listMode == ContentsList::Chapters;
+    const int numberColumn = pagesKnown ? pageWidth : numberWidth;
     for (int row = 0; row < buttons.size(); ++row) {
         const int index = itemIndex(row);
         auto *button = buttons[row];
@@ -613,18 +624,13 @@ void ChapterContents::redraw()
                                     + row * ui::metrics::list::oneLine,
                             qMax(1, width() - rowLeft), ui::metrics::list::oneLine);
         auto *itemRow = static_cast<ChapterRow *>(button);
-        const bool chapter = listMode == ContentsList::Chapters;
         itemRow->setProperty("reader_swipe_hold", chapter);
-        const int numberColumn = pagesKnown ? pageWidth : numberWidth;
-        itemRow->setBoundaryMarkers(chapter && index == startRow, chapter && index == endRow,
-                                    numberColumn);
-        const int markerCount = chapter && (startRow >= 0 || endRow >= 0)
-                ? (startRow == endRow ? 2 : 1)
-                : 0;
-        const int markerWidth = markerCount * (label->fontMetrics().height() + chrome::selectorGap);
-        const int previewSpace = hasImage ? chrome::cellWidth + contents::pageGap : 0;
+        const int flagSpace = itemRow->setBoundaryMarkers(
+                chapter && index == startRow, chapter && index == endRow, numberColumn, hasImage);
+        const int imageSpace = hasImage ? int(chrome::cellWidth) : 0;
+        const int accessoryWidth = numberColumn + qMax(flagSpace, imageSpace);
         if (hasImage) {
-            const int left = width() - ui::metrics::list::inset - numberColumn - markerWidth - previewSpace;
+            const int left = width() - ui::metrics::list::inset - numberColumn - imageSpace;
             previews[row]->setGeometry(left, button->y(), chrome::cellWidth, button->height());
             previews[row]->setObjectName(item.name + "Image");
             previews[row]->setAccessibleName(
@@ -661,14 +667,14 @@ void ChapterContents::redraw()
                     item.page >= 0
                             ? (pageLabel ? pageLabel(item.page) : QString::number(item.page + 1))
                             : QString(),
-                    pageWidth + markerWidth + previewSpace });
+                    accessoryWidth });
             itemRow->trailingLabel()->setObjectName(item.name + "Page");
         } else {
             // Without page numbers, the chapter number takes their place at
             // the right edge.
             itemRow->setLeading(QString(), indent);
             itemRow->leadingLabel()->setObjectName({});
-            itemRow->setAccessory(ui::ListRow::Caption{ number, numberWidth + markerWidth + previewSpace });
+            itemRow->setAccessory(ui::ListRow::Caption{ number, accessoryWidth });
             itemRow->trailingLabel()->setObjectName(item.name + "Number");
         }
         button->setAccessibleName(

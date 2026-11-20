@@ -103,6 +103,31 @@ public:
                                     : int(screenStarts.size());
     }
 
+    // Inspect a physical column without changing the reading bookmark. A page
+    // with only decoration can have its nearest text on a different spread.
+    class ScopedColumn
+    {
+        ColumnView &view;
+        int originalColumn;
+        bool moved;
+
+    public:
+        ScopedColumn(ColumnView &view, int column)
+            : view(view),
+              originalColumn(view.LVDocView::getCurPage(true)),
+              moved(column != originalColumn)
+        {
+            if (moved)
+                view.LVDocView::goToPage(column, true, false);
+        }
+
+        ~ScopedColumn()
+        {
+            if (moved)
+                view.LVDocView::goToPage(originalColumn, true, false);
+        }
+    };
+
     int firstColumn(int screen) const
     {
         if (screenStarts.empty())
@@ -206,7 +231,7 @@ public:
         const int target = first + column;
         if (column >= count)
             return {};
-        Position restore(*this, target);
+        ScopedColumn restore(*this, target);
         point.x = local + overflow;
         return LVDocView::getNodeByPoint(point, strict, selection);
     }
@@ -238,7 +263,7 @@ public:
         const int target = getPageList()->FindNearestPage(point.y - (bottom ? 1 : 0), 0);
         if (target < first || target >= first + count)
             return false;
-        Position restore(*this, target);
+        ScopedColumn restore(*this, target);
         if (!LVDocView::docToWindowPoint(point, bottom, fit))
             return false;
         point.x += columnOffset(target - first);
@@ -256,7 +281,7 @@ public:
         const int first = firstColumn(screen);
         const int count = columnCount(screen);
         for (int i = 0; i < count; ++i) {
-            Position restore(*this, first + i);
+            ScopedColumn restore(*this, first + i);
             ldomXRangeList links;
             LVDocView::getCurrentPageLinks(links);
             for (int j = 0; j < links.length(); ++j)
@@ -327,27 +352,5 @@ private:
     const std::shared_ptr<CallbackTarget> callbackTarget_ =
             std::make_shared<CallbackTarget>(CallbackTarget{ this });
     lvRect margins;
-
-    struct Position
-    {
-        ColumnView &view;
-        ldomXPointer bookmark;
-        bool moved;
-
-        Position(ColumnView &view, int page)
-            : view(view),
-              bookmark(view.getBookmark()),
-              moved(page != view.LVDocView::getCurPage(true))
-        {
-            if (moved)
-                view.LVDocView::goToPage(page, true);
-        }
-
-        ~Position()
-        {
-            if (moved)
-                view.goToBookmark(bookmark);
-        }
-    };
 };
 } // namespace kobalt

@@ -100,9 +100,18 @@ void verticalOrnamentTurns()
             "Cannot lay out the vertical spreads");
     require(fast.prepareFullDocument({}) == Engine::FullDocument::Ready && whole.pages() > 4,
             "Cannot prepare the vertical book");
+    const auto start = whole.position();
     for (const int direction : { 1, -1 }) {
         for (;;) {
             const int page = whole.page(), target = whole.turnTarget(page, direction);
+            whole.pageLinks();
+            require(whole.page() == page,
+                    "Inspecting links moved the reader off a vertical spread");
+            if (page > 0) {
+                whole.pageRangeRects(0, { { start, start } });
+                require(whole.page() == page,
+                        "Measuring a mark moved the reader off a vertical spread");
+            }
             require(fast.image(fast.page()) == whole.image(page),
                     "A vertical slice repeated an ornamental column");
             require(fast.preparedSpreadTurn(direction) == target,

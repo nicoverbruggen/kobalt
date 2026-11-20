@@ -1519,23 +1519,9 @@ EngineDocument::pageRangeRects(int target, const QVector<QPair<QString, QString>
     if (!engine_ || target < 0 || target >= pages() || ranges.isEmpty() || ranges.size() > 2000)
         return result;
     result.resize(ranges.size());
-    const int current = engine_->getCurPage();
-
-    struct Restore
-    {
-        LVDocView &view;
-        ldomXPointer bookmark;
-        bool moved;
-
-        ~Restore()
-        {
-            if (moved)
-                view.goToBookmark(bookmark);
-        }
-    } restore{ *engine_, engine_->getBookmark(), target != current };
-
-    if (restore.moved)
-        engine_->goToPage(target);
+    const int column = target == engine_->getCurPage() ? engine_->getCurPage(true)
+                                                       : engine_->firstColumn(target);
+    ColumnView::ScopedColumn restore(*engine_, column);
     int remaining = 65536;
     for (const int index : visibleRanges(ranges)) {
         engineActivity().checkpoint();

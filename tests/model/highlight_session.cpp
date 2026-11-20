@@ -181,22 +181,34 @@ int main(int argc, char **argv)
                             && detail(repaired, original.id).note == original.note,
                     "Reopened SQLite session did not recover the repaired highlight");
         }
-        for (bool appearanceFailure : { false, true }) {
+        enum class Failure { JumpKeepingLayout, Jump, Appearance };
+        for (const auto failure :
+             { Failure::JumpKeepingLayout, Failure::Jump, Failure::Appearance }) {
             const auto revision = model.layoutRevision();
+            const auto position = model.state()["position"];
+            const auto image = model.image();
             const auto page = model.page();
-            if (appearanceFailure) {
+            const bool chapter = model.continuesAfter();
+            if (failure == Failure::Appearance) {
                 auto invalid = model.state();
                 invalid["font_pixels"] = -1;
                 model.editAppearance(kobalt::appearance::Patch(invalid));
             } else {
-                require(model.goTo("/body[999999]/text().0"), "Cannot queue missing passage jump");
+                require(model.goTo("/body[999999]/text().0", failure == Failure::JumpKeepingLayout),
+                        "Cannot queue missing passage jump");
             }
             waitUntil([&] { return !model.busy(); });
-            require(!model.error().isEmpty() && !model.image().isNull() && model.pages() > 0
-                            && model.page() == page,
+            require(!model.error().isEmpty() && !image.isNull() && model.image() == image
+                            && model.pages() > 0 && model.page() == page
+                            && model.state()["position"] == position,
                     "Failed command did not retain the usable page fixture");
-            require(appearanceFailure ? model.layoutRevision() != revision
-                                      : model.layoutRevision() == revision,
+            // A normal jump can adopt the ready whole book before looking up
+            // its destination. A jump that keeps the layout cannot do that.
+            const bool adopted = chapter && !model.continuesAfter();
+            require(failure != Failure::JumpKeepingLayout || !adopted,
+                    "A failed jump replaced the layout it was asked to keep");
+            const bool invalidated = failure == Failure::Appearance || adopted;
+            require((model.layoutRevision() != revision) == invalidated,
                     "Failed command changed the wrong layout generation");
             for (int attempt = 0; attempt < 2; ++attempt) {
                 bool located = false;

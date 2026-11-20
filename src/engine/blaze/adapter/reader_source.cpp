@@ -1052,6 +1052,10 @@ bool EngineDocument::setChapterMode(bool fast, const appearance::Patch &patch, Q
         retire(std::move(full));
         return false;
     }
+    // Opening a document repairs invalid saved settings. A live edit must
+    // pass the same checks as an edit that keeps the current layout.
+    if (!patch.fields().isEmpty() && !updateAppearance(patch, size, {}, AppearanceAction::Validate))
+        return false;
     auto saved = state();
     for (auto it = patch.fields().begin(); it != patch.fields().end(); ++it)
         saved[it.key()] = it.value();

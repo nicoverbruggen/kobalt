@@ -1147,6 +1147,12 @@ bool EngineDocument::style(int pixels, int spacing, const QString &face, int mar
 bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
                                      OpeningProgress progress)
 {
+    return updateAppearance(patch, size, std::move(progress), AppearanceAction::Apply);
+}
+
+bool EngineDocument::updateAppearance(const appearance::Patch &patch, QSize size,
+                                      OpeningProgress progress, AppearanceAction action)
+{
     const auto &settings = patch.fields();
     const int pixels = settings.value("font_pixels").toInt(pixels_);
     const int spacing = settings.value("line_spacing").toInt(spacing_);
@@ -1242,6 +1248,8 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
         || (bionic != "off" && bionic != "bold") || (!face.isEmpty() && !fontFaces().contains(face))
         || !fontFaces().contains(defaultFace))
         return false;
+    if (action == AppearanceAction::Validate)
+        return true;
     if (windowFirst_ >= 0 && !inpageFootnotes_ && inpageFootnotes) {
         const auto layout = pageNoteLayout();
         if (layout == PageNoteLayout::Interrupted)

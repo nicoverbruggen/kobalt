@@ -357,6 +357,9 @@ public:
     QJsonObject settingsState() const override;
 
 private:
+    enum class AppearanceAction { Validate, Apply };
+    bool updateAppearance(const appearance::Patch &patch, QSize size, OpeningProgress progress,
+                          AppearanceAction action);
     // Sets the current and next entries of `links` around `position`.
     ChapterSelection chapterAround(const QVector<ChapterLink> &links,
                                    const QString &position) const;

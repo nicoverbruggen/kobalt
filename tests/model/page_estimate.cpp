@@ -1597,7 +1597,12 @@ void savedPlaceOutsideOpeningWindow()
     require(model.position() == shown, "The whole-book handoff changed the reading position");
     // Hybrid appearance edits return to chapter mode before changing text.
     // Repeat the edit and whole-book handoff away from the cover.
-    for (const int pixels : { 36, 20, 28 }) {
+    const auto minimum = minimumFontPixels();
+    const appearance::Patch tooSmall(qt::object({ { "font_pixels", minimum - 1 } }));
+    require(!model.setChapterMode(true, tooSmall, { 600, 800 }) && !model.partOfBook()
+                    && model.position() == shown,
+            "An invalid font size replaced the whole book");
+    for (const int pixels : { 36, minimum, 28 }) {
         const appearance::Patch next(qt::object({ { "font_pixels", pixels } }));
         require(model.setChapterMode(true, next, { 600, 800 }),
                 "Cannot change text size in chapter mode");

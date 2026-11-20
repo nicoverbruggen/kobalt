@@ -538,7 +538,8 @@ void Reader::paintTurn()
                              { "page", session->page() },
                              { "elapsed_ms", turnStarted.nsecsElapsed() / 1e6 },
                              { "render_ms", rendered },
-                             { "paint_ms", painting.nsecsElapsed() / 1e6 } },
+                             { "paint_ms", painting.nsecsElapsed() / 1e6 },
+                             { "whole_book", !session->state().contains("book_fraction") } },
                            false);
     turnStarted.invalidate();
     // The screen composes the flushed page from the event loop. Return

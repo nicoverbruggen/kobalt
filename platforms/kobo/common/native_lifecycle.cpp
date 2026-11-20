@@ -652,15 +652,16 @@ void NativeLifecycle::beginUsb()
     engineActivity().pause(false);
     diagnostic("usb-release-start");
     const auto handoff = [guard, request] {
-        if (!guard || request != guard->generation || !guard->usbPending)
+        if (!guard || request != guard->generation || !guard->usbPending || guard->storageReady)
             return;
         sessionStorageAvailable.store(false);
         storage::closeProfile(true);
         diagnostic("usb-release-complete");
+        guard->storageReady = true;
         if (guard->storageReleased)
             guard->storageReleased();
-        guard->storageReady = true;
-        guard->finishUsb();
+        if (guard && request == guard->generation)
+            guard->finishUsb();
     };
     active->prepareUsb([handoff] { storage::afterSleepSnapshotWork(handoff); });
 }

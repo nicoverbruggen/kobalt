@@ -449,9 +449,13 @@ int main(int argc, char **argv)
     {
         const int releases = assetReleases, restores = assetRestores;
         kobalt::NativeLifecycle::beginUsb();
-        drains.takeLast()();
+        const auto finish = drains.takeLast();
+        finish();
         require(!available() && assetReleases == releases + 1,
                 "USB preparation did not release storage before gadget handoff");
+        finish();
+        require(assetReleases == releases + 1,
+                "A duplicate drain completion released storage twice before gadget handoff");
         kobalt::NativeLifecycle::disconnected();
         require(available() && assetRestores == restores + 1,
                 "Cancelled gadget handoff stranded asset verification");

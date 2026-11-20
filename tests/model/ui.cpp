@@ -6072,6 +6072,32 @@ int main(int argc, char **argv)
         }
     }
     {
+        QWidget host;
+        host.resize(800, 600);
+        QWidget paper(&host);
+        paper.setGeometry(host.rect());
+        kobalt::ui::PageScrubber scrubber(&host);
+        scrubber.setGeometry(host.rect());
+        host.show();
+        scrubber.show();
+        scrubber.setBarVisible(false);
+        require(host.childAt(host.rect().center()) == &paper,
+                "An empty scrubber intercepted a tap on the page");
+        scrubber.setImageAction("Zoom image");
+        auto *button = scrubber.findChild<QPushButton *>("rrScrubberImage");
+        require(button && host.childAt(button->mapTo(&host, button->rect().center())) == button,
+                "Restoring a scrubber action must make it tappable again");
+        scrubber.setImageAction({});
+        require(host.childAt(host.rect().center()) == &paper,
+                "Removing the last scrubber action must expose the page again");
+        scrubber.showCurrentPage();
+        require(host.childAt(host.rect().center()) != &paper,
+                "An active preview must receive the tap even with the bar hidden");
+        scrubber.cancel();
+        require(host.childAt(host.rect().center()) == &paper,
+                "Cancelling the preview must return taps to the page");
+    }
+    {
         // A chapter beyond the page range previews the last page only once.
         kobalt::ui::PageScrubber scrubber(nullptr);
         scrubber.setChapterJumps(true);

@@ -833,8 +833,8 @@ QRect PageScrubber::imageBounds() const
 
 void PageScrubber::updateMask()
 {
-    const QRegion previousArea = mask().isEmpty() ? QRegion(rect()) : mask();
     if (selecting()) {
+        setAttribute(Qt::WA_TransparentForMouseEvents, false);
         clearMask();
     } else {
         QRegion hitArea = barVisible ? QRegion(panelBounds()) : QRegion();
@@ -849,6 +849,11 @@ void PageScrubber::updateMask()
             hitArea += returnFrame;
             hitArea += QRect(actions->pos() + stay->pos(), stay->size());
         }
+        QRegion previousArea = mask();
+        if (previousArea.isEmpty() && !testAttribute(Qt::WA_TransparentForMouseEvents))
+            previousArea = rect();
+        // An empty widget mask accepts input over the whole rectangle.
+        setAttribute(Qt::WA_TransparentForMouseEvents, hitArea.isEmpty());
         const QRegion exposed = previousArea - hitArea;
         const bool reclip = isVisible() && !exposed.isEmpty();
         if (reclip) {

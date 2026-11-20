@@ -4385,7 +4385,7 @@ int main(int argc, char **argv)
         page.cancelRequested = [&] {
             ++stops;
             page.setTransfer({}, 0, 0, false);
-            page.setState({}, false, {});
+            page.setState({}, false, kobalt::DictionaryDownloadResult::Cancelled);
         };
         QPointer<QPushButton> downloadAction = page.findChild<QPushButton *>("rrDictionaryAction0");
         downloadAction->click();
@@ -4414,6 +4414,14 @@ int main(int argc, char **argv)
         downloadAction->click();
         require(stops == 1 && downloadAction && !downloadAction->icon().isNull(),
                 "Cancelling did not restore the download icon and action in place");
+        const auto failureShown = [&] {
+            for (auto *label : page.findChildren<QLabel *>())
+                if (label->isVisible()
+                    && label->text() == kobalt::strings::get("dictionaries.download_failed"))
+                    return true;
+            return false;
+        };
+        require(!failureShown(), "A Stop request marked the download as failed");
         downloadAction->click();
         app.processEvents();
         owner.findChild<QPushButton *>("rrDictionaryDownloadConfirm")->click();
@@ -4447,21 +4455,13 @@ int main(int argc, char **argv)
                         == kobalt::ui::metrics::list::oneLine,
                 "Downloading changed the dictionary row height");
         page.setTransfer({}, 0, 0, false);
-        page.setState({}, false, "Download failed");
+        page.setState({}, false, kobalt::DictionaryDownloadResult::Failed);
         app.processEvents();
-        bool error = false;
-        for (auto *label : page.findChildren<QLabel *>())
-            error |= label->isVisible()
-                    && label->text() == kobalt::strings::get("dictionaries.download_failed");
-        require(error, "Failed transfer lacks its row error");
+        require(failureShown(), "Failed transfer lacks its row error");
         page.installRequested = [](const QString &) { };
         page.findChild<QPushButton *>("rrDictionaryAction0")->click();
         app.processEvents();
-        for (auto *label : page.findChildren<QLabel *>())
-            require(!label->isVisible()
-                            || label->text()
-                                    != kobalt::strings::get("dictionaries.download_failed"),
-                    "Next page action retained transfer failure");
+        require(!failureShown(), "Next page action retained transfer failure");
         owner.findChild<QPushButton *>("rrDictionaryDownloadCancel")->click();
         app.processEvents();
         page.setState({ "en-en" }, false, {});

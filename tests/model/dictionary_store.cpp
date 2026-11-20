@@ -486,6 +486,20 @@ int main(int argc, char **argv)
             reply.complete(200, {}, QNetworkReply::ConnectionRefusedError);
         });
         require(manager.status() == "Fixture network failure", "network error survives cleanup");
+        download([](BufferedDownload &reply) {
+            auto *timer = reply.findChild<QTimer *>(QString(), Qt::FindDirectChildrenOnly);
+            require(timer && timer->isActive(), "The request has no inactivity timer");
+            require(QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection)
+                            && reply.aborts == 1,
+                    "An inactivity timeout did not abort the pending network reply");
+        });
+        require(manager.status() == "The dictionary download timed out."
+                        && manager.transfer().result == DictionaryDownloadResult::Failed,
+                "A download timeout was reported as user cancellation");
+        download([](BufferedDownload &reply) { reply.abort(); });
+        require(manager.status() == "Operation canceled"
+                        && manager.transfer().result == DictionaryDownloadResult::Failed,
+                "A network abort without a Stop request must report a failed download");
         const int before = requests;
         download([](auto &reply) {
             reply.complete(302, QUrl("http://unsafe.example/dictionary.zip"));
@@ -504,7 +518,8 @@ int main(int argc, char **argv)
                 manager.cancel();
             });
         });
-        require(manager.status() == "dictionaries.download_cancelled",
+        require(manager.status() == "dictionaries.download_cancelled"
+                        && manager.transfer().result == DictionaryDownloadResult::Cancelled,
                 "A cancelled download bypassed the string catalog");
         StarDict missing;
         QString message;

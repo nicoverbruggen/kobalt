@@ -210,21 +210,20 @@ void DictionariesPage::setTransfer(const QString &id, qint64 received, qint64 to
     redraw();
 }
 
-void DictionariesPage::setState(const QSet<QString> &installed, bool busy, const QString &message)
+void DictionariesPage::setState(const QSet<QString> &installed, bool busy,
+                                DictionaryDownloadResult result)
 {
     const bool changed = installedIds != installed || working != busy;
     const auto previousFailure = failedId;
     installedIds = installed;
     working = busy;
     if (!endedId.isEmpty()) {
-        if (!installed.contains(endedId) && !message.isEmpty()
-            && !message.contains("cancel", Qt::CaseInsensitive))
+        if (!installed.contains(endedId) && result == DictionaryDownloadResult::Failed)
             failedId = endedId;
         endedId.clear();
     }
     if (!busy && !requestedId.isEmpty()) {
-        if (!installed.contains(requestedId) && !message.isEmpty()
-            && !message.contains("cancel", Qt::CaseInsensitive))
+        if (!installed.contains(requestedId) && result == DictionaryDownloadResult::Failed)
             failedId = requestedId;
         requestedId.clear();
     }

@@ -22,7 +22,7 @@ public:
     int preferredHeight() const;
     void setLanguage(const QString &language);
     void setCatalog(const QVector<DownloadDictionary> &entries);
-    void setState(const QSet<QString> &installed, bool busy, const QString &status);
+    void setState(const QSet<QString> &installed, bool busy, DictionaryDownloadResult result);
     void setStorage(const QHash<QString, qint64> &sizes, qint64 freeBytes,
                     const QString &selectedId = {});
     void setTransfer(const QString &id, qint64 received, qint64 total, bool installing);

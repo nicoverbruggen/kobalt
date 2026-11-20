@@ -49,6 +49,7 @@ class InstallJob final : public QThread
 {
 public:
     QString root, result;
+    DictionaryDownloadResult outcome = DictionaryDownloadResult::Failed;
     DownloadDictionary entry;
     DictionaryManager *owner;
     DictionaryManager::NetworkFactory networkFactory;
@@ -87,10 +88,13 @@ public:
             std::unique_ptr<QNetworkReply> reply(network->get(request));
             reply->setReadBufferSize(65536);
             QEventLoop loop;
-            QTimer timeout;
+            QTimer timeout(reply.get());
             timeout.setSingleShot(true);
             timeout.setInterval(30000);
-            connect(&timeout, &QTimer::timeout, reply.get(), &QNetworkReply::abort);
+            connect(&timeout, &QTimer::timeout, &loop, [&] {
+                result = strings::get("dictionaries.download_timed_out");
+                reply->abort();
+            });
             connect(owner, &DictionaryManager::cancelDownload, reply.get(), &QNetworkReply::abort);
             connect(reply.get(), &QNetworkReply::finished, &loop, &QEventLoop::quit);
             auto drain = [&] {
@@ -145,11 +149,18 @@ public:
             }
             file.close();
             progress(received, true);
-            if (DictionaryManager::installArchive(root, entry, file.fileName(), &result,
-                                                  [this] { return stopped.load(); }))
+            if (DictionaryManager::installArchive(root, entry, file.fileName(), &result, [this] {
+                    if (!stopped)
+                        return false;
+                    outcome = DictionaryDownloadResult::Cancelled;
+                    return true;
+                })) {
+                outcome = DictionaryDownloadResult::Installed;
                 result = strings::get("dictionaries.dictionary_installed");
+            }
             return;
         }
+        outcome = DictionaryDownloadResult::Cancelled;
         result = strings::get("dictionaries.download_cancelled");
     }
 };
@@ -158,6 +169,7 @@ public:
 struct DictionaryManager::Data
 {
     QString root, message, activeId, language;
+    DictionaryDownloadResult result = DictionaryDownloadResult::None;
     std::unique_ptr<DictionaryService> fallback;
     std::unique_ptr<StarDict> active;
     QHash<QString, QString> selected;
@@ -333,7 +345,7 @@ QString DictionaryManager::status() const
 DictionaryTransfer DictionaryManager::transfer() const
 {
     if (!busy())
-        return {};
+        return { {}, 0, 0, false, data->result };
     return { data->entry.id, data->bytes, data->entry.size, data->installing };
 }
 
@@ -430,6 +442,7 @@ void DictionaryManager::download(const QString &id)
     data->message = strings::get("dictionaries.downloading_name").arg(entry.name);
     connect(job, &QThread::finished, this, [this, job] {
         data->message = job->result;
+        data->result = job->outcome;
         data->job = nullptr;
         job->deleteLater();
         emit changed();

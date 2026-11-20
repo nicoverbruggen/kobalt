@@ -1493,6 +1493,7 @@
 "dictionaries.unsafe_download_redirect" = "Unsafe download redirect.";
 "dictionaries.unsupported_stardict_format" = "Unsupported StarDict format.";
 "dictionaries.wait_for_this_download_to_finish" = "Wait for this download to finish.";
+"dictionaries.download_timed_out" = "The dictionary download timed out.";
 "dictionaries.download_failed" = "Download failed. Try again.";
 /* Arguments: %1 */
 "dictionary_panel.for_language" = "For %1";

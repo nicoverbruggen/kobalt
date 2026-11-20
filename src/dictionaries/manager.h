@@ -17,11 +17,15 @@ struct DownloadDictionary
     qint64 size = 0;
 };
 
+enum class DictionaryDownloadResult { None, Installed, Cancelled, Failed };
+
 struct DictionaryTransfer
 {
     QString id;
     qint64 received = 0, total = 0;
     bool installing = false;
+    // The last completed download, or None while a download is running.
+    DictionaryDownloadResult result = DictionaryDownloadResult::None;
 };
 class StarDict;
 

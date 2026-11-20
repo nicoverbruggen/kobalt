@@ -1995,7 +1995,7 @@ void Reader::connectSettingsPage(SettingsPage section)
                 const auto transfer = manager->transfer();
                 dictionarySettings->setTransfer(transfer.id, transfer.received, transfer.total,
                                                 transfer.installing);
-                dictionarySettings->setState(installed, manager->busy(), manager->status());
+                dictionarySettings->setState(installed, manager->busy(), transfer.result);
                 dictionaryPanel->setChoices(manager->choices());
             };
             dictionarySettings->installRequested = [manager](const QString &id) {
@@ -2009,7 +2009,8 @@ void Reader::connectSettingsPage(SettingsPage section)
                     for (const auto &entry : catalog)
                         if (manager->installed(entry.id))
                             installed.insert(entry.id);
-                    dictionarySettings->setState(installed, manager->busy(), error);
+                    dictionarySettings->setState(installed, manager->busy(),
+                                                 DictionaryDownloadResult::None);
                 }
             };
             dictionarySettings->cancelRequested = [manager] { manager->cancel(); };

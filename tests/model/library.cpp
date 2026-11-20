@@ -5,6 +5,8 @@
 #include "library/library_store.h"
 #include "library/scanner.h"
 #include "storage/record_writer.h"
+#include "storage/profile_database.h"
+#include <QSqlQuery>
 #include <QSemaphore>
 #include <QBuffer>
 #include <QCoreApplication>
@@ -432,6 +434,46 @@ int main(int argc, char **argv)
         run();
         require(removed.size() == 1 && removed.first().endsWith("two.EPUB"),
                 "A deleted book was not reported");
+    }
+    {
+        const auto folder = root.filePath("folder-writes");
+        Index index;
+        require(index.loadDatabase(folder), "Could not open Library folder fixture");
+        index.addFolder({ "/keep", "Keep" });
+        index.addFolder({ "/remove", "Remove" });
+        index.addFolder({ "/rename", "Old label" });
+        const auto entry = book("/keep/a.epub", "A", "Author", 1);
+        index.books.insert(entry.key, entry);
+        require(index.saveDatabase(folder), "Could not seed Library folder fixture");
+        require(kobalt::storage::profileTransaction(
+                        folder,
+                        [](QSqlDatabase &db) {
+                            QSqlQuery query(db);
+                            for (const auto &operation :
+                                 QStringList{ "DELETE", "INSERT", "UPDATE" }) {
+                                const auto row = operation == "INSERT" ? "NEW" : "OLD";
+                                if (!query.exec(
+                                            "CREATE TEMP TRIGGER guard_" + operation + " BEFORE "
+                                            + operation + " ON library_folders WHEN " + row
+                                            + ".key='/keep' BEGIN "
+                                              "SELECT RAISE(ABORT,'unchanged folder written'); END"))
+                                    return false;
+                            }
+                            return true;
+                        }),
+                "Could not guard the unchanged folder");
+        index.books[entry.key].percent = 35;
+        require(index.saveDatabase(folder), "A progress-only save wrote an unchanged folder");
+        index.removeFolder("/remove");
+        index.addFolder({ "/rename", "New label" });
+        index.addFolder({ "/new", "" });
+        require(index.saveDatabase(folder), "A folder edit rewrote an unaffected folder");
+        Index saved;
+        require(saved.loadDatabase(folder) && saved.folders.size() == 3
+                        && saved.folders[0].key == "/keep" && saved.folders[1].key == "/rename"
+                        && saved.folders[1].label == "New label" && saved.folders[2].key == "/new"
+                        && saved.folders[2].label.isEmpty() && saved.books[entry.key].percent == 35,
+                "Library save lost folder order, labels or book progress");
     }
     // A slow profile writer must not hold up input when the Library save timer fires.
     {

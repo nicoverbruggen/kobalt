@@ -66,6 +66,51 @@ Settings parseSettings(const QJsonObject &object)
     return result;
 }
 
+bool saveFolders(QSqlDatabase &db, const QVector<Folder> &folders)
+{
+    QSqlQuery query(db);
+    if (!query.exec("SELECT CAST(key AS BLOB),CAST(label AS BLOB),ordinal FROM library_folders"))
+        return false;
+    QHash<QByteArray, QPair<QByteArray, qint64>> stored;
+    while (query.next())
+        stored.insert(query.value(0).toByteArray(),
+                      qMakePair(query.value(1).toByteArray(), query.value(2).toLongLong()));
+    if (query.lastError().isValid())
+        return false;
+    query.finish();
+    for (int i = 0; i < folders.size(); ++i) {
+        const auto key = folders[i].key.toUtf8();
+        const auto label = folders[i].label.isEmpty() ? QByteArray("") : folders[i].label.toUtf8();
+        auto found = stored.find(key);
+        if (found != stored.end()) {
+            const bool unchanged = found->first == label && found->second == i;
+            stored.erase(found);
+            if (unchanged)
+                continue;
+            if (!query.prepare(
+                        "UPDATE library_folders SET label=CAST(? AS TEXT),ordinal=? WHERE key=CAST(? AS TEXT)"))
+                return false;
+        } else if (
+                !query.prepare(
+                        "INSERT INTO library_folders(label,ordinal,key) VALUES(CAST(? AS TEXT),?,CAST(? AS TEXT))"))
+            return false;
+        query.addBindValue(label);
+        query.addBindValue(i);
+        query.addBindValue(key);
+        if (!query.exec())
+            return false;
+    }
+    if (!stored.isEmpty()
+        && !query.prepare("DELETE FROM library_folders WHERE key=CAST(? AS TEXT)"))
+        return false;
+    for (auto it = stored.constBegin(); it != stored.constEnd(); ++it) {
+        query.bindValue(0, it.key());
+        if (!query.exec())
+            return false;
+    }
+    return true;
+}
+
 bool saveRows(QSqlDatabase &db, const Index &index)
 {
     QSqlQuery query(db);
@@ -114,19 +159,7 @@ bool saveRows(QSqlDatabase &db, const Index &index)
         if (!query.exec())
             return false;
     }
-    if (!query.exec("DELETE FROM library_folders"))
-        return false;
-    for (int i = 0; i < index.folders.size(); ++i) {
-        if (!query.prepare("INSERT INTO library_folders VALUES(CAST(? AS TEXT),CAST(? AS TEXT),?)"))
-            return false;
-        query.addBindValue(index.folders[i].key.toUtf8());
-        query.addBindValue(index.folders[i].label.isEmpty() ? QByteArray("")
-                                                            : index.folders[i].label.toUtf8());
-        query.addBindValue(i);
-        if (!query.exec())
-            return false;
-    }
-    return true;
+    return saveFolders(db, index.folders);
 }
 } // namespace
 

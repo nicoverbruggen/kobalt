@@ -50,8 +50,11 @@ BlockSpacing::BlockSpacing(ldomNode *enode, bool vertical)
         css_style_ref_t a = ancestor->getStyle();
         if (a.isNull()) continue;
         lUInt16 ancestor_id = ancestor->getNodeId();
-        bool initial_float = opening && ancestor->getText().trim().length() <= 3 &&
-            (ancestor_id == el_floatBox || ancestor_id == el_pseudoElem || ancestor_id == el_span);
+        // Test the element first: the text of an outer ancestor can be
+        // the whole book.
+        bool initial_float = opening &&
+            (ancestor_id == el_floatBox || ancestor_id == el_pseudoElem || ancestor_id == el_span) &&
+            ancestor->getText().trim().length() <= 3;
         if (ancestor_id == el_table || ancestor_id == el_pre ||
             ancestor_id == el_li || ancestor_id == el_blockquote ||
             (a->white_space != css_ws_normal && a->white_space != css_ws_inherit && a->white_space != css_ws_nowrap) ||

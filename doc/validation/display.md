@@ -2,7 +2,7 @@
 
 Label `display`. Build `mac-tests`, then run `ctest --preset mac -L display` from `platforms/desktop/`. `ctest --preset mac -N -L display` lists its tests.
 
-These checks cover page animations, refresh policies and regions, pixel damage, paint batching, the Library theme surface and the BOOX frame transport. `platform.page-animation` and `platform.page-transition-native` check policy and submission with fake display calls. The `boox` checks use the Android frame transport and queue.
+These checks cover page animations, refresh policies and regions, pixel damage, paint batching, the Library theme surface and the BOOX frame transport. `platform.page-animation` and `platform.page-transition-native` check policy and submission with fake display calls. The `boox` checks use the Android frame transport and queue. `ui.booxAppCanvases` repaints a visible canvas while the activity is inactive. It checks that a rejected clean frame and new partial damage reach the Surface when the activity resumes.
 
 `ui.pagePaintsPaperAroundBody` compares reading and sleep snapshots with paper drawn under opaque, undersized, translucent and high-DPI body images. It checks a clipped, mirrored widget render and verifies that a viewport transition covers the old page while the replacement is being laid out.
 

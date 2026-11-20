@@ -47,15 +47,20 @@ public:
             auto *content = this->canvas->content.data();
             if (!content || !this->available() || region.isEmpty())
                 return;
+            // Qt can paint a visible canvas while its Android activity is inactive.
+            // Retain the damage for resume without updating the Surface.
+            const auto submitActive = [this](const RefreshFrame &frame) {
+                return !paused && this->submit(frame);
+            };
             if (presentingRegion) {
-                accepted = queue.present(this->submit);
+                accepted = queue.present(submitActive);
                 return;
             }
             auto *page = static_cast<ReadingPage *>(content->findChild<QWidget *>("rrPage"));
             policy.prepare(content, this->canvas->viewport(), page, region,
-                           [this](RefreshFrame frame) {
+                           [this, &submitActive](RefreshFrame frame) {
                                frame.clean = frame.clean || cleanPending;
-                               accepted = queue.prepare(frame, this->submit);
+                               accepted = queue.prepare(frame, submitActive);
                                // The queue owns the frame even when its first submission fails.
                                cleanPending = false;
                                return true;

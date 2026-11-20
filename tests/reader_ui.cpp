@@ -2372,10 +2372,10 @@ private slots:
                 // Keep the canvas visible, as Android can do while suspended.
                 qApp->applicationStateChanged(Qt::ApplicationInactive);
                 const int beforePause = rejected;
-                QTest::qWait(250);
+                start.libraryCanvas()->viewport()->repaint(QRect(20, 20, 30, 30));
                 const bool stopped = rejected == beforePause;
                 targetAvailable = true;
-                QTest::qWait(250);
+                start.libraryCanvas()->viewport()->repaint(QRect(20, 20, 30, 30));
                 const bool held = frames.isEmpty();
                 qApp->applicationStateChanged(Qt::ApplicationActive);
                 QVERIFY(stopped);
@@ -2391,6 +2391,15 @@ private slots:
             QCOMPARE(frames.size(), 2);
             QVERIFY(!frames.last().clean);
         }
+        // Damage first received while inactive must also reach the Surface on resume.
+        frames.clear();
+        qApp->applicationStateChanged(Qt::ApplicationInactive);
+        start.libraryCanvas()->viewport()->repaint(QRect(20, 20, 30, 30));
+        const bool queued = frames.isEmpty();
+        qApp->applicationStateChanged(Qt::ApplicationActive);
+        QVERIFY(queued);
+        QTRY_COMPARE_WITH_TIMEOUT(frames.size(), 1, 1000);
+        QVERIFY(!frames.first().clean);
         // A rejected text frame must keep its mode without assigning REGAL
         // to unrelated UI damage that arrives before the Surface recovers.
         frames.clear();

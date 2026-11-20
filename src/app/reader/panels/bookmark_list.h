@@ -41,7 +41,9 @@ public:
     explicit BookmarkList(QWidget *parent, KeyboardFactory keyboard = {});
     ~BookmarkList() override;
 
-    QWidget *pinDialog() const { return pinHelp ? pinHelp.data() : pinPopup.data(); }
+    QWidget *pinDialog() const { return pinPopup.data(); }
+
+    QWidget *pinHelpDialog() const { return pinHelp.data(); }
 
     std::function<bool(const QString &, const QString &, const QString &)> pinRequested;
     void showBookmarks(QVector<BookmarkRow> rows);

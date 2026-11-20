@@ -8,6 +8,8 @@ Label `annotations`. Build `mac-tests`, then run `ctest --preset mac -L annotati
 
 These checks cover bookmarks, pinned bookmarks, bookmark returns, highlights, notes, annotation mode, the annotation list, the annotation database and annotation export. The `model` checks hold the stores and the database, the `session` checks run each editing case in separate JSON and SQLite processes, and the `desktop`, `lifecycle` and `ui` checks drive the production reader.
 
+`desktop.customPinnedBookmarks` raises the bookmark list while the custom icon warning is open. After closing the warning, the next tap must reach the pin editor.
+
 `desktop.fastSavedLists` creates saved marks through the reader and visits enough chapters to exceed the retained-document limit. It checks bookmark returns and annotation jumps after reopening in Fast and Hybrid chapter mode, and after Hybrid adopts the whole document. The return action must show the origin's whole-book page number and restore its exact source position. The returned annotation must still open its editor without changing its saved data.
 
 `lifecycle.turnSkipsHiddenControls` assigns a different excerpt font to the hidden Bookmarks list. A page turn and opening the reading menu leave that font in place. Opening Bookmarks must apply the book’s selected reading face.

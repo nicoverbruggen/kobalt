@@ -997,6 +997,7 @@ QVector<QWidget *> Reader::popups() const
              settingsSheet.data(),
              kosyncPage ? kosyncPage->editorDialog.data() : nullptr,
              bookmarkList ? bookmarkList->pinDialog() : nullptr,
+             bookmarkList ? bookmarkList->pinHelpDialog() : nullptr,
              kosyncDialog.data(),
              linkDialog.data(),
              debugDialog.data(),

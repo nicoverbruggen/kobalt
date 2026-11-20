@@ -1631,7 +1631,11 @@ void fixBookmarkDates(Fixture &fixture)
     fixture.window.openBook(book);
     QTRY_COMPARE(reopened.count(), 1);
     QTRY_VERIFY(!fixture.state().value("busy").toBool());
-    QTRY_VERIFY(fixture.state().value("bookmarked").toBool());
+    // Poll the ribbon directly. Taking a checkpoint processes pending layout
+    // updates and can start another bookmark lookup between assertions.
+    auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+    QVERIFY(page);
+    QTRY_VERIFY(page->bookmarked);
 }
 
 // Two and a half months of reading for Activity, up to activityToday: daily
@@ -4152,8 +4156,14 @@ void checkCustomPinnedBookmarks(int preset, bool dark)
         return true;
     });
     QCOMPARE(shownFiles, expectedFiles);
+    // A bookmark refresh can raise the list while its warning is open.
+    fixture.widget("rrBookmarkList")->raise();
     QVERIFY(fixture.press("rrPinErrorsClose"));
     QTRY_VERIFY(!fixture.visible("rrPinErrorsPopup"));
+    auto *reader = fixture.window.readerWindow();
+    auto *target = reader->childAt(warning->mapTo(reader, warning->rect().center()));
+    QVERIFY2(target == warning || warning->isAncestorOf(target),
+             "Closing the warning must return input to the pin editor");
     QCOMPARE(input->text(), QString("Cat"));
     QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_custom:cat.svg"))->isChecked());
     auto *catButton = fixture.widget("rrPinIcon_custom:cat.svg");

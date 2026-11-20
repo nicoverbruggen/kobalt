@@ -12087,6 +12087,74 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("font_face"), originalFace);
     }
 
+    void sleepRandomStatusSelection()
+    {
+        const auto state = std::make_shared<test::SleepPresentationState>();
+        Fixture fixture(false, false, false, true, false, false,
+                        [state](ReaderHostServices &services) {
+                            services.presentation = [state](QWidget *) {
+                                return std::make_unique<test::HostPresentation>(state);
+                            };
+                        });
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrSleepScreen"));
+        auto *setting = dynamic_cast<ui::CaptionButton *>(fixture.widget("rrSleepScreen"));
+        QVERIFY(setting);
+        QVERIFY(fixture.press("rrSleepScreen"));
+        QTRY_VERIFY(fixture.visible("rrSleepGallery"));
+        while (fixture.widget("rrSleepGalleryPrevious")->isEnabled())
+            QVERIFY(fixture.press("rrSleepGalleryPrevious"));
+        const auto openCustom = [&fixture] {
+            auto *grid = fixture.widget("rrSleepGalleryGrid");
+            return grid && fixture.click(grid, QPoint(grid->width() * 3 / 4, grid->height() / 4));
+        };
+        QVERIFY(openCustom());
+        QTRY_VERIFY(fixture.visible("rrSleepEditorStatus"));
+        QVERIFY(fixture.press("rrSleepEditorBackdropNext"));
+        QVERIFY(fixture.press("rrSleepEditorStatusPrevious"));
+        QCOMPARE(labelText(fixture, "rrSleepEditorStatus"), strings::get("sleep.status_random"));
+        QCOMPARE(labelText(fixture, "rrSleepEditorBackdrop"), strings::get("sleep.backdrop_page"));
+        QVERIFY(fixture.press("rrSleepEditorSame"));
+        QVERIFY(fixture.press("rrSleepEditorBackdropNext"));
+        QVERIFY(fixture.press("rrSleepEditorBackdropNext"));
+        QCOMPARE(labelText(fixture, "rrSleepEditorBackdrop"),
+                 strings::get("sleep.wallpaper_random"));
+        QCOMPARE(labelText(fixture, "rrSleepEditorStatus"), strings::get("sleep.status_random"));
+        QVERIFY(fixture.press("rrSleepEditorStatusNext"));
+        QVERIFY(fixture.press("rrSleepEditorDone"));
+        QTRY_VERIFY(!fixture.widget("rrSleepEditor"));
+        QVERIFY(fixture.press("rrSleepGalleryClose"));
+        QTRY_VERIFY(!fixture.widget("rrSleepGallery"));
+        QCOMPARE(setting->caption(), strings::get("sleep.design_custom").toUpper());
+        const auto saved = storage::readJson(fixture.paths.preferences());
+        QCOMPARE(sleep::design(saved), sleep::Design::Custom);
+        const auto custom = sleep::custom(saved);
+        QVERIFY(!custom.same);
+        QCOMPARE(custom.sleep.status, sleep::Design::Random);
+        QCOMPARE(custom.sleep.backdrop, sleep::Mode::Page);
+        QCOMPARE(custom.off.status, sleep::Design::Bookmark);
+        QCOMPARE(custom.off.backdrop, sleep::Mode::Wallpaper);
+        QVERIFY(custom.off.wallpaper.isEmpty());
+
+        QVERIFY(fixture.press("rrSleepScreen"));
+        QTRY_VERIFY(fixture.visible("rrSleepGallery"));
+        QVERIFY(openCustom());
+        QTRY_VERIFY(fixture.visible("rrSleepEditorStatus"));
+        QCOMPARE(labelText(fixture, "rrSleepEditorStatus"), strings::get("sleep.status_random"));
+        QCOMPARE(labelText(fixture, "rrSleepEditorBackdrop"), strings::get("sleep.backdrop_page"));
+        QVERIFY(fixture.press("rrSleepEditorPoweredOff"));
+        QCOMPARE(labelText(fixture, "rrSleepEditorStatus"), strings::get("sleep.design_bookmark"));
+        QCOMPARE(labelText(fixture, "rrSleepEditorBackdrop"),
+                 strings::get("sleep.wallpaper_random"));
+    }
+
     void settingsSleepPrivacy()
     {
         const auto state = std::make_shared<test::SleepPresentationState>();
@@ -20422,12 +20490,23 @@ private slots:
         QTest::mouseRelease(grid, Qt::LeftButton, Qt::NoModifier, seal);
         QVERIFY(capture(fixture, name + "-sleep-arrange"));
         QVERIFY(fixture.press("rrSleepEditorDone"));
-        QTRY_VERIFY(!fixture.visible("rrSleepArrange"));
+        QTRY_VERIFY(!fixture.widget("rrSleepArrange"));
         // Custom is the second entry on page one. A tap opens its editor.
         QVERIFY(fixture.press("rrSleepGalleryPrevious"));
         QVERIFY(fixture.click(grid, QPoint(grid->width() * 3 / 4, grid->height() / 4)));
         QTRY_VERIFY(fixture.visible("rrSleepEditor"));
         QVERIFY(capture(fixture, name + "-sleep-custom"));
+        QVERIFY(fixture.press("rrSleepEditorBackdropNext"));
+        QVERIFY(fixture.press("rrSleepEditorStatusPrevious"));
+        QCOMPARE(labelText(fixture, "rrSleepEditorStatus"), strings::get("sleep.status_random"));
+        QVERIFY(capture(fixture, name + "-sleep-custom-random-status"));
+        QVERIFY(fixture.press("rrSleepEditorDone"));
+        QTRY_VERIFY(!fixture.widget("rrSleepEditor"));
+        QVERIFY(capture(fixture, name + "-sleep-gallery-custom-random-status"));
+        QVERIFY(fixture.click(grid, QPoint(grid->width() * 3 / 4, grid->height() / 4)));
+        QTRY_VERIFY(fixture.visible("rrSleepEditorStatus"));
+        QVERIFY(fixture.press("rrSleepEditorBackdropPrevious"));
+        QVERIFY(fixture.press("rrSleepEditorStatusNext"));
         QVERIFY(fixture.press("rrSleepEditorHelp"));
         QTRY_VERIFY(fixture.visible("rrSleepWallpaperHelpPopup"));
         QVERIFY(capture(fixture, name + "-sleep-wallpaper-help"));

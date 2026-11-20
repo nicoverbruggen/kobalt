@@ -526,6 +526,9 @@ private:
     // The design and text of the current sleep screen, without its image, and
     // what lies under its status so a battery change can repaint only that.
     sleep::Snapshot sleepShot;
+    // Sleep and power-off share one random status until the reader wakes.
+    sleep::Design pickedStatus = sleep::Design::Stock;
+    bool statusPickDue = true;
     QPointer<QLabel> privateSleepFrame;
     QVector<QImage> sleepUnderlay;
     // Other openings on this local date, loaded off the GUI thread.
@@ -903,6 +906,7 @@ private:
     QHash<int, sleep::Place> sleepPlaces() const;
     // `poweredOff` selects the power-off look of a Custom screen.
     sleep::Snapshot captureSleepScreen(bool poweredOff = false);
+    sleep::Design sleepStatusPick(bool poweredOff);
     // The clean backdrop of `look` at `size` in `shot`: its image, whether the
     // page is dimmed and where the cover sits. Leaves the image null when the
     // backdrop has nothing to show, such as a coverless book without a page.

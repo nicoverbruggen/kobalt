@@ -47,6 +47,8 @@ QString backdropLabel(sleep::Mode mode)
 
 QString statusLabel(sleep::Design status)
 {
+    if (status == sleep::Design::Random)
+        return strings::get("sleep.status_random");
     return status == sleep::Design::Cover ? strings::get("sleep.status_none")
                                           : SleepGallery::label(status);
 }
@@ -91,7 +93,8 @@ public:
         QVector<QPair<sleep::Place, QRect>> result;
         const auto area = screenArea();
         const QSize screen = editor->setup_.screen;
-        if (area.isEmpty() || screen.isEmpty())
+        if (area.isEmpty() || screen.isEmpty()
+            || (!editor->arranging() && editor->layer().status == sleep::Design::Random))
             return result;
         const auto look = editor->look();
         const auto status = sleep::statusDesign(look);
@@ -385,8 +388,7 @@ sleep::Look SleepEditor::look() const
 {
     if (setup_.arrange)
         return setup_.preset;
-    const auto &current = layer();
-    return { current.status, current.backdrop, sleep::tileFor(current.status) };
+    return sleep::look(layer());
 }
 
 sleep::Place SleepEditor::place() const

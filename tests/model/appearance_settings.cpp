@@ -64,6 +64,46 @@ int main()
                 "Invalid swipe direction did not fall back to normal");
     require(sleep::design({}) == sleep::Design::Bookmark,
             "Missing sleep preferences changed the default bookmark");
+    {
+        QJsonObject preferences;
+        sleep::setDesign(preferences, sleep::Design::Custom);
+        auto custom = sleep::custom(preferences);
+        require(!sleep::randomStatus(preferences),
+                "Existing Custom screens must keep their status");
+        custom.same = false;
+        custom.sleep = { sleep::Mode::Wallpaper, sleep::Design::Random, "cover.jpg" };
+        custom.off = { sleep::Mode::Page, sleep::Design::Caption, {} };
+        sleep::setCustom(preferences, custom);
+        preferences = appearance::cleanPreferences(preferences);
+        const auto saved = sleep::custom(preferences);
+        require(saved.sleep == custom.sleep && saved.off == custom.off && !saved.same
+                        && sleep::randomStatus(preferences)
+                        && !sleep::randomStatus(preferences, true),
+                "Random status changed a saved background or the separate power-off screen");
+        for (const auto choice : sleep::customStatuses) {
+            const auto next = sleep::pickStatus(choice);
+            require(sleep::eligibleStatus(next) && next != choice,
+                    "Random status repeated or picked an unavailable status");
+            auto look = sleep::look(preferences, false, choice);
+            const bool visible = choice != sleep::Design::Random && choice != sleep::Design::Cover;
+            require(sleep::eligibleStatus(choice) == visible && look.mode == sleep::Mode::Wallpaper
+                            && look.design == (visible ? choice : sleep::Design::Bookmark)
+                            && look.tile == sleep::tileFor(look.design),
+                    "Random status lost the wallpaper or resolved to the wrong indicator");
+        }
+        require(sleep::look(preferences, true).design == sleep::Design::Caption
+                        && sleep::uses(preferences, sleep::Mode::Wallpaper)
+                        && !sleep::uses(preferences, sleep::Mode::Cover),
+                "Random status changed the separate power-off indicator or backdrop preparation");
+        custom.same = true;
+        sleep::setCustom(preferences, custom);
+        require(sleep::randomStatus(preferences, true),
+                "Power-off did not follow the sleeping status");
+        sleep::setDesign(preferences, sleep::Design::Letter);
+        require(!sleep::randomStatus(preferences)
+                        && sleep::look(preferences).design == sleep::Design::Letter,
+                "A saved Custom status affected another gallery preset");
+    }
     for (const auto mode : sleep::modes) {
         for (const auto tile : sleep::tiles) {
             const QJsonObject legacy{ { sleep::preferenceKey, sleep::value(mode) },

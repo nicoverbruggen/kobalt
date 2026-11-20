@@ -14,6 +14,7 @@
 #include <QDir>
 #include <QFile>
 #include <QApplication>
+#include <QCryptographicHash>
 #include <QTemporaryDir>
 #include <QPointer>
 #include <QPainter>
@@ -23,6 +24,8 @@
 #include <QScopeGuard>
 #include <QSemaphore>
 #include <atomic>
+#include <array>
+#include <algorithm>
 #include "support/main_thread.h"
 #include <qpa/qwindowsysteminterface.h>
 
@@ -796,6 +799,138 @@ private slots:
         database.close();
     }
 
+    void homeRandomStatusKeepsBackground_data()
+    {
+        QTest::addColumn<bool>("privateBook");
+        QTest::addColumn<bool>("ambiguous");
+        QTest::newRow("known") << false << false;
+        QTest::newRow("private") << true << false;
+        QTest::newRow("ambiguous-last-book") << false << true;
+    }
+
+    void homeRandomStatusKeepsBackground()
+    {
+        using namespace kobalt;
+        QFETCH(bool, privateBook);
+        QFETCH(bool, ambiguous);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const storage::Paths paths{ directory.path() };
+        const auto connection = Device::getCurrentDevice()->getDbName();
+        const auto forgetConnection =
+                qScopeGuard([&] { QSqlDatabase::removeDatabase(connection); });
+        auto database = QSqlDatabase::addDatabase("QSQLITE", connection);
+        database.setDatabaseName(directory.path() + "/native.sqlite");
+        QVERIFY(database.open());
+        QSqlQuery query(database);
+        QVERIFY(query.exec(
+                "CREATE TABLE content (ContentID TEXT, ContentType INTEGER, DateLastRead TEXT, "
+                "Title TEXT, Attribution TEXT, ImageId TEXT, ___PercentRead INTEGER, ReadStatus INTEGER)"));
+        QVERIFY(query.exec(
+                "INSERT INTO content VALUES ('book', 6, '2026-11-14', 'Private title', 'Private author', '', 42, 1)"));
+        if (ambiguous)
+            QVERIFY(query.exec(
+                    "INSERT INTO content (ContentID, ContentType, DateLastRead) VALUES ('other', 6, '2026-11-14')"));
+        QVERIFY(storage::writeBookState(paths, "book",
+                                        { { "book", "book" },
+                                          { "percent", 42 },
+                                          { "hide_book_on_sleep_screen", privateBook } }));
+
+        MainWindowView window;
+        window.resize(QGuiApplication::primaryScreen()->size());
+        window.setStyleSheet("background-color: red;");
+        AbstractPowerView power(&window);
+        power.setGeometry(window.rect());
+        window.show();
+        nickel::HomeSleepScreen owner(paths, nullptr);
+        const auto pixels = [&] {
+            auto *frame = power.findChild<QWidget *>("rrSleepFrame");
+            if (!frame)
+                return QByteArray();
+            const auto image = frame->grab().toImage().convertToFormat(QImage::Format_RGB32);
+            return QCryptographicHash::hash(
+                    QByteArrayView(reinterpret_cast<const char *>(image.constBits()),
+                                   image.sizeInBytes()),
+                    QCryptographicHash::Sha256);
+        };
+        const auto show = [&](bool off) {
+            power.hide();
+            if (!owner.prepareHomeScreen(off))
+                return QByteArray();
+            power.show();
+            owner.present();
+            return pixels();
+        };
+        const auto choose = [&](sleep::Design sleeping, sleep::Design poweredOff) {
+            QJsonObject preferences;
+            sleep::Custom custom;
+            custom.same = false;
+            custom.sleep = { sleep::Mode::Page, sleeping, {} };
+            custom.off = { sleep::Mode::Plain, poweredOff, {} };
+            sleep::setCustom(preferences, custom);
+            sleep::setDesign(preferences, sleep::Design::Custom);
+            QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+        };
+        // Fixed statuses supply pixel references over both configured backgrounds.
+        using Frames = std::array<QByteArray, 3>;
+        QByteArray repeatedSleep;
+        const auto capture = [&](bool interruptedWake = false) {
+            battery = { 67, true, false };
+            Frames frames;
+            frames[0] = show(false);
+            if (interruptedWake) {
+                // Nickel can repeat sleep while the same book is already asleep.
+                owner.clearFrame();
+                repeatedSleep = show(false);
+            }
+            battery = { 67, false, false };
+            batteryChanged();
+            owner.present();
+            frames[1] = pixels();
+            // Cancelled wake drops the overlay but never completes the wake.
+            if (interruptedWake)
+                owner.clearFrame();
+            frames[2] = show(true);
+            owner.clear(); // Waking ends this choice.
+            return frames;
+        };
+        QVector<Frames> fixed;
+        for (const auto candidate : sleep::customStatuses) {
+            if (!sleep::eligibleStatus(candidate))
+                continue;
+            choose(candidate, candidate);
+            const auto reference = capture();
+            for (const auto &image : reference)
+                QVERIFY(!image.isEmpty());
+            QVERIFY2(!fixed.contains(reference),
+                     "The fixture must distinguish the eligible statuses");
+            fixed.append(reference);
+        }
+        choose(sleep::Design::Random, sleep::Design::Random);
+        const auto first = capture(true);
+        QCOMPARE(repeatedSleep, first[0]);
+        const auto second = capture();
+        QVERIFY(fixed.contains(first));
+        QVERIFY(fixed.contains(second));
+        QVERIFY(first != second);
+        // Direct power-off also uses its layer's random status.
+        const auto direct = show(true);
+        QVERIFY(std::any_of(fixed.begin(), fixed.end(),
+                            [&](const Frames &frames) { return frames[2] == direct; }));
+        owner.clear();
+        choose(sleep::Design::Seal, sleep::Design::Pill);
+        const auto manual = capture();
+        choose(sleep::Design::Random, sleep::Design::Pill);
+        const auto fixedOff = capture();
+        QCOMPARE(fixedOff[2], manual[2]);
+        choose(sleep::Design::Seal, sleep::Design::Random);
+        const auto fixedSleep = capture();
+        QCOMPARE(fixedSleep[0], manual[0]);
+        QCOMPARE(fixedSleep[1], manual[1]);
+        QVERIFY(std::any_of(fixed.begin(), fixed.end(),
+                            [&](const Frames &frames) { return frames[2] == fixedSleep[2]; }));
+    }
+
     void saveReadsCommittedTokenOffTheGuiThread()
     {
         QTemporaryDir directory;
@@ -991,6 +1126,44 @@ private slots:
             screen.prepare(true);
             screen.present();
             QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
+            QVERIFY(query.exec("DELETE FROM content WHERE ContentID = 'later'"));
+            // Random changes the status over the cached backdrop. A cached page
+            // cannot supply a Custom layer that asks for a different background.
+            using namespace kobalt;
+            sleep::Custom custom;
+            custom.sleep = { sleep::Mode::Plain, sleep::Design::Random, {} };
+            sleep::setDesign(preferences, sleep::Design::Custom);
+            for (const auto mode : { sleep::Mode::Plain, sleep::Mode::Page }) {
+                custom.sleep.backdrop = mode;
+                sleep::setCustom(preferences, custom);
+                QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+                screen.remember(snapshot, "book");
+                screen.finishSave();
+                nickel::HomeSleepScreen restored(paths, nullptr);
+                restored.prepare(true, true);
+                restored.present();
+                auto *image = power.findChild<QWidget *>("rrSleepFrame");
+                if (mode == sleep::Mode::Plain) {
+                    QVERIFY(!image);
+                    continue;
+                }
+                QVERIFY(image);
+                const auto rendered = image->grab().toImage().convertToFormat(QImage::Format_RGB32);
+                bool matches = false;
+                for (const auto candidate : sleep::customStatuses) {
+                    if (!sleep::eligibleStatus(candidate))
+                        continue;
+                    auto reference = snapshot;
+                    const auto look = sleep::look(preferences, true, candidate);
+                    reference.design = look.design;
+                    reference.tile = look.tile;
+                    reference.place = sleep::place(preferences, {}, look);
+                    matches |= rendered
+                            == reader::sleepDesignImage(reference.image, reference, 100,
+                                                        reader::SleepStatus::PoweredOff);
+                }
+                QVERIFY(matches);
+            }
             database.close();
         }
         QSqlDatabase::removeDatabase(connection);

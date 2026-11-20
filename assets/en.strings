@@ -996,6 +996,7 @@
 "sleep.backdrop_wallpaper" = "Wallpaper";
 "sleep.backdrop_plain" = "Blank";
 "sleep.status_none" = "None";
+"sleep.status_random" = "Random status";
 "sleep.wallpaper_random" = "Random wallpaper";
 "sleep.wallpaper_help_title" = "Wallpapers";
 "sleep.wallpaper_help" = "Did you know you can use your own wallpapers? Copy PNG or JPEG images to .adds/kobalt/wallpapers on your Kobo. Each image becomes a step in the Background row, and Random wallpaper picks a different one every time your Kobo sleeps.";

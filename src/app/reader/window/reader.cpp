@@ -511,6 +511,15 @@ void Reader::sleepBackdrop(const sleep::Look &look, QSize size, sleep::Snapshot 
     }
 }
 
+sleep::Design Reader::sleepStatusPick(bool poweredOff)
+{
+    if (statusPickDue && sleep::randomStatus(preferences, poweredOff)) {
+        pickedStatus = sleep::pickStatus(pickedStatus);
+        statusPickDue = false;
+    }
+    return pickedStatus;
+}
+
 sleep::Snapshot Reader::powerScreenSnapshot()
 {
     if (book->hideBookOnSleepScreen())
@@ -525,7 +534,7 @@ sleep::Snapshot Reader::powerScreenSnapshot()
         // get a fresh backdrop for power-off, so the sleeping status is not
         // drawn twice and a separate power-off look or wallpaper shows.
         if (sleep::design(preferences) == sleep::Design::Custom || !sleep::tiled(shot.design)) {
-            const auto off = sleep::look(preferences, true);
+            const auto off = sleep::look(preferences, true, sleepStatusPick(true));
             shot.design = off.design;
             shot.tile = off.tile;
             shot.place = sleep::place(preferences, book->sleepPositions(), off);
@@ -594,7 +603,8 @@ void Reader::loadTodayReading()
 sleep::Snapshot Reader::privateSleepSnapshot(bool poweredOff)
 {
     auto snapshot = sleep::privateSnapshot(page->size(), preferences, sleepPreviewSample(),
-                                           sleep::followsReading(preferences), poweredOff);
+                                           sleep::followsReading(preferences), poweredOff,
+                                           sleepStatusPick(poweredOff));
     // Nickel can change orientation after handoff. A later power screen keeps
     // the direction captured when the reader went to sleep.
     snapshot.orientation = lifecycleHidden && !sleepImage.isNull()
@@ -620,7 +630,7 @@ sleep::Snapshot Reader::captureSleepScreen(bool poweredOff)
     const qint64 pixels = qint64(page->width()) * page->height();
     const auto *modal = QApplication::activeModalWidget();
     const bool foreground = !modal || modal == this || isAncestorOf(modal);
-    auto look = sleep::look(preferences, poweredOff);
+    auto look = sleep::look(preferences, poweredOff, sleepStatusPick(poweredOff));
 #ifdef KOBALT_SCENARIO_PLAYER
     if (scenario::sleepPersistenceOptions().mode >= 0) {
         look.mode = sleep::Mode(scenario::sleepPersistenceOptions().mode);
@@ -876,6 +886,7 @@ void Reader::wakeReader()
     setProperty("reader_sleep_clean_pending", false);
     const bool menuStayedVisible = lifecycleHidden && topControls->isVisible();
     if (lifecycleHidden) {
+        statusPickDue = true;
         displayedMinute = {};
         wakePositionEpoch = book->advancePositionSaveEpoch();
     }

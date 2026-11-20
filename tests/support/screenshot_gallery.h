@@ -398,6 +398,8 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "sleep-greeting", "Night greeting" },
         { "sleep-arrange", "Move a sleep screen's status" },
         { "sleep-custom", "Custom lock screen" },
+        { "sleep-custom-random-status", "Custom lock screen with random status" },
+        { "sleep-gallery-custom-random-status", "Custom gallery preview with random status" },
         { "sleep-wallpaper-help", "Where to add wallpapers" },
         { "sleep-custom-power-off", "Custom lock screen: a different power-off screen" },
         { "settings-progress-percentages", "Progress percentages in Settings" },

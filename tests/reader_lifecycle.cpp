@@ -5296,6 +5296,135 @@ private slots:
                         .toBool());
     }
 
+    void sleepRandomStatusUntilWake_data()
+    {
+        QTest::addColumn<bool>("privateBook");
+        QTest::addColumn<bool>("randomSleep");
+        QTest::addColumn<bool>("randomOff");
+        for (const bool hidden : { false, true }) {
+            const QByteArray prefix = hidden ? "private-" : "";
+            QTest::newRow(prefix + "sleep-and-power-off") << hidden << true << true;
+            QTest::newRow(prefix + "sleep-only") << hidden << true << false;
+            QTest::newRow(prefix + "power-off-only") << hidden << false << true;
+        }
+    }
+
+    void sleepRandomStatusUntilWake()
+    {
+        QFETCH(bool, privateBook);
+        QFETCH(bool, randomSleep);
+        QFETCH(bool, randomOff);
+        const auto paths = testPaths();
+        QTemporaryDir wallpapers;
+        QVERIFY(wallpapers.isValid());
+        QImage wallpaper(32, 32, QImage::Format_RGB32);
+        wallpaper.fill(QColor(195, 65, 35));
+        QVERIFY(wallpaper.save(wallpapers.filePath("background.png")));
+        QJsonObject preferences;
+        sleep::Custom custom;
+        custom.same = false;
+        custom.sleep = { sleep::Mode::Wallpaper,
+                         randomSleep ? sleep::Design::Random : sleep::Design::Bookmark,
+                         "background.png" };
+        custom.off = { sleep::Mode::Plain,
+                       randomOff ? sleep::Design::Random : sleep::Design::Seal,
+                       {} };
+        sleep::setCustom(preferences, custom);
+        sleep::setDesign(preferences, sleep::Design::Custom);
+        QVERIFY(storage::writePreferences(paths.preferences(), preferences));
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        const auto state = std::make_shared<test::SleepPresentationState>();
+        BatteryStatus battery{ 67, false, false };
+        std::function<void()> changed;
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.sleepWallpaperDirectories = { wallpapers.path() };
+            services.battery = [&] { return battery; };
+            services.observeBattery = [&](QObject *, std::function<void()> notify) {
+                changed = std::move(notify);
+            };
+            services.presentation = [state](QWidget *) {
+                return std::make_unique<test::HostPresentation>(state);
+            };
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        QTRY_VERIFY(host.window()->property("sleepWallpaperReady").toBool());
+        host.book()->setHideBookOnSleepScreen(privateBook);
+        QVERIFY(changed);
+        auto previousPick = sleep::Design::Stock;
+        for (int cycle = 0; cycle < 2; ++cycle) {
+            battery.charging = false;
+            changed();
+            host.window()->sleepReader();
+            host.window()->sleepViewReady();
+            const auto off = host.window()->powerScreenSnapshot();
+            QCOMPARE(off.mode, sleep::Mode::Plain);
+            QCOMPARE(off.privateBook, privateBook);
+            QVERIFY(!off.image.isNull() && !state->image.isNull());
+            if (randomOff)
+                QVERIFY(sleep::eligibleStatus(off.design));
+            else
+                QCOMPARE(off.design, custom.off.status);
+            if (privateBook) {
+                QVERIFY(off.details.title.isEmpty() && off.details.author.isEmpty()
+                        && off.details.chapter.isEmpty() && off.coverPath.isEmpty());
+            }
+            // Identify the sleeping status from the presented frame. The power-off
+            // snapshot has the same statistics, but uses a different background.
+            const auto background = privateBook
+                    ? off.image
+                    : reader::sleepWallpaperBackground(wallpaper, off.image.size());
+            const auto sleepingFrame = [&](sleep::Design status, reader::SleepStatus power) {
+                auto shot = off;
+                shot.design = status;
+                shot.mode = privateBook ? sleep::Mode::Plain : custom.sleep.backdrop;
+                shot.tile = sleep::tileFor(status);
+                shot.place = sleep::defaultPlace(status);
+                return reader::sleepDesignImage(background, shot, battery.percent, power);
+            };
+            auto sleeping = sleep::Design::Stock;
+            for (const auto candidate : sleep::customStatuses) {
+                if (sleep::eligibleStatus(candidate)
+                    && state->image == sleepingFrame(candidate, reader::SleepStatus::Sleeping)) {
+                    sleeping = candidate;
+                    break;
+                }
+            }
+            QVERIFY(sleep::eligibleStatus(sleeping));
+            if (!randomSleep)
+                QCOMPARE(sleeping, custom.sleep.status);
+            if (randomSleep && randomOff)
+                QCOMPARE(sleeping, off.design);
+            const auto pick = randomSleep ? sleeping : off.design;
+            QVERIFY(pick != previousPick);
+            previousPick = pick;
+            host.window()->sleepReader();
+            host.window()->sleepViewReady();
+            battery.charging = true;
+            changed();
+            QCOMPARE(state->image, sleepingFrame(sleeping, reader::SleepStatus::Charging));
+            QCOMPARE(host.window()->powerScreenSnapshot().design, off.design);
+            QCOMPARE(state->presented, cycle + 1);
+            host.window()->wakeReader();
+            QTRY_VERIFY(host.window()->readyForPresentation());
+        }
+        const auto saved = storage::readPreferences(paths.preferences()).object;
+        QCOMPARE(saved.value(sleep::customKey), preferences.value(sleep::customKey));
+        // Power-off can also be the first request after waking.
+        const auto direct = host.window()->powerScreenSnapshot().design;
+        if (randomOff) {
+            QVERIFY(sleep::eligibleStatus(direct));
+            QVERIFY(direct != previousPick);
+        } else {
+            QCOMPARE(direct, custom.off.status);
+        }
+        QCOMPARE(host.window()->powerScreenSnapshot().design, direct);
+    }
+
     void sleepPowerOffWithoutCoverKeepsDesign_data()
     {
         QTest::addColumn<QString>("design");

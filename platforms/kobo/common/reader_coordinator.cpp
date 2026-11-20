@@ -273,7 +273,7 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     lifecycle->sleep = [this] {
         if (lifecycle->shuttingDown())
             return;
-        homeSleep->clear();
+        homeSleep->clearFrame();
         homeAfterClose = false;
         authorization->setBlocked(true);
         timer.stop();
@@ -309,7 +309,7 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         homeSleep->present();
     };
     lifecycle->beforeWake = [this] {
-        homeSleep->clear();
+        homeSleep->clearFrame();
         if (run.reader && !busy) {
             run.reader->prepareWake();
         }
@@ -376,15 +376,18 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         environment_.verifyAssets(this, "usb", {}, NativeLifecycle::stockStorageGeneration);
     };
     lifecycle->preparePowerScreen = [this](NativeLifecycle::Shutdown mode) {
-        homeSleep->clear();
-        if (mode == NativeLifecycle::Shutdown::Reboot)
+        if (mode == NativeLifecycle::Shutdown::Reboot) {
+            homeSleep->clear();
             return;
+        }
         // The reader hides after handing its sleep frame to Nickel, but still
         // owns this book and the clean backdrop needed for power-off.
         if (run.reader && !busy && !BrowserHandoff::activeFor(run.reader))
             homeSleep->preparePowerOff(run.reader->powerScreenSnapshot());
         else if (bindings_.enabled())
             homeSleep->prepareHomeScreen(true, busy || run.reader ? run.identity : QString());
+        else
+            homeSleep->clear();
     };
     lifecycle->prepareShutdown = [this](std::function<void()> ready) {
         homeAfterClose = false;

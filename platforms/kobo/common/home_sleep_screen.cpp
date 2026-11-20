@@ -270,6 +270,17 @@ void HomeSleepScreen::forget()
     remember({}, {});
 }
 
+sleep::Design HomeSleepScreen::statusPick(const QJsonObject &preferences, bool powerOff)
+{
+    if (!sleep::randomStatus(preferences, powerOff))
+        return sleep::Design::Stock;
+    if (!statusChosen) {
+        lastStatus = sleep::pickStatus(lastStatus);
+        statusChosen = true;
+    }
+    return lastStatus;
+}
+
 bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &openingIdentity)
 {
     auto identity = openingIdentity;
@@ -294,7 +305,7 @@ bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &opening
     }
     // A failed or ambiguous lookup cannot safely opt a private book back into
     // Nickel's cover. Use the neutral screen until its choice can be read.
-    clear();
+    clearFrame();
     const auto *screen = QGuiApplication::primaryScreen();
     const auto preferences = storage::readPreferences(paths.preferences()).object;
     sleep::Snapshot source;
@@ -316,10 +327,11 @@ bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &opening
         source.percent = completed ? 100 : qBound(0, bookState.value("percent").toInt(), 100);
         source.progress = strings::get("sleep.percent_read").arg(source.percent);
     }
+    const auto chosen = statusPick(preferences, powerOff);
     source.place = sleep::place(preferences, bookState.value("sleep_positions").toObject(),
-                                sleep::look(preferences, powerOff));
+                                sleep::look(preferences, powerOff, chosen));
     snapshot = sleep::privateSnapshot(screen ? screen->size() : QSize(800, 1200), preferences,
-                                      source, false, powerOff);
+                                      source, false, powerOff, chosen);
     if (source.privateBook && source.design == sleep::Design::Overlay
         && sleep::design(preferences) == sleep::Design::Overlay && !source.image.isNull())
         snapshot.image = source.image;
@@ -332,7 +344,7 @@ bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIde
 {
     if (preparePrivateScreen(powerOff, openingIdentity))
         return true;
-    clear();
+    clearFrame();
     if (!presentation->supportsSleepScreen())
         return false;
     const auto database = databasePath();
@@ -351,7 +363,7 @@ bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIde
     const auto preferences = storage::readPreferences(paths.preferences());
     if (preferences.status != storage::ReadStatus::Ok)
         return false;
-    auto look = sleep::look(preferences.object, powerOff);
+    auto look = sleep::look(preferences.object, powerOff, statusPick(preferences.object, powerOff));
     if (look.mode == sleep::Mode::Stock)
         return false;
     // Outside the reader, Nickel's own screen is the page. Without it, the
@@ -436,7 +448,7 @@ void HomeSleepScreen::prepare(bool enabled, bool powerOff)
 {
     if (enabled && preparePrivateScreen(powerOff))
         return;
-    clear();
+    clearFrame();
     if (!enabled || !presentation->supportsSleepScreen())
         return;
     {
@@ -448,7 +460,8 @@ void HomeSleepScreen::prepare(bool enabled, bool powerOff)
     const auto preferences = storage::readPreferences(paths.preferences());
     if (preferences.status != storage::ReadStatus::Ok)
         return;
-    const auto look = sleep::look(preferences.object, powerOff);
+    const auto look =
+            sleep::look(preferences.object, powerOff, statusPick(preferences.object, powerOff));
     const auto mode = look.mode;
     const auto token = readToken(databasePath());
     if (!token.isEmpty() && token == rememberedToken && remembered.mode == mode
@@ -547,6 +560,12 @@ void HomeSleepScreen::present()
 }
 
 void HomeSleepScreen::clear()
+{
+    statusChosen = false;
+    clearFrame();
+}
+
+void HomeSleepScreen::clearFrame()
 {
     presentation->clearSleepScreen();
     snapshot = {};

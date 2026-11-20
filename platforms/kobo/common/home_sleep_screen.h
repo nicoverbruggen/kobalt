@@ -34,6 +34,9 @@ public:
 
     void persistPowerOff(const QString &identity);
     void present();
+    // Drop the overlay while a sleep or tentative wake is in progress.
+    void clearFrame();
+    // A completed wake or a different owner ends the current random status.
     void clear();
     // Waits for the background write of a remembered screen.
     void finishSave();
@@ -53,6 +56,9 @@ private:
     bool poweredOff = false, invalidated = false;
     std::function<bool()> prepareFonts;
     void finishFonts(bool ready);
+    sleep::Design statusPick(const QJsonObject &preferences, bool powerOff);
+    sleep::Design lastStatus = sleep::Design::Stock;
+    bool statusChosen = false;
     void composeHome();
     void compose();
     std::unique_ptr<WindowPresentation> presentation;

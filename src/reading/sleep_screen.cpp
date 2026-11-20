@@ -1,7 +1,22 @@
 #include "sleep_screen.h"
 #include "render/page_refresh_regions.h"
+#include <chrono>
+#include <random>
 
 namespace kobalt::sleep {
+Design pickStatus(Design previous)
+{
+    QVector<Design> candidates;
+    for (auto entry : customStatuses)
+        if (eligibleStatus(entry) && entry != previous)
+            candidates.append(entry);
+
+    // The draw happens at sleep. Seed from the clock without reading a device.
+    static thread_local std::minstd_rand random(
+            static_cast<unsigned>(std::chrono::steady_clock::now().time_since_epoch().count()));
+    return candidates.at(std::uniform_int_distribution<int>(0, candidates.size() - 1)(random));
+}
+
 bool needsImageCleanup(const QImage &frame, bool colorDisplay)
 {
     if (frame.isNull())

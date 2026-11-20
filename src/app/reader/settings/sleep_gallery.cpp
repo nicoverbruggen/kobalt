@@ -384,7 +384,7 @@ sleep::Look SleepGallery::look(sleep::Design design, bool poweredOff) const
 {
     if (design == sleep::Design::Custom) {
         const auto &layer = poweredOff && !custom_.same ? custom_.off : custom_.sleep;
-        return { layer.status, layer.backdrop, sleep::tileFor(layer.status) };
+        return sleep::look(layer);
     }
     auto tile = sleep::Tile::None;
     if (design == sleep::Design::Bookmark)

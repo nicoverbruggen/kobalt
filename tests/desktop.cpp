@@ -9632,6 +9632,34 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.selectWord(page, word));
         QTRY_VERIFY(fixture.visible("rrAnnotationAddNote"));
         QVERIFY(!fixture.visible("rrAnnotationEditNote"));
+
+        if (annotationDatabaseEnabled()) {
+            // Reopen with compact metadata, then make the pending detail read fail.
+            fixture.window.readerWindow()->close();
+            QTRY_VERIFY(fixture.window.idle());
+            fixture.window.openBook(book);
+            QTRY_COMPARE(opened.count(), 2);
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+            QVERIFY(fixture.startAnnotation(page, word));
+            QTRY_VERIFY(fixture.visible("rrAnnotationAddNote"));
+            const auto state = fixture.state();
+            HighlightStore store(fixture.paths.annotations(), state.value("book").toString(),
+                                 state.value("fingerprint").toString().toLatin1(), "Fixture",
+                                 fixture.paths.database());
+            QVERIFY(store.load());
+            QCOMPARE(store.highlights().size(), 1);
+            store.setHighlights({});
+            QVERIFY(store.save());
+            QPointer<QPushButton> action =
+                    qobject_cast<QPushButton *>(fixture.widget("rrAnnotationAddNote"));
+            QVERIFY(action);
+            QSignalSpy delivered(action, &QPushButton::clicked);
+            action->click();
+            QVERIFY(fixture.visible("rrAnnotationLoadError"));
+            QCOMPARE(delivered.count(), 1);
+            QTRY_VERIFY(action.isNull());
+        }
     }
 
     void quickAnnotations_data()

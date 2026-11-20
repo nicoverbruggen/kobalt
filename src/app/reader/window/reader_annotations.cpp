@@ -314,7 +314,13 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
     auto *card = annotationPopover->card();
     auto *rows = card->rows();
     while (auto *item = rows->takeAt(0)) {
-        delete item->widget();
+        if (auto *row = item->widget()) {
+            // Actions can rebuild the card from their own clicked signal.
+            // Detach the old rows so widget lookups find the replacement.
+            row->hide();
+            row->setParent(nullptr);
+            row->deleteLater();
+        }
         delete item;
     }
     if (highlights->error() == "overlap" && !annotationDraft->range().start.isEmpty())
@@ -1522,13 +1528,7 @@ void Reader::showSavedAnnotationAt(const QString &id, QRect anchor, bool navigat
                 strings::get("annotations.edit_note"), [this, id] { openNoteEditor(id); } },
               { "rrAnnotationAppearance", ui::ControlIcon::Styling,
                 strings::get(colorAnnotations() ? "annotations.color" : "annotations.style"),
-                [this, id, anchor, navigate] {
-                    // Rebuilding the card deletes this button, so wait until its
-                    // click has been delivered.
-                    qt::later(0, this, [this, id, anchor, navigate] {
-                        showSavedAppearance(id, anchor, navigate, true);
-                    });
-                } },
+                [this, id, anchor, navigate] { showSavedAppearance(id, anchor, navigate, true); } },
               { "rrAnnotationEdit", ui::ControlIcon::EditHighlight,
                 strings::get("annotations.edit"),
                 [this, id, navigate, anchor] {
@@ -1581,13 +1581,9 @@ void Reader::showSavedAppearance(const QString &id, QRect anchor, bool navigate,
     };
     if (colorStep) {
         // Discard leaves the choices unsaved and returns to the note.
-        actions.append({ "rrAnnotationDiscard", ui::ControlIcon::Undo,
-                         strings::get("annotations.discard"), [this, id, anchor, navigate] {
-                             // Rebuilding the card deletes this button.
-                             qt::later(0, this, [this, id, anchor, navigate] {
-                                 showSavedAnnotationAt(id, anchor, navigate);
-                             });
-                         } });
+        actions.append(
+                { "rrAnnotationDiscard", ui::ControlIcon::Undo, strings::get("annotations.discard"),
+                  [this, id, anchor, navigate] { showSavedAnnotationAt(id, anchor, navigate); } });
     } else {
         actions.append({ "rrAnnotationAddNote", ui::ControlIcon::Note,
                          strings::get("annotations.add_note"),

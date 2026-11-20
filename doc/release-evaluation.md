@@ -153,7 +153,7 @@ The report starts with `Resource gate: pass` or `fail`, and its last section lis
 - a resource scenario of the base is missing from the target;
 - a resource metric is `slower` or `higher` than its band and floor allow.
 
-A metric that is `faster`, `lower` or `noisy` does not fail the gate. Add `-DGATE=ON` to the comparison to make the command fail with the gate:
+A metric that is `faster`, `lower` or `noisy` does not fail the gate. The report summary names each noisy resource metric. Repeat the measurement with more runs before drawing a conclusion about that metric. Add `-DGATE=ON` to the comparison to make the command fail with the gate:
 
 ```sh
 cmake -DRECORD_BASELINE=ON -P platforms/eval/run.cmake

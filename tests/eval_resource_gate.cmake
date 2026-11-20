@@ -69,6 +69,16 @@ check(write fail "`resources.turn.forward:profile_transactions` is above 0 in 1 
 compare(base cpu cpu)
 check(cpu fail "`resources.turn.forward:cpu_ms` is slower")
 
+# Turn CPU doubled, but the spread is too large to judge the change.
+write_run(noisy "0,0,0,0" "2,2,14,14" "-50000,-50000,-50000,-50000")
+compare(base noisy noisy)
+check(noisy pass "resources.turn.forward:cpu_ms is noisy")
+file(READ "${root}/noisy/report.json" report)
+string(JSON warning GET "${report}" flags 0)
+if(NOT warning MATCHES "resources.turn.forward:cpu_ms is noisy")
+    message(FATAL_ERROR "Noisy turn CPU was missing from the report summary: ${warning}")
+endif()
+
 file(MAKE_DIRECTORY "${root}/missing")
 file(WRITE "${root}/missing/meta.json" "${meta}")
 file(WRITE "${root}/missing/perf-1.json" [=[{"kind":"kobalt-perf","scenarios":[

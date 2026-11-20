@@ -658,7 +658,10 @@ QJsonObject compareMetrics(const Run &base, const Run &target, bool device,
         rows.append(row);
         const auto shownRatio =
                 baseMs > 0 && targetMs > 0 ? QString::number(ratio, 'f', 2) : QStringLiteral("n/a");
-        if (verdict != "same" && verdict != "noisy") {
+        if (verdict == "noisy" && b.resource) {
+            flags.append(QString("%1 is noisy (%2 → %3 %4). Measure again with more runs.")
+                                 .arg(it.key(), number(baseMs), number(targetMs), b.unit));
+        } else if (verdict != "same" && verdict != "noisy") {
             const bool unexpected = touched.isEmpty();
             flags.append(QString("%1 %2 %3× (%4 → %5 %6)%7")
                                  .arg(it.key(), verdict, shownRatio, number(baseMs),
@@ -798,7 +801,7 @@ int main(int argc, char **argv)
                  !failed.isEmpty() ? "Evaluation contains failed or missing results.\n"
                          : !timed  ? "Timings were not compared: a run has no timing results.\n"
                          : summary.isEmpty() ? "No timing changes beyond the noise bands.\n"
-                                             : "Timing changes:\n\n" + summary.join('\n') + "\n");
+                                             : "Metrics to review:\n\n" + summary.join('\n') + "\n");
     report["flags"] = flags;
     // Two runs of the same subject show how far each metric moves by itself.
     // Each band allows 1.5 times the largest such move on a ratio scale, and at

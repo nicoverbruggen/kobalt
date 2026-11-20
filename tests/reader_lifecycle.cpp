@@ -21,6 +21,7 @@
 #include "app/reader/settings/sleep_gallery.h"
 #include "app/reader_window.h"
 #include "ui/controls/page_scrubber.h"
+#include "ui/controls/rows.h"
 #include "ui/controls/panels.h"
 #include <QtGui/private/qeventpoint_p.h>
 #include "ui/dialogs/modals.h"
@@ -12827,9 +12828,10 @@ private slots:
             }
             engineActivity().pause(false);
             QTRY_VERIFY(!empty->isVisible());
-            auto *first = host.window()->findChild<QPushButton *>("rrAnnotation0");
+            auto *first = dynamic_cast<ui::ListRow *>(
+                    host.window()->findChild<QPushButton *>("rrAnnotation0"));
             QVERIFY(first && first->isVisible() && first->isEnabled());
-            QCOMPARE(first->accessibleName(), QString("First passage"));
+            QCOMPARE(first->titleLabel()->text(), QString("First passage"));
             if (pass == 0) {
                 host.window()->findChild<QPushButton *>("rrBookmarkListClose")->click();
                 QVERIFY(!list->isVisible());

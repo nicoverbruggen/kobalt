@@ -1056,11 +1056,28 @@ int main(int argc, char **argv)
             previous.status = 1;
             previous.location = "old-position";
         }
-        const auto original = qt::object({ { "schema", 1 },
-                                           { "book", identity },
-                                           { "future_optional", "keep" },
-                                           { "dictionary_id", "old-dictionary" },
-                                           { "nickel_progress", previous.json() } });
+        auto original = qt::object({ { "schema", 1 },
+                                     { "book", identity },
+                                     { "future_optional", "keep" },
+                                     { "dictionary_id", "old-dictionary" },
+                                     { "nickel_progress", previous.json() } });
+        auto prior = open();
+        bool marked = false;
+        prior->chapterBoundaryActions(1, [&](const auto &actions) {
+            for (const auto &action : actions)
+                if (action.start && !action.reset)
+                    marked = action.apply();
+            require(marked, "Cannot mark a main-text start");
+        });
+        waitUntil([&] { return marked && !prior->busy(); });
+        const auto marks = prior->mainTextMarks();
+        original["main_text_marks"] = marks;
+        original["fingerprint"] = QString::fromLatin1(prior->sourceHash());
+        original[textpresets::bookKey] = "classic";
+        prior.reset();
+        require(storage::writePreferences(paths.preferences(),
+                                          qt::object({ { textpresets::newBookKey, "modern" } })),
+                "Cannot choose a new-book preset");
         require(storage::writeBookState(paths, identity, original),
                 "Cannot seed native unread checkpoint");
         // Nickel's coordinator resets the opening snapshot without replacing
@@ -1072,9 +1089,15 @@ int main(int argc, char **argv)
         const auto hash = session->sourceHash();
         ReadingBook book(std::move(session), paths.bookState(identity), paths, identity, hash,
                          std::make_unique<Bridge>(calls), calls.current, calls.current);
+        require(book.session()->savedStateMatched() && book.session()->mainTextMarks() == marks,
+                "A native unread reset lost the matching chapter marks");
+        require(book.textPreset() == (newlyUnread ? "modern" : "classic"),
+                "A native unread reset must select the new-book preset even with chapter marks");
         QJsonObject snapshot;
         require(book.checkpoint(&snapshot), "Cannot checkpoint native unread state");
         const auto saved = storage::readBookState(paths, identity).object;
+        require(saved.value(textpresets::bookKey).toString() == book.textPreset(),
+                "The first checkpoint lost the selected preset");
         require(saved.contains("future_optional") == !newlyUnread
                         && saved.contains("dictionary_id") == !newlyUnread,
                 "Checkpoint ignored or repeated Nickel's explicit unread reset");

@@ -1696,9 +1696,10 @@ int run(int argc, char **argv)
         require(session->pages() > 5, "Burst fixture has too few pages");
         require(session->go(2), "Cannot reach burst starting page");
         rendered.exec();
+        const auto burstStart = session->state()["position"].toString();
         QVector<int> turnFrames;
         std::function<void()> checkBurstCompletion;
-        session->updated = [&] {
+        const auto recordTurn = [&] {
             if (!session->busy()) {
                 turnFrames.append(session->page());
                 // Check the deliberate idle gap before buffered dispatch is queued.
@@ -1706,6 +1707,7 @@ int run(int argc, char **argv)
                     checkBurstCompletion();
             }
         };
+        session->updated = recordTurn;
         const auto finishBurst = [&](const std::function<bool()> &completed) {
             if (!session->busy() && completed())
                 return;
@@ -1781,7 +1783,29 @@ int run(int argc, char **argv)
             if (!session->busy())
                 rendered.quit();
         };
-        require(session->go(session->pages() - 2), "Cannot reach final-page boundary");
+        if (session->continuesAfter()) {
+            const int lastLocalPage = session->pages() - 1;
+            const auto chapterStart = session->state()["slice_start"];
+            require(session->go(lastLocalPage - 1), "Cannot reach the chapter boundary");
+            rendered.exec();
+            turnFrames.clear();
+            boundaryCalls = 0;
+            session->updated = recordTurn;
+            require(session->turn(1) && session->turn(1), "Cannot buffer a cross-chapter turn");
+            finishBurst([&] { return turnFrames.size() >= 2; });
+            require(turnFrames == QVector<int>({ lastLocalPage, 0 }) && boundaryCalls == 0
+                            && session->state()["slice_start"] != chapterStart,
+                    "Buffered turn did not display the chapter end and the next chapter start");
+            session->updated = [&] {
+                if (!session->busy())
+                    rendered.quit();
+            };
+        }
+        require(session->goToFraction(1), "Cannot reach the end of the book");
+        rendered.exec();
+        require(!session->continuesAfter() && session->nextPage() == session->page(),
+                "End-of-book fixture has another page");
+        require(session->turn(-1), "Cannot reach the book's penultimate page");
         rendered.exec();
         session->updated = {};
         boundary = 0;
@@ -1795,7 +1819,7 @@ int run(int argc, char **argv)
             if (!session->busy())
                 rendered.quit();
         };
-        require(session->go(2), "Cannot restore page after boundary tests");
+        require(session->goTo(burstStart), "Cannot restore page after boundary tests");
         require(!session->canTurn() && !session->turn(1), "A jump accepted a pending page turn");
         rendered.exec();
         require(session->turn(1) && session->turn(1),

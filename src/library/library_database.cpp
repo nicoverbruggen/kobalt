@@ -138,10 +138,11 @@ bool saveRows(QSqlDatabase &db, const Index &index)
     const auto statement = "INSERT OR REPLACE INTO library_books(" + columns.join(',') + ") SELECT "
             + placeholders.join(',') + " WHERE NOT EXISTS(SELECT 1 FROM library_books WHERE "
             + matches.join(" AND ") + ')';
+    if (!index.books.isEmpty() && !query.prepare(statement))
+        return false;
     for (const auto &book : index.books) {
-        auto object = book.json();
-        if (!query.prepare(statement))
-            return false;
+        const auto object = book.json();
+        int parameter = 0;
         for (int repeat = 0; repeat < 2; ++repeat)
             for (int i = 0; i < fields.size(); ++i) {
                 const auto value = object.value(fields[i]);
@@ -149,11 +150,11 @@ bool saveRows(QSqlDatabase &db, const Index &index)
                     auto bytes = value.toString().toUtf8();
                     if (bytes.isNull())
                         bytes = QByteArray("");
-                    query.addBindValue(bytes);
+                    query.bindValue(parameter++, bytes);
                 } else if (boolColumn(i))
-                    query.addBindValue(value.toBool() ? 1 : 0);
+                    query.bindValue(parameter++, value.toBool() ? 1 : 0);
                 else
-                    query.addBindValue(value.toDouble());
+                    query.bindValue(parameter++, value.toDouble());
             }
         if (!query.exec())
             return false;

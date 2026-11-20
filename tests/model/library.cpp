@@ -493,6 +493,51 @@ int main(int argc, char **argv)
                 "A removed book with a leading FEFF returned");
     }
     {
+        const auto directory = root.filePath("book-batch");
+        Index legacy;
+        auto first = book("a", "First", "", 11);
+        auto last = book("z", "Last", "Author", 22, 33, true);
+        const auto removed = book("old", "Removed", "Other", 44);
+        for (const auto &entry : { first, last, removed })
+            legacy.books.insert(entry.key, entry);
+        require(QDir().mkpath(directory) && legacy.save(directory + "/library.json"),
+                "Could not create the legacy Library batch");
+        Index index;
+        require(index.loadDatabase(directory) && index.books.size() == 3
+                        && index.books.value(first.key).json() == first.json()
+                        && index.books.value(last.key).json() == last.json(),
+                "Import reused another book's values");
+        index.removeBook(removed.key);
+        index.books[first.key].title = "Changed first";
+        index.books[last.key].title = "Changed last";
+        require(kobalt::storage::profileTransaction(
+                        directory,
+                        [](QSqlDatabase &db) {
+                            return QSqlQuery(db).exec(
+                                    "CREATE TEMP TRIGGER reject_last BEFORE INSERT ON library_books "
+                                    "WHEN NEW.key='z' BEGIN SELECT RAISE(ABORT,'last book'); END");
+                        }),
+                "Could not install the Library write failure");
+        Index saved;
+        require(!index.saveDatabase(directory) && saved.loadDatabase(directory)
+                        && saved.books.size() == 3 && saved.books.contains(removed.key)
+                        && saved.books.value(first.key).json() == first.json()
+                        && saved.books.value(last.key).json() == last.json(),
+                "A failed book write committed part of the batch");
+        require(kobalt::storage::profileTransaction(directory,
+                                                    [](QSqlDatabase &db) {
+                                                        return QSqlQuery(db).exec(
+                                                                "DROP TRIGGER reject_last");
+                                                    }),
+                "Could not clear the Library write failure");
+        require(index.saveDatabase(directory) && saved.loadDatabase(directory)
+                        && saved.books.size() == 2 && !saved.books.contains(removed.key)
+                        && saved.books.value(first.key).json()
+                                == index.books.value(first.key).json()
+                        && saved.books.value(last.key).json() == index.books.value(last.key).json(),
+                "Retry lost a book change or restored a removed book");
+    }
+    {
         const auto folder = root.filePath("folder-writes");
         Index index;
         require(index.loadDatabase(folder), "Could not open Library folder fixture");

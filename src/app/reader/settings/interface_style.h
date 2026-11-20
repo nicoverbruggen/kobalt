@@ -32,8 +32,11 @@ inline QString savedThemeId(const QJsonObject &preferences)
         return id;
     if (preferences.value("playful_theme").toBool())
         return QStringLiteral("playful");
-    return preferences.value("ui_font_face").toString().isEmpty() ? QStringLiteral("classic")
-                                                                  : QStringLiteral("custom");
+    // The prototype's font override and colorful icons are custom choices.
+    return preferences.value("ui_font_face").toString().isEmpty()
+                    && !preferences.value("ui_colorful_icons").toBool()
+            ? QStringLiteral("classic")
+            : QStringLiteral("custom");
 }
 
 inline InterfaceStyle customInterfaceStyle(const QJsonObject &preferences)

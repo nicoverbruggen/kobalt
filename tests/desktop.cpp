@@ -13214,6 +13214,20 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         gate->release.release();
     }
 
+    // Settings from the theme prototype select the theme they described.
+    void prototypeThemeKeys()
+    {
+        QCOMPARE(reader::savedThemeId({}), QStringLiteral("classic"));
+        QCOMPARE(reader::savedThemeId({ { "playful_theme", true } }), QStringLiteral("playful"));
+        QCOMPARE(reader::savedThemeId({ { "ui_font_face", "Bitter" } }), QStringLiteral("custom"));
+        const QJsonObject colorful{ { "ui_colorful_icons", true } };
+        QCOMPARE(reader::savedThemeId(colorful), QStringLiteral("custom"));
+        QVERIFY(reader::savedInterfaceStyle(colorful).icons == ui::iconStyleFromId("pastel"));
+        QCOMPARE(
+                reader::savedThemeId({ { "ui_theme", "notebook" }, { "ui_colorful_icons", true } }),
+                QStringLiteral("notebook"));
+    }
+
     void activityCopyNavigation()
     {
         const QDate today(2026, 11, 17);

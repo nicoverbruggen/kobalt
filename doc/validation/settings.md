@@ -10,6 +10,8 @@
 
 `lifecycle.settingsChoiceSheetReusesRows` switches between two Settings choices and reopens the first after rotation. It checks the row identities, current selection, card bounds and callback after Escape and selection. `lifecycle.settingsFontSheetReusesRows` reopens the font chooser for another role, checks its title, default label, selected page and callback, then changes a font in the catalog and selects its replacement.
 
+`desktop.prototypeThemeKeys` checks that settings from the interface theme prototype select Playful, Custom or Classic as `doc/storage.md` describes, and that a saved `ui_theme` wins.
+
 `desktop.settingsCloseFonts` opens and closes Settings with custom main, monospace and reading-strip fonts and a custom strip weight. It checks that Restore defaults keeps the active fonts until the preference write succeeds, including after a failed close and retry.
 
 `desktop.settingsOpeningCover` checks the cover default, saving the logo choice, reopening with the logo and restoring the cover. `ui.openingCoverDisabled` checks that cached and late cover delivery cannot replace the logo or repaint the view, while progress, reopening status and native-reader handoff remain available. The loading gallery includes logo and logo-reopening screens. These checks use headless hosts; physical e-ink refresh remains unverified.

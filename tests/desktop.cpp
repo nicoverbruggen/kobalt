@@ -14062,11 +14062,35 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
         openPrologueBody(fixture);
+        // Read the card's accessible children the way a screen reader finds the painted rows.
+        const auto rowDescriptions = [&](const char *page) {
+            QHash<QString, QString> result;
+            auto *root = QAccessible::queryAccessibleInterface(fixture.widget(page));
+            for (int i = 0; root && i < root->childCount(); ++i) {
+                auto *row = root->child(i);
+                if (row && !row->state().invisible)
+                    result.insert(row->text(QAccessible::Name), row->text(QAccessible::Description));
+            }
+            return result;
+        };
+        QHash<QString, QString> records, sessions;
         activityTour(
-                fixture, [](const QString &) { return true; },
+                fixture,
+                [&](const QString &scene) {
+                    if (scene == "stats-activity-records")
+                        records = rowDescriptions("rrActivityRecords");
+                    if (scene == "stats-activity-open-book")
+                        sessions = rowDescriptions("rrActivityBookPage");
+                    return true;
+                },
                 [](const QString &, const char *) {});
         if (QTest::currentTestFailed())
             return;
+        QVERIFY(records.value("Most in one day").contains("3 h 5 min"));
+        QVERIFY(records.value("Longest streak").contains("31 days"));
+        const auto session = sessions.value("Today, 07:48");
+        QVERIFY(session.contains("14 min"));
+        QVERIFY(session.contains('%'));
         QVERIFY(fixture.press("rrNavStats"));
         QTRY_VERIFY(fixture.visible("rrGraphActivity") || fixture.visible("rrGraphActivityCell"));
         const char *entry =

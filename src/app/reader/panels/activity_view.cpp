@@ -1426,6 +1426,15 @@ public:
         time = milliseconds;
         number = count;
         units = unit;
+        setAccessibleName(title);
+        QStringList description;
+        if (!number.isEmpty())
+            description << number + QLatin1Char(' ') + units;
+        else if (time > 0)
+            description << duration(time);
+        if (!caption.isEmpty())
+            description << caption;
+        setAccessibleDescription(description.join(QStringLiteral(" · ")));
         update();
     }
 
@@ -2375,7 +2384,10 @@ public:
     {
         start = when;
         detail = range;
-        time = milliseconds;
+        length = duration(milliseconds);
+        setAccessibleName(start);
+        setAccessibleDescription(detail.isEmpty() ? length
+                                                  : length + QStringLiteral(" · ") + detail);
         update();
     }
 
@@ -2391,7 +2403,6 @@ protected:
         const int captionHeight = detail.isEmpty() ? 0 : ui::interfaceLineHeight(caption);
         const int top =
                 (height() - nameHeight - (captionHeight ? ui::px(4) + captionHeight : 0)) / 2;
-        const auto length = duration(time);
         const int lengthWidth = ui::interfaceTextWidth(length, name) + 2;
         drawText(painter, QRect(width() - chrome::inset - lengthWidth, 0, lengthWidth, height()),
                  length, Qt::AlignRight | Qt::AlignVCenter, name, ink);
@@ -2405,8 +2416,7 @@ protected:
     }
 
 private:
-    QString start, detail;
-    qint64 time = 0;
+    QString start, detail, length;
 };
 } // namespace
 

@@ -823,8 +823,7 @@ NightLayout nightLayout(const Frame &frame)
     return layout;
 }
 
-void paintNight(QPainter &painter, const Frame &frame, const Content &content, QSize size,
-                const Palette &colors)
+void paintNightSky(QPainter &painter, const Frame &frame, QSize size, const Palette &colors)
 {
     paper(painter, size, colors);
 
@@ -862,6 +861,11 @@ void paintNight(QPainter &painter, const Frame &frame, const Content &content, Q
     painter.setBrush(colors.paper);
     painter.drawEllipse(QRectF(frame.right(3) - inner, frame.y(5), inner, inner));
     painter.restore();
+}
+
+void paintNightText(QPainter &painter, const Frame &frame, const Content &content,
+                    const Palette &colors)
+{
     const auto layout = nightLayout(frame);
     QFont word = serif(15 * frame.u, true);
     const QFont detail = sans(3 * frame.u);
@@ -1302,10 +1306,13 @@ QVector<QRect> letterAreas(const Frame &frame, QSize size)
 // ----------------------------------------------------------------
 
 // Draws what a design adds to its backdrop before the status underlay is saved.
-void paintGround(QPainter &painter, QSize size, const sleep::Snapshot &shot)
+void paintGround(QPainter &painter, QSize size, const sleep::Snapshot &shot, SleepStatus status)
 {
     if (shot.design == Design::Caption)
         paintCaptionFade(painter, Frame(size), size, shot.place);
+    else if (shot.design == Design::Night)
+        paintNightSky(painter, Frame(size), size,
+                      palette(shot.dark || status == SleepStatus::PoweredOff));
 }
 
 // Draws a design that is not tiled over a backdrop already on the painter.
@@ -1333,7 +1340,7 @@ void paintDesign(QPainter &painter, QSize size, const sleep::Snapshot &shot, con
         paintWidgets(painter, frame, content, size, cover, colors);
         break;
     case Design::Night:
-        paintNight(painter, frame, content, size, colors);
+        paintNightText(painter, frame, content, colors);
         break;
     case Design::Ring:
         paintRing(painter, frame, content, size, colors);
@@ -1397,7 +1404,7 @@ QImage sleepDesignImage(QImage backdrop, const sleep::Snapshot &source, int batt
         dimSleepPage(backdrop, snapshot.dark);
     {
         QPainter ground(&backdrop);
-        paintGround(ground, backdrop.size(), snapshot);
+        paintGround(ground, backdrop.size(), snapshot, status);
     }
     if (underlay)
         *underlay = sleepStatusUnderlay(backdrop, sleepStatusAreas(backdrop.size(), snapshot));
@@ -1492,12 +1499,13 @@ QRect repaintSleepStatus(QImage &screen, const QVector<QImage> &underlay,
     QPainter screenPainter(&screen);
     for (int index = 0; index < areas.size(); ++index) {
         const auto &area = areas[index];
-        QImage patch = index < underlay.size() && underlay[index].size() == area.size()
-                ? underlay[index].copy()
-                : screen.copy(area);
+        const bool saved = index < underlay.size() && underlay[index].size() == area.size();
+        QImage patch = saved ? underlay[index].copy() : screen.copy(area);
         QPainter painter(&patch);
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
         painter.translate(-area.topLeft());
+        if (snapshot.design == Design::Night && (!saved || status == SleepStatus::PoweredOff))
+            paintGround(painter, screen.size(), snapshot, status);
         paintDesign(painter, screen.size(), snapshot, {}, batteryPercent, status);
         painter.end();
         screenPainter.drawImage(area.topLeft(), patch);
@@ -1586,7 +1594,7 @@ void paintSleepPreview(QPainter &painter, const QRectF &target, QSize size, cons
         QImage tileCover;
         if (drawsCover(snapshot.design))
             tileCover = cover;
-        paintGround(painter, size, shot);
+        paintGround(painter, size, shot, status);
         paintDesign(painter, size, shot, tileCover, -1, status);
     }
     painter.restore();

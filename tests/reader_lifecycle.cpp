@@ -5931,6 +5931,16 @@ private slots:
             QVERIFY(sleeping != poweredOff);
             const auto areas = reader::sleepStatusAreas(size, shot);
             QVERIFY(!areas.isEmpty());
+            // Night's battery line is empty while asleep. Its saved background
+            // includes the stars, ready for the next charging update.
+            if (design == sleep::Design::Night) {
+                QVERIFY(!underlay.isEmpty());
+                QCOMPARE(underlay.first(), sleeping.copy(areas.first()));
+                auto withoutUnderlay = sleeping;
+                reader::repaintSleepStatus(withoutUnderlay, {}, shot, 67,
+                                           reader::SleepStatus::Charging);
+                QCOMPARE(withoutUnderlay, charging);
+            }
             QRegion region;
             for (const auto &area : areas) {
                 QVERIFY(QRect(QPoint(), size).contains(area));

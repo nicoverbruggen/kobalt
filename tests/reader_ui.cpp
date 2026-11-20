@@ -1189,8 +1189,11 @@ private slots:
         }
         QCOMPARE(editor.text(), rows.join(""));
         auto *symbols = panel->findChild<QPushButton *>("widgetKeyboardSymbols");
+        QCOMPARE(symbols->accessibleName(), strings::get("keyboard.symbols"));
         symbols->click();
+        QCOMPARE(symbols->accessibleName(), strings::get("keyboard.letters"));
         symbols->click();
+        QCOMPARE(symbols->accessibleName(), strings::get("keyboard.symbols"));
         QCOMPARE(panel->findChild<QPushButton *>("widgetKey1_0")->text(), rows[0].left(1));
     }
 

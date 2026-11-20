@@ -188,7 +188,6 @@ public:
         layout->addLayout(actions);
         shift = new ShiftButton(panel);
         symbols = new Button(panel);
-        symbols->setAccessibleName(strings::get("keyboard.symbols"));
         shift->setObjectName("widgetKeyboardShift");
         symbols->setObjectName("widgetKeyboardSymbols");
         shift->setCheckable(true);
@@ -555,6 +554,8 @@ private:
         shift->setAccessibleName(
                 strings::get(caseMode == Case::Locked ? "keyboard.caps_lock" : "keyboard.shift"));
         const auto &rows = symbolPage ? symbolRows : letterRows;
+        symbols->setAccessibleName(
+                strings::get(symbolPage ? "keyboard.letters" : "keyboard.symbols"));
         symbols->setText(symbolPage ? QStringLiteral("ABC") : QStringLiteral("123"));
         shift->setVisible(!symbolPage);
         const int spacing = lastRow->spacing();

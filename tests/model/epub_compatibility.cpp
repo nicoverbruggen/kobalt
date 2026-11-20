@@ -8,7 +8,7 @@
 #include "lvimg.h"
 #include <QGuiApplication>
 #include <QFileInfo>
-#include <QTemporaryFile>
+#include <cstring>
 #include <QtEndian>
 #include "publication/zip_resource.h"
 #include <QDir>
@@ -157,8 +157,42 @@ void checkDtbookChapterWindow()
             "Text in nested DTBook section was lost");
 }
 
-// Move the central directory and all resources after mimetype past the ZIP32
-// offset limit. A sparse file gives the reader real 64-bit seeks without a large fixture.
+// Present the fixture as a seekable archive with a zero-filled gap after mimetype.
+class SparseArchive : public QIODevice
+{
+public:
+    SparseArchive(const QByteArray &bytes, qint64 first, qint64 gap)
+        : bytes_(bytes), first_(first), gap_(gap)
+    {
+        open(ReadOnly | Unbuffered);
+    }
+
+    qint64 size() const override { return bytes_.size() + gap_; }
+
+protected:
+    qint64 readData(char *data, qint64 capacity) override
+    {
+        const qint64 start = pos();
+        const qint64 count = qBound<qint64>(0, size() - start, capacity);
+        const qint64 prefix = qBound<qint64>(0, first_ - start, count);
+        const qint64 tail = qBound<qint64>(0, first_ + gap_ - start, count);
+        if (prefix)
+            std::memcpy(data, bytes_.constData() + start, prefix);
+        if (tail > prefix)
+            std::memset(data + prefix, 0, tail - prefix);
+        if (tail < count)
+            std::memcpy(data + tail, bytes_.constData() + (start + tail - gap_), count - tail);
+        return count;
+    }
+
+    qint64 writeData(const char *, qint64) override { return -1; }
+
+private:
+    const QByteArray &bytes_;
+    const qint64 first_;
+    const qint64 gap_;
+};
+
 void checkLargeArchiveOffsets(QByteArray bytes)
 {
     const auto read32 = [&](int p) {
@@ -197,13 +231,7 @@ void checkLargeArchiveOffsets(QByteArray bytes)
     set64(record + 48, gap + directory);
     set64(locator + 8, gap + record);
     set32(eocd + 16, 0xffffffff);
-    QTemporaryFile large;
-    require(large.open() && large.write(bytes.constData(), first) == first
-                    && large.seek(gap + first)
-                    && large.write(bytes.constData() + first, bytes.size() - first)
-                            == bytes.size() - first
-                    && large.flush(),
-            "Could not create sparse ZIP64 fixture");
+    SparseArchive large(bytes, first, gap);
     QString error;
     Publication publication;
     require(publication.inspect(large, &error), qPrintable(error));

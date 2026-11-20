@@ -11571,7 +11571,7 @@ private slots:
         QTest::addColumn<QString>("handoff");
         for (const auto *value :
              { "ordinary-sleep", "recovered", "persistent", "sleep-during-retry", "required",
-               "repaired-before-usb", "low-battery" })
+               "repaired-before-usb", "low-battery", "parked-low-battery" })
             QTest::newRow(value) << QString::fromLatin1(value);
     }
 
@@ -11584,6 +11584,8 @@ private slots:
         ReaderFixture host(paths, testFonts, testPlaceholder);
         host.configureServices = [&](ReaderHostServices &services) {
             services.suspended = [&] { return suspended; };
+            if (handoff == "parked-low-battery")
+                services.battery = [] { return BatteryStatus{ 5, false, false }; };
         };
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);
@@ -11657,6 +11659,19 @@ private slots:
         QCOMPARE(failures.load(), 3);
         QCOMPARE(completions, 0);
         QCOMPARE(position(), before);
+        if (handoff == "parked-low-battery") {
+            // The fault stays. At 5% the parked reader must not turn each
+            // standby poll into another write that refuses standby.
+            const auto beforeStandby = nickel::readerStandbyCheck(reader);
+            QTRY_VERIFY(beforeStandby());
+            for (int poll = 0; poll < 5; ++poll) {
+                QCoreApplication::processEvents();
+                QVERIFY2(beforeStandby(), qPrintable(QString("standby poll %1").arg(poll)));
+            }
+            QCOMPARE(failures.load(), 3);
+            QCOMPARE(position(), before);
+            return;
+        }
         if (handoff == "recovered") {
             // A later routine write can leave the profile WAL unsynced even
             // when the failed reader checkpoint has finished all its attempts.

@@ -612,7 +612,7 @@ bool NativeLifecycle::interceptUsbWorkflow(QObject *manager)
     engineActivity().pause(false);
     diagnostic("usb-save-start");
     const auto handoff = [guard, request] {
-        if (!guard || request != guard->generation || !guard->usbPending
+        if (!guard || request != guard->generation || !guard->usbPending || guard->storageReady
             || !guard->pendingWorkflow) {
             return;
         }
@@ -620,12 +620,14 @@ bool NativeLifecycle::interceptUsbWorkflow(QObject *manager)
         // finish after disconnect has cancelled it and reopened the profile.
         sessionStorageAvailable.store(false);
         storage::closeProfile(true);
-        if (guard->storageReleased)
-            guard->storageReleased();
-        auto *manager = guard->pendingWorkflow.data();
-        guard->pendingWorkflow.clear();
         guard->storageReady = true;
         diagnostic("usb-release-complete");
+        if (guard->storageReleased)
+            guard->storageReleased();
+        if (!guard || request != guard->generation || !guard->pendingWorkflow)
+            return;
+        auto *manager = guard->pendingWorkflow.data();
+        guard->pendingWorkflow.clear();
         // Resume the whole caller, not just its aboutToConnect signal. Nickel
         // can now clear its views and databases without racing our save.
         nativeUsbWorkflow(manager);
@@ -682,7 +684,7 @@ bool NativeLifecycle::interceptUsb(QObject *manager)
 
 void NativeLifecycle::finishUsb()
 {
-    if (!usbPending || !storageReady || !pendingGadget)
+    if (!usbPending || !storageReady || pendingWorkflow || !pendingGadget)
         return;
     auto *manager = pendingGadget.data();
     pendingGadget.clear();

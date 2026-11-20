@@ -460,6 +460,23 @@ int main(int argc, char **argv)
         require(available() && assetRestores == restores + 1,
                 "Cancelled gadget handoff stranded asset verification");
     }
+    // A disconnect can arrive while the workflow's storage-release observer runs.
+    {
+        const auto released = lifecycle.storageReleased;
+        const int restores = assetRestores;
+        lifecycle.storageReleased = [&] {
+            released();
+            kobalt::NativeLifecycle::interceptUsb(usb);
+            require(!handoffs, "USB gadget started before its pending workflow resumed");
+            kobalt::NativeLifecycle::disconnected();
+        };
+        kobalt::NativeLifecycle::interceptUsbWorkflow(usb);
+        drains.takeLast()();
+        lifecycle.storageReleased = released;
+        require(available() && !lifecycle.blocked() && assetRestores == restores + 1,
+                "Disconnect during storage release did not restore the profile and assets");
+        require(!workflows && !handoffs, "Disconnect during storage release started Nickel USB");
+    }
     // Both native USB entry points must release the connection before handoff.
     for (bool fullWorkflow : { false, true }) {
         QSemaphore release;

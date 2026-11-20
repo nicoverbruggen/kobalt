@@ -330,10 +330,32 @@ static void mixedSpreadHandoff(const QDir &fixtures)
                             && hybrid.layoutRevision() == layout,
                     "A numbered jump to a one-column cover must keep the title off screen");
         }
-        // A passage jump can adopt the cover and title together.
+        // A passage jump can adopt the cover and title together. A lookup that
+        // ran before it answers for the chapter still shown. A lookup queued
+        // behind it can carry chapter page numbers into the whole book, so it
+        // is dropped and its caller asks again.
+        BookmarkLocations before, during;
+        int answered = 0;
+        QEventLoop lookups;
+        QTimer::singleShot(10000, &lookups, &QEventLoop::quit);
+        const auto answer = [&](BookmarkLocations *into) {
+            return [&, into](BookmarkLocations locations) {
+                *into = std::move(locations);
+                if (++answered == 2)
+                    lookups.quit();
+            };
+        };
+        hybrid.bookmarkLocations({ coverPosition }, answer(&before));
         ReaderLocationProbe::offer(hybrid, ReaderLocationProbe::revision(hybrid));
         require(hybrid.goTo(coverPosition), "Cannot jump to the cover");
+        hybrid.bookmarkLocations({ coverPosition }, answer(&during));
         frame.exec();
+        if (answered < 2)
+            lookups.exec();
+        require(answered == 2, "A bookmark lookup across the adopting jump did not answer");
+        require(before.pages.size() == 1,
+                "A lookup that ran before the adopting jump lost its chapter answer");
+        require(during.pages.isEmpty(), "A lookup queued behind the adopting jump was not dropped");
         require(!hybrid.state().contains("book_fraction") && hybrid.image() == coverAndTitle
                         && hybrid.chapterTitle() == whole.chapterTitle(),
                 "A jump must adopt the whole book with the cover and title together");

@@ -54,4 +54,4 @@ A day counts as a reading day from one minute of reading. A session counts from 
 
 Books groups copies with the same title and author under one monthly row. Tap the row to see each copy’s reading time and sessions. Hiding or deleting activity applies to the selected copy. A missing title or author keeps the copy separate. Hiding Activity under Hidden features leaves reading history and Stats available.
 
-Activity reads the history on the profile writer thread, computes its summary there too and shows it when it arrives. It writes only the cover cache, the choice that the first-opening alert was shown, the list of hidden books and deletions. The open book adds its time that is not saved yet.
+Activity reads the history on the profile writer thread, computes its summary there too and shows it when it arrives. It writes only the cover cache, the choice that the first-opening alert was shown, the list of hidden books and deletions. A hide or deletion that fails shows a notice, also when it finishes after Activity has closed. The open book adds its time that is not saved yet.

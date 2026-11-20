@@ -13322,6 +13322,43 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.visible("rrActivityWriteError"));
         QVERIFY(fixture.press("rrActivityWriteErrorConfirm"));
         QTRY_VERIFY(fixture.visible("rrActivityBookPage"));
+        // A failed removal that finishes after Activity closed is still reported.
+        {
+            struct Gate
+            {
+                QSemaphore release;
+                std::atomic_bool entered{ false };
+            };
+
+            auto gate = std::make_shared<Gate>();
+            storage::RecordWriter blocker;
+            auto unblock = qScopeGuard([gate] { gate->release.release(); });
+            blocker.post(
+                    [gate] {
+                        gate->entered.store(true);
+                        return gate->release.tryAcquire(1, 3000);
+                    },
+                    {});
+            QTRY_VERIFY(gate->entered.load());
+            QVERIFY(fixture.press("rrActivityDeleteBook"));
+            QTRY_VERIFY(fixture.visible("rrActivityDelete"));
+            QVERIFY(fixture.press("rrActivityConfirmDelete"));
+            QVERIFY(fixture.press("rrActivityClose"));
+            QTRY_VERIFY(!fixture.visible("rrActivity"));
+            QVERIFY(!fixture.visible("rrActivityWriteError"));
+        }
+        QTRY_VERIFY(fixture.visible("rrActivityWriteError"));
+        QVERIFY(fixture.press("rrActivityWriteErrorConfirm"));
+        QTRY_VERIFY(!fixture.visible("rrActivityWriteError"));
+        QTRY_VERIFY(fixture.visible("rrGraphActivity") || fixture.visible("rrGraphActivityCell"));
+        QVERIFY(fixture.press(fixture.visible("rrGraphActivity") ? "rrGraphActivity"
+                                                                 : "rrGraphActivityCell"));
+        QTRY_VERIFY(fixture.visible("rrActivityOverview"));
+        QVERIFY(fixture.press("rrActivityBooksTab"));
+        QTRY_VERIFY(fixture.visible("rrActivityBooks"));
+        QCOMPARE(fixture.widget("rrActivityBook1")->accessibleName(), QString("War and Peace"));
+        QVERIFY(fixture.press("rrActivityBook1"));
+        QTRY_VERIFY(fixture.visible("rrActivityBookPage"));
         QVERIFY(changeSql("DROP TRIGGER refuse_history"));
         QVERIFY(fixture.press("rrActivityDeleteBook"));
         QTRY_VERIFY(fixture.visible("rrActivityDelete"));

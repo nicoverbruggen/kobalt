@@ -88,8 +88,8 @@ void Reader::hideActivityBook(const QString &key, bool hidden)
     if (!activityOpen() || !activityRecords || !book)
         return;
     QPointer<Reader> guard(this);
-    activityRecords->hide(key, hidden, [guard, opening = activityOpening](bool ok) {
-        if (guard && guard->activityOpening == opening)
+    activityRecords->hide(key, hidden, [guard](bool ok) {
+        if (guard)
             guard->finishActivityEdit(ok);
     });
 }
@@ -121,14 +121,15 @@ void Reader::deleteActivityBook(const QString &key, const QString &title)
         if (!remove || !guard || !guard->activityOpen() || guard->activityOpening != opening
             || !guard->activityRecords || !guard->book)
             return;
-        guard->activityRecords->remove(key, guard->book->readingOpeningId(),
-                                       [guard, key, opening](bool ok) {
-                                           if (!guard || guard->activityOpening != opening)
-                                               return;
-                                           if (ok && guard->activityOpen())
-                                               guard->activityView->closeBook(key);
-                                           guard->finishActivityEdit(ok);
-                                       });
+        guard->activityRecords->remove(
+                key, guard->book->readingOpeningId(), [guard, key, opening](bool ok) {
+                    if (!guard)
+                        return;
+                    // Only the visit that asked shows the removed book.
+                    if (ok && guard->activityOpen() && guard->activityOpening == opening)
+                        guard->activityView->closeBook(key);
+                    guard->finishActivityEdit(ok);
+                });
     };
     connect(choice->secondaryButton(), &QPushButton::clicked, choice, [finish] { finish(false); });
     connect(choice->primaryButton(), &QPushButton::clicked, choice, [finish] { finish(true); });
@@ -139,9 +140,11 @@ void Reader::deleteActivityBook(const QString &key, const QString &title)
     refresh();
 }
 
+// The result can arrive after Activity closed or opened again. A failure is
+// reported either way, and the open lists and Stats read the history again.
 void Reader::finishActivityEdit(bool ok)
 {
-    if (!ok && activityOpen())
+    if (!ok)
         showNotice({ strings::get("activity.title"), strings::get("activity.change_not_saved"),
                      QStringLiteral("rrActivityWriteError") });
     if (activityOpen() || !chapterGraph->isHidden())

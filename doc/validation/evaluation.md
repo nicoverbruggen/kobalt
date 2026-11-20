@@ -2,7 +2,7 @@
 
 Label `evaluation`. Build `mac-tests`, then run `ctest --preset mac -L evaluation` from `platforms/desktop/`. `ctest --preset mac -N -L evaluation` lists its tests.
 
-These checks cover the performance-mode timing events, the release-evaluation result formats, the evaluation lock and the scenario player's sleep, KOSync and Wi-Fi steps and its resource samples. `platform.scenario-sleep` runs the scenario player with a controlled host. Rendering-mode checks use a headless window. [Release evaluation](../release-evaluation.md) describes the comparison workflow.
+These checks cover the performance-mode timing events, the release-evaluation result formats, the evaluation lock and the scenario player's sleep, KOSync and Wi-Fi steps and its resource samples. `platform.scenario-sleep` runs the scenario player with a controlled host. Rendering-mode checks use a headless window. [Release evaluation](../release-evaluation.md) describes the comparison workflow. A fresh opening needs a cache-removal callback. A standalone cache-removal step requires the host to report that the book is closed.
 
 ## Performance and release evaluation
 

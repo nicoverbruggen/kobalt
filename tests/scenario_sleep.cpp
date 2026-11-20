@@ -467,6 +467,33 @@ int main(int argc, char **argv)
     require(openedModes == QVector<int>({ 0, 2 }),
             "scenario reused an unknown or different rendering mode, or reopened a matching book");
 
+    auto cacheStep = [&](QJsonObject step) {
+        auto scenario = turn;
+        scenario.remove("book");
+        scenario["steps"] = QJsonArray{ step, QJsonObject{ { "mark", true } },
+                                        QJsonObject{ { "mark_end", true } } };
+        return kobalt::scenario::run(QJsonObject{ { "scenarios", QJsonArray{ scenario } } },
+                                     library, options)
+                .first()
+                .value("status")
+                .toString();
+    };
+    const auto openings = openedModes.size();
+    require(cacheStep({ { "open", "test" }, { "fresh", true } }) == "skipped"
+                    && openedModes.size() == openings && reader.isVisible(),
+            "fresh open changed the reader without a cache removal callback");
+    int removals = 0;
+    library.forget = [&](const QString &) { ++removals; };
+    require(cacheStep({ { "forget", "test" } }) == "failed" && removals == 0 && reader.isVisible(),
+            "the player removed caches while the book was open");
+    reader.close();
+    require(cacheStep({ { "forget", "test" } }) == "completed" && removals == 1,
+            "the player did not remove caches after the book closed");
+    library.reader = {};
+    require(cacheStep({ { "forget", "test" } }) == "skipped" && removals == 1,
+            "the player removed caches without knowing whether a book was open");
+    reader.show();
+
     const QJsonObject opening{ { "scenarios", QJsonArray{ turn } } };
     kobalt::scenario::Host incomplete;
     int attempts = 0;

@@ -275,6 +275,12 @@ public:
                 unsupported = true;
                 return "the host cannot remove caches";
             }
+            if (!host.reader) {
+                unsupported = true;
+                return "the host cannot report whether a book is open";
+            }
+            if (host.reader())
+                return "close the book before removing caches";
             host.forget(step.value("forget").toString());
             return {};
         }
@@ -454,13 +460,17 @@ public:
             unsupported = true;
             return "the host cannot open " + key;
         }
+        if (fresh && !host.forget) {
+            unsupported = true;
+            return "the host cannot remove caches";
+        }
         if (auto *reader = host.reader()) {
             reader->close();
             current.clear();
             if (!closed())
                 return "the open book did not close";
         }
-        if (fresh && host.forget)
+        if (fresh)
             host.forget(key);
         events.skip();
         if (!host.open(key)) {

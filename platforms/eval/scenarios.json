@@ -21,6 +21,7 @@
       "repeat": 3,
       "paths": ["src/reading/", "src/engine/", "src/publication/", "dependencies/"],
       "book": "war-and-peace",
+      "rendering": "accurate",
       "fixture": {"mode": "accurate", "cache": "cold", "first_page": "opening page, may be cover or front matter"},
       "steps": [
         {"close": true},
@@ -38,6 +39,7 @@
       "repeat": 3,
       "paths": ["src/reading/", "src/engine/", "src/publication/", "dependencies/"],
       "book": "war-and-peace",
+      "rendering": "hybrid",
       "fixture": {"mode": "hybrid", "cache": "cold", "first_page": "opening page, may be cover or front matter", "full_ready_timer": "third page turn through full-document-ready"},
       "steps": [
         {"close": true},

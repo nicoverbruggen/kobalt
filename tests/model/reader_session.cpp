@@ -1655,15 +1655,27 @@ int run(int argc, char **argv)
         require(session->error().isEmpty() && session->image().size() == QSize(900, 758),
                 "A viewport change without a menu reused the old layout");
         const auto landscapeImage = session->image();
+        const bool expectChapter = renderingMode::effective(renderingMode::Mode::Hybrid)
+                != renderingMode::Mode::Accurate;
         for (const auto size : { QSize(758, 900), QSize(900, 758) }) {
             renderReports.clear();
             session->resize(size);
             rendered.exec();
             require(session->error().isEmpty() && session->state()["position"] == rotationAnchor,
                     "A cached session rotation lost its source position");
-            for (const auto &report : renderReports)
-                require(!report.active || report.stage != OpeningStage::Pages,
-                        "A cached session rotation paginated the whole book");
+            // On rotation Hybrid returns to the chapter. Rebuilding its slice can
+            // report Pages. Accurate reuses the whole book's alternate layout.
+            const bool chapter = !session->state()["slice_start"].toString().isEmpty();
+            require(chapter == expectChapter,
+                    "Rotation used the wrong layout for the selected rendering mode");
+            if (chapter) {
+                require(session->state()["continues_after"].toBool(),
+                        "Rotating the first chapter paginated to the end of the book");
+            } else {
+                for (const auto &report : renderReports)
+                    require(!report.active || report.stage != OpeningStage::Pages,
+                            "A cached Accurate rotation paginated the whole book");
+            }
             require(session->image()
                             == (size.width() < size.height() ? portraitImage : landscapeImage),
                     "A cached session rotation changed page pixels");

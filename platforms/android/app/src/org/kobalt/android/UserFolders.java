@@ -33,6 +33,7 @@ final class UserFolders {
     private static boolean accepts(int kind, String name) {
         String lower = name.toLowerCase(Locale.ROOT);
         if (kind == 2) return lower.endsWith(".svg");
+        if (name.startsWith("._")) return false; // AppleDouble metadata beside a font or dictionary.
         if (kind == 1) return lower.endsWith(".ttf") || lower.endsWith(".otf");
         return lower.endsWith(".ifo") || lower.endsWith(".idx") || lower.endsWith(".syn")
                 || lower.endsWith(".dict.dz")

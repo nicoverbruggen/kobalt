@@ -86,7 +86,14 @@ public final class UserFoldersTest {
         check(read(root, "custom-pins/unknown.svg").equals("two"), "Cancellation changed active mirror");
         source.folders.put("fonts", new ArrayList<>(Arrays.asList(new UserFolders.Entry("family", "family", true, 0, 1))));
         source.file("family", "Regular.ttf", "font", "font bytes", 1);
+        source.file("family", "._Regular.ttf", "font-metadata", "AppleDouble", 1);
         cache.sync(1, "fonts", source);
+        check(!Files.exists(root.resolve("fonts/family/._Regular.ttf")), "AppleDouble font mirrored");
+        source.file("dicts", "words.ifo", "dictionary", "dictionary info", 1);
+        source.file("dicts", "._words.ifo", "dict-metadata", "AppleDouble", 1);
+        cache.sync(0, "dicts", source);
+        check(read(root, "dictionaries/words.ifo").equals("dictionary info"), "Dictionary not mirrored");
+        check(!Files.exists(root.resolve("dictionaries/._words.ifo")), "AppleDouble dictionary mirrored");
         check(read(root, "fonts/family/Regular.ttf").equals("font bytes"), "Nested fonts not mirrored");
         cache.sync(2, "", source);
         check(!Files.exists(root.resolve("custom-pins")) && Files.exists(root.resolve("fonts")), "Clearing one folder changed another");

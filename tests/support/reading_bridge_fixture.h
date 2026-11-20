@@ -18,7 +18,7 @@ struct HostProgress
     bool changed = false, failWrite = false, writeBlocked = false;
     bool busyBeforeWrite = false;
     QString writeError = "The database is busy.";
-    int writes = 0, writeAttempts = 0, openingAttempts = 0;
+    int reads = 0, writes = 0, writeAttempts = 0, openingAttempts = 0;
     bool holdFinish = false, failFinish = false, finishPending = false;
     int finishAttempts = 0;
     // The write counts when the last finish began, so a test can check
@@ -98,7 +98,11 @@ public:
         return nickel::nativeSyncPolicy(progress->current.book);
     }
 
-    ReadingProgress read(QString *) const override { return progress->current; }
+    ReadingProgress read(QString *) const override
+    {
+        ++progress->reads;
+        return progress->current;
+    }
 
     bool takeChange() override { return std::exchange(progress->changed, false); }
 

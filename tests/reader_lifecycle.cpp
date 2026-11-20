@@ -12276,8 +12276,11 @@ private slots:
         QTRY_VERIFY(!host.session()->busy());
         QVERIFY(host.session()->go(0));
         QTRY_VERIFY(!host.session()->busy());
+        host.progress->publish(host.progress->current);
+        const int initialReads = host.progress->reads;
         host.window()->progressTick();
-        QTest::qWait(200);
+        QCOMPARE(host.progress->reads, initialReads + 1);
+        QVERIFY(!host.book()->pendingProgress());
         QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
         QString mappingError;
         const auto precise = host.session()->savedNativePosition(&mappingError);
@@ -12300,8 +12303,9 @@ private slots:
             return;
         }
         // Another device saved a position later in the book.
-        host.progress->publish(
-                { identity, "OEBPS/c3.xhtml#kobo.8.1:7", sameTimestamp ? 100 : 200, 1, true });
+        const ReadingProgress synced{ identity, "OEBPS/c3.xhtml#kobo.8.1:7",
+                                      sameTimestamp ? 100 : 200, 1, true };
+        host.progress->publish(synced);
         if (closeBook)
             host.window()->close();
         else
@@ -12331,8 +12335,11 @@ private slots:
         else
             QCOMPARE(host.session()->page(), before);
         // The choice is remembered: the same saved position does not ask again.
+        host.progress->publish(synced);
+        const int reads = host.progress->reads;
         host.window()->progressTick();
-        QTest::qWait(200);
+        QCOMPARE(host.progress->reads, reads + 1);
+        QVERIFY(!host.book()->pendingProgress());
         QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
     }
 
@@ -12386,7 +12393,7 @@ private slots:
         // The platform reports a newer position while Settings is open.
         host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true });
         host.window()->progressTick();
-        QTest::qWait(200);
+        QVERIFY(host.progress->changed);
         QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
         QVERIFY(click(canvas, close));
         // Settings closes directly to reading.
@@ -12436,14 +12443,14 @@ private slots:
         // The platform reports a newer position while Bookmarks is open.
         host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true });
         host.window()->progressTick();
-        QTest::qWait(100);
+        QVERIFY(host.progress->changed);
         QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrBookmarkListClose")));
         QTRY_VERIFY(!list->isVisible());
         // The menu still covers the page, so the choice keeps waiting.
         QVERIFY(top->isVisible());
         host.window()->progressTick();
-        QTest::qWait(100);
+        QVERIFY(host.progress->changed);
         QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
         QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
         QTRY_VERIFY(!top->isVisible());
@@ -12504,8 +12511,11 @@ private slots:
         QVERIFY(click(canvas, keep));
         QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
         QCOMPARE(host.session()->state().value("position"), original);
+        host.progress->publish(host.progress->current);
+        const int reads = host.progress->reads;
         host.window()->progressTick();
-        QTest::qWait(200);
+        QCOMPARE(host.progress->reads, reads + 1);
+        QVERIFY(!host.book()->pendingProgress());
         QVERIFY(!host.window()->findChild<QWidget *>("rrSyncedPosition"));
         QCOMPARE(host.session()->state().value("position"), original);
     }

@@ -4,6 +4,7 @@ Each book has one record in `kobalt.sqlite`: `book_state(identity, format, revis
 
 - The `book` and `fingerprint` fields identify the publication.
 - The record stores the canonical reading position, book-specific text preferences, dictionary choices and native progress reconciliation fields.
+- The Android and desktop libraries read main-text progress from `percent`, regardless of the scope selected for Stats.
 - Global layout preferences stay in `reader-settings.json`.
 - Bookmarks and annotations live in their own tables, not in this record.
 - Legacy JSON book state uses a host prefix, the SHA-256 of the UTF-8 book identity and `.json`. Its `schema` is 1. Profile preparation imports these files; see [Database and recovery](database.md#profile-migration-and-cleanup).
@@ -19,7 +20,7 @@ Each book has one record in `kobalt.sqlite`: `book_state(identity, format, revis
 
 ## Mark as unread and reopening
 
-- Mark as unread replaces the record with an identity-only checkpoint. A later opening does not restore the removed fields.
+- When Nickel marks a book as unread, Kobalt keeps the book identity and the fields listed below.
 - It clears the reading position, book-specific text preferences, `page_estimate` and `suppress_finish_prompt`.
 - It keeps annotations, `hide_book_on_sleep_screen`, `sleep_positions` and `main_text_marks` (with `fingerprint`).
 - Reopening a finished book resets only the reading position and the finished status. Book-specific preferences and annotations stay.
@@ -42,7 +43,7 @@ All fields keep record format 1, legacy JSON schema 1 and database schema 4. Mis
 
 ### Main text marks
 
-- The manual `start` and `end` each store the TOC entry’s zero-based `index`, `title`, source `position` and resolved `anchor`. For an older choice without an anchor, the reader checks the index and title before resolving the boundary.
+- The manual `start` and `end` each store the TOC entry’s zero-based `index`, `title`, source `position` and resolved `anchor`. For an older choice without an anchor, the reader checks the index and title. It ignores the choice if the entry no longer matches. If the entry matches, the reader saves the resolved anchor or removes the choice if it cannot resolve the boundary.
 - If the boundaries cross on load, the reader drops the manual end first. It drops the manual start only if the range is still invalid.
 - The start points to the first included passage. The end points to the first excluded passage, or the end of the spine.
 - The reader recalculates page numbers after reflow. The resume position and bookmarks keep their source locations.

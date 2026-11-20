@@ -26,7 +26,7 @@ The parser format is the `formatVersion` argument of `documentCacheChecksum` in 
 - Bump the format when parser or preprocessing changes make a cached DOM unsafe to reuse. The book is then parsed again on its next opening.
 - CREngine also rejects incompatible engine formats. Density, user CSS and bold-reading variants keep their own checks.
 
-The rendering policy is `rendering_version` in `platforms/cache-policy.cmake`, plus the names and contents of the bundled hyphenation patterns.
+The rendering policy is `rendering_version` in `platforms/cache-policy.cmake`, plus the names and contents of the bundled XML and packed hyphenation patterns.
 
 - Bump `rendering_version` for shaping or layout changes not covered by CREngine's formatting version. The comments in that file list what each version changed.
 - A cache with an older or missing policy keeps its parsed DOM and Kobalt markers, then rebuilds styles and pagination once. Saving records the current policy.

@@ -110,6 +110,9 @@ struct ReaderEnvironment
     // The Home frame can outlive an opening cancelled by sleep or power-off.
     bool deferHomeFonts(std::function<void(bool)> ready)
     {
+        // As for an opening, a failed font read is tried again on the worker.
+        if (!preparingOpeningFonts && assetsAvailable() && !ui::openingFontsPrepared(assets))
+            readOpeningFontsAgain();
         if (!preparingOpeningFonts)
             return false;
         homeFontsReady = std::move(ready);

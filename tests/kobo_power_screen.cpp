@@ -215,6 +215,31 @@ private slots:
         QCOMPARE(verified.size(), 1);
     }
 
+    void homeFontsRereadAfterFailedRead()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        QVERIFY(!kobalt::test::copyOpeningFontFixture(QStringLiteral(KOBALT_TEST_ASSET_ROOT),
+                                                      root.path())
+                         .isEmpty());
+        kobalt::nickel::ReaderEnvironment environment(root.path());
+        QList<bool> verified;
+        environment.verifyAssets(this, "startup", [&](bool valid) { verified.append(valid); });
+        QTRY_COMPARE(verified.size(), 1);
+        QVERIFY(verified.first());
+        // The worker verified the bundle, then could not read its fonts.
+        kobalt::ui::setPreparedOpeningFonts(environment.assets, {});
+        // The Home sleep screen waits for a new read instead of drawing without them.
+        QList<bool> delivered;
+        QVERIFY(environment.deferHomeFonts([&](bool prepared) { delivered.append(prepared); }));
+        QTRY_COMPARE(delivered.size(), 1);
+        QVERIFY(delivered.first());
+        QVERIFY(kobalt::ui::openingFontsPrepared(environment.assets));
+        QCOMPARE(verified.size(), 1);
+        // Prepared fonts need no wait.
+        QVERIFY(!environment.deferHomeFonts([&](bool prepared) { delivered.append(prepared); }));
+    }
+
     void openingFontReadSeesStorageChange_data()
     {
         QTest::addColumn<quint64>("nextPermit");
@@ -1108,6 +1133,7 @@ private slots:
         QCOMPARE(background.painted, background.color);
     }
 };
+
 int main(int argc, char **argv)
 {
     QApplication app(argc, argv);

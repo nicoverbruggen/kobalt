@@ -975,7 +975,6 @@ public:
         book = value;
         copyCaption = caption;
         author = authorCaption(book.author);
-        setObjectName("rrActivityBook");
         setAccessibleName(book.title);
         setAccessibleDescription(caption);
         update();
@@ -1269,6 +1268,7 @@ private:
                 }
                 if (rowsUsed == rows.size()) {
                     auto *row = new BookRow(this);
+                    row->setObjectName(rowName + QString::number(rowsUsed + 1));
                     connect(row, &QPushButton::clicked, this, [this, row] {
                         if (chosen)
                             chosen(row->month, row->book.book);
@@ -1291,7 +1291,6 @@ private:
                               missingBooks.contains(month.books[item.book].book));
                 if (!known.contains(month.books[item.book].book))
                     wanted.append(month.books[item.book]);
-                row->setObjectName(rowName + QString::number(rowsUsed));
                 row->setGeometry(0, y, width(), BookRow::preferredHeight());
                 row->show();
                 y += BookRow::preferredHeight();

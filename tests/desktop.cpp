@@ -14070,6 +14070,12 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         auto *second = view.findChild<QPushButton *>("rrActivityCopy2");
         QVERIFY(second && second->isVisible());
         QVERIFY(second->accessibleDescription().startsWith("2 · /books/0/Book.epub"));
+
+        view.reset();
+        QCOMPARE(group->objectName(), QStringLiteral("rrActivityBook1"));
+        QCOMPARE(newest->objectName(), QStringLiteral("rrActivityCopy1"));
+        QCOMPARE(second->objectName(), QStringLiteral("rrActivityCopy2"));
+        QVERIFY(!newest->isVisible() && newest->accessibleName().isEmpty());
     }
 
     // The book row and heading paint a single-line caption from saved authors.

@@ -29,8 +29,7 @@ kobalt_list_sources("${ROOT}" "src;platforms" product_sources)
 kobalt_list_sources("${ROOT}" "src;platforms;tests" all_sources)
 
 # Storage writes belong behind the storage helpers, which report themselves to
-# the main-thread guard and run on a writer thread. Preference saves have
-# their own check, preference-writes.cmake.
+# the main-thread guard and run on a writer thread.
 kobalt_scan("${ROOT}" "${interface_sources}"
     "(writeJson[ \t]*\\(|QSaveFile|QSettings|QSql[A-Z][A-Za-z]*|storage::checkpointProfile[ \t]*\\(|\\.open[ \t]*\\([ \t]*(QIODevice|QFile)::(WriteOnly|Append|ReadWrite))"
     hits)

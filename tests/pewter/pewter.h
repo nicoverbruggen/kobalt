@@ -27,6 +27,7 @@ struct Options
     bool sleepShowCover = true, sleepFullScreen = false, sleepInfo = true;
     bool sleeping = false; // N3PowerWorkflowManager::sleeping
     bool tolino = false; // Device::isTolino
+    bool claraColour = false, claraBW = false;
     bool beginFails = false; // DatabaseAdapter::beginTransaction refuses
     bool updateFails = false; // VolumeManager::updateFields refuses
     bool commitFails = false; // DatabaseAdapter::endTransaction(commit) rolls back

@@ -1,4 +1,5 @@
 #pragma once
+#include "native_symbol.h"
 #include <QTime>
 #include <QString>
 #include <QStringList>
@@ -46,6 +47,17 @@ void observeNativeWifi(QObject *context, std::function<void(WifiStatus)> changed
 void reportNativeBluetoothActivity(QObject *context, QKeyEvent *event);
 bool nativeReaderHasPageButtons();
 bool nativeReaderReverseLandscapeButtons();
+
+// In Landscape, these panels put the portrait bottom bezel on the left.
+inline bool nativeLandscapeBezelOnLeft()
+{
+    static const auto current = symbol<const void *(*)()>("_ZN6Device16getCurrentDeviceEv");
+    static const auto colour = symbol<bool (*)(const void *)>("_ZNK6Device9isSpaKoboEv");
+    static const auto bw = symbol<bool (*)(const void *)>("_ZNK6Device11isSpaKoboBWEv");
+    const auto *device = current ? current() : nullptr;
+    return device && ((colour && colour(device)) || (bw && bw(device)));
+}
+
 int nativePageButtonDirection(QKeyEvent *event);
 // True when the current rotation puts the physically lower page button on top.
 bool nativePageButtonsRotated();

@@ -68,6 +68,8 @@ public:
     static Device *getCurrentDevice();
     const QString &getDbName() const;
     bool isTolino() const;
+    bool isSpaKobo() const;
+    bool isSpaKoboBW() const;
 };
 
 // The Settings base occupies seven words on Qt5 and eleven on Qt6.

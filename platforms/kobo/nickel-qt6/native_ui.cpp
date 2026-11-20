@@ -83,12 +83,7 @@ bool nativeReaderHasPageButtons()
 
 bool nativeReaderReverseLandscapeButtons()
 {
-    static const auto current = symbol<const void *(*)()>("_ZN6Device16getCurrentDeviceEv");
-    static const auto spa = symbol<bool (*)(const void *)>("_ZNK6Device9isSpaKoboEv");
-    static const auto bw = symbol<bool (*)(const void *)>("_ZNK6Device11isSpaKoboBWEv");
-    const auto *device = current ? current() : nullptr;
-    // Confirmed on the Clara Colour: Landscape puts its bottom bezel on the left.
-    return device && ((spa && spa(device)) || (bw && bw(device)));
+    return nativeLandscapeBezelOnLeft();
 }
 
 int nativePageButtonDirection(QKeyEvent *event)

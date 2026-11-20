@@ -68,6 +68,16 @@ bool Device::isTolino() const
     return pewter::options().tolino;
 }
 
+bool Device::isSpaKobo() const
+{
+    return pewter::options().claraColour;
+}
+
+bool Device::isSpaKoboBW() const
+{
+    return pewter::options().claraBW;
+}
+
 bool DatabaseAdapter::beginTransaction(QString name)
 {
     record("DatabaseAdapter::beginTransaction", { { "database", name } });

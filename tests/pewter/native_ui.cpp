@@ -129,6 +129,13 @@ int main(int argc, char **argv)
 {
     QApplication application(argc, argv);
     checkBattery();
+    require(!kobalt::nativeLandscapeBezelOnLeft(), "other panels keep the standard landscape turn");
+    pewter::options().claraColour = true;
+    require(kobalt::nativeLandscapeBezelOnLeft(), "Clara Colour reverses landscape");
+    pewter::options().claraColour = false;
+    pewter::options().claraBW = true;
+    require(kobalt::nativeLandscapeBezelOnLeft(), "Clara BW reverses landscape");
+    pewter::options().claraBW = false;
     QWidget opening;
     QWidget cover(&opening);
     for (bool dark : { false, true }) {

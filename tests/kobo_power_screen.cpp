@@ -57,6 +57,8 @@ class Device
 public:
     static Device *getCurrentDevice();
     const QString &getDbName() const;
+    bool isSpaKobo() const;
+    bool claraColour = false;
 };
 
 Device *Device::getCurrentDevice()
@@ -69,6 +71,11 @@ const QString &Device::getDbName() const
 {
     static const QString name("power-screen-native");
     return name;
+}
+
+bool Device::isSpaKobo() const
+{
+    return claraColour;
 }
 
 class DatabaseAdapter
@@ -432,30 +439,38 @@ private slots:
     }
 
     // Compare actual native-frame pixels before and after Nickel changes orientation.
-    void sleepImageHandoffKeepsPortraitDirection_data()
+    void sleepImageHandoffKeepsReadingDirection_data()
     {
         QTest::addColumn<int>("reading");
         QTest::addColumn<int>("native");
         QTest::addColumn<bool>("followReading");
+        QTest::addColumn<bool>("claraColour");
         for (auto reading : { Qt::PortraitOrientation, Qt::InvertedPortraitOrientation,
                               Qt::LandscapeOrientation, Qt::InvertedLandscapeOrientation }) {
             for (auto native : { Qt::PortraitOrientation, Qt::InvertedPortraitOrientation,
                                  Qt::LandscapeOrientation, Qt::InvertedLandscapeOrientation }) {
-                for (bool followReading : { false, true })
-                    QTest::newRow(qPrintable(QString("%1-to-%2-follow-%3")
-                                                     .arg(int(reading))
-                                                     .arg(int(native))
-                                                     .arg(followReading)))
-                            << int(reading) << int(native) << followReading;
+                for (bool followReading : { false, true }) {
+                    for (bool claraColour : { false, true })
+                        QTest::newRow(qPrintable(QString("%1-to-%2-follow-%3-%4")
+                                                         .arg(int(reading))
+                                                         .arg(int(native))
+                                                         .arg(followReading)
+                                                         .arg(claraColour ? "clara" : "standard")))
+                                << int(reading) << int(native) << followReading << claraColour;
+                }
             }
         }
     }
 
-    void sleepImageHandoffKeepsPortraitDirection()
+    void sleepImageHandoffKeepsReadingDirection()
     {
         QFETCH(int, reading);
         QFETCH(int, native);
         QFETCH(bool, followReading);
+        QFETCH(bool, claraColour);
+        auto *device = Device::getCurrentDevice();
+        device->claraColour = claraColour;
+        const auto resetDevice = qScopeGuard([device] { device->claraColour = false; });
         auto *screen = QGuiApplication::primaryScreen();
         const auto original = screen->orientation();
         const auto turn = [screen](Qt::ScreenOrientation orientation) {
@@ -504,9 +519,19 @@ private slots:
             const auto expectedOrientation = followReading       ? Qt::ScreenOrientation(reading)
                     : reading == Qt::InvertedPortraitOrientation ? Qt::InvertedPortraitOrientation
                                                                  : Qt::PortraitOrientation;
+            // In successive clockwise turns, the portrait bottom bezel moves
+            // from bottom to left, top, then right. Clara's Landscape has its
+            // bezel on the left; a standard panel has it on the right.
+            const QList<Qt::ScreenOrientation> clockwise = {
+                Qt::PortraitOrientation,
+                claraColour ? Qt::LandscapeOrientation : Qt::InvertedLandscapeOrientation,
+                Qt::InvertedPortraitOrientation,
+                claraColour ? Qt::InvertedLandscapeOrientation : Qt::LandscapeOrientation
+            };
             QTransform transform;
-            transform.rotate(
-                    screen->angleBetween(expectedOrientation, Qt::ScreenOrientation(shown)));
+            transform.rotate(90
+                             * (clockwise.indexOf(Qt::ScreenOrientation(shown))
+                                - clockwise.indexOf(expectedOrientation)));
             QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),
                      expectedBackdrop.transformed(transform));
         }

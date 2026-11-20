@@ -193,6 +193,7 @@ public:
         symbols->setObjectName("widgetKeyboardSymbols");
         shift->setCheckable(true);
         symbols->setCheckable(true);
+        symbols->setProperty("reader_invert_pressed", true);
         QObject::connect(shift, &QPushButton::clicked, this, [this] {
             const auto interval = quint32(QApplication::doubleClickInterval());
             const bool doubleTap = shift->pointerRelease && pointerShift

@@ -998,7 +998,13 @@ private slots:
         QVERIFY(action("widgetKeyboardShift"));
         typePage();
         QVERIFY(action("widgetKeyboardSymbols"));
-        QCOMPARE(panel->findChild<QPushButton *>("widgetKeyboardSymbols")->text(), QString("ABC"));
+        QCOMPARE(symbols->text(), QString("ABC"));
+        const auto labelRect = symbols->rect().adjusted(6, 6, -6, -6);
+        const auto checkedLabel = symbols->grab(labelRect).toImage();
+        symbols->setText({});
+        const auto emptyLabel = symbols->grab(labelRect).toImage();
+        symbols->setText("ABC");
+        QVERIFY2(checkedLabel != emptyLabel, "The checked ABC label is invisible");
         for (auto *key : panel->findChildren<QPushButton *>()) {
             const auto character = key->property("keyboard.character").toString();
             if (key->isVisible() && !character.isEmpty())

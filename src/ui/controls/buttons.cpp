@@ -133,12 +133,13 @@ void Button::paintEvent(QPaintEvent *)
             option.text.clear();
             style()->drawControl(QStyle::CE_PushButton, &option, &painter, this);
             painter.setFont(font());
-            // Qt5's stylesheet palette can keep the normal text color after
-            // a segment is selected or pressed. Match its painted background.
+            // The stylesheet can keep the normal text color on a selected or pressed
+            // control. Match the ink to the background painted above.
             const bool primary = property("reader_primary_action").toBool();
             const bool segment = property("segment_first").isValid();
-            const bool inverted = segment ? isChecked() || isDown() : primary && !isDown();
-            const auto colors = primary || segment
+            const bool invertPressed = segment || property("reader_invert_pressed").toBool();
+            const bool inverted = invertPressed ? isChecked() || isDown() : primary && !isDown();
+            const auto colors = primary || invertPressed
                     ? readerPalette(palette(), darkTheme(this), interfacePalette(this))
                     : palette();
             painter.setPen(colors.color(!isEnabled()       ? QPalette::Mid

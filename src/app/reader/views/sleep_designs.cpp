@@ -18,6 +18,7 @@
 
 #include <cmath>
 #include <functional>
+#include <vector>
 
 namespace kobalt::reader {
 namespace {
@@ -1260,30 +1261,47 @@ void paintLetter(QPainter &painter, const Frame &frame, const Content &content, 
         shot.details.chapter = shortened(chapter, limit);
         return letterParagraphs({ shot, content.status, content.battery }, colors);
     };
-    const auto fits = [&](int limit) {
+
+    struct Paragraph
+    {
+        QString html;
+        std::unique_ptr<Block> layout;
+    };
+
+    // Shortening the title and chapter changes only their paragraph.
+    std::vector<Paragraph> bodyParagraphs;
+    const auto layoutParagraphs = [&](int limit) {
+        const auto text = paragraphs(limit);
+        bodyParagraphs.resize(text.size());
         qreal height = -gap;
-        for (const auto &paragraph : paragraphs(limit))
-            height += block(paragraph, font, width, letterSize * frame.u * letterLeading)->height
-                    + gap;
-        return height <= available;
+        for (int i = 0; i < text.size(); ++i) {
+            auto &paragraph = bodyParagraphs[i];
+            if (!paragraph.layout || paragraph.html != text[i]) {
+                paragraph.html = text[i];
+                paragraph.layout =
+                        block(paragraph.html, font, width, letterSize * frame.u * letterLeading);
+            }
+            height += paragraph.layout->height + gap;
+        }
+        return height;
     };
     int low = 0, high = qMax(title.size(), chapter.size());
-    if (!fits(high)) {
+    if (layoutParagraphs(high) > available) {
         while (low < high) {
             const int middle = (low + high + 1) / 2;
-            if (fits(middle))
+            if (layoutParagraphs(middle) <= available)
                 low = middle;
             else
                 high = middle - 1;
         }
+        layoutParagraphs(high);
     }
     qreal y = frame.y(20);
     painter.save();
     painter.setClipRect(QRectF(left, y, width, available), Qt::IntersectClip);
-    for (const auto &paragraph : paragraphs(high)) {
-        const auto laid = block(paragraph, font, width, letterSize * frame.u * letterLeading);
-        drawBlock(painter, *laid, QPointF(left, y), colors.ink);
-        y += laid->height + gap;
+    for (const auto &paragraph : bodyParagraphs) {
+        drawBlock(painter, *paragraph.layout, QPointF(left, y), colors.ink);
+        y += paragraph.layout->height + gap;
     }
     painter.restore();
     text(painter, font, colors.ink,

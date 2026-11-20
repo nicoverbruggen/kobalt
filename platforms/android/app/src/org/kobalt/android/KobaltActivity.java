@@ -524,7 +524,7 @@ public class KobaltActivity extends QtActivity {
             try {
                 File folder = target.getParentFile();
                 if (folder == null || (!folder.isDirectory() && !folder.mkdirs())) throw new java.io.IOException("Cannot create the book cache");
-                if (!target.isFile() || target.length() != size || target.lastModified() < modified) {
+                if (modified <= 0 || !target.isFile() || target.length() != size || target.lastModified() != modified) {
                     temporary = File.createTempFile("library-", ".part", folder);
                     try (InputStream input = getContentResolver().openInputStream(Uri.parse(uri));
                          FileOutputStream output = new FileOutputStream(temporary)) {
@@ -537,6 +537,8 @@ public class KobaltActivity extends QtActivity {
                         }
                         output.getFD().sync();
                     }
+                    // Publish the provider timestamp with the copy. A replacement can have an older date.
+                    temporary.setLastModified(Math.max(0L, modified));
                     if (!temporary.renameTo(target)) throw new java.io.IOException("Cannot save this book");
                 }
                 rememberSyncFilename(Uri.parse(uri), destination);

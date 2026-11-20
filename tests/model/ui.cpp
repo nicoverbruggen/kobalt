@@ -2619,6 +2619,15 @@ int main(int argc, char **argv)
                         && text("rrGraphBookWords")
                                 == get("stats.main_words").arg(get("stats.words").arg("35,706")),
                 "The word totals below the chart are missing");
+        auto singleWord = chapters;
+        singleWord[20].words = 1;
+        graph.setData(singleWord, { 20, -1, 1, 1 }, true, {});
+        graph.setReading(23, 1);
+        require(text("rrGraphChapterWords") == get("stats.chapter_words").arg(13).arg("1 word")
+                        && text("rrGraphBookWords") == get("stats.main_words").arg("1 word"),
+                "Stats must use the singular for a one-word chapter or book");
+        graph.setData(chapters, { 20, -1, 1, 1 }, true, {});
+        graph.setReading(23, 35706);
         graph.setChapterNumber(0, 24);
         require(text("rrGraphChapterWords") == get("stats.this_chapter_words").arg(chapterWords),
                 "A position before the contents named a chapter number");

@@ -410,6 +410,8 @@ void ChapterGraph::refreshCells()
                                  : QString();
     // The catalog is English, so group digits the English way on every device.
     const auto wordTotal = [](qint64 count) {
+        if (count == 1)
+            return strings::get("words.count_one");
         return count >= 0
                 ? strings::get("stats.words")
                           .arg(QLocale(QLocale::English, QLocale::UnitedStates).toString(count))

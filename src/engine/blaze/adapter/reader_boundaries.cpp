@@ -26,6 +26,10 @@ const QString ops = QStringLiteral("http://www.idpf.org/2007/ops");
 
 QByteArray resource(ReaderSource &source, const QString &path)
 {
+    // The resource cache finds members through its own index; opening an
+    // engine stream for each spine file costs more than reading it.
+    if (source.resources && source.resources->contains(path))
+        return source.resources->readOptional(path, Publication::maxResource);
     const auto stream = source.container->OpenStream(
             Utf8ToUnicode(path.toUtf8().constData()).c_str(), LVOM_READ);
     if (stream.isNull() || stream->GetSize() > Publication::maxResource)
@@ -43,6 +47,22 @@ void nextToken(QXmlStreamReader &xml)
 {
     if (xml.readNext() == QXmlStreamReader::DTD && unsafeEntities(xml))
         xml.raiseError(QStringLiteral("Entity declarations"));
+}
+
+// Only an OPS-namespaced type attribute can mark a boundary, and an attribute
+// in a namespace always has a prefix, as in epub:type.
+bool mayHaveOpsType(const QByteArray &bytes)
+{
+    if (!bytes.contains("http://www.idpf.org/2007/ops"))
+        return false;
+    for (int at = bytes.indexOf(":type"); at >= 0; at = bytes.indexOf(":type", at + 5)) {
+        int next = at + 5;
+        while (next < bytes.size() && QChar::isSpace(uchar(bytes[next])))
+            ++next;
+        if (next < bytes.size() && bytes[next] == '=')
+            return true;
+    }
+    return false;
 }
 
 struct Reference
@@ -206,7 +226,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
         if (!epub3 && targets.isEmpty() && ids.isEmpty())
             continue;
         const auto bytes = resource(source, spine[i]);
-        if (targets.isEmpty() && ids.isEmpty() && !bytes.contains("type")
+        if (targets.isEmpty() && ids.isEmpty() && !mayHaveOpsType(bytes)
             && !bytes.contains(char(0)))
             continue;
         QXmlStreamReader xml(bytes);

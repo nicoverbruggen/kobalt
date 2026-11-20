@@ -119,6 +119,17 @@
   },
   {
     "group": "engine",
+    "name": "brotli",
+    "version": "1.2.0",
+    "description": "Decompresses WOFF2 fonts for FreeType.",
+    "license": "MIT",
+    "url": "https://github.com/google/brotli",
+    "notices": [
+      "brotli"
+    ]
+  },
+  {
+    "group": "engine",
     "name": "FreeType",
     "version": "2.15.0",
     "description": "Font rasterization and outline emboldening. Portions of this software are copyright © 2026 The FreeType Project (https://freetype.org). All rights reserved.",

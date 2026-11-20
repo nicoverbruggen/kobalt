@@ -128,7 +128,7 @@ endif()
 set(kobalt_libraries ${qt_libraries}
     "${engine}" "${prefix}/lib/libharfbuzz.a" "${prefix}/lib/libxxhash.a" "${prefix}/lib/libutf8proc.a"
     "${prefix}/lib/libjpeg.a" "${prefix}/lib/liblunasvg.a" "${prefix}/lib/libfreetype.a"
-    "${prefix}/lib/libwebpdemux.a" "${prefix}/lib/libwebpdecoder.a"
+    "${prefix}/lib/libbrotlidec.a" "${prefix}/lib/libbrotlicommon.a" "${prefix}/lib/libwebpdemux.a" "${prefix}/lib/libwebpdecoder.a"
     "${prefix}/lib/libfribidi.a" "${prefix}/lib/libunibreak.a" "${KOBALT_TEST_PNG}" z dl pthread)
 target_link_libraries(kobalt-code PRIVATE ${qt_libraries})
 target_link_libraries(kobalt PRIVATE kobalt-code ${kobalt_libraries})
@@ -154,7 +154,7 @@ if(KOBALT_EVAL_PACKAGE)
 endif()
 target_link_options(kobalt PRIVATE -Wl,--no-undefined
     "LINKER:--whole-archive,${prefix}/lib/libfreetype.a,--no-whole-archive"
-    "LINKER:--exclude-libs,libharfbuzz.a:libjpeg.a:libwebpdecoder.a:libwebpdemux.a:liblunasvg.a:libutf8proc.a:libfribidi.a:libunibreak.a:libfreetype.a")
+    "LINKER:--exclude-libs,libharfbuzz.a:libjpeg.a:libwebpdecoder.a:libwebpdemux.a:libbrotlidec.a:libbrotlicommon.a:liblunasvg.a:libutf8proc.a:libfribidi.a:libunibreak.a:libfreetype.a")
 
 set(qrc "<RCC><qresource prefix=\"/kobalt\">")
 foreach(path IN LISTS kobalt_notice_resources)

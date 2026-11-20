@@ -8927,7 +8927,7 @@ public:
             printf("CRE WARNING: document font '%s' ignored: file too big\n", LCSTR(name));
             return false;
         }
-        LVByteArrayRef buf = _embeddedFontCache.read(name8, stream, size);
+        LVByteArrayRef buf = _embeddedFontCache.read(_library, name8, stream, size);
         if (!buf)
             return false;
 

@@ -130,7 +130,7 @@ target_link_libraries(kobalt-core PUBLIC Qt6::Widgets Qt6::Network Qt6::Sql
     "${KOBALT_TEST_DEPENDENCIES}/lib/libharfbuzz.a" "${KOBALT_TEST_DEPENDENCIES}/lib/libxxhash.a"
     "${KOBALT_TEST_DEPENDENCIES}/lib/libutf8proc.a" "${KOBALT_TEST_DEPENDENCIES}/lib/libjpeg.a"
     "${KOBALT_TEST_DEPENDENCIES}/lib/liblunasvg.a" "${KOBALT_TEST_DEPENDENCIES}/lib/libfreetype.a"
-    "${KOBALT_TEST_DEPENDENCIES}/lib/libwebpdemux.a" "${KOBALT_TEST_DEPENDENCIES}/lib/libwebpdecoder.a"
+    "${KOBALT_TEST_DEPENDENCIES}/lib/libbrotlidec.a" "${KOBALT_TEST_DEPENDENCIES}/lib/libbrotlicommon.a" "${KOBALT_TEST_DEPENDENCIES}/lib/libwebpdemux.a" "${KOBALT_TEST_DEPENDENCIES}/lib/libwebpdecoder.a"
     "${KOBALT_TEST_DEPENDENCIES}/lib/libfribidi.a" "${KOBALT_TEST_DEPENDENCIES}/lib/libunibreak.a"
     "${KOBALT_TEST_PNG}" z)
 # The engine and Qt must keep separate FreeType glyph implementations.

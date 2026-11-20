@@ -1,0 +1,22 @@
+--- a/src/sfnt/sfwoff2.c
++++ b/src/sfnt/sfwoff2.c
+@@ -37,8 +37,8 @@
+ #undef  FT_COMPONENT
+ #define FT_COMPONENT  sfwoff2
+ 
+-  /* An arbitrary, heuristic size limit (67MByte) for expanded WOFF2 data. */
+-#define MAX_SFNT_SIZE  ( 1 << 26 )
++  /* Use the reader's 16 MiB limit for reconstructed font data. */
++#define MAX_SFNT_SIZE  ( 1 << 24 )
+ 
+ #define READ_255USHORT( var )  FT_SET_ERROR( Read255UShort( stream, &var ) )
+ 
+@@ -224,7 +224,7 @@
+ 
+ 
+     /* Check whether we are within limits. */
+-    if ( ( *offset + size ) > WOFF2_DEFAULT_MAX_SIZE  )
++    if ( ( *offset + size ) > MAX_SFNT_SIZE  )
+       return FT_THROW( Array_Too_Large );
+ 
+     /* Reallocate `dst'. */

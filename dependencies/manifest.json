@@ -62,5 +62,10 @@
     "url": "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz",
     "sha256": "e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564",
     "directory": "libwebp-1.6.0"
+  },
+  "brotli": {
+    "url": "https://codeload.github.com/google/brotli/tar.gz/refs/tags/v1.2.0",
+    "sha256": "816c96e8e8f193b40151dad7e8ff37b1221d019dbcb9c35cd3fadbfe6477dfec",
+    "directory": "brotli-1.2.0"
   }
 }

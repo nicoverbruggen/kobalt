@@ -276,7 +276,7 @@ public:
         // Other resources can be transformed by their provider, so their
         // stream size must still come from the returned bytes.
         const auto suffix = QFileInfo(key).suffix().toLower();
-        const bool rawFont = suffix == "ttf" || suffix == "otf";
+        const bool rawFont = suffix == "ttf" || suffix == "otf" || suffix == "woff2";
         const auto length =
                 rawFont && sizes.contains(key) ? sizes.value(key) : resources->size(key);
         return length < 0 ? LVStreamRef() : LVStreamRef(new ResourceStream(resources, key, length));

@@ -2,6 +2,7 @@
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
 #include "engine/blaze/adapter/engine_document.h"
+#include "engine/blaze/extensions/embedded_font_cache.h"
 #include "publication/image_policy.h"
 #include "lvimg.h"
 #include <QGuiApplication>
@@ -227,6 +228,44 @@ void checkCodecs()
     require(inspectImageHeader(oversized).action == ImageHeader::Replace,
             "Oversized WebP was admitted");
 
+    auto font = QByteArray::fromBase64(
+            "d09GMgABAAAAAAFQAAoAAAAAAtQAAAEIAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAABmAANAoYNQE2AiQDBgsGAAQgBY"
+            "FGByYbNALIBIJa0z0IgopiUAiSS45YAQoZVed5fKfGtsJU/9Q5/SB+EIhVciUNsC3qfETDgY6GMGtXxkqeSvJA0qYl"
+            "XB73R5RcixdMaNxEkNoFxbU+fQkOqxJQeUGU2Auiu55G137fMOLZ+FquS5h6I5OaJpKubArl8FzYp7ntUgiPr7Xe7q"
+            "6n9W9V6k9Xv4mf7wTsmdyRO9MsKYhV2Kjhhlxjpyp3PshY3tXt1pTnS6eN+MDMlIkErlfVEguu7JsJvsDVNgpCpDWR"
+            "uBm8N5NmPrjafz4OT84fb++uj5fHp3dX+9etaMwCPjHgin2eOSbMhHMeueWOa45ZKvWUGDcYGbFzBWyRP4BxWhwA");
+    auto stream = LVCreateMemoryStream(font.data(), font.size(), false);
+    FT_Library library = nullptr;
+    require(!FT_Init_FreeType(&library), "FreeType unavailable");
+    blaze::EmbeddedFontCache cache;
+    auto bytes = cache.read(library, lString8("face"), stream, font.size());
+    require(!bytes.isNull() && bytes->get()[0] == 0, "WOFF2 did not reconstruct an SFNT");
+    require(cache.read(library, lString8("face"), stream, font.size()).get() == bytes.get(),
+            "A second font size reconstructed the WOFF2 again");
+    FT_Face face = nullptr;
+    require(!FT_New_Memory_Face(library, bytes->get(), bytes->length(), 0, &face)
+                    && FT_Get_Char_Index(face, 'A'),
+            "Decoded font is missing its glyph");
+    FT_Done_Face(face);
+    FT_Done_FreeType(library);
+
+    auto files = test::publisherPackage(
+            "en", "Codec fixture",
+            { { "c.xhtml",
+                "<html xmlns='http://www.w3.org/1999/xhtml'><head><style>"
+                "@font-face{font-family:Fixture;src:url(face.woff2)}p{font-family:Fixture}"
+                "</style></head><body><p>AAAA</p><img src='cover.webp'/></body></html>" },
+              { "face.woff2", font },
+              { "cover.webp", image } },
+            "<itemref idref='c.xhtml'/>");
+    files["book.opf"].replace("face.woff2\" media-type=\"font/ttf",
+                              "face.woff2\" media-type=\"font/woff2");
+    files["book.opf"].replace("cover.webp\" media-type=\"font/ttf",
+                              "cover.webp\" media-type=\"image/webp");
+    EngineDocument model(test::readerFonts());
+    openPublication(model, files);
+    require(model.embeddedFontCount() == 1 && !model.image(0).isNull(),
+            "EPUB with WOFF2 publisher font and WebP illustration did not render");
 }
 } // namespace
 

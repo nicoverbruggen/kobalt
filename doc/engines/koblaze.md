@@ -34,7 +34,7 @@ The CSS parser keeps the selector grammar and cascade order. The [ancestor filte
 
 The EPUB importer resolves manifest fallback chains before building chapter fragments.
 
-Blaze uses libwebp for still images and for the first composited frame of an animation. Layout reads the WebP header. A still-image decoder can produce a smaller raster when the drawing destination accepts one.
+Blaze uses libwebp for still images and for the first composited frame of an animation. Layout reads the WebP header. A still-image decoder can produce a smaller raster when the drawing destination accepts one. FreeType uses Brotli for WOFF2. The embedded font cache retains reconstructed single-face fonts so other sizes and chapter windows can share them. Font collections use FreeType’s collection handling.
 
 ## Cache compatibility
 

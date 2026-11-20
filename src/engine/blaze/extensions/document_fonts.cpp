@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "embedded_font_cache.h"
+#include "lvfntman.h"
+#include FT_TRUETYPE_TABLES_H
+#include <cstring>
 
 namespace blaze {
 
-LVByteArrayRef EmbeddedFontCache::read(const lString8 & name, const LVStreamRef & stream, lvsize_t size)
+LVByteArrayRef EmbeddedFontCache::read(FT_Library library, const lString8 & name, const LVStreamRef & stream, lvsize_t size)
 {
     const std::string key = std::string(name.c_str()) + ':' + std::to_string((unsigned long long)size);
     const auto known = _entries.find(key);
@@ -11,6 +14,27 @@ LVByteArrayRef EmbeddedFontCache::read(const lString8 & name, const LVStreamRef 
         return known->second;
     LVByteArrayRef data = stream->GetData();
     if ( !data.isNull() ) {
+        // FreeType reconstructs a WOFF2 on each face open. Share the decoded
+        // SFNT across font sizes and chapter documents, like a plain TTF.
+        if (data->length() >= 48 && !std::memcmp(data->get(), "wOF2", 4)
+                && std::memcmp(data->get() + 4, "ttcf", 4)) {
+            FT_Face face = nullptr;
+            if (FT_New_Memory_Face(library, data->get(), data->length(), 0, &face))
+                return {};
+            FT_ULong length = 0;
+            LVByteArrayRef decoded;
+            if (!FT_Load_Sfnt_Table(face, 0, 0, nullptr, &length) && length
+                    && length <= LVFontManager::MaxEmbeddedFontBytes) {
+                decoded = LVByteArrayRef(new LVByteArray(length, 0));
+                if (FT_Load_Sfnt_Table(face, 0, 0, decoded->ptr(), &length))
+                    decoded = LVByteArrayRef();
+            }
+            FT_Done_Face(face);
+            if (!decoded)
+                return {};
+            data = decoded;
+        }
+        size = data->length();
         if ( _bytes + size > 32u * 1024 * 1024 )
             clear();
         _entries[key] = data;

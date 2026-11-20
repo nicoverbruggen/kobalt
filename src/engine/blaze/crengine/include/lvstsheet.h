@@ -359,6 +359,20 @@ public:
         rebuildClassIndex();
     }
 
+    // Blaze: a cancelled style pass can unwind through nested fragment stylesheets.
+    class ScopedPush {
+        LVStyleSheet & sheet;
+        int depth;
+    public:
+        explicit ScopedPush( LVStyleSheet & sheet ) : sheet(sheet), depth(sheet._stack.length()) {
+            sheet.push();
+        }
+        ~ScopedPush() {
+            while ( sheet._stack.length() > depth )
+                sheet.pop();
+        }
+    };
+
     // save current state of stylesheet
     void push()
     {

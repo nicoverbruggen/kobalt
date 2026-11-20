@@ -1,12 +1,23 @@
 #include "check.h"
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
+#include "engine/blaze/adapter/column_view.h"
 #include "engine/blaze/adapter/engine_document.h"
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <cstdio>
+#if __has_include(<koblaze.h>)
+#  include <koblaze.h>
+#endif
 
 using namespace kobalt;
+
+namespace kobalt {
+struct ReaderLocationProbe
+{
+    static ColumnView &view(EngineDocument &model) { return *model.engine_; }
+};
+} // namespace kobalt
 
 namespace {
 void open(EngineDocument &model, const test::BookFiles &files)
@@ -39,6 +50,42 @@ bool setFont(EngineDocument &model, int pixels)
 {
     return model.applyAppearance(appearance::Patch(QJsonObject{ { "font_pixels", pixels } }));
 }
+
+#if __has_include(<koblaze.h>)
+// A style pass can stop with a fragment stylesheet active after the old page geometry was saved.
+void cancelledStylesDiscardSavedLayout()
+{
+    EngineDocument reader(test::readerFonts());
+    open(reader, test::engineBook(false, 2, 120));
+    auto &view = ReaderLocationProbe::view(reader);
+    require(view.koblazeSaveLayout(), "Cannot save the layout before a style change");
+
+    struct StopDuringStyles : LVDocViewCallback
+    {
+        bool entered = false;
+
+        void OnNodeStylesUpdateProgress(int) override { entered = true; }
+    } callback;
+
+    auto *previous = view.getCallback();
+    view.setCallback(&callback);
+    view.setFontSize(40);
+    koblazeSetCancelCheck([](void *p) { return static_cast<StopDuringStyles *>(p)->entered; },
+                          &callback);
+    bool stopped = false;
+    try {
+        view.Render();
+    } catch (const KoblazeRenderCancelled &) {
+        stopped = true;
+    }
+    koblazeSetCancelCheck(nullptr, nullptr);
+    view.setCallback(previous);
+    require(stopped, "The layout did not stop inside the style pass");
+    require(!view.koblazeRestoreLayout(), "Restored old geometry onto partially updated styles");
+    require(!view.getDocument()->getStyleSheet()->pop(),
+            "The stopped style pass left a stylesheet pushed");
+}
+#endif
 
 void interruptedViewportChange()
 {
@@ -102,6 +149,7 @@ int main(int argc, char **argv)
     QGuiApplication app(argc, argv);
 #if __has_include(<koblaze.h>)
     interruptedViewportChange();
+    cancelledStylesDiscardSavedLayout();
     EngineDocument model(test::readerFonts());
     open(model, test::engineBook(false, 8, 120));
     require(model.go(model.pages() / 2), "Cannot go to the middle of the book");

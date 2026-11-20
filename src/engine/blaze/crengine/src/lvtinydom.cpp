@@ -5769,6 +5769,8 @@ bool ldomDocument::render( LVRendPageList * pages, LVDocViewCallback * callback,
     }
     bool was_just_rendered_from_cache = _just_rendered_from_cache; // cleared by checkRenderContext()
     if ( !checkRenderContext() ) {
+        // Blaze: saved page geometry belongs to the styles that are about to change.
+        _koblazeSavedLayout.reset();
         // Remember these, in case we later do partial rerenderings
         _partial_rerendering_usable_left_overflow = usable_left_overflow;
         _partial_rerendering_usable_right_overflow = usable_right_overflow;
@@ -5852,13 +5854,13 @@ bool ldomDocument::render( LVRendPageList * pages, LVDocViewCallback * callback,
         TextLangMan::resetCounters();
 
         CRLog::trace("Save stylesheet...");
-        _stylesheet.push();
-        CRLog::trace("Init node styles...");
-        applyDocumentStyleSheet();
-        getRootNode()->initNodeStyleRecursive( callback );
-        _styleSheetCache.clear();
-        CRLog::trace("Restoring stylesheet...");
-        _stylesheet.pop();
+        {
+            LVStyleSheet::ScopedPush styles(_stylesheet);
+            CRLog::trace("Init node styles...");
+            applyDocumentStyleSheet();
+            getRootNode()->initNodeStyleRecursive( callback );
+            _styleSheetCache.clear();
+        }
 
         CRLog::trace("init render method...");
         getRootNode()->initNodeRendMethodRecursive();
@@ -5867,8 +5869,6 @@ bool ldomDocument::render( LVRendPageList * pages, LVDocViewCallback * callback,
         // This pass adds boxes and removes empty text nodes.
         _koblazeTextLengths.clear();
         _koblazeTextPrefixes.clear();
-        _koblazeSavedLayout.reset();
-
 //        getRootNode()->setFont( _def_font );
 //        getRootNode()->setStyle( _def_style );
         updateRenderContext();

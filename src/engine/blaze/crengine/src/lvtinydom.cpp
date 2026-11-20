@@ -5911,6 +5911,31 @@ bool ldomDocument::render( LVRendPageList * pages, LVDocViewCallback * callback,
             context.koblazeSkipLinesUntil( &_koblazeFirstBlock );
         try {
             renderBlockElement( context, getRootNode(), 0, y0, width, usable_left_overflow, usable_right_overflow );
+            _rendered = true;
+        #if 0 //def _DEBUG
+            LVStreamRef ostream = LVOpenFileStream( "test_save_after_init_rend_method.xml", LVOM_WRITE );
+            saveToStream( ostream, "utf-16" );
+        #endif
+            gc();
+            CRLog::trace("finalizing... fonts.length=%d", _fonts.length());
+            context.Finalize();
+            // Blaze: two forced page breaks with nothing between them give a
+            // page without height: an empty page before a chapter. The first
+            // page of a document never is one, so a host that loads a book in
+            // parts would show such a page for some parts only. It asks for
+            // none at all.
+            if ( _koblazeDropEmptyPages ) {
+                for ( int i = pages->length() - 1; i >= 0; i-- ) {
+                    LVRendPageInfo * page = (*pages)[i];
+                    if ( page->height <= 0 && page->footnotes.length() == 0 && pages->length() > 1 )
+                        delete pages->remove(i);
+                }
+                for ( int i = 0; i < pages->length(); i++ )
+                    (*pages)[i]->index = i;
+            }
+            updateRenderContext();
+            _pagesData.reset();
+            pages->serialize( _pagesData );
         }
         catch ( const KoblazeRenderCancelled & ) {
             // Forget the render context of the last complete layout, so the
@@ -5925,31 +5950,6 @@ bool ldomDocument::render( LVRendPageList * pages, LVDocViewCallback * callback,
             _rendered = false;
             throw;
         }
-        _rendered = true;
-    #if 0 //def _DEBUG
-        LVStreamRef ostream = LVOpenFileStream( "test_save_after_init_rend_method.xml", LVOM_WRITE );
-        saveToStream( ostream, "utf-16" );
-    #endif
-        gc();
-        CRLog::trace("finalizing... fonts.length=%d", _fonts.length());
-        context.Finalize();
-        // Blaze: two forced page breaks with nothing between them give a
-        // page without height: an empty page before a chapter. The first
-        // page of a document never is one, so a host that loads a book in
-        // parts would show such a page for some parts only. It asks for
-        // none at all.
-        if ( _koblazeDropEmptyPages ) {
-            for ( int i = pages->length() - 1; i >= 0; i-- ) {
-                LVRendPageInfo * page = (*pages)[i];
-                if ( page->height <= 0 && page->footnotes.length() == 0 && pages->length() > 1 )
-                    delete pages->remove(i);
-            }
-            for ( int i = 0; i < pages->length(); i++ )
-                (*pages)[i]->index = i;
-        }
-        updateRenderContext();
-        _pagesData.reset();
-        pages->serialize( _pagesData );
         _renderedBlockCache.restoreSize(); // Restore original cache size
 
         if ( _nodeDisplayStyleHashInitial == NODE_DISPLAY_STYLE_HASH_UNINITIALIZED ) {

@@ -357,6 +357,26 @@ int main(int argc, char **argv)
                             .text
                     == "remains",
             "Decimal period created a false sentence start");
+    const auto highlight = [&](const QString &phrase) {
+        for (int page = 0; page < model.pages(); ++page) {
+            const auto hits = model.searchPage(phrase, page).hits;
+            if (!hits.isEmpty()) {
+                const auto &hit = hits.first();
+                return model.annotationRange(hit.start, hit.start, hit.end, hit.end, true, true)
+                        .text;
+            }
+        }
+        return QString();
+    };
+    for (const auto *phrase :
+         { "Published in 1984", "Copies sold", "She said no", "Plan B", "Un vrai naïf" }) {
+        const auto words = QString::fromUtf8(phrase);
+        require(highlight(words) == words + '.', qPrintable("Missing sentence period in " + words));
+    }
+    require(highlight("Ask No") == "Ask No" && highlight("Call A") == "Call A",
+            "A numbered reference or an initial gained a sentence ending");
+    require(highlight("Press here") == "Press here",
+            "A list number supplied a false sentence start");
     const auto japaneseStart = tokenFor(QString::fromUtf8("日")),
                japaneseEnd = tokenFor(QString::fromUtf8("葉"));
     require(model.annotationRange(japaneseStart.start, japaneseStart.end, japaneseEnd.start,

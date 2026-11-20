@@ -504,21 +504,33 @@ bool sentenceTerminal(char32_t c)
             || c == 0x061f || c == 0x06d4 || c == 0x0964 || c == 0x0965;
 }
 
-bool ambiguousPeriod(const QString &text, int position)
+bool ambiguousPeriod(const QString &text, int position, bool blockEnd)
 {
     if (position <= 0 || text[position] != '.') {
         return false;
     }
     int begin = position;
-    while (begin > 0 && (text[begin - 1].isLetterOrNumber() || text[begin - 1] == '.')) {
+    while (begin > 0
+           && (text[begin - 1].isLetterOrNumber() || text[begin - 1].isMark()
+               || text[begin - 1] == '.')) {
         --begin;
     }
     const auto word = text.mid(begin, position - begin).toLower();
-    static const QSet<QString> abbreviations = { "mr",  "mrs", "ms",  "dr",  "prof",
-                                                 "st",  "sr",  "jr",  "vs",  "etc",
-                                                 "fig", "no",  "inc", "e.g", "i.e" };
-    return word.size() == 1 || word.contains('.') || abbreviations.contains(word)
-            || (!word.isEmpty() && word.at(word.size() - 1).isDigit());
+    static const QSet<QString> abbreviations = { "mr", "mrs", "ms",  "dr",  "prof", "st",  "sr",
+                                                 "jr", "vs",  "etc", "fig", "inc",  "e.g", "i.e" };
+    if (text[position - 1].isDigit()) {
+        // A decimal point or a leading list number does not finish a sentence.
+        return (position + 1 < text.size() && text[position + 1].isDigit())
+                || text.left(begin).trimmed().isEmpty();
+    }
+    int next = position + 1;
+    while (next < text.size() && text[next].isSpace())
+        ++next;
+    if (word == "no")
+        return next < text.size() ? text[next].isDigit() || text[begin].isUpper() : !blockEnd;
+    if (word.normalized(QString::NormalizationForm_C).size() == 1)
+        return next < text.size() || !blockEnd;
+    return word.contains('.') || abbreviations.contains(word);
 }
 
 QChar openingFor(QChar closing)
@@ -670,7 +682,7 @@ QString sentenceEnding(ColumnView *engine, QSize size, const TextRange &range,
         || suffix.contains("..")) {
         return {};
     }
-    if (ambiguousPeriod(text, wordEnd)) {
+    if (ambiguousPeriod(text, wordEnd, blockEnd)) {
         return {};
     }
     QTextBoundaryFinder sentences(QTextBoundaryFinder::Sentence, text);
@@ -685,7 +697,7 @@ QString sentenceEnding(ColumnView *engine, QSize size, const TextRange &range,
            && (text[preceding].isSpace() || text[preceding] == '"' || text[preceding] == '\'')) {
         --preceding;
     }
-    if (preceding >= 0 && ambiguousPeriod(text, preceding)) {
+    if (preceding >= 0 && ambiguousPeriod(text, preceding, blockEnd)) {
         return {};
     }
     sentences.setPosition(wordEnd);

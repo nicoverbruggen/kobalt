@@ -105,7 +105,9 @@ inline QMap<QString, QByteArray> lookupBook()
                   "<p id='annotation-sentences'>Al<span>pha</span> finishes clearly. Beta completes fully! “Quotation ending.” (Nested closing?) Dr. Smith waits. Value 3.14 remains. 東京。 Ends with ellipsis… “Earlier completed.” Later rests.” We're arriving.' <span>(“</span>Layered pairing<span>.</span><span>”)</span> “Greeting,” she murmured softly. “First one. Second two.”</p>")
                   + QByteArray("<p id='dense-search'>") + QByteArray("Densemarker ").repeated(600)
                   + "</p><p>ﬃ Straße e‑mail a&#x200b;b</p>"
-                  + QByteArray("<p>More fixture text.</p>").repeated(80) + "</body></html>" },
+                  + QByteArray("<p>More fixture text.</p>").repeated(80)
+                  + "<p>Published in 1984. Copies sold. She said no. Plan B.</p>"
+                    "<p>Ask No. 5 tomorrow. Call A. Smithson. Un vrai naïf.</p><p>1. Press here.</p></body></html>" },
         { "two.xhtml",
           "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Lookup fixture</title></head><body><p id='boundary'>Chapter boundary. Hello again.</p></body></html>" }
     };

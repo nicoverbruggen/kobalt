@@ -59,6 +59,7 @@ private:
     KosyncWifiTile *wait_ = nullptr, *wake_ = nullptr;
     QPointer<ui::ModalOverlay> intervals_;
 };
+
 // Zen and the Sync page share one open schedule and its save callbacks.
 class KosyncScheduleEditor final : public QObject
 {

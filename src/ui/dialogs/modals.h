@@ -90,8 +90,10 @@ public:
     }
 
     void fitCard();
+
     // Keep list pages at the card width unless a row cannot fit on its own.
     void preferPagingToWidening() { pageBeforeWidening = true; }
+
     void setDelayedProgress(bool active, qint64 elapsedMilliseconds, int percent,
                             const QString &message = {});
     // Window coordinates for a value-only update of the visible progress bar.

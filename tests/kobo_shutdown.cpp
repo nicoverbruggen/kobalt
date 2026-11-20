@@ -510,8 +510,8 @@ private:
     void checkScreensaverChain(QLibrary &screensaver, bool screensaverLast, bool low)
     {
         using PowerOff = void (*)(void *, bool);
-        const auto hook =
-                reinterpret_cast<PowerOff>(screensaver.resolve("hook_N3PowerWorkflowManager_powerOff"));
+        const auto hook = reinterpret_cast<PowerOff>(
+                screensaver.resolve("hook_N3PowerWorkflowManager_powerOff"));
         const auto reset =
                 reinterpret_cast<void (*)(PowerOff)>(screensaver.resolve("fixtureReset"));
         const auto calls = reinterpret_cast<int (*)()>(screensaver.resolve("fixtureCalls"));
@@ -567,6 +567,7 @@ private:
         }
     }
 };
+
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
@@ -574,4 +575,5 @@ int main(int argc, char **argv)
     QTimer::singleShot(0, &app, [&] { app.exit(QTest::qExec(&tests, argc, argv)); });
     return app.exec();
 }
+
 #include "kobo_shutdown.moc"

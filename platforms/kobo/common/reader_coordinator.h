@@ -132,6 +132,7 @@ private:
         int openingPercent = -1;
         qint64 progressPainted = -1000;
     } run;
+
     // A cancelled opening can retain its reader and failed checkpoint until unlock.
     QPointer<kobalt::ReaderWindow> sleepingOpening;
 

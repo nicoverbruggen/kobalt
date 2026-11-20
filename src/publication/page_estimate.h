@@ -312,6 +312,7 @@ public:
     void restore(const QMap<int, int> &pages, int wholeSpreads = 0);
 
     int wholeSpreads() const { return wholeSpreads_; }
+
     // The parts of the spine items of completeItems() that have several.
     QVector<PageEstimateRecord::Part> completeParts() const;
     // Gives the parts of spine items from an earlier reading. They replace

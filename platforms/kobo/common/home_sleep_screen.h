@@ -29,7 +29,9 @@ public:
     // its neutral screen. Returns false to leave Nickel's screen.
     bool prepareHomeScreen(bool powerOff = false, const QString &identity = {});
     void setFontSource(ReaderEnvironment &environment, std::function<bool()> install);
+
     bool waitingForFonts() const { return !fontBackdrop.image.isNull(); }
+
     void persistPowerOff(const QString &identity);
     void present();
     void clear();

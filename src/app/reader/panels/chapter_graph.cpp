@@ -442,6 +442,11 @@ void ChapterGraph::refreshCells()
     arrangeWords();
 }
 
+QString ChapterGraph::activitySummary() const
+{
+    return activityCell->accessibleDescription();
+}
+
 void ChapterGraph::setActivity(const QString &summary)
 {
     activityRow->setSummary(summary);

@@ -2809,7 +2809,9 @@ void Reader::openGraph()
         chapterGraph->activityRequested = [this] { openActivity(); };
     else
         chapterGraph->activityRequested = {};
-    chapterGraph->setActivity({});
+    // Keep the last summary until the new one arrives, so the row does not
+    // blank and redraw on every visit. A changed summary replaces it.
+    chapterGraph->setActivity(showActivity ? chapterGraph->activitySummary() : QString());
     updateGraph();
     if (navigation) {
         chapterGraph->setAvailableHeight(navigation->contentBottom(size())

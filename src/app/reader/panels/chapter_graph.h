@@ -35,6 +35,7 @@ public:
     // The row under the cells that opens Activity, with today's reading and
     // the streak. Hidden without a handler.
     void setActivity(const QString &summary);
+    QString activitySummary() const;
     std::function<void()> activityRequested;
 
     void open();

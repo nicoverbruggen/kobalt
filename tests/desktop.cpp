@@ -13182,6 +13182,36 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.visible("rrChapterGraph"));
         QCOMPARE(fixture.visible("rrGraphActivity") || fixture.visible("rrGraphActivityCell"),
                  !hideActivity);
+        if (hideActivity)
+            return;
+        // Reopening Stats keeps the last summary while the history loads.
+        auto *cell = fixture.widget("rrGraphActivityCell");
+        QVERIFY(cell);
+        QTRY_VERIFY(!cell->accessibleDescription().isEmpty());
+        const auto summary = cell->accessibleDescription();
+        QVERIFY(fixture.press("rrNavStats"));
+        QTRY_VERIFY(!fixture.visible("rrChapterGraph"));
+
+        struct Gate
+        {
+            QSemaphore release;
+            std::atomic_bool entered{ false };
+        };
+
+        auto gate = std::make_shared<Gate>();
+        storage::RecordWriter blocker;
+        auto unblock = qScopeGuard([gate] { gate->release.release(); });
+        blocker.post(
+                [gate] {
+                    gate->entered.store(true);
+                    return gate->release.tryAcquire(1, 3000);
+                },
+                {});
+        QTRY_VERIFY(gate->entered.load());
+        QVERIFY(fixture.press("rrNavStats"));
+        QTRY_VERIFY(fixture.visible("rrChapterGraph"));
+        QCOMPARE(cell->accessibleDescription(), summary);
+        gate->release.release();
     }
 
     void activityCopyNavigation()

@@ -29,8 +29,20 @@ int main(int argc, char **argv)
         model.setDocumentCache(directory.filePath("cache"), key, "large-toc", 128 * 1024 * 1024);
         QString error;
         require(model.open(bytes, QSize(600, 800), {}, &error), qPrintable(error));
-        const auto links = model.chapters();
         const int expected = qMin(count, 10000);
+        if (model.partOfBook()) {
+            const auto chapterLinks = model.chapters();
+            require(chapterLinks.size() == expected, "Chapter layout lost song destinations");
+            for (int i = 0; i < expected; ++i)
+                require(chapterLinks[i].title == QString("Song %1").arg(i + 1)
+                                && chapterLinks[i].depth == (i % 10 == 0 ? 0 : 1)
+                                && !chapterLinks[i].position.isEmpty(),
+                        "Chapter layout lost a title, destination or hierarchy");
+            require(model.prepareFullDocument({}) == Engine::FullDocument::Ready
+                            && model.setChapterMode(false, {}, {}),
+                    "Cannot adopt the whole songbook for page and cache checks");
+        }
+        const auto links = model.chapters();
         require(links.size() == expected,
                 qPrintable(QString("TOC count %1: got %2, expected %3")
                                    .arg(count)
@@ -134,7 +146,10 @@ int main(int argc, char **argv)
         require(model.saveDocumentCache(), "Cannot cache songbook");
         EngineDocument reopened(test::readerFonts());
         reopened.setDocumentCache(directory.filePath("cache"), key, "large-toc", 128 * 1024 * 1024);
-        require(reopened.open(bytes, QSize(700, 900), model.state(), &error), qPrintable(error));
+        // Only the whole document has a parsed-book cache.
+        auto saved = model.state();
+        saved["koblaze_first_spine_item"] = -1;
+        require(reopened.open(bytes, QSize(700, 900), saved, &error), qPrintable(error));
         require(reopened.openedFromCache() && reopened.chapters().size() == expected
                         && reopened.chapterTitle(links.last().position) == links.last().title,
                 "Cached reopening lost the last indexed title");
@@ -148,7 +163,7 @@ int main(int argc, char **argv)
         require(cacheFiles().isEmpty(), "Eviction left a songbook cache file");
         EngineDocument evicted(test::readerFonts());
         evicted.setDocumentCache(directory.filePath("cache"), key, "large-toc", 128 * 1024 * 1024);
-        require(evicted.open(bytes, QSize(700, 900), model.state(), &error), qPrintable(error));
+        require(evicted.open(bytes, QSize(700, 900), saved, &error), qPrintable(error));
         require(!evicted.openedFromCache(), "An evicted songbook opened from the cache");
         require(evicted.saveDocumentCache() && !cacheFiles().isEmpty(),
                 "Cannot cache the songbook again");

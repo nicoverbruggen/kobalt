@@ -35,7 +35,10 @@ int main(int argc, char **argv)
     QString error;
     kobalt::EngineDocument model(kobalt::test::readerFonts());
     model.setDocumentCache(cache.path(), key, "word-count-test", 1000000);
-    require(model.open(bytes, QSize(1072, 1328), {}, &error), qPrintable(error));
+    // Cancellation and cold-cache checks need the uncounted styled DOM.
+    // Hybrid's background whole-book build already counts it before handoff.
+    const QJsonObject whole{ { "koblaze_first_spine_item", -1 } };
+    require(model.open(bytes, QSize(1072, 1328), whole, &error), qPrintable(error));
     const auto anchor = model.position();
     int calls = 0;
     require(model.wordCounts([&] { return ++calls < 2; }).total == -1,
@@ -62,7 +65,10 @@ int main(int argc, char **argv)
     require(model.saveDocumentCache(), "Cannot persist the counted document");
     kobalt::EngineDocument reopened(kobalt::test::readerFonts());
     reopened.setDocumentCache(cache.path(), key, "word-count-test", 1000000);
-    require(reopened.open(bytes, QSize(600, 800), model.state(), &error), qPrintable(error));
+    // Only the whole document has a parsed-book cache.
+    auto saved = model.state();
+    saved["koblaze_first_spine_item"] = -1;
+    require(reopened.open(bytes, QSize(600, 800), saved, &error), qPrintable(error));
     require(reopened.openedFromCache(), "Document did not reopen from cache");
     calls = 0;
     require(reopened.wordCounts([&] { return ++calls < 2; }).total == -1 && calls == 2,
@@ -77,11 +83,21 @@ int main(int argc, char **argv)
     require(reopened.open(bytes, QSize(600, 800), {}, &error), qPrintable(error));
     require(reopened.totalWords() == -1 && reopened.chapterGraph().isEmpty(),
             "Opening a new document retained the previous count before counting");
+    if (reopened.partOfBook()) {
+        require(reopened.wordCounts().total == -1 && reopened.totalWords() == -1,
+                "An unmeasured chapter published a partial book count");
+        require(reopened.prepareFullDocument({}) == kobalt::Engine::FullDocument::Ready
+                        && reopened.setChapterMode(false, {}, {}),
+                "Cannot adopt the whole book for styled word counts");
+        const auto prepared = reopened.wordCounts();
+        require(prepared.cached, "Hybrid handoff discarded its prepared word counts");
+        check(prepared);
+    }
     QFile longFile(QString::fromLocal8Bit(argv[2]));
     require(longFile.open(QIODevice::ReadOnly), "Cannot open cancellation fixture");
     const auto longBytes = longFile.readAll();
     kobalt::EngineDocument interrupted(kobalt::test::readerFonts());
-    require(interrupted.open(longBytes, QSize(600, 800), {}, &error), qPrintable(error));
+    require(interrupted.open(longBytes, QSize(600, 800), whole, &error), qPrintable(error));
     calls = 0;
     require(interrupted.wordCounts([&] { return ++calls < 2; }).total == -1 && calls == 2,
             "Long scan ignored cancellation at its traversal checkpoint");

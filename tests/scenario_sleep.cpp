@@ -466,4 +466,30 @@ int main(int argc, char **argv)
         require(result.value("status") == "completed", "rendering scenario did not complete");
     require(openedModes == QVector<int>({ 0, 2 }),
             "scenario reused an unknown or different rendering mode, or reopened a matching book");
+
+    const QJsonObject opening{ { "scenarios", QJsonArray{ turn } } };
+    kobalt::scenario::Host incomplete;
+    int attempts = 0;
+    incomplete.open = [&](const QString &) {
+        ++attempts;
+        return true;
+    };
+    options.openBook.clear();
+    try {
+        results = kobalt::scenario::run(opening, incomplete, options);
+        require(results.first().value("status") == "skipped" && attempts == 0,
+                "a host without a reader callback started an opening");
+        incomplete.reader = [&] { return &reader; };
+        results = kobalt::scenario::run(opening, incomplete, options);
+        require(results.first().value("status") == "skipped" && attempts == 0 && reader.isVisible(),
+                "a host without a busy callback changed the open reader");
+        turn.remove("book");
+        turn["steps"] = QJsonArray{ QJsonObject{ { "settle", true } } };
+        results = kobalt::scenario::run(QJsonObject{ { "scenarios", QJsonArray{ turn } } },
+                                        incomplete, options);
+        require(results.first().value("status") == "skipped",
+                "settle accepted a host that cannot report work in flight");
+    } catch (const std::bad_function_call &) {
+        require(false, "scenario player called an absent host callback");
+    }
 }

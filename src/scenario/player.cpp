@@ -261,6 +261,10 @@ public:
             events.skip();
             return click(target, point, 0) ? QString() : name + " has no window";
         }
+        if (!host.busy && (step.contains("hold") || step.contains("settle"))) {
+            unsupported = true;
+            return "the host cannot report whether the reader is busy";
+        }
         if (step.contains("hold"))
             return hold(step.value("hold").toObject(), step.value("ms").toInt(650), repetition);
         if (step.contains("open"))
@@ -446,11 +450,11 @@ public:
     // Closes an open book first, as a person returns to the library.
     QString open(const QString &key, bool fresh)
     {
-        if (!host.open || (host.opens && !host.opens(key))) {
+        if (!host.open || !host.reader || !host.busy || (host.opens && !host.opens(key))) {
             unsupported = true;
             return "the host cannot open " + key;
         }
-        if (auto *reader = host.reader ? host.reader() : nullptr) {
+        if (auto *reader = host.reader()) {
             reader->close();
             current.clear();
             if (!closed())
@@ -459,7 +463,7 @@ public:
         if (fresh && host.forget)
             host.forget(key);
         events.skip();
-        if (!host.open || !host.open(key)) {
+        if (!host.open(key)) {
             unsupported = true;
             return "the host cannot open " + key;
         }

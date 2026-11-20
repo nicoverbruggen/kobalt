@@ -16,7 +16,7 @@ namespace kobalt::scenario {
 // diagnostics events, so the same scenario file runs on every platform.
 struct Host
 {
-    // The open reader window, or null.
+    // The open reader window, or null. Required for opening books.
     std::function<QWidget *()> reader;
     // Starts opening the book with this key from the scenario file's `books`.
     // Returns false when the host cannot open books by itself; scenarios that
@@ -25,7 +25,7 @@ struct Host
     // Whether the host can open the book with this key at all, asked before
     // the open book closes. Optional; without it every key is assumed.
     std::function<bool(const QString &key)> opens;
-    // Whether the reader's engine has work in flight.
+    // Whether the reader's engine has work in flight. Required for open, hold and settle.
     std::function<bool()> busy;
     // Whether no book is open and nothing is still closing. Optional.
     std::function<bool()> idle;

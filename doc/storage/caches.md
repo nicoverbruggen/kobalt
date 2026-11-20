@@ -10,7 +10,7 @@ Caches hold no reading data. Kobalt can always rebuild them, and rebuilding neve
 - Desktop builds keep no parsed books.
 - The budget is 128 MiB. The format is engine-specific binary. It is not an interchange or backup format.
 - The engine deletes files it does not recognize in the folder.
-- Once the reader shows the whole book, Blaze writes the parsed book in idle steps of at most 20 ms. Closing writes the rest.
+- Once the reader shows the whole book, Blaze writes the parsed book in idle steps. Closing writes the rest. See [cache step timing](../engines.md#the-reader-comes-first).
 - An interrupted save resumes after the completed writes. A change to the document restarts it.
 - The cache index keeps access order, also for entries of the same size.
 

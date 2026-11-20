@@ -868,7 +868,7 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
     // A fragment is a URI component. Decode it once before comparing it
     // with the Unicode id from the XHTML.
     const auto id = DecodeHTMLUrlString(href.substr(1));
-    auto *target = doc->getNodeById(doc->getAttrValueIndex(id.c_str()));
+    auto *target = doc->getNodeById(doc->findAttrValueIndex(id.c_str()));
     auto match = noteReference(node);
     // In chapter mode the target can be in a spine item that is not loaded.
     // The engine names a link into spine item n "#_doc_fragment_n_ id".
@@ -906,7 +906,7 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
         if (!targetDocument || !targetDocument->engine_)
             return result;
         auto *other = targetDocument->engine_->getDocument();
-        target = other->getNodeById(other->getAttrValueIndex(id.c_str()));
+        target = other->getNodeById(other->findAttrValueIndex(id.c_str()));
     }
     if (!target)
         return result;

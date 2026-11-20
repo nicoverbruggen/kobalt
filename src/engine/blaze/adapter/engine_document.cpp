@@ -1076,7 +1076,7 @@ bool EngineDocument::goTo(const QString &position)
             return false;
         auto *doc = engine_->getDocument();
         const auto id = cre(position.mid(1));
-        auto *target = doc->getNodeById(doc->getAttrValueIndex(id.c_str()));
+        auto *target = doc->getNodeById(doc->findAttrValueIndex(id.c_str()));
         if (!target)
             return false;
         ldomXPointerEx pointer(target, 0);

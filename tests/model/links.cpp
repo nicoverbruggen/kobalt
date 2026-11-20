@@ -586,11 +586,21 @@ void linksOutsideCurrentLayout()
             require(model.showSpineItems(0, 0) && model.go(0), "Cannot open the chapter window");
         }
         const auto origin = model.position();
+        auto *doc = ReaderFootnoteProbe::view(model).getDocument();
+        require(!model.goTo("#_doc_fragment_0_ absent_printed_page"),
+                "A missing printed page unexpectedly resolved");
+        require(doc->findAttrValueIndex(U"_doc_fragment_0_ absent_printed_page") == lUInt32(-1),
+                "A missing printed-page jump added an attribute value to the document");
         const auto links = model.pageLinks();
         require(links.size() == 4, "The link fixture lost a reference");
         for (const auto &link : links) {
             const auto details = model.linkDetails(link.source);
             require(model.position() == origin, "Inspecting a link moved the page");
+            if (details.label == "Missing")
+                require(ReaderFootnoteProbe::view(model).getDocument()->findAttrValueIndex(
+                                U"_doc_fragment_1_ missing")
+                                == lUInt32(-1),
+                        "Inspecting a missing passage added its ID to the document");
             if (details.label == "Hidden" || details.label == "Missing") {
                 require(details.kind == LinkKind::Unavailable && details.target.isEmpty(),
                         "A missing or hidden passage became navigable");

@@ -2007,6 +2007,13 @@ int main(int argc, char **argv)
         QApplication::processEvents();
         require(!open->isVisible() && text->page() == 0 && text->pages() == 1,
                 "Hidden note retained a target or old pagination");
+        host.resize(1480, 720);
+        details.target = "passage";
+        details.html = "<p>First line.<br/>Second line.</p>";
+        note.open(details, QRect(80, 100, 100, 40), host.rect());
+        QApplication::processEvents();
+        require(text->pages() == 1 && open->isVisible(),
+                "A short footnote must fit beside its controls on a landscape phone");
         QWidget browserHost;
         browserHost.resize(1264, 1680);
         browserHost.show();

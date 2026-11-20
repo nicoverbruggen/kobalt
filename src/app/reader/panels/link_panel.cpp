@@ -87,9 +87,15 @@ void LinkPanel::open(const LinkDetails &details, const QRect &reference, const Q
     passage->setAccessibleName(passage->text()
                                + (chapter.isEmpty() ? QString() : " " + passage->caption()));
     const auto area = readingArea.isEmpty() ? parentWidget()->rect() : readingArea;
-    const int h =
-            qMin(parentWidget()->height() * metrics::lookup::heightPercent / 100, area.height());
-    // Like the dictionary, the sheet takes the half without the reference.
+    // On short screens the heading, navigation and pager can consume the whole
+    // sheet. Reserve two lines of note text even when all three rows are shown.
+    const int rows = 2 * chrome::actionHeight
+            + (destination.isEmpty() ? 0 : int(metrics::links::returnHeight));
+    const int minimum = rows + chrome::heavyRule + metrics::control::border + 2 * chrome::blockTop
+            + 2 * ui::interfaceLineHeight(text->textFont());
+    const int preferred = parentWidget()->height() * metrics::lookup::heightPercent / 100;
+    const int h = qMin(area.height(), qMax(minimum, preferred));
+    // Anchor the sheet to the edge opposite the reference.
     lower = reference.center().y() < area.center().y();
     setEdges(lower ? Qt::TopEdge : Qt::BottomEdge);
     setGeometry(area.left(), lower ? area.bottom() + 1 - h : area.top(), area.width(), h);

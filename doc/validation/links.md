@@ -12,6 +12,8 @@ Website targets preserve encoded path and query separators when the reader prepa
 
 The native suite launches no external browser. Physical touch accuracy still needs device validation.
 
+`component.ui` checks that a short footnote fits on one page on a landscape phone with the Show in book row visible.
+
 `desktop.links` opens short, long and legacy footnotes in the book, then returns to the reference. It checks the exact source position and rendered page pixels. Run it with `KOBALT_CHAPTER_MODE=0`, `1` or `2` to cover Accurate, Fast or Hybrid rendering.
 
 `engine.links` also checks explicit EPUB page-note markup, token lists, individual InDesign note bodies, labeled Gutenberg paragraphs and continuations, exclusion of groups, backlinks, hidden bodies, unlinked notes and ordinary numeric destinations. It compares rendered pages to check that Kobalt overrides publisher note boxes and spacing while preserving inline markup. It checks a note reached by a percent-encoded fragment, note continuation fragments and page bounds, popup recognition, note selection rectangles and handles, saved-highlight redraw, source anchors, viewport reflow, restored pixels when disabled and parsed-cache reuse across both choices and themes. `desktop.inpageFootnotes` drives the checkbox, deferred saving, popup access, long-note page turns, reopening and restoring defaults in both themes. The page-note gallery shows the setting, ordinary text, notes, popup and continuation pages at the existing gallery sizes. These cases do not establish compatibility with every publisher’s note markup.

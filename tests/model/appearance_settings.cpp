@@ -380,6 +380,15 @@ int main()
                     && hiddenFeatures.value("tappable_links") == "all"
                     && hiddenFeatures.value("future_option").toInt() == 42,
             "Hidden features retained incompatible options or lost unrelated preferences");
+    for (bool hideActivity : { false, true }) {
+        auto saved = appearance::cleanPreferences(
+                { { "disable_stats", true }, { "disable_activity", hideActivity } });
+        require(!features::enabled(saved, features::Activity),
+                "Activity was available while Stats was hidden");
+        saved["disable_stats"] = false;
+        require(features::enabled(saved, features::Activity) == !hideActivity,
+                "Showing Stats lost the saved Activity choice");
+    }
     // My Words shares the bookmarks' sort order, so it keeps the order alone.
     const auto wordsShown = appearance::cleanPreferences({ { "disable_annotations", true },
                                                            { "disable_bookmarks", true },

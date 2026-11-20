@@ -385,6 +385,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "sleep-private-overlay", "Private PNG over text: asleep" },
         { "power-off-private-overlay", "Private PNG over text: powered off" },
         { "settings-features", "Hide features" },
+        { "settings-features-stats-hidden", "Hide features with Stats hidden" },
         { "settings-standby-confirmation", "Disable reader standby confirmation" },
         { "settings-automatic-opening-confirmation", "Turn off automatic opening confirmation" },
         { "settings-debug", "Debug settings" },

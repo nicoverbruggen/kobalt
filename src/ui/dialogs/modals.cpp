@@ -412,9 +412,16 @@ void PopupCard::fitToHeight(int height, int fallbackWidth)
         return;
     }
     int used = 0;
-    for (auto *row : rows) {
+    for (int index = 0; index < rows.size(); ++index) {
+        auto *row = rows[index];
         const int needed = rowHeight(row) + contentRows->spacing();
-        if (rowPages.isEmpty() || (used && used + needed > room)) {
+        int together = needed;
+        if (row->property("keepWithNext").toBool() && index + 1 < rows.size()) {
+            const int pair = needed + rowHeight(rows[index + 1]) + contentRows->spacing();
+            if (pair <= room)
+                together = pair;
+        }
+        if (rowPages.isEmpty() || (used && used + together > room)) {
             rowPages.append(QVector<QWidget *>());
             used = 0;
         }

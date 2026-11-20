@@ -20,7 +20,9 @@ inline bool debugMode(const QJsonObject &preferences)
 
 inline bool enabled(const QJsonObject &preferences, Feature feature)
 {
-    return !preferences.value(keys[feature]).toBool(false);
+    // Activity lives inside Stats. Keep its own preference for when Stats returns.
+    return !preferences.value(keys[feature]).toBool(false)
+            && (feature != Activity || !preferences.value(keys[Stats]).toBool(false));
 }
 
 // Normalize dependent choices together with the switches, including profiles

@@ -120,16 +120,20 @@ void DescribedOption::setTitleLabel(QLabel *label)
     update();
 }
 
-void DescribedOption::setLeadingIcon(ControlIcon icon)
+void DescribedOption::setLeadingIcon(ControlIcon icon, IconBranch branch)
 {
     leadingIcon = int(icon);
+    iconBranch = branch;
     updateGeometry();
     update();
 }
 
 int DescribedOption::iconSpace() const
 {
-    return leadingIcon < 0 ? 0 : int(metrics::chrome::cellIcon) + px(20);
+    if (leadingIcon < 0)
+        return 0;
+    const int indent = iconBranch == IconBranch::Child ? int(metrics::chrome::cellIcon) : 0;
+    return int(metrics::chrome::cellIcon) + px(20) + indent;
 }
 
 int DescribedOption::labelHeight() const
@@ -258,7 +262,14 @@ void DescribedOption::paintEvent(QPaintEvent *)
     // The pressed gray of list rows such as Chapters.
     painter.fillRect(rect(), held ? themeColors(this).pressedPaper : paper);
     if (appearance.dividers) {
-        paintEdges(painter, rect(), appearance.dividers, dividerColor(this));
+        auto edges = appearance.dividers;
+        if (iconBranch == IconBranch::Parent && (edges & Qt::BottomEdge)) {
+            // Leave the gutter open for the line down to the child.
+            paintEdges(painter, rect().adjusted(textLeft, 0, 0, 0), Qt::BottomEdge,
+                       dividerColor(this));
+            edges &= ~Edges(Qt::BottomEdge);
+        }
+        paintEdges(painter, rect(), edges, dividerColor(this));
     }
     if (!isEnabled())
         painter.setOpacity(.45);
@@ -303,8 +314,21 @@ void DescribedOption::paintEvent(QPaintEvent *)
     if (leadingIcon >= 0) {
         // The same place as a list action row's icon, balancing its bearings.
         const int size = metrics::chrome::cellIcon;
-        const QRect bounds(textLeft - iconSpace() - px(7), (height() - size) / 2 + px(1), size,
+        const QRect bounds(textLeft - size - px(20) - px(7), (height() - size) / 2 + px(1), size,
                            size);
+        if (iconBranch != IconBranch::None) {
+            const int x = bounds.center().x(), y = bounds.center().y();
+            painter.save();
+            painter.setOpacity(1);
+            painter.setPen(QPen(dividerColor(this), metrics::control::border));
+            if (iconBranch == IconBranch::Parent)
+                painter.drawLine(x, bounds.bottom() + px(6), x, height());
+            else {
+                painter.drawLine(x - size, 0, x - size, y);
+                painter.drawLine(x - size, y, bounds.left() - px(6), y);
+            }
+            painter.restore();
+        }
         const auto icon = controlIcon(ControlIcon(leadingIcon), ink);
         // Annotate uses the same custom painter as the navigation tabs.
         if (icon.isNull())

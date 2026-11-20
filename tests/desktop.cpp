@@ -13708,9 +13708,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         saved["dense_stats_chart"] = true;
         saved["navigation_bar_buttons"] = "pages";
         QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
-        const char *keys[] = { "disable_navigate",        "disable_stats",   "disable_annotations",
-                               "disable_bookmarks",       "disable_kosync",  "disable_words",
-                               "disable_highlight_links", "disable_activity" };
+        const char *keys[] = { "disable_navigate",  "disable_stats",
+                               "disable_kosync",    "disable_annotations",
+                               "disable_bookmarks", "disable_highlight_links",
+                               "disable_words" };
         for (int pass = 0; pass < 2; ++pass) {
             QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
             fixture.window.openBook(path);
@@ -13730,12 +13731,22 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             auto *featuresButton =
                     static_cast<ui::CaptionButton *>(fixture.widget("rrDisabledFeatures"));
             const QString allHidden =
-                    "Navigation, Stats, Annotations, Bookmarks, KOSync, My Words, Highlight links, Activity";
+                    "Navigation, Stats, Activity, KOSync, Annotations, Bookmarks, Highlight links, My Words";
             QCOMPARE(featuresButton->caption(), pass ? allHidden : QString("None"));
             QVERIFY(fixture.press("rrDisabledFeatures"));
             QTRY_VERIFY(fixture.visible("rrDisabledFeaturesPopup"));
             if (!pass) {
-                QVERIFY(fixture.press("rrDisableFeature_disable_highlight_links"));
+                auto *activity = qobject_cast<QCheckBox *>(
+                        fixture.widget("rrDisableFeature_disable_activity"));
+                QVERIFY(activity);
+                QVERIFY(fixture.revealCardRow(activity));
+                QVERIFY(fixture.press("rrDisableFeature_disable_activity"));
+                auto *stats = fixture.widget("rrDisableFeature_disable_stats");
+                QVERIFY(fixture.revealCardRow(stats));
+                QVERIFY(fixture.press("rrDisableFeature_disable_stats"));
+                QVERIFY(activity->isChecked() && !activity->isEnabled());
+                QVERIFY(fixture.press("rrDisableFeature_disable_stats"));
+                QVERIFY(activity->isChecked() && activity->isEnabled());
                 QVERIFY(fixture.press("rrDisabledFeaturesCancel"));
                 QTRY_VERIFY(!fixture.widget("rrDisabledFeaturesPopup"));
                 QCOMPARE(featuresButton->caption(), QString("None"));
@@ -13750,6 +13761,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 QCOMPARE(option->isChecked(), bool(pass));
                 QVERIFY(fixture.press(name.toUtf8().constData()));
             }
+            auto *activity =
+                    qobject_cast<QCheckBox *>(fixture.widget("rrDisableFeature_disable_activity"));
+            QVERIFY(activity);
+            QCOMPARE(activity->isChecked(), !pass);
+            QCOMPARE(activity->isEnabled(), bool(pass));
             QVERIFY(fixture.press("rrDisabledFeaturesDone"));
             QCOMPARE(featuresButton->caption(), pass ? QString("None") : allHidden);
             QCOMPARE(fixture.widget("rrSettingsKosync")->isHidden(), pass == 0);
@@ -13759,6 +13775,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             for (const auto *key : keys)
                 QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value(key).toBool(),
                              pass == 0);
+            QVERIFY(!storage::readJson(fixture.paths.preferences())
+                             .value("disable_activity")
+                             .toBool());
             QVERIFY(!fixture.visible("rrControlsTop"));
             QVERIFY(fixture.press("rrPage"));
             QCOMPARE(fixture.visible("rrNavSeek"), pass == 1);
@@ -17877,7 +17896,13 @@ private slots:
         QVERIFY(fixture.press("rrDisabledFeatures"));
         QTRY_VERIFY(fixture.visible("rrDisabledFeaturesPopup"));
         capturePages(fixture, name + "-settings-features", "rrDisabledFeaturesPopup");
-        QVERIFY(fixture.press("rrDisabledFeaturesDone"));
+        QVERIFY(fixture.revealCardRow(fixture.widget("rrDisableFeature_disable_stats")));
+        QVERIFY(fixture.press("rrDisableFeature_disable_stats"));
+        auto *activity = fixture.widget("rrDisableFeature_disable_activity");
+        QVERIFY(fixture.revealCardRow(activity));
+        QVERIFY(!activity->isEnabled());
+        QVERIFY(capture(fixture, name + "-settings-features-stats-hidden"));
+        QVERIFY(fixture.press("rrDisabledFeaturesCancel"));
 
         QVERIFY(revealSettingsOption(fixture, "rrDisableReaderStandby"));
         QVERIFY(fixture.press("rrDisableReaderStandby"));

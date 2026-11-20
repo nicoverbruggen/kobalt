@@ -75,7 +75,8 @@ public:
     QWidget *previewWidget() const { return preview; }
 
     // An icon before the label, placed like the icons of list action rows.
-    void setLeadingIcon(ControlIcon icon);
+    enum class IconBranch { None, Parent, Child };
+    void setLeadingIcon(ControlIcon icon, IconBranch branch = IconBranch::None);
     // The wordmark replaces the painted title and shares the checkbox's click target.
     void setTitleLabel(QLabel *label);
 
@@ -94,6 +95,7 @@ private:
     QWidget *preview = nullptr;
     QSize previewSize;
     int leadingIcon = -1;
+    IconBranch iconBranch = IconBranch::None;
     int iconSpace() const;
     // Large text makes the title line taller by what it adds to the line
     // height; the description moves down with it.

@@ -48,6 +48,27 @@ using ui::readerStyle;
 
 namespace {
 
+struct FeatureOption
+{
+    features::Feature feature;
+    const char *label;
+    ui::ControlIcon icon;
+};
+
+constexpr FeatureOption featureOptions[] = {
+    { features::Navigate, "features.navigate", ui::ControlIcon::Compass },
+    { features::Stats, "features.stats", ui::ControlIcon::Graph },
+    { features::Activity, "features.activity", ui::ControlIcon::Calendar },
+    { features::Kosync, "features.kosync", ui::ControlIcon::Sync },
+    { features::Annotations, "features.annotations", ui::ControlIcon::Annotate },
+    { features::Bookmarks, "features.bookmarks", ui::ControlIcon::Bookmark },
+    { features::HighlightLinks, "features.highlight_links", ui::ControlIcon::Link },
+    { features::Words, "features.words", ui::ControlIcon::Note },
+};
+static_assert(sizeof(featureOptions) / sizeof(*featureOptions)
+                      == sizeof(features::keys) / sizeof(*features::keys),
+              "A feature without a checklist row");
+
 // A retained confirmation might have a new font. If Qt has a resize to
 // deliver on show, that resize already fits it with the current font.
 void showConfirmation(ui::ChoiceModal *dialog)
@@ -3093,13 +3114,10 @@ void SettingsPanel::showDebug(bool visible)
 
 void SettingsPanel::updateFeatureOptions()
 {
-    const char *names[] = { "navigate", "stats", "annotations",     "bookmarks",
-                            "kosync",   "words", "highlight_links", "activity" };
-    static_assert(sizeof(names) == sizeof(features::keys), "A feature without a name");
     QStringList hidden;
-    for (int i = 0; i < int(sizeof(names) / sizeof(*names)); ++i)
-        if (featurePreferences.value(features::keys[i]).toBool(false))
-            hidden.append(strings::get((QString("features.") + names[i]).toUtf8().constData()));
+    for (const auto &entry : featureOptions)
+        if (!features::enabled(featurePreferences, entry.feature))
+            hidden.append(strings::get(entry.label));
     const bool navigate = features::enabled(featurePreferences, features::Navigate);
     const bool stats = features::enabled(featurePreferences, features::Stats);
     if (disabledFeaturesButton) {
@@ -3138,32 +3156,40 @@ void SettingsPanel::showDisabledFeatures()
     card->heading(strings::get("settings.disable_features"),
                   strings::get("settings.disable_features_description"));
     auto draft = std::make_shared<QJsonObject>(featurePreferences);
-    const char *names[] = { "navigate", "stats", "annotations",     "bookmarks",
-                            "kosync",   "words", "highlight_links", "activity" };
-    const ui::ControlIcon icons[] = { ui::ControlIcon::Compass,  ui::ControlIcon::Graph,
-                                      ui::ControlIcon::Annotate, ui::ControlIcon::Bookmark,
-                                      ui::ControlIcon::Sync,     ui::ControlIcon::Note,
-                                      ui::ControlIcon::Link,     ui::ControlIcon::Calendar };
-    static_assert(sizeof(icons) / sizeof(*icons) == sizeof(names) / sizeof(*names),
-                  "A feature without an icon");
     QVector<ui::DescribedOption *> options;
-    for (int i = 0; i < int(sizeof(names) / sizeof(*names)); ++i) {
-        const auto *key = features::keys[i];
-        const auto prefix = QString("features.") + names[i];
-        auto *option = checklistOption(card, QString("rrDisableFeature_%1").arg(key),
-                                       strings::get(prefix.toUtf8().constData()),
-                                       strings::get((prefix + "_description").toUtf8().constData()),
-                                       i == 0);
+    ui::DescribedOption *stats = nullptr, *activity = nullptr;
+    for (const auto &entry : featureOptions) {
+        const auto *key = features::keys[entry.feature];
+        auto *option = checklistOption(
+                card, QString("rrDisableFeature_%1").arg(key), strings::get(entry.label),
+                strings::get((QByteArray(entry.label) + "_description").constData()),
+                options.isEmpty());
         auto presentation = option->presentation();
         presentation.leadingIndicator = false;
         option->setPresentation(presentation);
-        option->setLeadingIcon(icons[i]);
+        using Branch = ui::DescribedOption::IconBranch;
+        auto branch = Branch::None;
+        if (entry.feature == features::Stats) {
+            stats = option;
+            stats->setProperty("keepWithNext", true);
+            branch = Branch::Parent;
+        } else if (entry.feature == features::Activity) {
+            activity = option;
+            branch = Branch::Child;
+        }
+        option->setLeadingIcon(entry.icon, branch);
         option->setChecked(draft->value(key).toBool(false));
         rows->addWidget(option);
         options.append(option);
         connect(option, &QCheckBox::clicked, card,
                 [draft, key](bool hidden) { (*draft)[key] = hidden; });
     }
+    const auto updateActivity = [activity, draft] {
+        activity->setEnabled(features::enabled(*draft, features::Stats));
+        activity->setChecked(!features::enabled(*draft, features::Activity));
+    };
+    connect(stats, &QCheckBox::clicked, card, updateActivity);
+    updateActivity();
     auto *cancel = ui::makeModalButton(
             card, { strings::get("common.cancel"), "rrDisabledFeaturesCancel" }, false);
     auto *done = ui::makeModalButton(

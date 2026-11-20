@@ -416,7 +416,8 @@ double pageEstimateTextFraction(const QByteArray &xhtml, const QString &path, bo
         } else if (token == QXmlStreamReader::Characters && body && depth > 0) {
             const auto value = reader.text().toString();
             int at = 0;
-            if (reader.isWhitespace()) {
+            // Empty CDATA sections produce a Characters token but no engine text node.
+            if (value.isEmpty() || reader.isWhitespace()) {
                 count(value, at, INT_MAX);
                 continue;
             }

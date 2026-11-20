@@ -1006,6 +1006,35 @@ void openFiles(EngineDocument &model, const test::BookFiles &files)
     require(model.go(0), "Cannot go to the first page");
 }
 
+void splitTextEstimate()
+{
+    const QByteArray xhtml =
+            "<html xmlns='http://www.w3.org/1999/xhtml'><body><p>"
+            "one <![CDATA[two]]><![CDATA[]]> thr&#101;e <em>f&#x6f;ur</em> five</p></body></html>";
+    const QString plain = QStringLiteral("one two three four five");
+    EngineDocument model(test::readerFonts());
+    openResources(model,
+                  test::publisherPackage("en", "Text positions", { { "part.xhtml", xhtml } },
+                                         "<itemref idref='part.xhtml'/>"),
+                  {});
+    qint64 expectedWords = 0;
+    for (const auto &word : plain.split(' ')) {
+        const auto hits = model.searchPage(word, 0).hits;
+        require(hits.size() == 1, qPrintable("Missing rendered word: " + word));
+        const QString end = hits.first().end;
+        const QString path = end.mid(end.lastIndexOf("/body"));
+        qint64 words = -1;
+        const auto fraction = pageEstimateTextFraction(xhtml, path, false, &words);
+        const int length = plain.indexOf(word) + word.size();
+        require(words == ++expectedWords, qPrintable("Incorrect word count at " + end));
+        require(std::abs(fraction * plain.size() - length) < 0.000001,
+                qPrintable(QString("Estimate at %1 (%2) counted %3 characters instead of %4")
+                                   .arg(word, end)
+                                   .arg(fraction * plain.size())
+                                   .arg(length)));
+    }
+}
+
 void selectionAcrossSliceAfterReflow()
 {
     const auto files = test::engineBook(false, 1, 220);
@@ -3558,6 +3587,7 @@ int main(int argc, char **argv)
         require(layout() != before, "Replacing a font under the same family kept the layout key");
     }
     offscreenRangeEnd();
+    splitTextEstimate();
     selectionAcrossSliceAfterReflow();
     savedPlaceOutsideOpeningWindow();
     parkedBookLanguage();

@@ -87,8 +87,10 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
             if (margin.value && (column || side >= 2 || margin.type == css_val_unspecified || margin.value < 0))
                 return false;
         }
-        if (item->max_width.type == css_val_percent ||
-            item->min_width.type == css_val_percent)
+        // A block row measures both limits against its content width.
+        // Columns and shrink-to-fit inline rows use different sizing paths.
+        if ((column || style->display == css_d_inline_flex) &&
+            (item->max_width.type == css_val_percent || item->min_width.type == css_val_percent))
             return false;
         if (column && (item->flex_grow || item->flex_basis.type != css_val_unspecified))
             return false;

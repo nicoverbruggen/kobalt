@@ -8882,7 +8882,10 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
             // this is ensured naturally by the inner content measurement)
             // We do max-width first, and then min-width (https://www.w3.org/TR/CSS2/visudet.html#min-max-widths)
             css_length_t style_max_width = style->max_width;
-            if ( style_max_width.type != css_val_unspecified ) {
+            // Blaze: a flex row already resolved percentage limits against its
+            // width. This item's allocated box is a different percentage basis.
+            if ( style_max_width.type != css_val_unspecified &&
+                 !(flex_width >= 0 && style_max_width.type == css_val_percent) ) {
                 if ( BLOCK_RENDERING(flags, ALLOW_STYLE_W_H_ABSOLUTE_UNITS) ||
                      style_max_width.type == css_val_screen_px || // in case it was converted to screen_px beforehand
                      is_length_relative_unit(style_max_width.type) ) {
@@ -8896,7 +8899,8 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                 }
             }
             css_length_t style_min_width = style->min_width;
-            if ( style_min_width.type != css_val_unspecified ) {
+            if ( style_min_width.type != css_val_unspecified &&
+                 !(flex_width >= 0 && style_min_width.type == css_val_percent) ) {
                 if ( BLOCK_RENDERING(flags, ALLOW_STYLE_W_H_ABSOLUTE_UNITS) ||
                      style_min_width.type == css_val_screen_px || // in case it was converted to screen_px beforehand
                      is_length_relative_unit(style_min_width.type) ) {

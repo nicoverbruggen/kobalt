@@ -163,6 +163,14 @@ void flexRows()
                     "width:80px;margin-right:4px")
                     == QRect(240, 0, 80, 32),
             "A reversed row preserves physical left and right margins");
+    const auto limited =
+            redItem("flex", "width:320px", "width:40px;min-width:25%", "flex:1;max-width:50%");
+    require(limited == QRect(80, 0, 160, 32),
+            qPrintable(QString("Expected adjacent items constrained by the row, got %1,%2 %3x%4")
+                               .arg(limited.x())
+                               .arg(limited.y())
+                               .arg(limited.width())
+                               .arg(limited.height())));
     require(redItem("flex", "align-items:center;gap:12px", "width:64px;height:64px", "width:160px")
                     == QRect(76, 16, 160, 32),
             "Center a label beside a taller item");

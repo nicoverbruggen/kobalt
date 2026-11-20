@@ -19,7 +19,8 @@ set(layout_policy "849b421de582bf6b89f84263eab8e27dabd97cc0a8cfc807504f170a6ac35
 # Version 16: correct constrained flex rows and intrinsic inline flex sizing.
 # Version 17: rebuild layouts that resumed with another publication’s language.
 # Version 18: repaginate flex rows with horizontal item margins.
-set(rendering_version 18)
+# Version 19: repaginate block flex rows with percentage item width limits.
+set(rendering_version 19)
 file(GLOB cache_patterns CONFIGURE_DEPENDS
     "${KOBALT_ROOT}/assets/hyph/*.pattern" "${KOBALT_ROOT}/assets/hyph/*.khg")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${cache_patterns})

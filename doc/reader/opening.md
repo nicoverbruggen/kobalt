@@ -51,7 +51,7 @@ Protected-book routing checks Adobe and LCP flags, Kobo key-record presence, and
 
 Kobalt tolerates repeated manifest items when every attribute matches. Conflicting declarations with the same ID remain unsupported.
 
-- ZIP64 archives are not supported. Resource encryption is unsupported except for IDPF and Adobe font obfuscation.
+- Single-disk ZIP64 archives can store chapters past the 4 GiB offset. Kobalt reads individual resources on demand. The directory limit is 4,096 entries and 4 MiB, and the total expanded size limit is 4 GiB. Resource encryption is unsupported except for IDPF and Adobe font obfuscation.
 - SVG input elements can nest up to 64 levels. Rendering skips references that would extend an active SVG reference chain beyond 16 levels.
 - Resources are limited to 32 MiB each, and the source cache to 32 MiB in total. Images above the limits show a placeholder. An optional image that cannot load shows a warning and does not stop later images from loading. Renewing the source allows another attempt. Cancellation, revoked access and changed resource bytes still stop the session. Interlaced PNG images whose decoded storage exceeds 64 MiB are not rendered, including images embedded inside other resources. The parsed document, fonts and page images are outside the source-cache budget.
 - Typography changes lay out the whole book again. There is no partial reflow.

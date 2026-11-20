@@ -13,6 +13,7 @@ namespace kobalt {
 class Publication
 {
 public:
+    bool zip64() const { return zip64_; }
     bool protectedBook() const { return protected_; }
 
     bool inspect(const QByteArray &source, QString *error, OpeningResult *result = nullptr);
@@ -35,7 +36,7 @@ public:
     static constexpr int maxResource = 16 * 1024 * 1024;
 
 private:
-    bool protected_ = false;
+    bool protected_ = false, zip64_ = false;
     QStringList names_;
     QMap<QString, qint64> sizes_;
     QSet<QString> skippedFonts_;

@@ -14,6 +14,8 @@
 #include "document_cache.h"
 #include "engine/engine_activity.h"
 #include "publication/publication.h"
+#include "publication/zip_resource.h"
+#include <QBuffer>
 #include "render/image_damage.h"
 #include <atomic>
 #include <lvdocview.h>
@@ -455,11 +457,8 @@ int spineItemIndex(const QString &position)
     return match.hasMatch() ? qMax(1, match.captured(1).toInt()) - 1 : -1;
 }
 
-bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error,
-                                      QSet<QString> *skippedFonts)
+static bool inspectMemoryArchive(const QByteArray &bytes, Publication &publication, QString *error)
 {
-    if (skippedFonts)
-        skippedFonts->clear();
     auto fail = [error](const QString &message) {
         *error = message;
         return false;
@@ -467,52 +466,24 @@ bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error,
     if (bytes.size() < 22 || bytes.size() > maxBook)
         return fail(strings::get("error.unsupported_publication_size"));
     // Inspect the central directory before giving the archive to the engine.
-    // Reject ZIP encryption and ZIP64 rather than guessing.
-    Publication publication;
     if (!publication.inspect(bytes, error))
         return false;
-    auto u16 = [&bytes](int p) {
-        return qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(bytes.constData() + p));
-    };
-    auto u32 = [&bytes](int p) {
-        return qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(bytes.constData() + p));
-    };
-    int end = -1;
-    for (int p = bytes.size() - 22; p >= qMax(0, int(bytes.size()) - 65557); --p) {
-        if (u32(p) == 0x06054b50 && p + 22 + u16(p + 20) == bytes.size()) {
-            end = p;
-            break;
-        }
-    }
-    if (end < 0 || u16(end + 4) || u16(end + 6) || u16(end + 8) != u16(end + 10))
-        return fail(strings::get("error.unsupported_epub_archive"));
-    const quint32 offset = u32(end + 16), length = u32(end + 12);
-    const int count = u16(end + 10);
-    if (!count || count == 65535 || quint64(offset) + length != quint64(end))
-        return fail(strings::get("error.unsupported_epub_directory"));
-    int at = int(offset);
-    quint64 expanded = 0;
-    bool container = false;
-    for (int i = 0; i < count; ++i) {
-        if (at > end - 46 || u32(at) != 0x02014b50)
-            return fail(strings::get("error.invalid_epub_directory"));
-        const int nameSize = u16(at + 28), extra = u16(at + 30), comment = u16(at + 32);
-        const quint64 next = quint64(at) + 46 + nameSize + extra + comment;
-        if (next > quint64(end) || (u16(at + 8) & 0x41) || u32(at + 20) == 0xffffffffU)
-            return fail(strings::get("error.encrypted_or_unsupported_epub"));
-        const QByteArray name = bytes.mid(at + 46, nameSize);
-        if (name == "META-INF/container.xml")
-            container = true;
-        expanded += u32(at + 24);
-        if (expanded > 256 * 1024 * 1024)
-            return fail(strings::get("error.expanded_publication_is_too_large"));
-        at = int(next);
-    }
-    if (!container || at != end)
-        return fail(strings::get("error.missing_epub_container"));
-    if (skippedFonts)
-        *skippedFonts = publication.skippedFonts();
+    qint64 expanded = 0;
+    for (const auto size : publication.sizes())
+        expanded += size;
+    if (expanded > 256 * 1024 * 1024)
+        return fail(strings::get("error.expanded_publication_is_too_large"));
     return true;
+}
+
+bool EngineDocument::supportedArchive(const QByteArray &bytes, QString *error,
+                                      QSet<QString> *skippedFonts)
+{
+    Publication publication;
+    const bool valid = inspectMemoryArchive(bytes, publication, error);
+    if (skippedFonts)
+        *skippedFonts = valid ? publication.skippedFonts() : QSet<QString>{};
+    return valid;
 }
 
 void setChapterModeOverride(int mode)
@@ -523,19 +494,51 @@ void setChapterModeOverride(int mode)
 bool EngineDocument::open(QByteArray bytes, QSize size, const QJsonObject &saved, QString *error,
                           OpeningProgress progress)
 {
-    QSet<QString> skippedFonts;
-    if (!supportedArchive(bytes, error, &skippedFonts))
+    Publication publication;
+    if (!inspectMemoryArchive(bytes, publication, error))
         return false;
     auto source = std::make_shared<ReaderSource>();
-    source->bytes = std::move(bytes);
-    source->container = LVOpenArchieve(
-            LVCreateMemoryStream(source->bytes.data(), source->bytes.size(), false, LVOM_READ));
-    if (source->container.isNull()) {
-        *error = strings::get("error.the_reading_engine_could_not_open_this_epub");
-        return false;
+    source->sizes = publication.sizes();
+    if (publication.zip64()) {
+        // Blaze's memory ZIP reader uses 32-bit offsets. Use the same bounded
+        // member reader as file-backed books for ZIP64 input.
+        struct MemoryArchive
+        {
+            QMutex mutex;
+            QBuffer buffer;
+            ZipResourceIndex index;
+        };
+
+        auto archive = std::make_shared<MemoryArchive>();
+        archive->buffer.setData(bytes);
+        archive->buffer.open(QIODevice::ReadOnly);
+        source->resources = std::make_shared<ResourceCache>(
+                publication.names(),
+                [archive](const QString &name, const ResourceCache::Sink &sink, QString *) {
+                    QMutexLocker lock(&archive->mutex);
+                    ZipResource member;
+                    if (!member.open(archive->buffer, name, archive->index))
+                        return false;
+                    while (member.valid() && !member.finished()) {
+                        const auto block = member.next();
+                        if (!block.isEmpty() && !sink(block.constData(), block.size()))
+                            return false;
+                    }
+                    return member.valid();
+                },
+                std::make_shared<std::atomic_bool>(false));
+        source->container = LVContainerRef(new ResourceContainer(source->resources, source->sizes));
+    } else {
+        source->bytes = std::move(bytes);
+        source->container = LVOpenArchieve(
+                LVCreateMemoryStream(source->bytes.data(), source->bytes.size(), false, LVOM_READ));
+        if (source->container.isNull()) {
+            *error = strings::get("error.the_reading_engine_could_not_open_this_epub");
+            return false;
+        }
     }
     return openSource(std::move(source), size, saved, error, std::move(progress), nullptr, {},
-                      std::move(skippedFonts));
+                      publication.skippedFonts());
 }
 
 bool EngineDocument::openResources(std::shared_ptr<ResourceCache> resources,

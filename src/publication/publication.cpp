@@ -1,3 +1,4 @@
+#include "zip_directory.h"
 #include "support/strings.h"
 #include "publication.h"
 #include "zip_resource.h"
@@ -354,46 +355,18 @@ bool Publication::inspect(QIODevice &source, QString *error, OpeningResult *resu
     fingerprint_.clear();
     received_ = 0;
     protected_ = false;
+    zip64_ = false;
     const qint64 length = source.size();
-    if (source.isSequential() || length < 22 || length > 1024LL * 1024 * 1024)
+    if (source.isSequential() || length < 22)
         return inspectionFailure(error, result, OpeningFailureKind::Unsupported,
                                  strings::key("error.unsupported_publication_size"));
-    const auto tailStart = qMax(qint64(0), length - 65557);
-    if (!source.seek(tailStart))
-        return inspectionFailure(error, result, OpeningFailureKind::Io,
-                                 strings::key("error.cannot_read_publication_directory"));
-    const auto tail = source.read(length - tailStart);
-    if (tail.size() != length - tailStart)
-        return inspectionFailure(error, result, OpeningFailureKind::Io,
-                                 strings::key("error.incomplete_publication_directory"));
-    auto tail16 = [&](int p) {
-        return qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(tail.constData() + p));
-    };
-    auto tail32 = [&](int p) {
-        return qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(tail.constData() + p));
-    };
-    int end = -1;
-    for (int p = tail.size() - 22; p >= 0; --p)
-        if (tail32(p) == 0x06054b50 && p + 22 + tail16(p + 20) == tail.size()) {
-            end = p;
-            break;
-        }
-    if (end < 0 || tail16(end + 4) || tail16(end + 6) || tail16(end + 8) != tail16(end + 10))
+    zip::Directory contents;
+    if (!zip::readDirectory(source, contents))
         return inspectionFailure(error, result, OpeningFailureKind::Unsupported,
                                  strings::key("error.unsupported_publication_directory"));
-    const int count = tail16(end + 10);
-    const quint32 offset = tail32(end + 16), directorySize = tail32(end + 12);
-    if (!count || count > 4096 || directorySize > 4 * 1024 * 1024
-        || quint64(offset) + directorySize != quint64(tailStart + end))
-        return inspectionFailure(error, result, OpeningFailureKind::Unsupported,
-                                 strings::key("error.unsupported_publication_directory_size"));
-    if (!source.seek(offset))
-        return inspectionFailure(error, result, OpeningFailureKind::Io,
-                                 strings::key("error.unsupported_publication_directory_size"));
-    const auto directory = source.read(directorySize);
-    if (directory.size() != qint64(directorySize))
-        return inspectionFailure(error, result, OpeningFailureKind::Io,
-                                 strings::key("error.incomplete_publication_directory"));
+    zip64_ = contents.zip64;
+    const auto &directory = contents.entries;
+    const int directorySize = directory.size(), count = contents.count;
     auto read16 = [&](int p) {
         return qFromLittleEndian<quint16>(
                 reinterpret_cast<const uchar *>(directory.constData() + p));
@@ -412,10 +385,13 @@ bool Publication::inspect(QIODevice &source, QString *error, OpeningResult *resu
                                      strings::key("error.invalid_publication_directory"));
         const int nameLength = read16(at + 28);
         const quint64 next = quint64(at) + 46 + nameLength + read16(at + 30) + read16(at + 32);
-        if (next > directorySize || read16(at + 34) || read32(at + 20) == 0xffffffffU
-            || read32(at + 24) == 0xffffffffU || read32(at + 42) >= offset)
+        zip::Member member;
+        if (next > quint64(directorySize) || !zip::member(directory, at, member)
+            || member.local >= contents.offset || member.packed > contents.offset - member.local)
             return inspectionFailure(error, result, OpeningFailureKind::InvalidContent,
                                      strings::key("error.unsupported_publication_member"));
+        zip64_ |= read32(at + 20) == 0xffffffff || read32(at + 24) == 0xffffffff
+                || read32(at + 42) == 0xffffffff || read16(at + 34) == 0xffff;
         if (read16(at + 8) & 0x41) {
             protected_ = true;
             return inspectionFailure(error, result, OpeningFailureKind::Protected,
@@ -433,10 +409,10 @@ bool Publication::inspect(QIODevice &source, QString *error, OpeningResult *resu
             return inspectionFailure(error, result, OpeningFailureKind::InvalidContent,
                                      strings::key("error.ambiguous_publication_member_path"));
         seen.insert(name);
-        expanded += read32(at + 24);
-        if (expanded > 4ULL * 1024 * 1024 * 1024)
+        if (member.size > 4ULL * 1024 * 1024 * 1024 - expanded)
             return inspectionFailure(error, result, OpeningFailureKind::Unsupported,
                                      strings::key("error.expanded_publication_is_too_large"));
+        expanded += member.size;
         // Kobalt does not open LCP-protected books. Their encryption metadata
         // would reject them below, but that check is about fonts and may change.
         if (name == "META-INF/license.lcpl") {
@@ -450,10 +426,13 @@ bool Publication::inspect(QIODevice &source, QString *error, OpeningResult *resu
             unsupportedMetadata = true;
         if (!isDirectory) {
             names_.append(name);
-            sizes_[name] = read32(at + 24);
+            sizes_[name] = member.size;
         }
         at = int(next);
     }
+    if (!zip64_ && length > 1024LL * 1024 * 1024)
+        return inspectionFailure(error, result, OpeningFailureKind::Unsupported,
+                                 strings::key("error.unsupported_publication_size"));
     if (at != int(directorySize) || !names_.contains("META-INF/container.xml")
         || !names_.contains("mimetype"))
         return inspectionFailure(error, result, OpeningFailureKind::InvalidContent,
@@ -478,7 +457,7 @@ bool Publication::inspect(QIODevice &source, QString *error, OpeningResult *resu
     u32(size, quint32(quint64(length) >> 32));
     hash.addData(size);
     hash.addData(directory);
-    hash.addData(tail.mid(end));
+    hash.addData(contents.endRecord);
     fingerprint_ = hash.result().toHex();
     return true;
 }

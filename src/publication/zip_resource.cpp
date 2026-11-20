@@ -1,5 +1,6 @@
 #include "support/diagnostics.h"
 #include "zip_resource.h"
+#include "zip_directory.h"
 #include "resource_cache.h"
 #include <QFile>
 #include <QtEndian>
@@ -68,7 +69,7 @@ struct ZipResourceIndex::Data
     QByteArray directory;
     std::vector<int> offsets;
     qint64 length = 0;
-    quint32 directoryOffset = 0;
+    quint64 directoryOffset = 0;
     const QIODevice *source = nullptr;
     FileIdentity file{};
     bool hasIdentity = false;
@@ -91,37 +92,11 @@ bool ZipResourceIndex::prepare(QIODevice &source)
     if (source.isSequential()) {
         return false;
     }
-    auto &file = source;
-    const auto length = file.size(), tailStart = qMax<qint64>(0, length - 65557);
-    if (!file.seek(tailStart)) {
+    zip::Directory contents;
+    if (!zip::readDirectory(source, contents))
         return false;
-    }
-    const auto tail = file.read(length - tailStart);
-    int end = -1;
-    for (int p = tail.size() - 22; p >= 0; --p) {
-        if (u32(tail, p) == 0x06054b50U && p + 22 + u16(tail, p + 20) == tail.size()) {
-            end = p;
-            break;
-        }
-    }
-    if (end < 0 || u16(tail, end + 4) || u16(tail, end + 6)
-        || u16(tail, end + 8) != u16(tail, end + 10)) {
-        return false;
-    }
-    const auto directorySize = u32(tail, end + 12), directoryOffset = u32(tail, end + 16);
-    if (directorySize > 4 * 1024 * 1024
-        || quint64(directoryOffset) + directorySize != quint64(tailStart + end)
-        || !file.seek(directoryOffset)) {
-        return false;
-    }
-    const auto directory = file.read(directorySize);
-    if (directory.size() != int(directorySize)) {
-        return false;
-    }
-    const int count = u16(tail, end + 10);
-    if (!count || count > 4096) {
-        return false;
-    }
+    const auto &directory = contents.entries;
+    const int count = contents.count;
     auto parsed = std::make_unique<Data>();
     parsed->offsets.reserve(count);
     int at = 0;
@@ -148,8 +123,8 @@ bool ZipResourceIndex::prepare(QIODevice &source)
         return memberName(directory, a) < memberName(directory, b);
     });
     parsed->directory = directory;
-    parsed->directoryOffset = directoryOffset;
-    parsed->length = length;
+    parsed->directoryOffset = contents.offset;
+    parsed->length = source.size();
     parsed->source = &source;
     parsed->file = current;
     parsed->hasIdentity = hasIdentity;
@@ -226,23 +201,27 @@ bool ZipResource::open(QIODevice &source, const QString &name, ZipResourceIndex 
     data->source = &source;
     auto &file = source;
     const auto flags = u16(directory, at + 8), method = u16(directory, at + 10);
-    const auto local = u32(directory, at + 42);
-    data->size = u32(directory, at + 24);
-    data->packed = u32(directory, at + 20);
-    data->expectedCrc = u32(directory, at + 16);
-    if ((flags & 0x41) || u16(directory, at + 34) || (method != 0 && method != 8) || limit < 0
-        || data->size > limit || data->packed > limit || quint64(local) + 30 > directoryOffset
-        || !file.seek(local)) {
+    zip::Member member;
+    if (!zip::member(directory, at, member) || (flags & 0x41) || (method != 0 && method != 8)
+        || limit < 0 || member.size > quint64(limit) || member.packed > quint64(limit)
+        || member.local > directoryOffset || directoryOffset - member.local < 30
+        || !file.seek(member.local))
         return false;
-    }
+    const auto local = member.local;
+    data->size = member.size;
+    data->packed = member.packed;
+    data->expectedCrc = u32(directory, at + 16);
     const auto header = file.read(30);
     if (header.size() != 30 || u32(header, 0) != 0x04034b50U || u16(header, 6) != flags
         || u16(header, 8) != method || u16(header, 26) != wanted.size()) {
         return false;
     }
-    const qint64 start = qint64(local) + 30 + u16(header, 26) + u16(header, 28);
-    if (start + data->packed > directoryOffset || file.read(wanted.size()) != wanted
-        || !file.seek(start)) {
+    const auto version = u16(header, 4);
+    if (version != 10 && version != 20 && version != 45)
+        return false;
+    const quint64 start = local + 30 + u16(header, 26) + u16(header, 28);
+    if (start > directoryOffset || member.packed > directoryOffset - start
+        || file.read(wanted.size()) != wanted || !file.seek(start)) {
         return false;
     }
     data->deflated = method == 8;

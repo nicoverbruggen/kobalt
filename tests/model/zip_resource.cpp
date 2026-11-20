@@ -211,6 +211,13 @@ int main(int argc, char **argv)
     const auto path = dir.path() + "/book.zip";
     ZipResourceIndex index;
     checkDirectoryReuse();
+    auto unsupported = zip("chapter", false);
+    replace16(unsupported, 4, 46);
+    save(path, unsupported);
+    ZipResource unsupportedMember;
+    if (unsupportedMember.open(path, "image.png", index))
+        qFatal("Unsupported OCF extraction version");
+
     for (bool deflated : { false, true })
         for (int length : { 0, 1, 65535, 65536, 65537, 196608, 2097171 }) {
             QByteArray original(length, 'a');

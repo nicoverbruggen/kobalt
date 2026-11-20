@@ -281,10 +281,16 @@ void Reader::saveTransition(quint64 request, bool usb, const QString &location,
         return;
     const QPointer<Reader> guard(this);
     const auto again = [this, request, usb, location, error, mapped, finished](int failures) {
-        kobalt::qt::later(
-                100, this, [this, request, usb, location, error, mapped, finished, failures] {
+        auto *timer = new QTimer(this);
+        timer->setObjectName("rrTransitionSaveRetry");
+        timer->setSingleShot(true);
+        timer->setTimerType(Qt::PreciseTimer);
+        connect(timer, &QTimer::timeout, this,
+                [this, timer, request, usb, location, error, mapped, finished, failures] {
+                    timer->deleteLater();
                     saveTransition(request, usb, location, error, mapped, finished, failures);
                 });
+        timer->start(100);
     };
     // Waiting for an active operation does not spend or renew its retry budget.
     if (pendingStorageSave()) {

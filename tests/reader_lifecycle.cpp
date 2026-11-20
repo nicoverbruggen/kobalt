@@ -12193,17 +12193,43 @@ private slots:
             host.progress->completeFinish(true);
             elapsed.restart();
         }
-        if (outcome == "failed") {
-            QTRY_VERIFY(host.progress->writeAttempts > attempts);
-            QCOMPARE(completed, 0);
-            host.progress->failWrite = false;
+        const auto armedRetry = [&]() -> QTimer * {
+            for (auto *timer : host.window()->findChildren<QTimer *>("rrTransitionSaveRetry")) {
+                if (timer->isActive())
+                    return timer;
+            }
+            return nullptr;
+        };
+        if (outcome == "failed" || outcome.startsWith("persistent-") || outcome == "battery-low") {
+            // The test advances each retry itself, even if a busy host delivers its timer first.
+            struct HoldRetries : QObject
+            {
+                bool eventFilter(QObject *object, QEvent *event) override
+                {
+                    return event->type() == QEvent::Timer
+                            && object->objectName() == "rrTransitionSaveRetry";
+                }
+            } hold;
+
+            qApp->installEventFilter(&hold);
+            const int expectedAttempts = outcome == "failed" ? 1 : 3;
+            for (int attempt = 1; attempt <= expectedAttempts; ++attempt) {
+                QTRY_VERIFY(armedRetry());
+                QCOMPARE(host.progress->writeAttempts - attempts, attempt);
+                auto *retry = armedRetry();
+                QVERIFY(retry->isSingleShot());
+                QCOMPARE(retry->interval(), 100);
+                if (outcome == "failed")
+                    host.progress->failWrite = false;
+                retry->stop();
+                QMetaObject::invokeMethod(retry, "timeout", Qt::DirectConnection);
+            }
         }
         if (outcome.startsWith("persistent-")) {
             QTRY_VERIFY(host.window()->findChild<QPushButton *>("rrCloseSaveQuit"));
             QCOMPARE(completed, 0);
             QCOMPARE(host.progress->writeAttempts - attempts, 3);
-            QTest::qWait(300);
-            QCOMPARE(host.progress->writeAttempts - attempts, 3);
+            QVERIFY(!armedRetry());
             if (outcome == "persistent-retry") {
                 host.progress->failWrite = false;
                 host.window()->findChild<QPushButton *>("rrCloseSaveRetry")->click();
@@ -12231,9 +12257,7 @@ private slots:
         if (outcome == "persistent-failure" || outcome == "battery-low") {
             QCOMPARE(host.progress->writeAttempts - attempts, 3);
             QVERIFY(host.window()->property("reader_transition_save_failed").toBool());
-            const int terminalAttempts = host.progress->writeAttempts;
-            QTest::qWait(400);
-            QCOMPARE(host.progress->writeAttempts, terminalAttempts);
+            QVERIFY(!armedRetry());
         }
         QCOMPARE(host.progress->writes,
                  writes

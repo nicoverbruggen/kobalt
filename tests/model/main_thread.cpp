@@ -1,4 +1,6 @@
 #include "support/main_thread.h"
+#include "engine/engine_activity.h"
+#include "engine/engine_worker.h"
 #include "storage/record_writer.h"
 #include "storage/profile_database.h"
 #include "storage/reader_storage.h"
@@ -7,7 +9,6 @@
 #include <QCoreApplication>
 #include <QJsonObject>
 #include <QStringList>
-#include <QTimer>
 #include <cstdio>
 #include <thread>
 #include "check.h"
@@ -74,9 +75,24 @@ int main(int argc, char **argv)
             "The profile was not opened");
     {
         mainthread::Interaction screen([] { return true; });
-        QTimer::singleShot(0, &app, &QCoreApplication::quit);
+        // Let a background layout reach its next checkpoint during shutdown.
+        // Quit must invalidate its request before waking the engine.
+        auto *worker = engineWorkerForIdle();
+        engineActivity().pause(true);
+        bool yielded = false;
+        QMetaObject::invokeMethod(
+                worker,
+                [&] {
+                    const auto requests = engineWorkRequests();
+                    QMetaObject::invokeMethod(&app, "quit", Qt::QueuedConnection);
+                    engineActivity().enter();
+                    yielded = engineWorkRequests() != requests;
+                    engineActivity().leave();
+                },
+                Qt::QueuedConnection);
         app.exec();
-        require(violations.isEmpty(), "Closing the profile at quit was reported");
+        require(yielded, "Application quit did not interrupt background engine work");
+        require(violations.isEmpty(), "Waiting for storage or the engine at quit was reported");
     }
     require(storage::readRecord(profile.path(), "quit-check", {}).object.value("saved").toBool(),
             "The record was lost when the application quit");

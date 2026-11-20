@@ -9,6 +9,7 @@
 
 namespace kobalt {
 namespace {
+std::atomic<quint64> workRequests{ 0 };
 std::atomic_bool runtimeSlowdown{ false };
 thread_local EngineSlowdownScope *slowdownScope = nullptr;
 } // namespace
@@ -132,8 +133,12 @@ const std::shared_ptr<EngineWorker> &engineWorkerState()
         object->moveToThread(thread);
         QObject::connect(thread, &QThread::finished, object, &QObject::deleteLater);
         QObject::connect(qApp, &QCoreApplication::aboutToQuit, thread, [state] {
-            engineActivity().pause(false);
+            // Interrupt idle layout at its next checkpoint, including work parked for sleep.
+            workRequests.fetch_add(1);
             state->thread->quit();
+            engineActivity().pause(false);
+            mainthread::AllowBlocking allow("application quits");
+            mainthread::BlockingOperation operation("engine-worker-join");
             state->thread->wait();
             state->stopped.store(true);
         });
@@ -144,7 +149,6 @@ const std::shared_ptr<EngineWorker> &engineWorkerState()
 }
 
 namespace {
-std::atomic<quint64> workRequests{ 0 };
 std::atomic<qint64> lastRequest{ 0 };
 
 qint64 monotonicMilliseconds()

@@ -1448,6 +1448,51 @@
 /* Arguments: %1, %2 */
 "dictionaries.downloading" = "Downloading · %1 of %2";
 "dictionaries.installing" = "Installing";
+"dictionaries.cannot_activate_installed_dictionary" = "Cannot activate installed dictionary.";
+"dictionaries.cannot_create_dictionary_storage" = "Cannot create dictionary storage.";
+"dictionaries.cannot_install_this_dictionary" = "Cannot install this dictionary.";
+"dictionaries.cannot_read_dictionary_index" = "Cannot read dictionary index.";
+"dictionaries.cannot_remove_this_dictionary" = "Cannot remove this dictionary.";
+"dictionaries.cannot_save_dictionary_files" = "Cannot save dictionary files.";
+"dictionaries.cannot_save_dictionary_index" = "Cannot save dictionary index.";
+"dictionaries.cannot_save_dictionary_metadata" = "Cannot save dictionary metadata.";
+"dictionaries.cannot_save_the_download" = "Cannot save the download.";
+"dictionaries.dictionary_archive_is_damaged" = "Dictionary archive is damaged.";
+"dictionaries.dictionary_archive_is_missing_required_files" = "Dictionary archive is missing required files.";
+"dictionaries.dictionary_checksum_differs" = "Dictionary checksum differs.";
+"dictionaries.dictionary_checksum_or_size_differs" = "Dictionary checksum or size differs.";
+"dictionaries.dictionary_definition_is_damaged" = "Dictionary definition is damaged.";
+"dictionaries.dictionary_download_is_incomplete" = "Dictionary download is incomplete.";
+"dictionaries.dictionary_index_is_damaged" = "Dictionary index is damaged.";
+"dictionaries.dictionary_index_is_too_large" = "Dictionary index is too large.";
+"dictionaries.dictionary_index_points_outside_its_data" = "Dictionary index points outside its data.";
+"dictionaries.dictionary_installed" = "Dictionary installed.";
+"dictionaries.dictionary_removed" = "Dictionary removed.";
+"dictionaries.download_cancelled" = "Download cancelled.";
+"dictionaries.download_size_or_storage_error" = "Download size or storage error.";
+/* Arguments: %1 */
+"dictionaries.downloading_name" = "Downloading %1";
+/* Arguments: %1, %2 */
+"dictionaries.downloading_progress" = "Downloading %1 · %2%";
+"dictionaries.installation_cancelled" = "Installation cancelled.";
+"dictionaries.installed_dictionary_is_damaged" = "Installed dictionary is damaged.";
+"dictionaries.installed_inflection_index_is_damaged" = "Installed inflection index is damaged.";
+/* Arguments: %1 */
+"dictionaries.installing_name" = "Installing %1";
+"dictionaries.invalid_dictzip_data" = "Invalid dictzip data.";
+"dictionaries.invalid_stardict_index" = "Invalid StarDict index.";
+"dictionaries.invalid_stardict_metadata" = "Invalid StarDict metadata.";
+"dictionaries.missing_stardict_inflection_index" = "Missing StarDict inflection index.";
+"dictionaries.missing_stardict_metadata" = "Missing StarDict metadata.";
+"dictionaries.no_dictionary_installed" = "No dictionary installed.";
+"dictionaries.not_enough_space_for_this_dictionary" = "Not enough space for this dictionary.";
+"dictionaries.stardict_index_size_differs" = "StarDict index size differs.";
+"dictionaries.stardict_word_count_differs_from_its_index" = "StarDict word count differs from its index.";
+"dictionaries.this_dictionary_is_not_available" = "This dictionary is not available.";
+"dictionaries.this_dictionary_is_not_installed" = "This dictionary is not installed.";
+"dictionaries.unsafe_download_redirect" = "Unsafe download redirect.";
+"dictionaries.unsupported_stardict_format" = "Unsupported StarDict format.";
+"dictionaries.wait_for_this_download_to_finish" = "Wait for this download to finish.";
 "dictionaries.download_failed" = "Download failed. Try again.";
 /* Arguments: %1 */
 "dictionary_panel.for_language" = "For %1";

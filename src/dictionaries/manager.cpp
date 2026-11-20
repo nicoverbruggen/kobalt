@@ -1,5 +1,6 @@
 #include "manager.h"
 #include "support/main_thread.h"
+#include "support/strings.h"
 #include "stardict.h"
 #include <dictionary_catalog.h>
 #include "publication/zip_resource.h"
@@ -58,12 +59,12 @@ public:
     {
         mainthread::blocking("dictionary download storage");
         if (QFileInfo(root).isSymLink() || !QDir().mkpath(root)) {
-            result = "Cannot create dictionary storage.";
+            result = strings::get("dictionaries.cannot_create_dictionary_storage");
             return;
         }
         QTemporaryFile file(folder(root, ".download-XXXXXX"));
         if (!file.open()) {
-            result = "Cannot save the download.";
+            result = strings::get("dictionaries.cannot_save_the_download");
             return;
         }
         auto network =
@@ -74,7 +75,7 @@ public:
         int lastPercent = -1;
         for (int redirects = 0; !stopped; ++redirects) {
             if (url.scheme() != "https" || redirects > 5) {
-                result = "Unsafe download redirect.";
+                result = strings::get("dictionaries.unsafe_download_redirect");
                 return;
             }
             QNetworkRequest request(url);
@@ -101,7 +102,7 @@ public:
                     mainthread::blocking("dictionary download write");
                     if (bytes.isEmpty() || received + bytes.size() > entry.size
                         || file.write(bytes) != bytes.size()) {
-                        result = "Download size or storage error.";
+                        result = strings::get("dictionaries.download_size_or_storage_error");
                         reply->abort();
                         return;
                     }
@@ -135,21 +136,21 @@ public:
             }
             if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200
                 || received != entry.size || hash.result() != entry.sha256) {
-                result = "Dictionary checksum or size differs.";
+                result = strings::get("dictionaries.dictionary_checksum_or_size_differs");
                 return;
             }
             if (!file.flush()) {
-                result = "Download size or storage error.";
+                result = strings::get("dictionaries.download_size_or_storage_error");
                 return;
             }
             file.close();
             progress(received, true);
             if (DictionaryManager::installArchive(root, entry, file.fileName(), &result,
                                                   [this] { return stopped.load(); }))
-                result = "Dictionary installed.";
+                result = strings::get("dictionaries.dictionary_installed");
             return;
         }
-        result = "Download cancelled.";
+        result = strings::get("dictionaries.download_cancelled");
     }
 };
 } // namespace
@@ -243,7 +244,7 @@ bool DictionaryManager::select(const QString &book, const QString &id, QString *
     if (id.startsWith("downloaded:")) {
         const auto pair = id.mid(11);
         if (!installed(pair))
-            return fail(error, "This dictionary is not installed.");
+            return fail(error, strings::get("dictionaries.this_dictionary_is_not_installed"));
         if (data->activeId != pair) {
             auto active = std::make_unique<StarDict>();
             if (!active->open(folder(data->root, pair), pair, error))
@@ -413,9 +414,11 @@ void DictionaryManager::download(const QString &id)
                         return;
                     data->bytes = bytes;
                     data->installing = installing;
-                    data->message = installing ? "Installing " + data->entry.name
-                                               : "Downloading " + data->entry.name + " · "
-                                    + QString::number(bytes * 100 / data->entry.size) + "%";
+                    data->message = installing
+                            ? strings::get("dictionaries.installing_name").arg(data->entry.name)
+                            : strings::get("dictionaries.downloading_progress")
+                                      .arg(data->entry.name,
+                                           QString::number(bytes * 100 / data->entry.size));
                     emit changed();
                 },
                 Qt::QueuedConnection);
@@ -424,7 +427,7 @@ void DictionaryManager::download(const QString &id)
     data->entry = entry;
     data->bytes = 0;
     data->installing = false;
-    data->message = "Downloading " + entry.name;
+    data->message = strings::get("dictionaries.downloading_name").arg(entry.name);
     connect(job, &QThread::finished, this, [this, job] {
         data->message = job->result;
         data->job = nullptr;
@@ -438,15 +441,15 @@ void DictionaryManager::download(const QString &id)
 bool DictionaryManager::remove(const QString &id, QString *error)
 {
     if (busy() && data->entry.id == id)
-        return fail(error, "Wait for this download to finish.");
+        return fail(error, strings::get("dictionaries.wait_for_this_download_to_finish"));
     if (!installed(id))
-        return fail(error, "This dictionary is not installed.");
+        return fail(error, strings::get("dictionaries.this_dictionary_is_not_installed"));
     if (data->activeId == id) {
         data->active.reset();
         data->activeId.clear();
     }
     if (!QDir(folder(data->root, id)).removeRecursively())
-        return fail(error, "Cannot remove this dictionary.");
+        return fail(error, strings::get("dictionaries.cannot_remove_this_dictionary"));
     for (auto it = data->selected.begin(); it != data->selected.end();) {
         if (it.value() == "downloaded:" + id)
             it = data->selected.erase(it);
@@ -454,7 +457,7 @@ bool DictionaryManager::remove(const QString &id, QString *error)
             ++it;
     }
     if (!busy())
-        data->message = "Dictionary removed.";
+        data->message = strings::get("dictionaries.dictionary_removed");
     emit changed();
     return true;
 }
@@ -465,21 +468,21 @@ bool DictionaryManager::installArchive(const QString &directory, const DownloadD
 {
     if (!validId(entry.id) || entry.sha256.size() != 32 || QFileInfo(directory).isSymLink()
         || !QDir().mkpath(directory) || QFileInfo::exists(folder(directory, entry.id)))
-        return fail(error, "Cannot install this dictionary.");
+        return fail(error, strings::get("dictionaries.cannot_install_this_dictionary"));
     QFile archive(zip);
     if (!archive.open(QIODevice::ReadOnly) || archive.size() != entry.size)
-        return fail(error, "Dictionary download is incomplete.");
+        return fail(error, strings::get("dictionaries.dictionary_download_is_incomplete"));
     QCryptographicHash hash(QCryptographicHash::Sha256);
     while (!archive.atEnd()) {
         if (cancelled && cancelled())
-            return fail(error, "Installation cancelled.");
+            return fail(error, strings::get("dictionaries.installation_cancelled"));
         hash.addData(archive.read(65536));
     }
     if (hash.result() != entry.sha256)
-        return fail(error, "Dictionary checksum differs.");
+        return fail(error, strings::get("dictionaries.dictionary_checksum_differs"));
     QTemporaryDir stage(folder(directory, ".install-XXXXXX"));
     if (!stage.isValid())
-        return fail(error, "Cannot create dictionary storage.");
+        return fail(error, strings::get("dictionaries.cannot_create_dictionary_storage"));
     const auto files = QStringList{ entry.id + ".ifo", entry.id + ".idx", entry.id + ".dict.dz",
                                     entry.id + ".syn", "LICENSE",         "ATTRIBUTION",
                                     "README.txt" };
@@ -492,21 +495,23 @@ bool DictionaryManager::installArchive(const QString &directory, const DownloadD
                                    : 1024 * 1024)) {
             if (name.endsWith(".syn") || name == "README.txt")
                 continue;
-            return fail(error, "Dictionary archive is missing required files.");
+            return fail(error,
+                        strings::get("dictionaries.dictionary_archive_is_missing_required_files"));
         }
         mainthread::BlockingOperation blockingOperation("dictionary-install-write");
         QFile output(folder(stage.path(), name));
         if (!output.open(QIODevice::WriteOnly))
-            return fail(error, "Cannot save dictionary files.");
+            return fail(error, strings::get("dictionaries.cannot_save_dictionary_files"));
         while (resource.valid() && !resource.finished()) {
             if (cancelled && cancelled())
-                return fail(error, "Installation cancelled.");
+                return fail(error, strings::get("dictionaries.installation_cancelled"));
             const auto bytes = resource.next();
             if (output.write(bytes) != bytes.size())
-                return fail(error, "Not enough space for this dictionary.");
+                return fail(error,
+                            strings::get("dictionaries.not_enough_space_for_this_dictionary"));
         }
         if (!resource.valid())
-            return fail(error, "Dictionary archive is damaged.");
+            return fail(error, strings::get("dictionaries.dictionary_archive_is_damaged"));
     }
     if (!StarDict::prepare(stage.path(), entry.id, error, cancelled))
         return false;
@@ -515,11 +520,11 @@ bool DictionaryManager::installArchive(const QString &directory, const DownloadD
                 qt::object({ { "id", entry.id },
                              { "name", entry.name },
                              { "sha256", QString::fromLatin1(entry.sha256.toHex()) } })))
-        return fail(error, "Cannot save dictionary metadata.");
+        return fail(error, strings::get("dictionaries.cannot_save_dictionary_metadata"));
     if (cancelled && cancelled())
-        return fail(error, "Installation cancelled.");
+        return fail(error, strings::get("dictionaries.installation_cancelled"));
     if (!QDir().rename(stage.path(), folder(directory, entry.id)))
-        return fail(error, "Cannot activate installed dictionary.");
+        return fail(error, strings::get("dictionaries.cannot_activate_installed_dictionary"));
     stage.setAutoRemove(false);
     return true;
 }

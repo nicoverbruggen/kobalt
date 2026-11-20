@@ -1,5 +1,6 @@
 #include "stardict.h"
 #include "support/main_thread.h"
+#include "support/strings.h"
 #include <QFile>
 #include <QDateTime>
 #include <QDir>
@@ -221,15 +222,15 @@ bool index(const QString &path, int suffix, quint32 bodyLength, quint32 wordCoun
     mainthread::BlockingOperation blockingOperation("dictionary-index-write");
     QSaveFile positions(path + ".kobalt");
     if (!file.open(QIODevice::ReadOnly) || !positions.open(QIODevice::WriteOnly))
-        return fail(error, "Cannot read dictionary index.");
+        return fail(error, strings::get("dictionaries.cannot_read_dictionary_index"));
     QByteArray previous;
     quint32 count = 0;
     while (!file.atEnd()) {
         if (cancelled && cancelled())
-            return fail(error, "Installation cancelled.");
+            return fail(error, strings::get("dictionaries.installation_cancelled"));
         const qint64 position = file.pos();
         if (position > 0xffffffffLL)
-            return fail(error, "Dictionary index is too large.");
+            return fail(error, strings::get("dictionaries.dictionary_index_is_too_large"));
         QByteArray word;
         bool ended = false;
         for (int i = 0; i < 256; ++i) {
@@ -245,22 +246,23 @@ bool index(const QString &path, int suffix, quint32 bodyLength, quint32 wordCoun
         const auto value = file.read(suffix);
         if (!ended || word.isEmpty() || QString::fromUtf8(word).toUtf8() != word
             || value.size() != suffix || (!previous.isEmpty() && compare(previous, word) > 0))
-            return fail(error, "Invalid StarDict index.");
+            return fail(error, strings::get("dictionaries.invalid_stardict_index"));
         if (suffix == 8
                     ? quint64(be32(value.constData())) + be32(value.constData() + 4) > bodyLength
                     : be32(value.constData()) >= wordCount)
-            return fail(error, "Dictionary index points outside its data.");
+            return fail(error,
+                        strings::get("dictionaries.dictionary_index_points_outside_its_data"));
         char bytes[4];
         qToBigEndian<quint32>(position, reinterpret_cast<uchar *>(bytes));
         if (positions.write(bytes, 4) != 4)
-            return fail(error, "Cannot save dictionary index.");
+            return fail(error, strings::get("dictionaries.cannot_save_dictionary_index"));
         previous = word;
         ++count;
     }
     if (count != expectedCount)
-        return fail(error, "StarDict word count differs from its index.");
+        return fail(error, strings::get("dictionaries.stardict_word_count_differs_from_its_index"));
     if (!positions.commit())
-        return fail(error, "Cannot save dictionary index.");
+        return fail(error, strings::get("dictionaries.cannot_save_dictionary_index"));
     return true;
 }
 
@@ -316,10 +318,10 @@ bool StarDict::prepare(const QString &directory, const QString &id, QString *err
     const auto prefix = QDir(directory).filePath(id);
     QFile ifo(prefix + ".ifo");
     if (!ifo.open(QIODevice::ReadOnly) || ifo.size() > 65536)
-        return fail(error, "Missing StarDict metadata.");
+        return fail(error, strings::get("dictionaries.missing_stardict_metadata"));
     const auto text = ifo.readAll();
     if (!text.startsWith("StarDict's dict ifo file\n"))
-        return fail(error, "Invalid StarDict metadata.");
+        return fail(error, strings::get("dictionaries.invalid_stardict_metadata"));
     QMap<QByteArray, QByteArray> values;
     for (const auto &line : text.split('\n')) {
         int at = line.indexOf('=');
@@ -329,18 +331,18 @@ bool StarDict::prepare(const QString &directory, const QString &id, QString *err
     bool valid = false;
     const quint32 words = values["wordcount"].toUInt(&valid);
     if (!valid || !words || values["version"] != "2.4.2" || values["sametypesequence"] != "h")
-        return fail(error, "Unsupported StarDict format.");
+        return fail(error, strings::get("dictionaries.unsupported_stardict_format"));
     const auto indexSize = values["idxfilesize"].toULongLong(&valid);
     if (!valid || indexSize != quint64(QFile(prefix + ".idx").size()))
-        return fail(error, "StarDict index size differs.");
+        return fail(error, strings::get("dictionaries.stardict_index_size_differs"));
     Body body;
     if (!body.open(prefix + ".dict.dz"))
-        return fail(error, "Invalid dictzip data.");
+        return fail(error, strings::get("dictionaries.invalid_dictzip_data"));
     if (!index(prefix + ".idx", 8, body.length, words, error, cancelled, words))
         return false;
     const quint32 synonyms = values.value("synwordcount", "0").toUInt(&valid);
     if (!valid || (synonyms && !QFile::exists(prefix + ".syn")))
-        return fail(error, "Missing StarDict inflection index.");
+        return fail(error, strings::get("dictionaries.missing_stardict_inflection_index"));
     if (QFile::exists(prefix + ".syn")
         && !index(prefix + ".syn", 4, body.length, words, error, cancelled, synonyms))
         return false;
@@ -359,12 +361,12 @@ bool StarDict::open(const QString &directory, const QString &id, QString *error)
     next->words = std::make_unique<Mapped>(prefix + ".idx.kobalt");
     if (!next->words->bytes || next->words->file.size() % 4 || !next->idx.open(QIODevice::ReadOnly)
         || !next->body.open(prefix + ".dict.dz"))
-        return fail(error, "Installed dictionary is damaged.");
+        return fail(error, strings::get("dictionaries.installed_dictionary_is_damaged"));
     if (next->syn.exists() && next->syn.size() > 0) {
         next->synonyms = std::make_unique<Mapped>(prefix + ".syn.kobalt");
         if (!next->synonyms->bytes || next->synonyms->file.size() % 4
             || !next->syn.open(QIODevice::ReadOnly))
-            return fail(error, "Installed inflection index is damaged.");
+            return fail(error, strings::get("dictionaries.installed_inflection_index_is_damaged"));
     }
     QFile credits(QDir(directory).filePath("ATTRIBUTION"));
     if (credits.open(QIODevice::ReadOnly))
@@ -378,7 +380,7 @@ DictionaryResult StarDict::lookup(const QString &word)
     DictionaryResult result;
     result.word = word;
     if (!data) {
-        result.error = "No dictionary installed.";
+        result.error = strings::get("dictionaries.no_dictionary_installed");
         return result;
     }
     result.received = true;
@@ -401,19 +403,19 @@ DictionaryResult StarDict::lookup(const QString &word)
         return result;
     if (number >= data->words->file.size() / 4
         || !data->idx.seek(be32(reinterpret_cast<char *>(data->words->bytes) + number * 4))) {
-        result.error = "Dictionary index is damaged.";
+        result.error = strings::get("dictionaries.dictionary_index_is_damaged");
         return result;
     }
     const auto entry = data->idx.read(264);
     const int zero = entry.indexOf('\0');
     if (zero <= 0 || zero + 9 > entry.size()) {
-        result.error = "Dictionary index is damaged.";
+        result.error = strings::get("dictionaries.dictionary_index_is_damaged");
         return result;
     }
     const auto html =
             data->body.read(be32(entry.constData() + zero + 1), be32(entry.constData() + zero + 5));
     if (html.isEmpty())
-        result.error = "Dictionary definition is damaged.";
+        result.error = strings::get("dictionaries.dictionary_definition_is_damaged");
     else
         result.html = QString::fromUtf8(html);
     return result;
@@ -514,7 +516,7 @@ bool FolderDictionaries::select(const QString &book, const QString &id, QString 
         selected.insert(book, id);
         return true;
     }
-    return fail(error, "This dictionary is not available.");
+    return fail(error, strings::get("dictionaries.this_dictionary_is_not_available"));
 }
 
 DictionaryResult FolderDictionaries::lookup(const QString &book, const QString &word)

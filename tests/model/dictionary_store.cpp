@@ -2,6 +2,7 @@
 #include "dictionaries/stardict.h"
 #include "support/main_thread.h"
 #include "support/qt_compat.h"
+#include "support/strings.h"
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QEventLoop>
@@ -494,6 +495,8 @@ int main(int argc, char **argv)
         download([](auto &reply) { reply.complete(302, QUrl("/dictionary.zip")); });
         require(requests == before + 7 && manager.status() == "Unsafe download redirect.",
                 "redirect limit ends the transfer");
+        const bool previousKeyDisplay = strings::keyDisplay().load();
+        strings::showKeys(true);
         const int beforeCancel = requests;
         download([&](auto &) {
             qt::invoke(&manager, [&] {
@@ -501,7 +504,14 @@ int main(int argc, char **argv)
                 manager.cancel();
             });
         });
-        require(manager.status() == "Download cancelled.", "user cancellation remains distinct");
+        require(manager.status() == "dictionaries.download_cancelled",
+                "A cancelled download bypassed the string catalog");
+        StarDict missing;
+        QString message;
+        require(!missing.open(temp.path(), "missing", &message)
+                        && message == "dictionaries.installed_dictionary_is_damaged",
+                "An unreadable installed dictionary bypassed the string catalog");
+        strings::showKeys(previousKeyDisplay);
         manager.download("../invalid");
         require(!manager.busy() && requests == beforeCancel + 1,
                 "busy and invalid requests do not start another download");

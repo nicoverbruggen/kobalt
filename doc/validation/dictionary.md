@@ -9,3 +9,5 @@ These checks cover word lookup, dictionary editing, dictionary book search, down
 These checks use a controlled keyboard. They do not establish physical Kobo or Android keyboard and touch behavior.
 
 `model.dictionary-store` also checks selected-folder StarDict preparation, lookup, stable IDs, missing source files and coexistence with downloaded dictionaries. Index generation uses only the private working copy. Invalid dictionaries are omitted from the folder catalogue.
+
+The dictionary store test switches to string-key mode to check the cancellation status and the error for a damaged installed dictionary.

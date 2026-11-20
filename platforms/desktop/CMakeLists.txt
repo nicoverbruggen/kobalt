@@ -432,7 +432,7 @@ if(BUILD_TESTING)
     function(kobalt_add_regression name executable arguments timeout labels)
         set(names "${name}")
         if(name MATCHES "^session[.]"
-            OR name MATCHES "^engine[.](document-word-count|large-toc|source-index|word-selection)$"
+            OR name MATCHES "^engine[.](document-word-count|large-toc|search|source-index|word-selection)$"
             OR name STREQUAL "lifecycle.lightReplacesDefaultMenu"
             OR name STREQUAL "lifecycle.annotationFramesKeepFirstPaintComplete"
             OR name STREQUAL "lifecycle.nativeProgressWaitsForSleep"

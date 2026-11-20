@@ -16,7 +16,8 @@ static void chapterScopes()
     EngineDocument whole(test::readerFonts()), chapter(test::readerFonts());
     QString error;
     const QSize viewport{ 600, 800 };
-    require(whole.open(bytes, viewport, {}, &error) && chapter.open(bytes, viewport, {}, &error),
+    require(whole.open(bytes, viewport, { { "koblaze_first_spine_item", -1 } }, &error)
+                    && chapter.open(bytes, viewport, {}, &error),
             qPrintable(error));
     chapter.setChapterSlices(2);
     require(chapter.showSpineItems(0, 0), "Cannot open in chapter mode");
@@ -50,7 +51,8 @@ static void chapterScopes()
         require(chapter.position() == shown, "Scoped search moved the reading position");
         return actual.size();
     };
-    for (const auto scope : { SearchScope::Chapter, SearchScope::Before, SearchScope::After }) {
+    for (const auto scope :
+         { SearchScope::Book, SearchScope::Chapter, SearchScope::Before, SearchScope::After }) {
         require(compare(scope) > 0, "Scope fixture must contain matches");
     }
     // Returning from a search result keeps the page where Search was opened.
@@ -81,7 +83,10 @@ int main(int argc, char **argv)
     require(file.open(QIODevice::ReadOnly), "Missing fixture");
     kobalt::EngineDocument model(kobalt::test::readerFonts());
     QString error;
-    require(model.open(file.readAll(), { 360, 700 }, {}, &error), qPrintable(error));
+    // searchPage() is the page-by-page reference for the book-wide text scan.
+    require(model.open(file.readAll(), { 360, 700 }, { { "koblaze_first_spine_item", -1 } },
+                       &error),
+            qPrintable(error));
     auto search = [&](QString query) {
         const auto origin = model.position();
         QVector<kobalt::SearchHit> hits;

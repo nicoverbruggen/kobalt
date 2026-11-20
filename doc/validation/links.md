@@ -26,7 +26,7 @@ Search checks compare the prepared-text path with page search for Unicode normal
 
 `engine.chapter-parity` searches unopened chapters for accented text, punctuation variants, Arabic words with tatweel, and words split by comments, CDATA or hidden inline text. It compares the source position of each result with whole-book search.
 
-The scoped search check compares Current chapter, Up to this page and After this page with Accurate on the Type Tester. It compares the source ranges and clipped excerpts across chapter and slice boundaries, including after following a result and on the last page.
+The scoped search check compares all four search scopes in a chapter window with an explicitly paginated whole-book reference on the Type Tester. It compares the source ranges and clipped excerpts across chapter and slice boundaries, including after following a result and on the last page.
 
 Worker budgets are checked between logical text blocks. A single unusually large paragraph can exceed the preparation budget; physical Kobo typing latency and memory use still need device validation.
 

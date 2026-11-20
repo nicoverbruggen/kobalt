@@ -3,7 +3,6 @@
 #include "storage/reader_storage.h"
 #include <QCryptographicHash>
 #include <QFile>
-#include <QJsonDocument>
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QVariant>
@@ -203,8 +202,10 @@ bool Index::loadDatabase(const QString &directory)
                 if (!file.open(QIODevice::ReadOnly))
                     return false;
                 const auto bytes = file.read(16 * 1024 * 1024 + 1);
-                if (bytes.size() > 16 * 1024 * 1024
-                    || QJsonDocument::fromJson(bytes).object() != source.object)
+                if (bytes.size() > 16 * 1024 * 1024)
+                    return false;
+                const auto checked = storage::parseJsonObject(bytes);
+                if (checked.status != storage::ReadStatus::Ok || checked.object != source.object)
                     return false;
                 if (!query.prepare("INSERT INTO imports VALUES(?,?,'library')"))
                     return false;

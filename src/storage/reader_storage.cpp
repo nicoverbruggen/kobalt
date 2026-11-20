@@ -109,6 +109,18 @@ bool writeJson(const QString &path, const QJsonObject &object)
     return file.write(bytes) == bytes.size() && file.commit();
 }
 
+JsonRead parseJsonObject(QByteArray bytes)
+{
+    // Qt can consume a literal FEFF at the start of a JSON string as a UTF-8
+    // header. Its JSON escape denotes the same character and survives decoding.
+    bytes.replace("\"\xef\xbb\xbf", "\"\\ufeff");
+    QJsonParseError parse;
+    const auto document = QJsonDocument::fromJson(bytes, &parse);
+    if (parse.error != QJsonParseError::NoError || !document.isObject())
+        return { {}, ReadStatus::Invalid };
+    return { document.object(), ReadStatus::Ok };
+}
+
 JsonRead readJsonFile(const QString &path, qint64 maxBytes)
 {
     QFile file(path);
@@ -135,11 +147,7 @@ JsonRead readJsonFile(const QString &path, qint64 maxBytes)
     }
     if (file.error() != QFileDevice::NoError)
         return { {}, ReadStatus::Unreadable };
-    QJsonParseError parse;
-    const auto document = QJsonDocument::fromJson(bytes, &parse);
-    if (parse.error != QJsonParseError::NoError || !document.isObject())
-        return { {}, ReadStatus::Invalid };
-    return { document.object(), ReadStatus::Ok };
+    return parseJsonObject(bytes);
 }
 
 const char *readStatusName(ReadStatus status)
@@ -257,13 +265,12 @@ bool recordTransaction(const QString &directory, const QString &name, const QStr
                 read->status = ReadStatus::TooLarge;
                 return false;
             }
-            QJsonParseError error;
-            const auto document = QJsonDocument::fromJson(query.value(2).toByteArray(), &error);
-            if (error.error != QJsonParseError::NoError || !document.isObject()) {
-                read->status = ReadStatus::Invalid;
+            const auto parsed = parseJsonObject(query.value(2).toByteArray());
+            if (parsed.status != ReadStatus::Ok) {
+                read->status = parsed.status;
                 return false;
             }
-            object = document.object();
+            object = parsed.object;
             if (object.contains("schema") && object.value("schema").toDouble(-1) != 1) {
                 read->status = ReadStatus::Unsupported;
                 return false;
@@ -301,7 +308,10 @@ bool recordTransaction(const QString &directory, const QString &name, const QStr
                 if (!source.open(QIODevice::ReadOnly))
                     return false;
                 const auto bytes = source.read(maxBytes + 1);
-                if (bytes.size() > maxBytes || QJsonDocument::fromJson(bytes).object() != object)
+                if (bytes.size() > maxBytes)
+                    return false;
+                const auto checked = parseJsonObject(bytes);
+                if (checked.status != ReadStatus::Ok || checked.object != object)
                     return false;
                 importedDigest = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256);
                 if (!putDocument(db, name, object, false))

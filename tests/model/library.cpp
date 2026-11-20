@@ -435,12 +435,14 @@ int main(int argc, char **argv)
         require(removed.size() == 1 && removed.first().endsWith("two.EPUB"),
                 "A deleted book was not reported");
     }
-    {
-        const auto directory = root.filePath("literal-book-keys");
+    for (const bool escaped : { false, true }) {
+        const auto directory = root.filePath(escaped ? "escaped-book-keys" : "literal-book-keys");
         const QString plain = "book.epub";
         const QString marked = QChar(0xfeff) + plain;
+        const QByteArray marker = escaped ? QByteArray("\\ufeff") : QByteArray::fromHex("efbbbf");
         write(directory + "/library.json",
-              R"({"schema":1,"folders":[],"books":[{"key":"book.epub"},{"key":"\ufeffbook.epub"}]})");
+              R"({"schema":1,"folders":[],"books":[{"key":"book.epub"},{"key":")" + marker
+                      + R"(book.epub"}]})");
         Index imported;
         require(imported.loadDatabase(directory), "Could not import the legacy Library");
         require(imported.books.contains(marked) && imported.books.contains(plain),

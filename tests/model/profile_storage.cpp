@@ -190,6 +190,8 @@ int main(int argc, char **argv)
     state["nickel_progress"] = qt::object({ { "location", "native-position" }, { "percent", 24 } });
     state["future_optional"] = qt::array({ 1, false, qt::object({ { "note", "Preserve me" } }) });
     state["literal"] = QString(QChar(0xfeff)) + QString::fromUtf8("é") + QChar(0) + "tail";
+    const QString markedField = QString(QChar(0xfeff)) + "field";
+    state[markedField] = QString(2, QChar(0xfeff)) + "value";
     state["null"] = QJsonValue();
     require(storage::writeJson(paths.bookState(identity), state), "Legacy book fixture");
     const auto original = bytes(paths.bookState(identity));

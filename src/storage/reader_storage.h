@@ -42,6 +42,7 @@ struct JsonRead
 // Ordinary state files are small. A larger file is refused, not parsed.
 inline constexpr qint64 maxJsonBytes = 16384;
 // Invalid covers bad JSON and a top level that is not an object.
+JsonRead parseJsonObject(QByteArray bytes);
 JsonRead readJsonFile(const QString &path, qint64 maxBytes = maxJsonBytes);
 const char *readStatusName(ReadStatus status);
 // The object, or an empty one after any failure. Use readJsonFile when a

@@ -131,7 +131,7 @@ The reader also names these lifecycle scopes explicitly:
 - `wifi-off at sleep`: the reader is hidden for sleep, or wake has not shown it yet. The Wi-Fi power saver's `turnWifiOff()`, or `WirelessManager::off()` for Wi-Fi that a cancelled or finished KOSync sync turned on, waits for the same child processes.
 - `wifi-off while closing`: the reader is closing and takes no input. `WirelessManager::off()` turns off Wi-Fi that a cancelled or finished KOSync sync turned on.
 - `application quits`: Qt has ended the event loop, so no input can arrive. The shared profile waits for queued writes and closes. Mac and Android leave this way, and so does Nickel when it quits rather than powers off. `model.main-thread` quits an application while a screen still counts as taking input and checks that the close is not reported and the record survives.
-- `final native progress before storage handoff`: USB or shutdown has stopped reader input and drained pending storage work. Nickel's interface-thread API writes and verifies the final native progress before the handoff continues.
+- `final native progress before storage handoff`: On ordinary reader exit, USB handoff or shutdown, the reader stops accepting input and waits for its local checkpoint. Nickel's interface-thread API then saves native progress and finishes the reading session.
 
 These scopes permit waits only at their lifecycle boundaries. They do not permit storage waits during reading. The opening status scope replaces the old native opening-progress write and its retries while reading.
 

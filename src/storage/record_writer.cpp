@@ -15,10 +15,11 @@
 #include <utility>
 
 namespace kobalt::storage {
-#ifdef KOBALT_TEST_WRITER_START
+#ifdef KOBALT_TEST_RECORD_WRITER
 namespace test {
 void beforeWriterStart();
-}
+void adjustWriterTime(clockid_t clock, timespec &now);
+} // namespace test
 #endif
 namespace {
 // A background write that has waited this long runs before further calls, so
@@ -32,6 +33,22 @@ constexpr auto backgroundLimit = std::chrono::seconds(2);
 class Condition
 {
 public:
+#ifndef __APPLE__
+    Condition()
+    {
+        pthread_condattr_t attributes;
+        int error = pthread_condattr_init(&attributes);
+        if (error)
+            throw std::system_error(error, std::generic_category());
+        error = pthread_condattr_setclock(&attributes, CLOCK_MONOTONIC);
+        if (!error)
+            error = pthread_cond_init(&condition, &attributes);
+        pthread_condattr_destroy(&attributes);
+        if (error)
+            throw std::system_error(error, std::generic_category());
+    }
+#endif
+
     ~Condition() { pthread_cond_destroy(&condition); }
 
     template <class Ready>
@@ -45,25 +62,55 @@ public:
     template <class Ready>
     bool waitFor(std::unique_lock<std::mutex> &lock, int milliseconds, Ready ready)
     {
-        timespec deadline;
-        clock_gettime(CLOCK_REALTIME, &deadline);
-        deadline.tv_sec += milliseconds / 1000;
-        deadline.tv_nsec += long(milliseconds % 1000) * 1000000L;
-        if (deadline.tv_nsec >= 1000000000L) {
-            ++deadline.tv_sec;
-            deadline.tv_nsec -= 1000000000L;
-        }
-        while (!ready())
-            if (pthread_cond_timedwait(&condition, lock.mutex()->native_handle(), &deadline)
-                == ETIMEDOUT)
+        const auto deadline = monotonicTime() + std::chrono::milliseconds(milliseconds);
+        while (!ready()) {
+#ifdef __APPLE__
+            // Darwin takes a relative timeout. Keep the same deadline across wakeups.
+            const auto remaining = deadline - monotonicTime();
+            if (remaining <= std::chrono::nanoseconds::zero())
+                return false;
+            const auto timeout = timespecOf(remaining);
+            const int error = pthread_cond_timedwait_relative_np(
+                    &condition, lock.mutex()->native_handle(), &timeout);
+#else
+            const auto timeout = timespecOf(deadline);
+            const int error =
+                    pthread_cond_timedwait(&condition, lock.mutex()->native_handle(), &timeout);
+#endif
+            if (error == ETIMEDOUT)
                 return ready();
+            if (error)
+                throw std::system_error(error, std::generic_category());
+        }
         return true;
     }
 
     void notifyAll() { pthread_cond_broadcast(&condition); }
 
 private:
+    static std::chrono::nanoseconds monotonicTime()
+    {
+        timespec now;
+        constexpr auto clock = CLOCK_MONOTONIC;
+        clock_gettime(clock, &now);
+#ifdef KOBALT_TEST_RECORD_WRITER
+        test::adjustWriterTime(clock, now);
+#endif
+        return std::chrono::seconds(now.tv_sec) + std::chrono::nanoseconds(now.tv_nsec);
+    }
+
+    static timespec timespecOf(std::chrono::nanoseconds duration)
+    {
+        const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration);
+        return { static_cast<time_t>(seconds.count()),
+                 static_cast<long>((duration - seconds).count()) };
+    }
+
+#ifdef __APPLE__
     pthread_cond_t condition = PTHREAD_COND_INITIALIZER;
+#else
+    pthread_cond_t condition;
+#endif
 };
 } // namespace
 
@@ -205,7 +252,7 @@ private:
         if (worker.joinable())
             return true;
         try {
-#ifdef KOBALT_TEST_WRITER_START
+#ifdef KOBALT_TEST_RECORD_WRITER
             test::beforeWriterStart();
 #endif
             worker = std::thread([this] { run(); });

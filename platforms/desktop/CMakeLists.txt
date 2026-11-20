@@ -673,9 +673,9 @@ if(BUILD_TESTING)
                 target_link_libraries(kobalt-${name}-tests PRIVATE kobalt-regression-runtime)
             endif()
             if(check STREQUAL "record_writer")
-                # Build this source again only for the deterministic thread launch test.
+                # This target injects thread launch failures and clock changes.
                 target_sources(kobalt-${name}-tests PRIVATE "${source}/storage/record_writer.cpp")
-                target_compile_definitions(kobalt-${name}-tests PRIVATE KOBALT_TEST_WRITER_START)
+                target_compile_definitions(kobalt-${name}-tests PRIVATE KOBALT_TEST_RECORD_WRITER)
             endif()
             if(check STREQUAL "android_assets")
                 target_sources(kobalt-${name}-tests PRIVATE "${KOBALT_ROOT}/platforms/android/assets.cpp")

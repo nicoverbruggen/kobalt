@@ -4,7 +4,9 @@
 #include <QFile>
 #include <QTemporaryDir>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
+#include <time.h>
 #include <cstdio>
 #include <memory>
 #include <mutex>
@@ -17,9 +19,17 @@ using kobalt::storage::RecordWriter;
 
 namespace {
 int rejectedStarts = 0;
-}
+std::atomic_bool shiftNextWallTime{ false };
+} // namespace
 
 namespace kobalt::storage::test {
+// Simulate a wall-clock correction between reading the time and starting the wait.
+void adjustWriterTime(clockid_t clock, timespec &now)
+{
+    if (clock == CLOCK_REALTIME && shiftNextWallTime.exchange(false))
+        now.tv_sec -= 60;
+}
+
 void beforeWriterStart()
 {
     if (rejectedStarts > 0) {
@@ -199,7 +209,12 @@ int main()
         second.post(record(log, "b1"), {});
         first.post(record(log, "a2"), {});
         require(!first.idle() && !second.idle(), "Queued writers reported idle");
+        shiftNextWallTime = true;
+        const auto started = std::chrono::steady_clock::now();
         require(!first.flush(50), "A flush finished while its write was held");
+        require(std::chrono::steady_clock::now() - started >= std::chrono::milliseconds(50),
+                "A wall-clock adjustment shortened the writer flush timeout");
+        shiftNextWallTime = false;
         gate.release();
         require(first.flush() && second.flush(), "Writers did not drain");
         require(log.text() == "a1 b1 a2 ", "Writes ran out of queue order");

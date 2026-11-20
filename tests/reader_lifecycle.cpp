@@ -5799,6 +5799,32 @@ private slots:
         ui::setDensity(previous);
     }
 
+    void sleepPillOmitsUnknownProgress()
+    {
+        sleep::Snapshot shot;
+        shot.design = sleep::Design::Pill;
+        shot.mode = sleep::Mode::Plain;
+        shot.dimPage = false;
+        QImage paper(480, 640, QImage::Format_RGB32);
+        paper.fill(Qt::white);
+        for (auto status : { reader::SleepStatus::Sleeping, reader::SleepStatus::Charging }) {
+            const auto pillWidth = [&](int percent) {
+                shot.percent = percent;
+                const auto image = reader::sleepDesignImage(paper, shot, 67, status);
+                QRect ink;
+                for (int y = 0; y < image.height(); ++y)
+                    for (int x = 0; x < image.width(); ++x)
+                        if (image.pixel(x, y) != paper.pixel(x, y))
+                            ink |= QRect(x, y, 1, 1);
+                return ink.width();
+            };
+            const int unknown = pillWidth(-1);
+            QVERIFY(unknown > 0);
+            QVERIFY2(unknown < pillWidth(0),
+                     "Unknown progress still occupies the percentage field");
+        }
+    }
+
     void sleepDesignsRepaintOnlyTheirStatus_data()
     {
         QTest::addColumn<int>("designIndex");

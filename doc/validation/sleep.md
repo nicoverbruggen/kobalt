@@ -1,5 +1,7 @@
 # Sleep, USB and power checks
 
+`lifecycle.sleepPillOmitsUnknownProgress` compares the sleeping and charging Pill when progress is unknown and when it is zero.
+
 `lifecycle.sleepGalleryCancelsInterruptedPresses` checks that a touch cancellation or page change during a press does not choose a sleep screen on release. A new tap still chooses the visible design. `lifecycle.sleepCustomEditorShowsTheCover` also checks that a page button leaves the gallery on its current page while the editor covers it.
 
 Asset verification uses the actual USB handoff and completed remount. The lifecycle adapter invalidates assets once after the current request releases storage, even if the reader drain reports completion twice before the USB gadget arrives. A disconnect during asset invalidation restores the profile and cancels the pending Nickel workflow. It requests a recheck only after Nickel's `aboutToUnplug` and `doneProcessing` sequence reopens the volume. An ordinary scan or a stale cancelled completion does not change the verification result. Cancellation after storage release rechecks when the profile becomes available again. `platform.native-lifecycle` checks these callback boundaries. Kobo keeps reading unavailable while the check runs or after it fails.

@@ -424,6 +424,7 @@ void paintMedallion(QPainter &painter, const Frame &frame, const Content &conten
 struct PillLayout
 {
     QRectF pill;
+    QString progress;
     qreal height = 0;
 };
 
@@ -435,9 +436,12 @@ PillLayout pillLayout(const Frame &frame, const Content &content)
 {
     const QFont font = sans(3 * frame.u);
     const qreal gap = pillGap * frame.u;
-    qreal width = 1.8 * frame.u + 2.2 * frame.u + ui::interfaceTextWidth(content.word(), font) + gap
-            + ui::interfaceTextWidth(strings::get("sleep.percent_read").arg(content.shot.percent),
-                                     font);
+    qreal width = 1.8 * frame.u + 2.2 * frame.u + ui::interfaceTextWidth(content.word(), font);
+    QString progress;
+    if (content.shot.percent >= 0) {
+        progress = strings::get("sleep.percent_read").arg(content.shot.percent);
+        width += gap + ui::interfaceTextWidth(progress, font);
+    }
     if (content.charging())
         width += gap + batteryWidth(font, content.battery);
     width += 2 * pillPadding * frame.u;
@@ -445,7 +449,7 @@ PillLayout pillLayout(const Frame &frame, const Content &content)
     const qreal top =
             content.shot.place == sleep::Place::Top ? frame.y(6) : frame.bottom(6) - height;
     const QRectF pill(frame.box.center().x() - width / 2, top, width, height);
-    return { pill, height };
+    return { pill, progress, height };
 }
 
 void paintPill(QPainter &painter, const Frame &frame, const Content &content, const Palette &colors)
@@ -489,11 +493,12 @@ void paintPill(QPainter &painter, const Frame &frame, const Content &content, co
     const auto word = content.word();
     label(word, colors.ink);
     x += ui::interfaceTextWidth(word, font);
-    rule(x);
-    x += gap;
-    const auto read = strings::get("sleep.percent_read").arg(content.shot.percent);
-    label(read, colors.ink);
-    x += ui::interfaceTextWidth(read, font);
+    if (!layout.progress.isEmpty()) {
+        rule(x);
+        x += gap;
+        label(layout.progress, colors.ink);
+        x += ui::interfaceTextWidth(layout.progress, font);
+    }
     if (content.charging()) {
         rule(x);
         x += gap;

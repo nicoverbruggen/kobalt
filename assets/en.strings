@@ -1791,7 +1791,6 @@
 "keyboard.shift" = "Shift";
 "keyboard.caps_lock" = "Caps Lock on";
 "keyboard.symbols" = "Symbols";
-"keyboard.letters" = "Letters";
 "keyboard.space" = "Space";
 "keyboard.backspace" = "Backspace";
 "keyboard.done" = "Done";

@@ -431,7 +431,7 @@ if(BUILD_TESTING)
     add_dependencies(kobalt-tests kobalt-reader-lifecycle-tests)
     function(kobalt_add_regression name executable arguments timeout labels)
         set(names "${name}")
-        if(name MATCHES "^session[.](bookmark-session|highlight-session|reader-session)$"
+        if(name MATCHES "^session[.]"
             OR name STREQUAL "lifecycle.lightReplacesDefaultMenu"
             OR name STREQUAL "lifecycle.annotationFramesKeepFirstPaintComplete"
             OR name STREQUAL "lifecycle.remoteKeyActivityRequiresActiveReading")

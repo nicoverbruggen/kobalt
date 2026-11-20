@@ -41,12 +41,27 @@ QJsonObject persistedBook(QJsonObject state)
         state.remove(key);
     for (const auto *key : appearance::marginKeys)
         state.remove(key);
-    for (const auto *key :
-         { "chapter_title", "chapter_page", "chapter_pages", "page", "pages", "next_page",
-           "text_font_face", "embedded_font_count", "cached_pages", "continues_before",
-           "continues_after", "book_fraction", "rough_page", "rough_pages", "rough_item_page",
-           "rough_item_pages", "rough_pages_estimated", "rough_item_pages_estimated",
-           "chapter_load_ms" })
+    for (const auto *key : { "chapter_title",
+                             "chapter_page",
+                             "chapter_pages",
+                             "page",
+                             "pages",
+                             "next_page",
+                             "text_font_face",
+                             "embedded_font_count",
+                             "cached_pages",
+                             "continues_before",
+                             "continues_after",
+                             "book_fraction",
+                             "rough_page",
+                             "rough_pages",
+                             "rough_item_page",
+                             "rough_item_pages",
+                             "rough_pages_estimated",
+                             "rough_item_pages_estimated",
+                             "chapter_load_ms",
+                             "slice_start",
+                             "whole_book_ready" })
         state.remove(key);
     return state;
 }
@@ -270,14 +285,17 @@ int main(int argc, char **argv)
         book.stopReading();
         QString mappingError;
         const auto finalPosition = book.session()->savedNativePosition(&mappingError);
-        require(mappingError.isEmpty() && calls.stoppedActivity.page != opening.page
-                        && calls.stoppedActivity.nativePosition != opening.nativePosition
-                        && calls.stoppedActivity.nativePosition == finalPosition
-                        && calls.stoppedActivity.percent
-                                == qMin(99,
-                                        pageProgressPercent(book.session()->page(),
-                                                            book.session()->pages())),
-                "The closing native interval received the preceding page's progress or mapping");
+        const auto &activity = calls.stoppedActivity;
+        require(mappingError.isEmpty() && activity.nativePosition != opening.nativePosition
+                        && activity.nativePosition == finalPosition
+                        && activity.position
+                                == book.session()->state().value("position").toString(),
+                "The closing native interval received the preceding page's position");
+        // Hybrid can turn a page before it has page counts for the whole book.
+        require(activity.page == book.session()->bookPage()
+                        && activity.pages == book.session()->bookPages()
+                        && activity.percent == qMin(99, book.session()->progressPercent()),
+                "The closing native interval lost the displayed frame's whole-book progress");
         require(calls.writes == 0, "Stopping the native interval persisted book progress");
     }
     // Optional book state must survive both supported backends without
@@ -473,8 +491,9 @@ int main(int argc, char **argv)
             // The page estimate is optional and can be rebuilt. Over the byte
             // limit its read spine items go first, then the record, and only
             // then image views.
-            // Without chapter slices the whole book saves no record of its
-            // own over the seeded one.
+            // Use a whole-book layout without slices so the session leaves the seeded estimate alone.
+            const auto mode = qgetenv("KOBALT_CHAPTER_MODE");
+            qputenv("KOBALT_CHAPTER_MODE", "0");
             qputenv("KOBALT_CHAPTER_PAGES", "0");
             const auto views = [](int count) {
                 QVector<QPair<QString, QJsonObject>> result;
@@ -542,6 +561,10 @@ int main(int argc, char **argv)
                             "The page estimate must go before image views are trimmed");
             }
             qunsetenv("KOBALT_CHAPTER_PAGES");
+            if (mode.isNull())
+                qunsetenv("KOBALT_CHAPTER_MODE");
+            else
+                qputenv("KOBALT_CHAPTER_MODE", mode);
         }
 #if __has_include(<koblaze.h>)
         {
@@ -679,7 +702,7 @@ int main(int argc, char **argv)
             auto session = open();
             require(session->style(32, 150), "Cannot set finish-book appearance");
             waitUntil([&] { return !session->busy(); });
-            require(session->go(session->pages() - 1), "Cannot reach finish page");
+            require(session->goToFraction(1), "Cannot reach the last page of the book");
             waitUntil([&] { return !session->busy(); });
             const auto hash = session->sourceHash();
             ReadingBook book(std::move(session), finishPaths.bookState(identity), finishPaths,
@@ -1146,8 +1169,11 @@ int main(int argc, char **argv)
                 "Standalone opaque identities remain eligible for KOsync");
         require(!local.canWriteNative() && !local.deviceTransition(),
                 "Local book acquired platform services");
+        waitUntil([&] {
+            return local.session()->bookPages() > 0 && local.session()->totalWords() > 0;
+        });
         require(local.estimates().learningPace && local.estimates().bookMilliseconds > 0,
-                "Standalone book did not provide a rough estimate at opening");
+                "Standalone book did not provide a rough estimate after counting pages and words");
         local.pollProgress();
         local.observeProgress();
         require(!local.readProgress().valid && !local.pendingProgress(),
@@ -1235,7 +1261,7 @@ int main(int argc, char **argv)
 
         tick();
         require(local.readingMilliseconds() == active, "Stopped local reading time kept running");
-        require(local.session()->go(local.session()->pages() - 1), "Cannot reach the final page");
+        require(local.session()->goToFraction(1), "Cannot reach the final page");
         waitUntil([&] { return !local.session()->busy(); });
         require(local.offerFinish(), "Local book cannot be marked finished without a bridge");
         local.markFinished();
@@ -1266,10 +1292,11 @@ int main(int argc, char **argv)
         ReadingBook first(std::move(session), paths.bookState("pace-first"), paths, "pace-first",
                           hash, nullptr, {}, {});
         auto *model = first.session();
+        waitUntil([&] { return model->bookPages() > 0 && model->totalWords() > 0; });
         const ReadingActivity activity{ model->state().value("position").toString(),
                                         0,
-                                        model->page(),
-                                        model->pages(),
+                                        model->bookPage(),
+                                        model->bookPages(),
                                         0,
                                         model->totalWords(),
                                         model->chapterGraph(),
@@ -1301,6 +1328,9 @@ int main(int argc, char **argv)
         auto next = open(QSize(400, 600));
         ReadingBook second(std::move(next), paths.bookState("pace-second"), paths, "pace-second",
                            hash, nullptr, {}, {});
+        waitUntil([&] {
+            return second.session()->bookPages() > 0 && second.session()->totalWords() > 0;
+        });
         require(second.estimates().bookMilliseconds == expected.estimates(activity).bookMilliseconds
                         && second.estimates().learningPace,
                 "Another book did not reuse saved partial history");
@@ -1914,7 +1944,7 @@ int main(int argc, char **argv)
         require(book.writeNative("position", {}).saved() && calls.writes == 1
                         && calls.location == "position",
                 "Acknowledged progress was not written");
-        require(calls.observed == 1 && calls.writtenActivity.page == book.session()->page()
+        require(calls.observed == 1 && calls.writtenActivity.page == book.session()->bookPage()
                         && calls.writtenActivity.position
                                 == book.session()->state().value("position").toString(),
                 "Native estimate used the preceding observed page when saving a completed turn");
@@ -2077,6 +2107,12 @@ int main(int argc, char **argv)
                 waitUntil([&] { return done; });
                 return saved;
             };
+            // The unchanged-record case needs a stable page estimate on disk.
+            book.session()->requestMenuPagination();
+            waitUntil([&] {
+                return !book.session()->paginationPending() && !book.session()->busy();
+            });
+            require(book.checkpoint(&snapshot), "Cannot save the settled book before close");
             require(closeCheckpoint() && checkpoints == 0,
                     "Already durable close checkpoint folded WAL again");
             const auto routineRecord = [&](int value) {

@@ -21,6 +21,7 @@ struct ActionMenuItem
     std::function<void()> triggered;
     bool chevron = false;
     bool startsSection = false;
+    QString disabledReason = {};
 };
 
 inline ActionMenuItem actionItem(const QString &text, const QString &name, ControlIcon icon,

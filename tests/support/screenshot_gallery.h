@@ -160,6 +160,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "pinned-bookmark-limit", "Bookmark shortcut limit" },
         { "chapters", "Chapter list" },
         { "chapter-navigation-menu", "Chapter navigation menu" },
+        { "printed-page-unavailable", "Chapter menu without printed page numbers" },
         { "printed-page-input", "Go to printed page" },
         { "illustrated-chapters", "Illustrated chapter list" },
         { "chapter-image-preview", "Chapter illustration preview" },

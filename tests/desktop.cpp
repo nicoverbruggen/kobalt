@@ -2184,6 +2184,15 @@ void chapterGroups(Fixture &fixture, const QString &name = {})
     QCOMPARE(fixture.state().value("chapters").toInt(), 5);
     QVERIFY(fixture.visible("rrChapter1"));
     QVERIFY(!fixture.visible("rrChapter4"));
+    QVERIFY(fixture.press("rrContentsMore"));
+    QVERIFY(fixture.visible("rrContentsShowPrinted"));
+    QVERIFY(!fixture.widget("rrContentsShowPrinted")->isEnabled());
+    QCOMPARE(fixture.widget("rrContentsShowPrinted")->accessibleDescription(),
+             strings::get("chapter_contents.no_printed_pages"));
+    if (!name.isEmpty())
+        QVERIFY(capture(fixture, name + "-printed-page-unavailable"));
+    QTest::keyClick(fixture.widget("rrContentsMenu"), Qt::Key_Escape);
+    QTRY_VERIFY(!fixture.visible("rrContentsMenu"));
     const auto initialPage = fixture.state().value("page");
     const auto graph = fixture.state().value("word_counts").toObject().value("positions");
     if (!name.isEmpty()) {

@@ -232,7 +232,25 @@ ActionMenu::ActionMenu(QWidget *parent, const ActionMenuHeader &header,
     }
     for (const auto &item : items) {
         // Without a header, the first row's divider would double the card's border.
-        auto *row = new ActionRow(item, hasHeader || !rows.isEmpty(), card());
+        const bool divider = hasHeader || !rows.isEmpty();
+        if (!item.disabledReason.isEmpty()) {
+            auto *row = new CaptionButton(CaptionButton::Presentation::ListAction, card());
+            row->setObjectName(item.name);
+            row->setText(item.text);
+            row->setDescription(item.disabledReason);
+            row->setIconVisible(item.hasIcon);
+            if (item.hasIcon)
+                buttonIcon(row, item.icon);
+            row->setChevron(item.chevron);
+            if (divider)
+                row->setRule(Qt::TopEdge);
+            readerStyle(row, styles::font(metrics::chrome::labelText));
+            row->setEnabled(false);
+            rows.append(row);
+            rowsLayout->addWidget(row);
+            continue;
+        }
+        auto *row = new ActionRow(item, divider, card());
         rows.append(row);
         rowsLayout->addWidget(row);
         const auto triggered = item.triggered;

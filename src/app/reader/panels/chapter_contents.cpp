@@ -281,7 +281,7 @@ void ChapterContents::setListMode(ContentsList active, const QVector<ContentsLis
     title->setText(caption(active));
     closeListMenu();
     availableLists = available;
-    moreButton->setVisible(availableLists.size() > 1);
+    moreButton->show();
 }
 
 void ChapterContents::openListMenu()
@@ -300,6 +300,12 @@ void ChapterContents::openListMenu()
         ui::ControlIcon::Chapters);
     add(ContentsList::PrintedPages, "chapter_contents.go_to_printed_page", "rrContentsShowPrinted",
         ui::ControlIcon::Scroll);
+    if (!availableLists.contains(ContentsList::PrintedPages)) {
+        auto unavailable = ui::actionItem(strings::get("chapter_contents.go_to_printed_page"),
+                                          "rrContentsShowPrinted", ui::ControlIcon::Scroll, {});
+        unavailable.disabledReason = strings::get("chapter_contents.no_printed_pages");
+        actions.append(unavailable);
+    }
     add(ContentsList::Landmarks, "chapter_contents.view_landmarks", "rrContentsShowLandmarks",
         ui::ControlIcon::Flag);
     if (actions.isEmpty())

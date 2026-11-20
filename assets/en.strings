@@ -261,6 +261,7 @@
 "chapter_contents.other_labels" = "Other page labels";
 "chapter_contents.more" = "More navigation options";
 "chapter_contents.go_to_printed_page" = "Go to printed page";
+"chapter_contents.no_printed_pages" = "This book doesn’t include printed page numbers.";
 "chapter_contents.view_landmarks" = "View book landmarks";
 "chapter_contents.landmarks" = "Landmarks";
 "chapter_contents.landmark_count" = "Landmarks · %1";

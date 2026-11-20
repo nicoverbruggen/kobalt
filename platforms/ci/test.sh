@@ -3,7 +3,7 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$root"
-for script in platforms/ci/*.sh platforms/android/*.sh platforms/kobo/*.sh platforms/sdk-image.sh; do bash -n "$script"; done
+for script in platforms/ci/*.sh platforms/android/*.sh platforms/kobo/*.sh platforms/sdk-image.sh platforms/build-container.sh; do bash -n "$script"; done
 mkdir -p build
 scratch=$(mktemp -d "$root/build/release-check.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
@@ -171,7 +171,7 @@ CONTAINER_ENGINE="$scratch/container-engine" KOBALT_ANDROID_IMAGE=fixture-sdk KO
 exported="$scratch/export/application"
 mkdir -p "$exported/platforms/android" "$exported/platforms/kobo" "$exported/assets" "$exported/dependencies"
 cp dependencies/cache.cmake "$exported/dependencies/"
-cp platforms/source-info.cmake platforms/release-version.cmake platforms/sdk-image.sh platforms/load-lock.cmake "$exported/platforms/"
+cp platforms/source-info.cmake platforms/release-version.cmake platforms/sdk-image.sh platforms/build-container.sh platforms/load-lock.cmake "$exported/platforms/"
 cp platforms/android/build.sh "$exported/platforms/android/"
 cp platforms/kobo/build.sh "$exported/platforms/kobo/"
 printf '{"version":"v1.0-beta.1"}\n' > "$exported/assets/manifest.json"

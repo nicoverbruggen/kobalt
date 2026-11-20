@@ -2,6 +2,7 @@
 set -euo pipefail
 if [[ $# -ne 0 ]]; then echo "Usage: bash platforms/android/build.sh" >&2; exit 2; fi
 root=$(cd "$(dirname "$0")/../.." && pwd)
+source "$root/platforms/build-container.sh"
 jobs=${JOBS:-2}
 [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || { echo "JOBS must be positive" >&2; exit 2; }
 # Prepared multi-architecture Android SDK; application dependencies build locally.
@@ -29,7 +30,8 @@ if [[ "$release" == 1 ]]; then
     [[ -f $KOBALT_ANDROID_KEYSTORE ]] || { echo 'Release keystore is missing' >&2; exit 2; }
     extra+=(--volume "$KOBALT_ANDROID_KEYSTORE:/signing/release.keystore:ro")
 fi
-"$engine" run --rm --user "$(id -u):$(id -g)" \
+own_build_container "$root/build/android-run.XXXXXX"
+"$engine" run --cidfile "$container_run_dir/container.cid" --user "$(id -u):$(id -g)" \
     "${extra[@]}" -e KOBALT_RELEASE_VERSION -e KOBALT_ANDROID_RELEASE="$release" \
     -e KOBALT_ANDROID_KEYSTORE=/signing/release.keystore -e KOBALT_ANDROID_KEY_ALIAS \
     -e KOBALT_ANDROID_KEYSTORE_PASSWORD -e KOBALT_ANDROID_KEY_PASSWORD -e KOBALT_ANDROID_CERT_SHA256 \

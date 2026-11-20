@@ -2813,6 +2813,7 @@ private:
         std::vector<lUInt8> decisions;
     };
     std::vector<ParagraphBreaks> _paragraphBreaks;
+    lUInt32 _paragraphBreakReuses = 0;
 #endif
     bool _just_rendered_from_cache;
 
@@ -2931,6 +2932,8 @@ public:
     const lUInt8 *paragraphBreaks(ldomNode *node, const lChar32 *text, int length,
                                   TextLangCfg *language, css_line_break_t lineBreak,
                                   css_word_break_t wordBreak);
+    // Lookups answered from the retained decisions, for tests.
+    lUInt32 paragraphBreakReuses() const { return _paragraphBreakReuses; }
 #endif
     lUInt32 getDocumentRenderingHash() { return _doc_rendering_hash; }
     /// Blaze: lay out only a slice of the text of each spine item in the

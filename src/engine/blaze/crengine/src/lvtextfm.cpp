@@ -80,6 +80,7 @@ const lUInt8 *ldomDocument::paragraphBreaks(ldomNode *node, const lChar32 *text,
     if (entry.text.size() == (size_t)length && entry.language == tag &&
         entry.lineBreak == lineBreak && entry.wordBreak == wordBreak &&
         memcmp(entry.text.data(), text, length * sizeof(lChar32)) == 0) {
+        ++_paragraphBreakReuses;
         return entry.decisions.data();
     }
 

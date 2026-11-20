@@ -21,7 +21,11 @@ if [[ "$mode" == --check && -n "${KOBALT_CHECK_SOURCE_ROOT:-}" ]]; then
 fi
 jobs=${JOBS:-2}
 [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || { echo "JOBS must be positive" >&2; exit 2; }
-[[ "${KOBALT_DOCKER_CPUS:-1}" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "KOBALT_DOCKER_CPUS must be a number of CPUs" >&2; exit 2; }
+cpus=${KOBALT_DOCKER_CPUS:-}
+if [[ -n "$cpus" && ( ! "$cpus" =~ ^[0-9]+(\.[0-9]+)?$ || ! "$cpus" =~ [1-9] ) ]]; then
+    echo "KOBALT_DOCKER_CPUS must be a positive number of CPUs" >&2
+    exit 2
+fi
 image=$(sh "$root/platforms/sdk-image.sh" "${target%%-*}")
 engine=${CONTAINER_ENGINE:-docker}
 sdk_id=$("$engine" image inspect "$image" --format '{{.Id}}')
@@ -59,7 +63,6 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 # Leave CPUs for the rest of the machine: half of the host's, at least two and
 # at most what the engine has.
-cpus=${KOBALT_DOCKER_CPUS:-}
 if [[ -z "$cpus" ]]; then
     host_cpus=$(sysctl -n hw.ncpu 2> /dev/null || getconf _NPROCESSORS_ONLN)
     cpus=$((host_cpus / 2 > 2 ? host_cpus / 2 : 2))

@@ -27,6 +27,17 @@ case $1 in
 esac
 ENGINE
 chmod +x "$scratch/engine"
+# A zero CPU quota would run the container without the build's CPU limit.
+for quota in 0 0.00; do
+    actual=0
+    KOBALT_LOAD_LOCK_HELD=1 KOBALT_CHECK_SOURCE_ROOT= KOBALT_DOCKER_CPUS=$quota \
+        CONTAINER_ENGINE="$scratch/engine" KOBALT_CLEANUP_LOG="$scratch/removed" \
+        bash "$root/platforms/kobo/build.sh" qt5 --check > "$scratch/output" 2>&1 || actual=$?
+    [[ $actual == 2 && ! -e "$scratch/removed" ]] || {
+        echo "Expected zero CPU quota $quota to be rejected before the build; got status $actual"
+        exit 1
+    }
+done
 # Cleanup is shared with SDK checks. A fixture engine must never record a package pass.
 for result in 0 17; do
     actual=0

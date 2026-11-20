@@ -157,7 +157,7 @@ Android, desktop and Kobo record foreground reading intervals in `reading_sessio
 
 ### Schema upgrades
 
-- Versions 2 and 3 upgrade to version 4 in one transaction, after their columns, keys and referential integrity are checked.
+- Versions 2 and 3 upgrade to version 4 in one transaction. Kobalt checks the old schema and its integrity after taking the write lock. It checks the upgraded database before committing.
 - Version 2 gets the session and saved-word tables. Version 3 gets the saved-word table. Then `user_version` changes. A failure rolls back.
 - Other versions and partial schemas are rejected without repair.
 - Builds that support only version 2 or 3 cannot open an upgraded profile.

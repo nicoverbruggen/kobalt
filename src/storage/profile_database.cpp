@@ -455,7 +455,6 @@ private:
                            "name IN ('books','lists','entries','imports','library_books','library_folders','book_state','profile_state')")
                             .toInt();
             check(tables == 8, "invalid-database");
-            validateSchema(db, version);
             if (version < schemaVersion) {
                 // Upgrade before changing the journal mode. A rejected or failed
                 // migration leaves the old schema and data intact.
@@ -471,9 +470,11 @@ private:
                         sessionSchema(db);
                     wordSchema(db);
                     run(db, QString("PRAGMA user_version=%1").arg(schemaVersion));
+                    validateSchema(db, schemaVersion);
                 }
                 check(db.commit(), "database-commit");
-                validateSchema(db, schemaVersion);
+            } else {
+                validateSchema(db, version);
             }
             // Validate and, if needed, migrate before changing journal mode.
             // A rejected file keeps its content; only a log left by a crash

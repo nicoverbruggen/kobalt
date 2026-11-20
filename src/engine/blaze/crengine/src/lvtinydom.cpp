@@ -2894,6 +2894,8 @@ bool tinyNodeCollection::loadNodeData(lUInt16 type, ldomNode ** list, int nodeco
 bool tinyNodeCollection::saveNodeData( lUInt16 type, ldomNode ** list, int nodecount )
 {
     int count = ((nodecount+TNC_PART_LEN-1) >> TNC_PART_SHIFT);
+    // Blaze: reuse one heap buffer for full and partial node chunks.
+    std::vector<ldomNode> buf;
     for (lUInt16 i=0; i<count; i++) {
         if (!list[i])
             continue;
@@ -2902,8 +2904,9 @@ bool tinyNodeCollection::saveNodeData( lUInt16 type, ldomNode ** list, int nodec
         if (offs + sz > nodecount) {
             sz = nodecount - offs;
         }
-        ldomNode buf[sz];
-        memcpy(buf, list[i], sizeof(buf));
+        buf.resize(sz);
+        const size_t bytes = buf.size() * sizeof(ldomNode);
+        memcpy(buf.data(), list[i], bytes);
         for (int j = 0; j < sz; j++) {
             buf[j].setDocumentIndex(0);
             // On 64bits builds, this serialized ldomNode may have some
@@ -2919,7 +2922,7 @@ bool tinyNodeCollection::saveNodeData( lUInt16 type, ldomNode ** list, int nodec
         }
         // A full or failing disk must not end the host process. The file
         // stays marked dirty, so it is never opened again.
-        if (!_cacheFile->write(type, i, (lUInt8*)buf, sizeof(buf), COMPRESS_NODE_DATA)) {
+        if (!_cacheFile->write(type, i, (lUInt8*)buf.data(), bytes, COMPRESS_NODE_DATA)) {
             CRLog::error("Cannot write node data to cache file");
             return false;
         }

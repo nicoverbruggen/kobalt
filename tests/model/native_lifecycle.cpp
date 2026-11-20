@@ -15,6 +15,7 @@
 #include <QVector>
 #include <atomic>
 #include <memory>
+#include <new>
 
 // Nickel's exported managers and signals, resolved by the production adapter.
 class N3PowerWorkflowManager : public QObject
@@ -461,6 +462,13 @@ int main(int argc, char **argv)
         std::atomic_bool timedOut{ false };
         kobalt::storage::queueSleepSnapshotWork("held-snapshot",
                                                 [&] { timedOut = !release.tryAcquire(1, 5000); });
+        std::atomic_bool savedNext{ false };
+        if (fullWorkflow)
+            kobalt::storage::queueSleepSnapshotWork("failed-snapshot",
+                                                    [] { throw std::bad_alloc(); });
+        kobalt::storage::queueSleepSnapshotWork("next-snapshot", [&] { savedNext = true; });
+        if (!fullWorkflow)
+            kobalt::storage::queueSleepSnapshotWork("next-snapshot", {});
         require(!kobalt::NativeLifecycle::canSuspend(), "Standby interrupted snapshot storage");
         if (fullWorkflow)
             kobalt::NativeLifecycle::interceptUsbWorkflow(usb);
@@ -478,6 +486,7 @@ int main(int argc, char **argv)
         release.release();
         delivered.exec();
         require(!timedOut, "USB blocked the event thread on the snapshot");
+        require(savedNext, "A failed or empty snapshot job discarded the next save");
         require(!available(), "USB preparation did not keep the profile closed");
         const int count = handoffs;
         finish();

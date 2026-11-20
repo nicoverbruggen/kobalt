@@ -68,7 +68,11 @@ public:
             std::lock_guard<std::mutex> lock(worker.mutex);
             work = worker.queued.take(path);
         }
-        work();
+        try {
+            work();
+        } catch (...) {
+            qWarning("Sleep snapshot job failed with an exception");
+        }
         if (--pendingJobs == 0)
             qt::invoke(
                     QCoreApplication::instance(),
@@ -267,6 +271,8 @@ bool persistSnapshot(const QString &path, const sleep::Snapshot &snapshot, const
 
 void queueSleepSnapshotWork(const QString &path, std::function<void()> work)
 {
+    if (!work)
+        return;
     auto &worker = snapshotWorker();
     {
         std::lock_guard<std::mutex> lock(worker.mutex);

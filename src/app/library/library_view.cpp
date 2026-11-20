@@ -133,9 +133,8 @@ class BookPages final : public QWidget
     friend class LibraryView;
 
 public:
-    BookPages(const Index &index, std::function<QString(const QString &)> coverPath,
-              QWidget *parent)
-        : QWidget(parent), index(index), coverPath(std::move(coverPath))
+    BookPages(std::function<QString(const QString &)> coverPath, QWidget *parent)
+        : QWidget(parent), coverPath(std::move(coverPath))
     {
         setObjectName("libraryPages");
         setProperty("reader_owns_swipes", true);
@@ -328,7 +327,6 @@ private:
         return highlighted >= 0 && highlighted < placed.size() && &hit == &placed[highlighted];
     }
 
-    const Index &index;
     std::function<QString(const QString &)> coverPath;
     QCache<QString, QImage> covers;
     QVector<Placement> placed;
@@ -886,7 +884,7 @@ LibraryView::LibraryView(const Index &index, std::function<QString(const QString
     progress = new ui::LoadingIndicator(ui::LoadingIndicator::Style::Squares, this);
     progress->setObjectName("libraryScanProgress");
     progress->hide();
-    pages = new BookPages(index, coverPath, this);
+    pages = new BookPages(coverPath, this);
     pager = new ui::PagerBar(this, "library");
     empty = buildEmpty();
     throttle = new QTimer(this);

@@ -8558,7 +8558,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(start && start->libraryShown());
         auto *library = start->library();
         QTRY_VERIFY(library->isVisible() && library->size() == QSize(1264, 1680));
-        QApplication::setActiveWindow(&fixture.window);
+        fixture.window.activateWindow();
         for (const auto *mode : { "libraryViewGrid", "libraryViewList" }) {
             library->findChild<QPushButton *>(mode)->click();
             auto *counter = library->findChild<QLabel *>("libraryPage");
@@ -8772,7 +8772,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("position"), position);
         reader->pageButton(-1);
         QTRY_COMPARE(counter->text(), initial);
-        QApplication::setActiveWindow(&fixture.window);
+        fixture.window.activateWindow();
         fixture.window.setFocus();
         QTest::keyClick(&fixture.window, Qt::Key_PageDown);
         QTRY_VERIFY(counter->text() != initial);

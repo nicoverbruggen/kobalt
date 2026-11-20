@@ -2724,8 +2724,9 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
                              + text("_" + values[index] + "_description"));
     };
     if (paragraph) {
-        const auto [area, controls] =
-                padded({ chrome::inset, ui::px(12), chrome::inset, ui::px(16) });
+        const auto section = padded({ chrome::inset, ui::px(12), chrome::inset, ui::px(16) });
+        auto *area = section.first;
+        auto *controls = section.second;
         area->setObjectName("rrParagraphControls");
         rows->removeWidget(area);
         rows->insertWidget(rows->indexOf(choices), area);

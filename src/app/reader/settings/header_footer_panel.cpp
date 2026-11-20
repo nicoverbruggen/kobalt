@@ -224,7 +224,7 @@ private:
     Content content;
 };
 
-SlotMap::SlotMap(QWidget *parent, bool editable) : QWidget(parent), editable(editable)
+SlotMap::SlotMap(QWidget *parent, bool editable) : QWidget(parent)
 {
     setObjectName(editable ? "rrHeaderFooterCustomMap" : "rrHeaderFooterPresetMap");
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);

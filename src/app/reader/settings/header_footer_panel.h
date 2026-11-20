@@ -43,7 +43,6 @@ private:
     void setSlot(int slot, const headerfooter::Content &content);
     std::array<Cell *, headerfooter::slotCount> cells{};
     headerfooter::Layout layout;
-    bool editable;
 };
 
 // A preset as a miniature page with its name below. A selected card has a

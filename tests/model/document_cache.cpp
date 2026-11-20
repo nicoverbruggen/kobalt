@@ -44,6 +44,7 @@ static void parkedCache()
                     && QString::fromUtf8(UnicodeToUtf8(path).c_str())
                                .startsWith(root.path() + "/owner/"),
             "The resumed build writes to another document's cache");
+    require(path.endsWith(U"/parked-book.00000001.0.cr3"), "The cache filename format changed");
 }
 
 // Run the writer with the previous engine and the checker with its replacement.

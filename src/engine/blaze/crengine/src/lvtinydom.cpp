@@ -19735,8 +19735,9 @@ public:
             fn << "_noname";
         if (fn.length() > 25)
             fn = fn.substr(0, 12) + "-" + fn.substr(fn.length()-12, 12);
-        char s[16];
-        sprintf(s, ".%08x.%d.cr3", (unsigned)crc, (int)docFlags);
+        // Blaze: reserve room for the full signed decimal flags field in existing cache names.
+        char s[32];
+        snprintf(s, sizeof(s), ".%08x.%d.cr3", (unsigned)crc, (int)docFlags);
         return fn + lString32( s ); //_cacheDir +
     }
 

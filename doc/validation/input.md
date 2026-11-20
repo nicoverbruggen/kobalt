@@ -10,6 +10,8 @@ The word-selection check drags a highlight back across a slice boundary within o
 
 `desktop.illustratedNavigation` opens the artwork from a chapter row, dismisses it without changing reading position and follows a publisher landmark.
 
+`lifecycle.remoteKeyActivityRequiresActiveReading` checks that a remote key press turns one page, including across a chapter boundary in Hybrid. Holding the key reports activity without turning again.
+
 ## Restored input and paint checks
 
 The UI and reader-window checks keep selected assertions from `tests/android/android_ui_test.cpp` and `tests/native-ui/reader_test.cpp` at `82b8935`. The toolbar invalidation check measures the reader window directly, because a graphics proxy renders widgets into its display cache and adds paint events that do not prove that the reader invalidated them. The annotation-frame checks use the original focused EPUB text and anchors. General reading checks and screenshots still use Type Tester.

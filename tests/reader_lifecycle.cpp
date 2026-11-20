@@ -7547,10 +7547,10 @@ private slots:
 
     void remoteKeyActivityRequiresActiveReading()
     {
-        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
-        CloseHost cleanup{ host };
         int reports = 0;
         bool suspended = false;
+        ReaderFixture host(testPaths(), testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
         host.configureServices = [&](ReaderHostServices &services) {
             services.pageButtonDirection = [](QKeyEvent *event) {
                 return event->key() == Qt::Key_Right ? 1 : 0;
@@ -7574,15 +7574,24 @@ private slots:
             QKeyEvent event(type, key, Qt::NoModifier, 106, 0, 0, {}, repeat);
             QCoreApplication::sendEvent(host.window(), &event);
         };
-        const int initial = host.session()->page();
+        const auto position = [&] { return host.session()->state().value("position").toString(); };
+        const QString initial = position();
+        QVERIFY(!initial.isEmpty());
+        const bool nextChapter = host.session()->page() + 1 == host.session()->pages()
+                && host.session()->continuesAfter();
+        const int nextPage = nextChapter ? 0 : host.session()->nextPage();
         sendKey(QEvent::KeyPress, Qt::Key_Right);
         QCOMPARE(reports, 1);
-        QTRY_VERIFY(!host.session()->busy() && host.session()->page() == initial + 1);
+        QTRY_VERIFY(!host.session()->busy() && position() != initial);
+        QCOMPARE(host.session()->page(), nextPage);
+        const auto turned = position();
+        QVERIFY(!turned.isEmpty());
         sendKey(QEvent::KeyRelease, Qt::Key_Right);
         QCOMPARE(reports, 1);
         sendKey(QEvent::KeyPress, Qt::Key_Right, true);
         QCOMPARE(reports, 2);
-        QCOMPARE(host.session()->page(), initial + 1);
+        QVERIFY(!host.session()->busy());
+        QCOMPARE(position(), turned);
         sendKey(QEvent::KeyPress, Qt::Key_A);
         QCOMPARE(reports, 2);
         suspended = true;

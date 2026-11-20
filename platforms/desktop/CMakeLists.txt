@@ -83,8 +83,7 @@ set(source "${KOBALT_ROOT}/src")
 # default, kobalt_shared_definitions and kobalt_notice_resources.
 include("${KOBALT_ROOT}/platforms/shared-inputs.cmake")
 include("${KOBALT_ROOT}/platforms/source-info.cmake")
-kobalt_source_info("${KOBALT_ROOT}")
-configure_file("${source}/support/build_info.h.in" build_info.h @ONLY)
+kobalt_desktop_build_info("${KOBALT_ROOT}")
 
 # Keep portable objects separate so UI edits do not relink standalone checks.
 file(GLOB_RECURSE shared CONFIGURE_DEPENDS
@@ -106,6 +105,7 @@ add_library(kobalt-core OBJECT ${shared} display.cpp ../standalone/native_image.
     "${source}/publication/image_policy.cpp" "${source}/publication/layout_compatibility.cpp"
     "${source}/publication/native_resources.cpp" "${source}/publication/resource_server.cpp"
     "${source}/publication/page_estimate.cpp")
+add_dependencies(kobalt-core kobalt-build-info)
 target_include_directories(kobalt-core PUBLIC "${KOBALT_ROOT}" "${source}" "${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(kobalt-core SYSTEM PUBLIC
     "${CRENGINE_SOURCE}/crengine/include" "${CRENGINE_BUILD}"

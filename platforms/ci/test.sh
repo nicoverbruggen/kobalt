@@ -241,6 +241,37 @@ fi
 rm "$exported/source-info.json"
 [[ $(env -u KOBALT_RELEASE_VERSION cmake -P "$exported/platforms/source-info.cmake") == 'unknown OFF v1.0-beta.1' ]]
 echo 'PASS: Git-free source provenance, release versions and launchers'
+# An incremental desktop build refreshes both the revision and its modified flag.
+(
+    mkdir -p "$scratch/stamp/platforms" "$scratch/stamp/src/support"
+    cp platforms/source-info.cmake "$scratch/stamp/platforms/"
+    cp src/support/build_info.h.in "$scratch/stamp/src/support/"
+    cd "$scratch/stamp"
+    git init -q
+    git config user.name Fixture
+    git config user.email fixture@example.invalid
+    git config commit.gpgsign false
+    cat > CMakeLists.txt <<'CMAKE'
+cmake_minimum_required(VERSION 3.22)
+project(stamp NONE)
+include(platforms/source-info.cmake)
+kobalt_desktop_build_info("${CMAKE_CURRENT_SOURCE_DIR}")
+CMAKE
+    touch source
+    git add .
+    git -c core.hooksPath=/dev/null commit -qm initial
+    cmake -S . -B "$scratch/stamp-build"
+    check_stamp() {
+        cmake --build "$scratch/stamp-build" --target kobalt-build-info
+        grep -F "kobaltCommit = \"$(git rev-parse --short HEAD)\"" "$scratch/stamp-build/build_info.h"
+        grep -F "#define KOBALT_COMMIT_MODIFIED $1" "$scratch/stamp-build/build_info.h"
+    }
+    check_stamp 0
+    echo changed > source
+    check_stamp 1
+    git -c core.hooksPath=/dev/null commit -qam changed
+    check_stamp 0
+)
 # Release filenames stay fixed while the tag selects the release and version.
 mkdir -p "$scratch/bin" "$scratch/draft/build/release"
 cat > "$scratch/bin/gh" <<'SH'

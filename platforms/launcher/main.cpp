@@ -39,6 +39,7 @@ struct Step
     QString program;
     QStringList arguments;
     QString directory;
+    bool ownsContainer = false;
 };
 
 enum Action { Desktop, Kobo5, Kobo6, Headless, Visible };
@@ -52,9 +53,10 @@ QVector<Step> plan(Action action, const QString &platform)
 {
     const auto desktop = root + "/platforms/desktop";
     if (action == Kobo5 || action == Kobo6)
-        return {
-            { "bash", { root + "/platforms/kobo/build.sh", action == Kobo5 ? "qt5" : "qt6" }, root }
-        };
+        return { { "bash",
+                   { root + "/platforms/kobo/build.sh", action == Kobo5 ? "qt5" : "qt6" },
+                   root,
+                   true } };
     QStringList configure{ "--preset", platform };
     if (!QFile::exists(output(platform) + "/CMakeCache.txt"))
         configure << QStringLiteral("-DQt6_DIR=" KOBALT_QT_DIR);
@@ -93,7 +95,7 @@ public:
     bool busy = false, succeeded = false, wasCancelled = false;
     QString lastScratch;
 
-    explicit Launcher() : lock(root + "/build/launcher-actions.lock")
+    explicit Launcher(int killDelay) : lock(root + "/build/launcher-actions.lock"), killDelay(killDelay)
     {
         lock.setStaleLockTime(0);
         setWindowTitle("Kobalt Developer Launcher");
@@ -242,8 +244,12 @@ public:
         stop->setEnabled(false);
         status->setText("Stopping the job and cleaning up…");
         signalGroup(SIGTERM);
+        // The Kobo build handles TERM and removes its container before it exits. Killing
+        // its process group on a timer can interrupt the container engine during removal.
+        if (steps.at(index).ownsContainer)
+            return;
         const auto stoppedGeneration = generation;
-        QTimer::singleShot(4000, this, [this, stoppedGeneration] {
+        QTimer::singleShot(killDelay, this, [this, stoppedGeneration] {
             if (busy && wasCancelled && generation == stoppedGeneration) {
                 signalGroup(SIGKILL);
                 process.kill();
@@ -273,6 +279,7 @@ private:
     QLabel *status;
     QPushButton *stop;
     QProgressBar *progress;
+    const int killDelay;
     int index = 0, generation = 0;
     qint64 group = 0;
     bool closing = false, launchDesktop = false;
@@ -403,6 +410,41 @@ int selfTest(Launcher &launcher)
     QTimer::singleShot(100, &launcher, [&] { launcher.cancel(); });
     if (!wait() || !launcher.wasCancelled)
         return 1;
+    // Cancel only after the build owns its container. Removing it takes longer than the
+    // launcher's kill delay, as it can when the engine is busy.
+    QTemporaryDir fixture(root + "/build/launcher-container-test-XXXXXX");
+    if (!fixture.isValid())
+        return 1;
+    auto build = plan(Kobo5, host).first();
+    build.arguments = { "-c", R"(
+        set -eu
+        source "$1"
+        engine=fixture_engine
+        fixture_engine() {
+            [[ $1 == rm && $2 == -f && $3 == fixture-container ]] || return 1
+            sleep 0.09
+            touch "$fixture/removed"
+        }
+        fixture=$2
+        own_build_container "$fixture/run.XXXXXX"
+        echo fixture-container > "$container_run_dir/container.cid"
+        touch "$fixture/ready"
+        while :; do sleep 0.05; done
+    )",
+                        "fixture", root + "/platforms/build-container.sh", fixture.path() };
+    QTimer ready;
+    QObject::connect(&ready, &QTimer::timeout, &launcher, [&] {
+        if (QFile::exists(fixture.filePath("ready"))) {
+            ready.stop();
+            launcher.cancel();
+        }
+    });
+    launcher.start({ build });
+    ready.start(10);
+    if (!wait() || !launcher.wasCancelled || !QFile::exists(fixture.filePath("removed"))) {
+        qWarning("Cancelled build did not finish removing its container");
+        return 1;
+    }
     return 0;
 }
 } // namespace
@@ -414,7 +456,7 @@ int main(int argc, char **argv)
     QApplication app(argc, argv);
     app.setApplicationName("Kobalt Developer Launcher");
     app.setStyle("Fusion");
-    Launcher launcher;
+    Launcher launcher(app.arguments().contains("--self-test") ? 20 : 4000);
     std::signal(SIGINT, requestStop);
     std::signal(SIGTERM, requestStop);
     QTimer interruptPoll;

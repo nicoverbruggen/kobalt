@@ -2043,9 +2043,12 @@ private slots:
         QVERIFY(toolbar->isVisible());
         if (menuView == "stats")
             stats->installEventFilter(&defaultShows);
-        else if (menuView == "seek")
-            // The slider tracks Navigate; the parent also hosts floating image actions.
-            seek->slider()->installEventFilter(&defaultShows);
+        else if (menuView == "seek") {
+            // Both the chapter bar and the whole-book slider show this label.
+            auto *range = seek->findChild<QWidget *>("rrScrubberRange");
+            QVERIFY(range);
+            range->installEventFilter(&defaultShows);
+        }
         if (action == "tab")
             QVERIFY(click(canvas, tab));
         else if (action == "outside")

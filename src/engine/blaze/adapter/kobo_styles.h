@@ -2,6 +2,7 @@
 #include <QByteArray>
 #include <QRegularExpression>
 #include <QXmlStreamReader>
+#include "xml_entities.h"
 
 namespace kobalt {
 // Remove only the complete known injection. A reused marker can contain custom CSS.
@@ -25,6 +26,8 @@ inline QByteArray withoutKoboStyleHacks(const QByteArray &bytes)
     QList<QPair<int, int>> removals;
     while (!xml.atEnd()) {
         xml.readNext();
+        if (xml.isDTD() && unsafeEntities(xml))
+            return bytes;
         if (!xml.isStartElement() || xml.name() != QStringLiteral("style")
             || !(xml.namespaceUri().isEmpty()
                  || xml.namespaceUri() == QStringLiteral("http://www.w3.org/1999/xhtml"))) {

@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QUrl>
 #include <QXmlStreamReader>
+#include "xml_entities.h"
 
 namespace kobalt {
 namespace {
@@ -37,6 +38,13 @@ QByteArray resource(ReaderSource &source, const QString &path)
     return bytes;
 }
 
+// Stop at a DTD whose entities could grow without limit on Qt 5.2.
+void nextToken(QXmlStreamReader &xml)
+{
+    if (xml.readNext() == QXmlStreamReader::DTD && unsafeEntities(xml))
+        xml.raiseError(QStringLiteral("Entity declarations"));
+}
+
 struct Reference
 {
     QString path, id;
@@ -61,7 +69,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
     QHash<QString, QString> ncx;
     QXmlStreamReader container(resource(source, "META-INF/container.xml"));
     while (!container.atEnd()) {
-        container.readNext();
+        nextToken(container);
         if (container.isStartElement() && container.name() == QStringLiteral("rootfile")) {
             package = container.attributes().value("full-path").toString();
             break;
@@ -73,7 +81,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
     QVector<Reference> refs;
     bool epub3 = false, guide = false;
     while (!opf.atEnd()) {
-        opf.readNext();
+        nextToken(opf);
         const auto name = opf.name().toString();
         if (name == "guide")
             guide = opf.isStartElement();
@@ -105,7 +113,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
         QVector<int> parents;
         while (!xml.atEnd()) {
             stopPoint();
-            xml.readNext();
+            nextToken(xml);
             const auto types = xml.attributes()
                                        .value(ops, QStringLiteral("type"))
                                        .toString()
@@ -149,7 +157,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
         QVector<int> parents;
         while (!xml.atEnd()) {
             stopPoint();
-            xml.readNext();
+            nextToken(xml);
             const auto name = xml.name().toString();
             if (xml.isStartElement() && name == "navPoint") {
                 if (source.tocAnchors.size() >= maximumChapterEntries)
@@ -208,7 +216,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
         int elementOrder = 0;
         while (!xml.atEnd()) {
             stopPoint();
-            xml.readNext();
+            nextToken(xml);
             const auto name = xml.name().toString();
             if (xml.isStartElement()) {
                 if (steps.isEmpty() && name != "body")

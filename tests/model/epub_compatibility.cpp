@@ -2,6 +2,7 @@
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
 #include "engine/blaze/adapter/engine_document.h"
+#include "engine/blaze/adapter/xml_entities.h"
 #include "engine/blaze/extensions/embedded_font_cache.h"
 #include "publication/image_policy.h"
 #include "lvimg.h"
@@ -313,9 +314,30 @@ void checkCodecs()
 }
 } // namespace
 
+namespace {
+// Entity declarations that Qt 5.2 could expand without a limit are refused.
+bool entitiesRefused(const QByteArray &doctype)
+{
+    QXmlStreamReader xml(doctype + "<html/>");
+    while (!xml.atEnd())
+        if (xml.readNext() == QXmlStreamReader::DTD)
+            return unsafeEntities(xml);
+    return false;
+}
+} // namespace
+
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    require(!entitiesRefused(
+                    "<!DOCTYPE html [<!ENTITY nbsp \"&#160;\"><!ENTITY mdash \"&#x2014;\">]>"),
+            "Short character entities are refused");
+    require(entitiesRefused("<!DOCTYPE html [<!ENTITY a \"&#38;b;\">]>"),
+            "An entity that starts another reference is accepted");
+    require(entitiesRefused("<!DOCTYPE html [<!ENTITY a \"x\"><!ENTITY b \"&a;&a;\">]>"),
+            "Nested entities are accepted");
+    require(entitiesRefused("<!DOCTYPE html [<!ENTITY a \"0123456789abcdefg\">]>"),
+            "A long entity is accepted");
     // This independent ZIP writer fixture has ZIP64 member sizes, offsets, end record and locator.
     QFile fixture(
             QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath("../fixtures/zip64-dtbook.epub"));

@@ -30,6 +30,7 @@
 #include <QRegion>
 #include <QUrl>
 #include <QXmlStreamReader>
+#include "xml_entities.h"
 #include <QPainter>
 #include <QSet>
 #include <QtMath>
@@ -2119,6 +2120,10 @@ QString chapterImage(ReaderSource &source, ldomNode *node)
         bool body = false;
         while (!xml.atEnd()) {
             xml.readNext();
+            if (xml.isDTD() && unsafeEntities(xml)) {
+                image.clear();
+                break;
+            }
             const auto name = xml.name().toString();
             if (xml.isStartElement()
                 && (name == "base" || xml.attributes().hasAttribute("xml:base"))) {

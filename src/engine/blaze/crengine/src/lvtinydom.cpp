@@ -18700,8 +18700,7 @@ bool ldomDocument::loadCacheFileContent(CacheLoadingCallback * formatCallback, L
         pagebuf.swap( _pagesData );
         _pagesData.setPos( 0 );
         LVRendPageList pages;
-        pages.deserialize(_pagesData);
-        if ( _pagesData.error() ) {
+        if ( !pages.deserialize(_pagesData) ) {
             CRLog::error("Page data deserialization is failed");
             return false;
         }

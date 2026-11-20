@@ -52,6 +52,29 @@ bool setFont(EngineDocument &model, int pixels)
 }
 
 #if __has_include(<koblaze.h>)
+void rejectedPageList()
+{
+    LVRendPageList pages;
+    pages.add(new LVRendPageInfo(0, 100, 0));
+    pages.add(new LVRendPageInfo(100, 100, 1));
+    pages[1]->justificationPrefix = 101;
+    SerialBuf saved(128);
+    require(pages.serialize(saved), "Cannot save test page list");
+    SerialBuf input(saved.buf(), saved.pos());
+    LVRendPageList restored;
+    require(!restored.deserialize(input) && restored.empty(),
+            "A rejected page record left a partial page list");
+    pages[1]->justificationPrefix = 0;
+    saved.reset();
+    require(pages.serialize(saved), "Cannot save the corrected page list");
+    SerialBuf incomplete(saved.buf(), saved.pos() / 2);
+    require(!restored.deserialize(incomplete) && restored.empty(),
+            "An incomplete list restored pages");
+    SerialBuf complete(saved.buf(), saved.pos());
+    require(restored.deserialize(complete) && restored.length() == 2 && restored[1]->start == 100,
+            "A valid page list failed to restore after a rejected list");
+}
+
 // A stop after the page split must discard the unfinished layout before another render.
 void cancelledPageSplit()
 {
@@ -197,6 +220,7 @@ int main(int argc, char **argv)
     koblazeSetCancelCheck(nullptr, nullptr);
     interruptedViewportChange();
     cancelledStylesDiscardSavedLayout();
+    rejectedPageList();
     cancelledPageSplit();
     EngineDocument model(test::readerFonts());
     open(model, test::engineBook(false, 8, 120));

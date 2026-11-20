@@ -1330,6 +1330,14 @@
 "activity.progress" = "Progress";
 /* Arguments: %1 */
 "activity.started" = "Started %1";
+/* Chart label and value. Arguments: %1, %2 */
+"activity.chart_value" = "%1: %2";
+/* Dates with the same reading time. Arguments: %1, %2 */
+"activity.chart_dates" = "%1 to %2";
+/* Reading time below one minute. */
+"activity.under_minute" = "Less than one minute";
+/* Estimated finish date on the book progress chart. Arguments: %1 */
+"activity.projected_finish" = "Projected finish %1";
 "activity.time_per_day" = "Time per day";
 "activity.at_recent_pace" = "at your recent pace";
 /* A session's progress, such as "21% → 22%". Arguments: %1, %2 */

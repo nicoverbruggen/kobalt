@@ -57,6 +57,38 @@ QString duration(qint64 milliseconds)
                         : strings::get("stats.duration_hours").arg(minutes / 60).arg(minutes % 60);
 }
 
+QString chartValue(const QString &label, const QString &value)
+{
+    return strings::get("activity.chart_value").arg(label, value);
+}
+
+QString chartDuration(qint64 milliseconds)
+{
+    return milliseconds > 0 && milliseconds < minute ? strings::get("activity.under_minute")
+                                                     : duration(milliseconds);
+}
+
+QString chartDates(QDate first, QDate last)
+{
+    return first == last ? day(first)
+                         : strings::get("activity.chart_dates").arg(day(first), day(last));
+}
+
+// Consecutive days with the same reading time need only one entry.
+QString dailyValues(const QMap<QDate, qint64> &days, QDate first, QDate last)
+{
+    QStringList entries;
+    while (first.isValid() && first <= last) {
+        const auto time = days.value(first);
+        auto end = first;
+        while (end < last && days.value(end.addDays(1)) == time)
+            end = end.addDays(1);
+        entries << chartValue(chartDates(first, end), chartDuration(time));
+        first = end.addDays(1);
+    }
+    return entries.join(QStringLiteral(". "));
+}
+
 // A short form for small places, such as a bar or a calendar day: "38 min" or "1 h 04".
 QString shortDuration(qint64 milliseconds)
 {
@@ -265,6 +297,13 @@ public:
     {
         week = values;
         today = todayIndex;
+        setAccessibleName(strings::get("activity.this_week"));
+        QStringList entries;
+        for (int i = 0; i < week.size(); ++i)
+            if (week[i] >= 0)
+                entries << chartValue(english().dayName(i + 1, QLocale::ShortFormat),
+                                      chartDuration(week[i]));
+        setAccessibleDescription(entries.join(QStringLiteral(". ")));
         update();
     }
 
@@ -548,11 +587,17 @@ class MonthGrid final : public QWidget
 public:
     explicit MonthGrid(QWidget *parent) : QWidget(parent) { setObjectName("rrActivityMonth"); }
 
-    void setMonth(const QDate &first, const QMap<QDate, qint64> &values, const QDate &now)
+    void setMonth(const QDate &first, const QMap<QDate, qint64> &values, const QDate &now,
+                  const QDate &since)
     {
         month = first;
         days = values;
         today = now;
+        setAccessibleName(english().toString(month, QStringLiteral("MMMM yyyy")));
+        setAccessibleDescription(since.isValid()
+                                         ? dailyValues(days, qMax(month, since),
+                                                       qMin(now, month.addMonths(1).addDays(-1)))
+                                         : QString());
         update();
     }
 
@@ -664,12 +709,33 @@ class YearStrip final : public QWidget
 public:
     explicit YearStrip(QWidget *parent) : QWidget(parent) { setObjectName("rrActivityYear"); }
 
-    void setYear(const QMap<QDate, qint64> &values, const QDate &now, const QDate &since)
+    int setYear(const QMap<QDate, qint64> &values, const QDate &now, const QDate &since)
     {
+        if (first == since && today == now && days == values)
+            return readingDays;
         days = values;
         today = now;
         first = since;
+        readingDays = 0;
+        setAccessibleName(now.isValid() ? QString::number(now.year()) : QString());
+        QStringList entries;
+        const auto startOfHistory = qMax(since, QDate(now.year(), 1, 1));
+        auto it = values.lowerBound(startOfHistory);
+        for (QDate start = startOfHistory; since.isValid() && start.isValid() && start <= now;) {
+            const QDate last = qMin(now, QDate(start.year(), start.month(), start.daysInMonth()));
+            int read = 0;
+            for (; it != values.cend() && it.key() <= last; ++it)
+                read += level(it.value()) > 0;
+            readingDays += read;
+            entries << chartValue(english().monthName(start.month()),
+                                  plural("activity.day_read", "activity.days_read_count", read));
+            start = last.addDays(1);
+        }
+        if (!entries.isEmpty())
+            entries.prepend(chartDates(startOfHistory, now));
+        setAccessibleDescription(entries.join(QStringLiteral(". ")));
         update();
+        return readingDays;
     }
 
 protected:
@@ -719,6 +785,7 @@ protected:
 private:
     QMap<QDate, qint64> days;
     QDate today, first;
+    int readingDays = 0;
 };
 } // namespace
 
@@ -749,7 +816,7 @@ public:
     {
         summary = {};
         shown = {};
-        grid->setMonth({}, {}, {});
+        grid->setMonth({}, {}, {}, {});
         year->setYear({}, {}, {});
     }
 
@@ -773,14 +840,9 @@ public:
                      summary.longest.days ? day(summary.longest.first) + QStringLiteral(" – ")
                                      + day(summary.longest.last)
                                           : QString());
-        int read = 0;
-        for (auto it = summary.days.cbegin(); it != summary.days.cend(); ++it)
-            if (it.key().year() == summary.today.year()
-                && it.value() >= activity::readingDayMinimum)
-                ++read;
+        const int read = year->setYear(summary.days, summary.today, summary.since);
         setBand(yearBand, QString::number(summary.today.year()),
                 plural("activity.day_read", "activity.days_read_count", read));
-        year->setYear(summary.days, summary.today, summary.since);
         showMonth();
         arrange();
     }
@@ -836,7 +898,7 @@ private:
                     strings::get(days == 1 ? "activity.days_of_one" : "activity.days_of")
                             .arg(read)
                             .arg(days));
-        grid->setMonth(shown, summary.days, summary.today);
+        grid->setMonth(shown, summary.days, summary.today, summary.since);
         months->setPage(monthIndex(shown), monthIndex(summary.today) + 1,
                         english().toString(shown, QStringLiteral("MMMM yyyy")), false, {}, true);
     }
@@ -1354,6 +1416,15 @@ public:
     {
         hours = values;
         busiest = peak;
+        setAccessibleName(strings::get("activity.when_you_read"));
+        QStringList entries;
+        for (int i = 0; i < hours.size(); ++i)
+            if (hours[i] > 0)
+                entries << chartValue(QTime(i, 0).toString(QStringLiteral("HH:mm")),
+                                      chartDuration(hours[i]));
+        if (hours.size() == 24 && entries.isEmpty())
+            entries << duration(0);
+        setAccessibleDescription(entries.join(QStringLiteral(". ")));
         update();
     }
 
@@ -1561,13 +1632,25 @@ public:
         : QWidget(parent)
     {
         setObjectName(name);
+        setAccessibleName(strings::get("activity.milestones"));
     }
 
     void setMilestones(const QVector<activity::Milestone> &values, int columnCount, bool names)
     {
-        milestones = values;
         columns = columnCount;
+        if (milestones.constData() == values.constData() && named == names) {
+            update();
+            return;
+        }
+        milestones = values;
         named = names;
+        QStringList entries;
+        for (const auto &m : milestones) {
+            const auto progress =
+                    strings::get("activity.progress_of").arg(qMin(m.value, m.target)).arg(m.target);
+            entries << (named ? chartValue(milestoneName(m), progress) : progress);
+        }
+        setAccessibleDescription(entries.join(QStringLiteral(". ")));
         update();
     }
 
@@ -1912,6 +1995,7 @@ public:
                 }
             setBand(bands[kind], strings::get(titles[kind]),
                     strings::get("activity.reached_of").arg(reached).arg(ladder.size()));
+            ladders[kind]->setAccessibleName(strings::get(titles[kind]));
             ladders[kind]->setMilestones(ladder, qMax(1, int(ladder.size())), false);
             counts[kind] = ladder.size();
             columnWidths[kind] = badgeColumn(ladder);
@@ -2108,6 +2192,19 @@ public:
         days.clear();
         today = now;
         end = finish;
+        setAccessibleName(strings::get("activity.progress"));
+        QStringList entries;
+        if (!points.isEmpty()) {
+            const auto &first = points.first();
+            if (first.first != today)
+                entries << chartValue(day(first.first),
+                                      strings::get("common.percent").arg(first.second));
+            entries << chartValue(day(today),
+                                  strings::get("common.percent").arg(points.last().second));
+            if (finish > today)
+                entries << strings::get("activity.projected_finish").arg(day(finish, true));
+        }
+        setAccessibleDescription(entries.join(QStringLiteral(". ")));
         update();
     }
 
@@ -2116,6 +2213,12 @@ public:
         points.clear();
         days = values;
         today = now;
+        setAccessibleName(strings::get("activity.time_per_day"));
+        setAccessibleDescription(
+                days.isEmpty()
+                        ? QString()
+                        : dailyValues(days, qMax(days.firstKey(), days.lastKey().addDays(-29)),
+                                      days.lastKey()));
         update();
     }
 

@@ -14112,10 +14112,30 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             }
             return result;
         };
-        QHash<QString, QString> records, sessions;
+        QHash<QString, QString> records, sessions, charts;
+        const auto readChart = [&](const char *widget, const char *expectedName) {
+            auto *chart = QAccessible::queryAccessibleInterface(fixture.widget(widget));
+            if (chart && !chart->state().invisible
+                && chart->text(QAccessible::Name) == expectedName)
+                charts.insert(expectedName, chart->text(QAccessible::Description));
+        };
         activityTour(
                 fixture,
                 [&](const QString &scene) {
+                    if (scene == "stats-activity-overview")
+                        readChart("rrActivityWeek", "This week");
+                    if (scene == "stats-activity-calendar") {
+                        readChart("rrActivityMonth", "November 2026");
+                        readChart("rrActivityYear", "2026");
+                    }
+                    if (scene == "stats-activity-records") {
+                        readChart("rrActivityHours", "When you read");
+                        readChart("rrActivityMilestones", "Milestones");
+                    }
+                    if (scene == "stats-activity-book")
+                        readChart("rrActivityBookChart", "Time per day");
+                    if (scene == "stats-activity-open-book")
+                        readChart("rrActivityBookChart", "Progress");
                     if (scene == "stats-activity-records")
                         records = rowDescriptions("rrActivityRecords");
                     if (scene == "stats-activity-open-book")
@@ -14125,6 +14145,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 [](const QString &, const char *) {});
         if (QTest::currentTestFailed())
             return;
+        QVERIFY(charts.value("This week").contains("Sat: 42 min"));
+        QVERIFY(!charts.value("This week").contains("Sun: 0 min"));
+        QVERIFY(charts.value("November 2026").contains("14 Nov: 42 min"));
+        QVERIFY(charts.value("November 2026").contains("2 Nov: 0 min"));
+        QVERIFY(!charts.value("November 2026").contains("15 Nov"));
+        QVERIFY(charts.value("2026").contains("November: 13 days read"));
+        QVERIFY(!charts.value("2026").contains("August"));
+        QVERIFY(charts.value("When you read").contains("21:00"));
+        QVERIFY(charts.value("Milestones").contains("Books: 2 / "));
+        QVERIFY(charts.value("Time per day").contains("14 Nov: 28 min"));
+        QVERIFY(charts.value("Progress").contains("14 Nov")
+                && charts.value("Progress").contains('%'));
         QVERIFY(records.value("Most in one day").contains("3 h 5 min"));
         QVERIFY(records.value("Longest streak").contains("31 days"));
         const auto session = sessions.value("Today, 07:48");

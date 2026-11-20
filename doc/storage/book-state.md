@@ -42,7 +42,8 @@ All fields keep record format 1, legacy JSON schema 1 and database schema 4. Mis
 
 ### Main text marks
 
-- The manual start and end are stored apart. Each holds a TOC entry and its source position.
+- The manual `start` and `end` each store the TOC entry’s zero-based `index`, `title`, source `position` and resolved `anchor`. For an older choice without an anchor, the reader checks the index and title before resolving the boundary.
+- If the boundaries cross on load, the reader drops the manual end first. It drops the manual start only if the range is still invalid.
 - The start points to the first included passage. The end points to the first excluded passage, or the end of the spine.
 - The reader recalculates page numbers after reflow. The resume position and bookmarks keep their source locations.
 

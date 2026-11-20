@@ -93,7 +93,7 @@ The text values of a book (`font_face`, `font_pixels`, `line_spacing`, `text_ali
 | `header_footer_percentage_format` | `whole`, `decimal` | `whole` | Decimal shows one decimal place in the header, the footer and their previews. Both count the current page and round down. |
 | `time_remaining_format` | `detailed`, `approximate` | `detailed` | Display only. Applies to the header, the footer and Kobalt sleep screens. Does not change the stored pace or cache identity. |
 | `secondary_page_numbers` | `roman`, `arabic`, `letters`, `prefixed`, `upper_roman` | `upper_roman` | Front matter and back matter each count from the start. |
-| `stats_word_scope` | `main`, `volume` | `main` | Main uses the main-text boundaries for the Book figures in Stats. Volume uses the full publication. The lock screen follows this choice. |
+| `stats_word_scope` | `main`, `volume` | `main` | Main uses the main-text boundaries for the Book figures in Stats. Volume uses the full publication. The lock screen follows this choice. The Android and desktop libraries show main-text progress from the book’s `percent` field in either mode. |
 | `activity_welcome_seen` | Boolean | `false` | Activity showed its first-opening alert. |
 | `dense_stats_chart` | Boolean | `false` | Written through the profile writer. If the write fails, the graph goes back to the saved mode. |
 

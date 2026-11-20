@@ -64,7 +64,7 @@
 #  include <QJsonArray>
 #  include <QJsonDocument>
 #  include <QMouseEvent>
-#  include <QSaveFile>
+#  include "scenario/results.h"
 #  include <QWindow>
 #  include <dlfcn.h>
 #endif
@@ -1759,22 +1759,22 @@ void ReaderCoordinator::runScenarios(const QString &path)
             header[it.key()] = it.value();
     }
     // One line per scenario, kept apart from the rotating event log.
-    QSaveFile output(environment_.paths.directory + "/diagnostics/scenarios.jsonl");
-    bool saved = false;
-    if (output.open(QIODevice::WriteOnly)) {
-        output.write(QJsonDocument(header).toJson(QJsonDocument::Compact) + '\n');
-        for (const auto &result : results)
-            output.write(QJsonDocument(result).toJson(QJsonDocument::Compact) + '\n');
-        saved = output.commit();
-    }
-    kobalt::diagnostic("scenario-run-end",
-                       kobalt::qt::object({ { "results", results.size() }, { "saved", saved } }));
-    // Tell whoever started the run that it ended. When the run lost its
-    // reader, the next opening shows the notice instead.
-    const auto notice = kobalt::benchmarkNotice(
-            results, saved, usbPath(environment_.paths.directory + "/diagnostics"));
-    if (!run.reader || !run.reader->showNotice(notice))
-        pendingNotice = notice;
+    const auto folder = environment_.paths.directory + "/diagnostics";
+    QPointer<ReaderCoordinator> guard(this);
+    kobalt::scenario::saveResults(
+            scenarioWriter, folder + "/scenarios.jsonl", header, results,
+            [guard, results, folder](bool saved) {
+                if (!guard)
+                    return;
+                kobalt::diagnostic(
+                        "scenario-run-end",
+                        kobalt::qt::object({ { "results", results.size() }, { "saved", saved } }));
+                // Tell whoever started the run that it ended. When the run lost its
+                // reader, the next opening shows the notice instead.
+                const auto notice = kobalt::benchmarkNotice(results, saved, usbPath(folder));
+                if (!guard->run.reader || !guard->run.reader->showNotice(notice))
+                    guard->pendingNotice = notice;
+            });
 }
 #endif
 

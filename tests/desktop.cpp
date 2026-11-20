@@ -4,6 +4,7 @@
 #include "app/reader/views/annotation_exporter.h"
 #include "app/reader/panels/activity_view.h"
 #include "storage/record_writer.h"
+#include "scenario/results.h"
 #include <QtGui/private/qeventpoint_p.h>
 #include "ui/controls/options.h"
 #include "ui/controls/rows.h"
@@ -6630,6 +6631,39 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(limited.getUncompressedSize() > 1);
         limited.compact(0);
         QVERIFY(limited.warned());
+    }
+
+    void scenarioResultFile()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        kobalt::storage::RecordWriter writer(kobalt::storage::RecordWriter::Delivery::All);
+        QSemaphore release;
+        QVERIFY(writer.tryPost([&] { return release.tryAcquire(1, 5000); }));
+        const auto path = directory.filePath("scenarios.jsonl");
+        const QJsonObject header{ { "kind", "device" } }, result{ { "id", "first" } };
+        bool done = false, saved = false;
+        kobalt::scenario::saveResults(writer, path, header, { result }, [&](bool success) {
+            QCOMPARE(QThread::currentThread(), qApp->thread());
+            saved = success;
+            done = true;
+        });
+        const bool wroteBeforeRelease = QFileInfo::exists(path);
+        release.release();
+        QVERIFY2(!wroteBeforeRelease, "The report was written while its writer was busy");
+        QVERIFY2(!done, "The reader thread completed the report write inline");
+        QTRY_VERIFY(done);
+        QVERIFY(saved);
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), QByteArray("{\"kind\":\"device\"}\n{\"id\":\"first\"}\n"));
+        done = false;
+        kobalt::scenario::saveResults(writer, directory.path(), header, {}, [&](bool success) {
+            saved = success;
+            done = true;
+        });
+        QTRY_VERIFY(done);
+        QVERIFY(!saved);
     }
 
     // Opening and closing a book write "reader-shown" and "book-close" with

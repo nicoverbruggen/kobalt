@@ -52,3 +52,5 @@ Three consecutive screenshot runs with the corrected Type Tester fixture, fixed 
 The Qt5 package passed ZIP integrity checks and contains the ARM32 library at `usr/local/Kobo/imageformats/libkobalt.so` in `KoboRoot.tgz`. The prepared SDK prints a CMake developer warning for `COPY_ONLY` in its resource macro; this did not prevent compilation or packaging. This check does not run the package on a device or establish firmware compatibility. Neither the Mac nor the Qt5 validation rebuilt Qt.
 
 `desktop.fastLocateText` checks that a scenario can hold a word in another chapter when Fast rendering gives the search hit an estimated book page.
+
+The device report check holds the writer busy while the reader submits the results. It checks the saved JSON lines, the completion on the reader thread and the failure notice input when the destination cannot be written.

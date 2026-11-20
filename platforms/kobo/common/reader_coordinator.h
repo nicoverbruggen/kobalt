@@ -93,6 +93,7 @@ private:
     void startScenarios();
     void runScenarios(const QString &path);
     bool scenariosStarted = false;
+    storage::RecordWriter scenarioWriter;
     // A copy of the first opening, so scenarios can open the same book again.
     std::unique_ptr<NativeOpening> scenarioOpening;
 #endif

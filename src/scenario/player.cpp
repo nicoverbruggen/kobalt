@@ -23,26 +23,38 @@
 
 namespace kobalt::scenario {
 namespace {
-// Polls every millisecond without sleeping, so a wait never adds to a measured
-// time. done() is called until it first holds and never again, because a check
-// that reads events consumes what it reads.
+class WaitLoop : public QEventLoop
+{
+public:
+    void wait(int milliseconds)
+    {
+        QTimer deadline;
+        deadline.setTimerType(Qt::PreciseTimer);
+        deadline.setSingleShot(true);
+        QObject::connect(&deadline, &QTimer::timeout, this, &QEventLoop::quit);
+        deadline.start(qMax(0, milliseconds));
+        exec();
+    }
+};
+
+// Host predicates have no change notification. Limit how often the player
+// samples them so a slow operation can leave the reader thread asleep.
 bool waitUntil(const std::function<bool()> &done, int timeout)
 {
     if (done())
         return true;
-    bool met = false;
-    QEventLoop loop;
+    WaitLoop loop;
     QTimer poll;
-    QElapsedTimer clock;
-    clock.start();
+    bool met = false;
     QObject::connect(&poll, &QTimer::timeout, &loop, [&] {
-        met = done();
-        if (met || clock.elapsed() > timeout)
+        if (done()) {
+            met = true;
             loop.quit();
+        }
     });
-    poll.start(1);
-    loop.exec();
-    return met;
+    poll.start(16);
+    loop.wait(timeout);
+    return met || done();
 }
 
 // Diagnostics events from any thread, in the order they were written.
@@ -63,6 +75,8 @@ public:
             ++state->counted[name];
             if (name == QLatin1String("operation-start"))
                 ++state->counted[name + '/' + event.value("operation").toString()];
+            if (state->notify)
+                state->notify(event);
         });
     }
 
@@ -108,8 +122,9 @@ public:
             return match;
         };
         QJsonObject found;
+        WaitLoop loop;
+        QMutexLocker lock(&state->mutex);
         if (earlier) {
-            QMutexLocker lock(&state->mutex);
             auto &passed = state->passed;
             for (auto it = passed.begin(); it != passed.end(); ++it) {
                 if (matches(*it)) {
@@ -119,29 +134,41 @@ public:
                 }
             }
         }
-        waitUntil(
-                [&] {
-                    QMutexLocker lock(&state->mutex);
-                    auto &queue = state->queue;
-                    while (!queue.empty()) {
-                        const auto event = queue.front();
-                        queue.pop_front();
-                        if (matches(event)) {
-                            found = event;
-                            return true;
-                        }
-                        state->passed.push_back(event);
-                    }
-                    return false;
-                },
-                timeout);
-        return found;
+        const auto takeMatch = [&] {
+            while (!state->queue.empty()) {
+                auto event = state->queue.front();
+                state->queue.pop_front();
+                if (matches(event))
+                    return event;
+                state->passed.push_back(event);
+            }
+            return QJsonObject{};
+        };
+        found = takeMatch();
+        if (!found.isEmpty())
+            return found;
+
+        // Register before unlocking so an event cannot arrive between checking
+        // the queue and starting the wait. Workers only post to the reader loop.
+        bool posted = false;
+        state->notify = [&](const QJsonObject &event) {
+            if (!posted && matches(event)) {
+                posted = true;
+                QMetaObject::invokeMethod(&loop, "quit", Qt::QueuedConnection);
+            }
+        };
+        lock.unlock();
+        loop.wait(timeout);
+        lock.relock();
+        state->notify = {};
+        return takeMatch();
     }
 
 private:
     struct State
     {
         QMutex mutex;
+        std::function<void(const QJsonObject &)> notify;
         std::deque<QJsonObject> queue;
         // Events that left the queue without a match since the sample started.
         std::deque<QJsonObject> passed;
@@ -366,18 +393,14 @@ public:
         if (step.contains("wait_ms")) {
             const int wait = qMax(0, step.value("wait_ms").toInt());
             if (!host.realMilliseconds) {
-                QEventLoop loop;
-                QTimer::singleShot(wait, &loop, &QEventLoop::quit);
-                loop.exec();
+                WaitLoop().wait(wait);
                 return {};
             }
             // Count real time. A Kobo in standby stops the process's timers,
             // so check again at least every second of awake time.
             const auto end = host.realMilliseconds() + wait;
             for (qint64 left = wait; left > 0; left = end - host.realMilliseconds()) {
-                QEventLoop loop;
-                QTimer::singleShot(int(qMin<qint64>(left, 1000)), &loop, &QEventLoop::quit);
-                loop.exec();
+                WaitLoop().wait(int(qMin<qint64>(left, 1000)));
             }
             return {};
         }
@@ -527,7 +550,7 @@ public:
         if (host.press) {
             host.press(widget, point, true);
             if (milliseconds > 0)
-                waitUntil([] { return false; }, milliseconds);
+                WaitLoop().wait(milliseconds);
             host.press(widget, point, false);
             return true;
         }
@@ -536,7 +559,7 @@ public:
             return false;
         qt::sendMouse(input.first, input.second, true);
         if (milliseconds > 0)
-            waitUntil([] { return false; }, milliseconds);
+            WaitLoop().wait(milliseconds);
         qt::sendMouse(input.first, input.second, false);
         return true;
     }

@@ -8,6 +8,7 @@
 #include <QVector>
 #include <cstdio>
 #include <cstdlib>
+#include <thread>
 
 // This check drives the player's failure paths without a reader or hardware.
 namespace kobalt {
@@ -229,7 +230,11 @@ int main(int argc, char **argv)
             "a host that cannot turn Wi-Fi off skips the scenario");
     bool up = true;
     int offCalls = 0;
-    radio.wifiUp = [&] { return up; };
+    int radioChecks = 0;
+    radio.wifiUp = [&] {
+        ++radioChecks;
+        return up;
+    };
     radio.wifiOff = [&] {
         ++offCalls;
         QTimer::singleShot(30, [&] { up = false; });
@@ -241,6 +246,7 @@ int main(int argc, char **argv)
             "the wifi step completes once the radio is down");
     require(offCalls == 1, "the step turns Wi-Fi off only while it is up");
     up = true;
+    radioChecks = 0;
     radio.wifiOff = [] { return QString(); };
     auto stuck = wifiScenario;
     stuck["steps"] = QJsonArray{ QJsonObject{ { "wifi", "off" }, { "timeout", 50 } },
@@ -250,6 +256,7 @@ int main(int argc, char **argv)
     require(results[0].value("status") == "failed"
                     && results[0].value("reason").toString().contains("Wi-Fi stayed on"),
             "a radio that stays up fails the sample");
+    require(radioChecks <= 8, "a 50 ms radio wait must not poll every millisecond");
     radio.wifiOff = [] { return QStringLiteral("this firmware has no WirelessManager::off()"); };
     results = kobalt::scenario::run(wifiFile(), radio, options);
     require(results[0].value("status") == "failed"
@@ -349,6 +356,7 @@ int main(int argc, char **argv)
             "a host without its own sync skips the scenario");
     bool syncing = true, startedWhileSyncing = false;
     int starts = 0;
+    std::thread worker;
     store.nativeSyncing = [&] { return syncing; };
     store.nativeSync = [&] {
         startedWhileSyncing = syncing;
@@ -356,8 +364,10 @@ int main(int argc, char **argv)
         // The first save ends before the page turn and is passed over; the
         // second ends after the step that waits for the turn.
         kobalt::observer(save(11));
-        QTimer::singleShot(20, [] {
-            kobalt::observer(QJsonObject{ { "event", "page-turn-painted" }, { "elapsed_ms", 5 } });
+        QTimer::singleShot(20, [&] {
+            worker = std::thread([notify = kobalt::observer] {
+                notify(QJsonObject{ { "event", "page-turn-painted" }, { "elapsed_ms", 5 } });
+            });
         });
         QTimer::singleShot(150, [&] { kobalt::observer(save(22)); });
         QTimer::singleShot(200, [] {
@@ -367,6 +377,8 @@ int main(int argc, char **argv)
     };
     QTimer::singleShot(30, [&] { syncing = false; });
     results = kobalt::scenario::run(syncFile(), store, options);
+    if (worker.joinable())
+        worker.join();
     require(results[0].value("status") == "completed", "the native sync scenario completes");
     require(starts == 1 && !startedWhileSyncing, "the step waits for the earlier sync to end");
     const auto samples = results[0].value("samples").toArray();

@@ -127,6 +127,8 @@ The `resources.` scenarios measure what the main reading cycle costs in CPU time
 
 The second after each turn is quiet time, as a reader pauses. A write that a turn schedules for up to one second later counts for that turn, so the turn samples measure CPU time, not the speed of the turn. `page.turn` measures that. Hybrid starts the background layout only after three page turns, as a reader who has started to read. `resources.layout` turns three pages, so it also includes the two-second quiet time before the build starts. Use its CPU time, not its wall time.
 
+A diagnostics event wakes the scenario player when it matches the current step. A held press uses one timer until release. For host state such as reader activity or widget visibility, the player checks immediately and then every 16 ms. A timed step that waits for host state can include that detection delay. Earlier players polled every millisecond, which also counted the polling work in CPU samples. Use the same player version to compare those measurements.
+
 A sample is the time from `mark` to `mark_end`. With `"resources": true` in `sample`, the player also reads the counters of the operating system at both steps and adds the difference as stages. The reader has no write counters of its own; every value comes from the kernel:
 
 | Stage | Source |

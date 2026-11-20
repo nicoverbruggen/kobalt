@@ -1292,7 +1292,8 @@ void ReaderCoordinator::showReader()
         // poll show the reader again before Qt processes deleteLater().
         run.reader.clear();
         if (!retained || lifecycle->blocked() || kobalt::NativeLifecycle::suspended()) {
-            disposeForTransition([] { });
+            // A Home press that closed this reader still goes Home.
+            disposeForTransition([this] { finishHomeNavigation(); });
             return;
         }
         run.session = std::move(retained);

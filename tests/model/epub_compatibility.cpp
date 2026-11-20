@@ -104,6 +104,26 @@ void checkUnloadedMainTextRange()
             "Equivalent first-child positions changed the order of the boundaries");
 }
 
+void checkBoxedMainTextBoundaries()
+{
+    const auto body = test::publisherHtml(
+            "<div><p>Preface</p></div>"
+            "<div epub:type='bodymatter' style='float:left'><span>Main</span><p>Story</p></div>"
+            "<div epub:type='backmatter'><span>End</span><p>Notes</p></div>");
+    EngineDocument model(test::readerFonts());
+    openPublication(model,
+                    test::publisherPackage("en", "Boxed anchors", { { "text.xhtml", body } },
+                                           "<itemref idref='text.xhtml'/>"));
+    const auto hints = model.mainTextHints();
+    require(!hints.first.isEmpty() && !hints.second.isEmpty(), "Missing structural anchors");
+    const auto openingText = [&](const QString &anchor, int length) {
+        const auto text = anchor + "/span[1]/text()";
+        return model.textRange(text + ".0", text + "." + QString::number(length)).text;
+    };
+    require(openingText(hints.first, 4) == "Main" && openingText(hints.second, 3) == "End",
+            "Generated layout boxes changed the text at a source boundary");
+}
+
 void checkUnresolvedSpineFallbacks()
 {
     auto files = test::engineBook(false, 4, 2);
@@ -529,6 +549,7 @@ int main(int argc, char **argv)
     checkChapterImageWrappers();
     checkChapterGlossary();
     checkUnloadedMainTextRange();
+    checkBoxedMainTextBoundaries();
     checkUnresolvedSpineFallbacks();
     checkNavigation(false);
     checkNavigation(true);

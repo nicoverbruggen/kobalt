@@ -58,6 +58,25 @@ void checkChapterImageWrappers()
     require(chapters[3].labelImage.isEmpty(), "Chapter preview accepted a long entity declaration");
 }
 
+void checkChapterGlossary()
+{
+    const auto glossary =
+            test::publisherHtml("<section epub:type='glossary'><p>Terms</p></section>");
+    auto chapter = test::publisherHtml(
+            "<p>Opening</p><section epub:type='glossary'><p>Local terms</p></section>");
+    chapter.replace("<body>", "<body epub:type='chapter'>");
+    auto files = test::publisherPackage(
+            "en", "Glossaries",
+            { { "one.xhtml", chapter },
+              { "two.xhtml", test::publisherHtml("<p>More text</p>") },
+              { "terms.xhtml", glossary } },
+            "<itemref idref='one.xhtml'/><itemref idref='two.xhtml'/><itemref idref='terms.xhtml'/>");
+    EngineDocument model(test::readerFonts());
+    openPublication(model, files);
+    require(model.mainTextHints().second == "/body/DocFragment[3]/body[1]/section[1]",
+            "A glossary inside a chapter hid later text and the publication glossary");
+}
+
 void checkUnresolvedSpineFallbacks()
 {
     auto files = test::engineBook(false, 4, 2);
@@ -481,6 +500,7 @@ int main(int argc, char **argv)
     checkDtbookChapterWindow();
     checkCodecs();
     checkChapterImageWrappers();
+    checkChapterGlossary();
     checkUnresolvedSpineFallbacks();
     checkNavigation(false);
     checkNavigation(true);

@@ -234,6 +234,7 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
         QStringList steps;
         const auto before = result;
         int elementOrder = 0;
+        bool chapterBody = false;
         while (!xml.atEnd()) {
             stopPoint();
             nextToken(xml);
@@ -256,10 +257,12 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
                 if (epub3
                     && (name == "body" || name == "section" || name == "div"
                         || name == "article")) {
+                    if (steps.size() == 1)
+                        chapterBody = types.contains("chapter");
                     // A glossary inside a chapter is local to that chapter. Only a
                     // partition of the publication or a landmark can end the main text.
                     if (types.contains("backmatter") || types.contains("bodymatter")
-                        || steps.size() <= 2)
+                        || steps.size() == 1 || (steps.size() == 2 && !chapterBody))
                         flags |= semantics(types);
                     if (types.contains("chapter") || types.contains("part"))
                         result.second.clear();

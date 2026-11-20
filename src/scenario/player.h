@@ -31,7 +31,7 @@ struct Host
     std::function<bool()> idle;
     // Removes the disposable caches of the book with this key, so its next
     // opening starts cold. Called only while no book is open. Optional.
-    std::function<void(const QString &key)> forget;
+    std::function<bool(const QString &key)> forget;
     // Whether a dictionary is installed. Optional; without it the player
     // assumes one is.
     std::function<bool()> dictionary;

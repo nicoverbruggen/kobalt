@@ -281,7 +281,8 @@ public:
             }
             if (host.reader())
                 return "close the book before removing caches";
-            host.forget(step.value("forget").toString());
+            if (!host.forget(step.value("forget").toString()))
+                return "could not clear the book caches";
             return {};
         }
         if (step.contains("close")) {
@@ -470,8 +471,8 @@ public:
             if (!closed())
                 return "the open book did not close";
         }
-        if (fresh)
-            host.forget(key);
+        if (fresh && !host.forget(key))
+            return "could not clear the book caches";
         events.skip();
         if (!host.open(key)) {
             unsupported = true;

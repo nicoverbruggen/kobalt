@@ -4,7 +4,7 @@
 #include "app/reader/views/annotation_exporter.h"
 #include "app/reader/panels/activity_view.h"
 #include "storage/record_writer.h"
-#include "scenario/results.h"
+#include "scenario/files.h"
 #include <QtGui/private/qeventpoint_p.h>
 #include "ui/controls/options.h"
 #include "ui/controls/rows.h"
@@ -6631,6 +6631,40 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(limited.getUncompressedSize() > 1);
         limited.compact(0);
         QVERIFY(limited.warned());
+    }
+
+    void scenarioCacheRemoval()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        kobalt::storage::Paths paths;
+        paths.directory = directory.path();
+        QVERIFY(QDir().mkpath(paths.documentCache()));
+        QVERIFY(QDir().mkpath(QFileInfo(paths.layoutCache()).absolutePath()));
+        QFile layout(paths.layoutCache());
+        QVERIFY(layout.open(QIODevice::WriteOnly));
+        layout.close();
+
+        QSemaphore release;
+        kobalt::storage::RecordWriter writer(kobalt::storage::RecordWriter::Delivery::All);
+        QVERIFY(writer.tryPost([&] { return release.tryAcquire(1, 5000); }));
+        QObject context;
+        bool processed = false;
+        QTimer::singleShot(0, &context, [&] {
+            processed = QFileInfo::exists(paths.documentCache())
+                    && QFileInfo::exists(paths.layoutCache());
+            release.release();
+        });
+        const bool cleared = kobalt::scenario::clearCaches(writer, paths);
+        release.release();
+        QVERIFY2(processed, "The application thread could not process events before cache removal");
+        QVERIFY(cleared);
+        QVERIFY(!QFileInfo::exists(paths.documentCache())
+                && !QFileInfo::exists(paths.layoutCache()));
+        QVERIFY(kobalt::scenario::clearCaches(writer, paths));
+        QVERIFY(QDir().mkpath(paths.layoutCache() + "/unexpected"));
+        QVERIFY(!kobalt::scenario::clearCaches(writer, paths));
+        QVERIFY(QFileInfo::exists(paths.layoutCache() + "/unexpected"));
     }
 
     void scenarioResultFile()

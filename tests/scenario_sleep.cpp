@@ -483,12 +483,21 @@ int main(int argc, char **argv)
                     && openedModes.size() == openings && reader.isVisible(),
             "fresh open changed the reader without a cache removal callback");
     int removals = 0;
-    library.forget = [&](const QString &) { ++removals; };
+    library.forget = [&](const QString &) {
+        ++removals;
+        return true;
+    };
     require(cacheStep({ { "forget", "test" } }) == "failed" && removals == 0 && reader.isVisible(),
             "the player removed caches while the book was open");
     reader.close();
     require(cacheStep({ { "forget", "test" } }) == "completed" && removals == 1,
             "the player did not remove caches after the book closed");
+    library.forget = [](const QString &) { return false; };
+    require(cacheStep({ { "open", "test" }, { "fresh", true } }) == "failed"
+                    && openedModes.size() == openings,
+            "a failed cache removal was measured as a cold open");
+    require(cacheStep({ { "forget", "test" } }) == "failed",
+            "a failed cache removal step reported success");
     library.reader = {};
     require(cacheStep({ { "forget", "test" } }) == "skipped" && removals == 1,
             "the player removed caches without knowing whether a book was open");

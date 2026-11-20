@@ -296,9 +296,9 @@ private:
         };
         host.idle = [&] { return fixture.window.idle(); };
         // Parsed books and layouts are disposable caches.
+        kobalt::storage::RecordWriter scenarioWriter;
         host.forget = [&](const QString &) {
-            QDir(fixture.paths.documentCache()).removeRecursively();
-            QFile::remove(fixture.paths.layoutCache());
+            return kobalt::scenario::clearCaches(scenarioWriter, fixture.paths);
         };
         // The reader is drawn into the window's canvas scene, so input goes to
         // the canvas viewport's window at the scene position.

@@ -64,7 +64,7 @@
 #  include <QJsonArray>
 #  include <QJsonDocument>
 #  include <QMouseEvent>
-#  include "scenario/results.h"
+#  include "scenario/files.h"
 #  include <QWindow>
 #  include <dlfcn.h>
 #endif
@@ -1588,8 +1588,7 @@ void ReaderCoordinator::runScenarios(const QString &path)
         // The closed book stays in memory for a quick return. A cold opening
         // must not reuse it.
         run.session.reset();
-        QDir(environment_.paths.documentCache()).removeRecursively();
-        QFile::remove(environment_.paths.layoutCache());
+        return kobalt::scenario::clearCaches(scenarioWriter, environment_.paths);
     };
     host.reader = [this]() -> QWidget * { return run.reader.data(); };
     host.busy = [this] {

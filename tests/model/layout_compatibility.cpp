@@ -1,5 +1,8 @@
 #include "publication/layout_compatibility.h"
 #include <QCoreApplication>
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+#  include <QTextCodec>
+#endif
 #include <QFile>
 #include <QDir>
 #include <cstdio>
@@ -227,6 +230,22 @@ int main(int argc, char **argv)
         const QByteArray imageItem = "<item id='image' href='image.jpg' media-type='image/jpeg'/>";
         image["OPS/book.opf"].replace("</manifest>", imageItem + imageItem + "</manifest>");
         expect(image, L::Supported, "Identical duplicate image manifest item rejected");
+    }
+    {
+        auto files = publication();
+        files["OPS/text/chapter.xhtml"] =
+                "<?xml version='1.0' encoding='not-a-codec'?><html><body>café</wrong></html>";
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+        auto *saved = QTextCodec::codecForLocale();
+        QTextCodec::setCodecForLocale(QTextCodec::codecForName("ISO-8859-1"));
+#endif
+        const auto result = inspect(files);
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+        QTextCodec::setCodecForLocale(saved);
+#endif
+        if (result.verdict != LayoutCompatibility::Incomplete
+            || !result.excerpt.contains(QStringLiteral("café")))
+            qFatal("Unknown XML encoding lost the UTF-8 diagnostic excerpt");
     }
     {
         const auto broken = publication("<p>" + QByteArray(1000, 'x') + "\n<p>&nbsp;</p>");

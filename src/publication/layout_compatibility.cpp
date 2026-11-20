@@ -7,6 +7,9 @@
 #include <QUrl>
 #include <QXmlStreamReader>
 #include <QTextStream>
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+#  include <QTextCodec>
+#endif
 
 namespace kobalt {
 const char *LayoutCompatibility::reasonKey() const
@@ -46,7 +49,10 @@ QString xmlSource(QByteArray bytes)
             QStringLiteral("^<\\?xml\\s[^>]*encoding\\s*=\\s*['\"]([^'\"]+)['\"]"));
     const auto encoding = declaration.match(QString::fromLatin1(bytes.left(512))).captured(1);
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    stream.setCodec(encoding.isEmpty() ? "UTF-8" : encoding.toLatin1().constData());
+    if (auto *codec = QTextCodec::codecForName(encoding.toLatin1()))
+        stream.setCodec(codec);
+    else
+        stream.setCodec("UTF-8");
 #else
     if (const auto codec = QStringConverter::encodingForName(encoding.toLatin1().constData())) {
         stream.setEncoding(*codec);

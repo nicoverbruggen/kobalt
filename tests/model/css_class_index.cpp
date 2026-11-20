@@ -72,6 +72,16 @@ void checkClassSelectorIndex()
     scan.merge(imported);
     indexed.merge(imported);
     compare(scan, indexed, node, 0x445566);
+    {
+        LVStyleSheet::ScopedPush nested(indexed);
+        require(indexed.parse(".item {color:#789}"), "Cannot parse a nested class rule");
+        LVStyleSheet expected(scan);
+        require(expected.parse(".item {color:#789}"), "Cannot parse the reference class rule");
+        compare(expected, indexed, node, 0x778899);
+        indexed.push(); // Leave an unmodified scope for ScopedPush to unwind.
+        compare(expected, indexed, node, 0x778899);
+    }
+    compare(scan, indexed, node, 0x445566);
     require(scan.pop() && indexed.pop(), "Cannot restore CSS scope");
     compare(scan, indexed, node, 0x111111);
     scan.clear();

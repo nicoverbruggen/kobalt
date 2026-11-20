@@ -8683,18 +8683,27 @@ LVCssSelector::LVCssSelector( LVCssSelector & v )
         _next = new LVCssSelector( *v._next );
 }
 
-void LVStyleSheet::set(LVPtrVector<LVCssSelector> & v  )
+void LVStyleSheet::copySelectorsTo(LVPtrVector<LVCssSelector> & target) const
 {
-    _selectors.clear();
-    _selectors.reserve( v.size() );
-    for ( int i=0; i<v.size(); i++ ) {
-        LVCssSelector * selector = v[i];
-        if ( selector )
-            _selectors.add( new LVCssSelector( *selector ) );
-        else
-            _selectors.add( NULL );
-    }
-    rebuildClassIndex();
+    target.reserve(_selectors.length());
+    for (int i = 0; i < _selectors.length(); ++i)
+        target.add(_selectors[i] ? new LVCssSelector(*_selectors[i]) : NULL);
+}
+
+void LVStyleSheet::detachScope()
+{
+    if (_stack.empty() || _stack.back().selectors)
+        return;
+    // The index points into its selector chains. Keep both originals for pop
+    // and let parse or merge build the working index after it adds the rules.
+    auto working = std::make_unique<LVPtrVector<LVCssSelector>>();
+    copySelectorsTo(*working);
+    auto index = _classIndex ? std::make_unique<LVCssClassIndex>() : nullptr;
+    _selectors.swap(*working);
+    auto & saved = _stack.back();
+    saved.selectors = std::move(working);
+    saved.index = std::move(_classIndex);
+    _classIndex = std::move(index);
 }
 
 LVStyleSheet::LVStyleSheet( LVStyleSheet & sheet )
@@ -8705,7 +8714,8 @@ LVStyleSheet::LVStyleSheet( LVStyleSheet & sheet )
 {
     if ( sheet._classIndex )
         _classIndex = std::make_unique<LVCssClassIndex>();
-    set( sheet._selectors );
+    sheet.copySelectorsTo(_selectors);
+    rebuildClassIndex();
     _selector_count = sheet._selector_count;
 }
 
@@ -8927,6 +8937,7 @@ bool LVStyleSheet::parseAndAdvance( const char * &str, bool useragent_sheet, lSt
         // We can't parse anything if no _doc to get element name ids from
         return false;
     }
+    detachScope();
     LVCssSelector * selector = NULL;
     LVCssSelector * prev_selector;
     for (;*str;)
@@ -9093,6 +9104,7 @@ bool LVStyleSheet::gatherNodeMatchingRulesets(ldomNode * node, const char * str,
 }
 
 void LVStyleSheet::merge(const LVStyleSheet &other) {
+    detachScope();
     int length = other._selectors.length();
     if (length > _selectors.length())
         _selectors.set(length - 1, nullptr);

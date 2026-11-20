@@ -19,6 +19,7 @@
 #include "crsetup.h"
 
 #include <stdlib.h>
+#include <utility>
 #include "lvmemman.h"
 
 /** \brief template which implements vector of pointer
@@ -38,6 +39,11 @@ class LVPtrVector
 public:
     /// default constructor
     LVPtrVector() : _list(NULL), _size(0), _count(0) {}
+    void swap(LVPtrVector & other) {
+        std::swap(_list, other._list);
+        std::swap(_size, other._size);
+        std::swap(_count, other._count);
+    }
     /// retrieves item from specified position
     T * operator [] ( int pos ) const { return _list[pos]; }
 	/// returns pointer array

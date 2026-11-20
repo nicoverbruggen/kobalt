@@ -220,6 +220,17 @@ void flexRows()
     require(wordRect(direct, "Chapter") == wordRect(wrapped, "Chapter")
                     && qAbs(wordRect(direct, "Chapter").center().x() - 200) < 4,
             "Center a text-only flex heading as an anonymous item");
+    QRect firstBox;
+    for (int width : { 300, 400 }) {
+        kobalt::EngineDocument single(kobalt::test::readerFonts());
+        open(single, "<div><span>Alpha</span></div>", "div{display:flex}span{background:red}", {},
+             QSize(width, 240));
+        const auto box = ink(single.image(0), true);
+        require(box.x() == 0 && box.width() > 0 && box.width() < width
+                        && (firstBox.isNull() || box == firstBox),
+                "A start-aligned flex item keeps its content width");
+        firstBox = box;
+    }
     const QByteArray poem = "<div class='poem'><div><p>Opening</p><p>Verse</p></div></div>";
     kobalt::EngineDocument doc(kobalt::test::readerFonts());
     open(doc, poem, ".poem{display:flex;justify-content:center}", {}, QSize(410, 600));

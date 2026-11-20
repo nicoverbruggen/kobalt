@@ -8454,6 +8454,59 @@ private slots:
         QCOMPARE(host.session()->state().value("position"), position);
     }
 
+    void kosyncInvalidPosition_data()
+    {
+        QTest::addColumn<bool>("saveFails");
+        QTest::newRow("saved") << false;
+        QTest::newRow("save-failed") << true;
+    }
+
+    void kosyncInvalidPosition()
+    {
+        QFETCH(bool, saveFails);
+        const auto paths = testPaths();
+        const auto account = paths.syncAccount();
+        QVERIFY(storage::writeJson(account,
+                                   { { "schema", 1 },
+                                     { "server", "https://fixture.invalid" },
+                                     { "username", "reader" },
+                                     { "key", QString(32, 'a') },
+                                     { "device_id", "local" },
+                                     { "automatic", true },
+                                     { "sync_on_open", false } }));
+        auto http = std::make_shared<KosyncHttpState>();
+        http->readBody =
+                R"({"progress":"/not/a/real/position","percentage":0.7,"device":"Other","device_id":"remote","timestamp":1})";
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [http](ReaderHostServices &services) {
+            services.kosyncHttp = [http] { return std::make_unique<KosyncHttp>(http); };
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture(), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QVERIFY(buildKosyncPage(host));
+        const auto position = host.session()->state().value("position");
+        host.window()->findChild<QPushButton *>("rrKosyncNow")->click();
+        ui::ChoiceModal *choice = nullptr;
+        QTRY_VERIFY((choice = dynamic_cast<ui::ChoiceModal *>(
+                             host.window()->findChild<QWidget *>("rrKosyncChoice")))
+                    && choice->isVisible() && choice->primaryButton()->isEnabled());
+        if (saveFails)
+            QVERIFY(storage::writeJson(account, { { "schema", 99 }, { "automatic", true } }));
+        choice->primaryButton()->click();
+        auto *status = host.window()->findChild<QLabel *>("rrKosyncStatus");
+        QVERIFY(status);
+        QTRY_COMPARE(status->text(),
+                     strings::get(saveFails ? "kosync.storage_error" : "kosync.position_error"));
+        QCOMPARE(host.session()->state().value("position"), position);
+        QCOMPARE(storage::readJson(account).value("automatic").toBool(), saveFails);
+        QCOMPARE(http->uploads, 0);
+    }
+
     void kosyncFailure_data()
     {
         QTest::addColumn<bool>("upload");

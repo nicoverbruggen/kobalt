@@ -667,6 +667,7 @@ void Reader::showKosyncChoice()
             return;
         dismiss();
         if (!session->goToSyncedPosition(remote.position, [this](const QString &error) {
+                QString notice = error;
                 if (error.isEmpty()) {
                     syncCoordinator->acceptRemote(session->state().value("position").toString());
                     // Both writes are queued on the profile writer thread, which
@@ -682,17 +683,19 @@ void Reader::showKosyncChoice()
                         refresh();
                         return;
                     }
+                    notice = strings::get("kosync.resumed");
                 } else {
                     // Do not offer the same invalid position indefinitely. Keep
                     // writes blocked until the user explicitly keeps local progress.
                     kosyncPositionFailed = true;
-                    kosyncClient->setAutomatic(false);
+                    if (!kosyncClient->setAutomatic(false))
+                        notice = strings::get("kosync.storage_error");
                     updateKosyncToolbar();
                     if (kosyncPage)
                         kosyncPage->setAccount(kosyncClient->server(), kosyncClient->username(),
                                                true, kosyncClient->automatic());
                 }
-                page->notice = error.isEmpty() ? strings::get("kosync.resumed") : error;
+                page->notice = notice;
                 kosyncStatus(page->notice);
                 refresh();
             }))

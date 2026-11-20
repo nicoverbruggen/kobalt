@@ -27,6 +27,7 @@ These checks cover KOSync accounts, automatic and manual sync, sync moments and 
 | `lifecycle.kosyncSleepSavesSyncTime` | Sleep saves the sync time, also when the sleep sync ends after the reader sleeps |
 | `lifecycle.kosyncMissingProgress` | First uploads after absent progress, with no upload on route, authentication or server errors |
 | `lifecycle.kosyncFailure` | Failed progress reads and uploads retain the specific error, fit its guidance and keep local progress |
+| `lifecycle.kosyncInvalidPosition` | An invalid remote position keeps the local position. If disabling automatic sync fails, the reader reports the account storage error. |
 | `lifecycle.kosyncManualToolbar`, `lifecycle.kosyncManualConnection` | Manual sync and its Syncing notice |
 | `lifecycle.kosyncDialogResume` | A successful response waits under a native dialog, then resumes without another fetch when the host releases input |
 | `lifecycle.wifiPowerSaver`, `lifecycle.wifiPowerSaverAtSleep` | When the reader asks the host to turn Wi-Fi off |

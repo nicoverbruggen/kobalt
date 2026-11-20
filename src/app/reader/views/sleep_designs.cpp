@@ -620,17 +620,20 @@ QVector<QRect> captionAreas(const Frame &frame, const sleep::Snapshot &shot, QSi
 
 struct WidgetsLayout
 {
-    QRectF word, book, cover, read, second, left;
+    QRectF book, cover, read, second, left;
     std::unique_ptr<Block> title;
     qreal titleTop = 0, authorTop = 0, labelTop = 0;
 };
+
+QRectF widgetsStatusRect(const Frame &frame)
+{
+    return QRectF(frame.x(7), frame.y(8), 86 * frame.u, lineHeight(serif(12 * frame.u)));
+}
 
 WidgetsLayout widgetsLayout(const Frame &frame, const sleep::Snapshot &shot)
 {
     WidgetsLayout layout;
     const qreal u = frame.u, pad = 3.4 * u, gap = 3 * u;
-    const QFont state = serif(12 * u);
-    layout.word = QRectF(frame.x(7), frame.y(8), 86 * u, lineHeight(state));
     const qreal left = frame.x(7), width = 86 * u;
     const QSizeF coverShape =
             shot.coverArea.isEmpty() ? QSizeF(600, 851) : QSizeF(shot.coverArea.size());
@@ -681,12 +684,13 @@ void paintWidgets(QPainter &painter, const Frame &frame, const Content &content,
     const QColor background = colors.paper;
     painter.fillRect(QRect(QPoint(), size), background);
     const QFont state = serif(12 * u);
-    text(painter, state, colors.ink, layout.word, content.word(), Qt::AlignLeft | Qt::AlignTop);
+    const auto word = widgetsStatusRect(frame);
+    text(painter, state, colors.ink, word, content.word(), Qt::AlignLeft | Qt::AlignTop);
     if (content.charging()) {
         // The battery aligns with the tiles' right edge, on the state word's middle.
         const QFont level = sans(4 * u);
-        const qreal middle = inkMiddle(state, layout.word.top(), content.word());
-        const qreal left = layout.word.right() - batteryWidth(level, content.battery);
+        const qreal middle = inkMiddle(state, word.top(), content.word());
+        const qreal left = word.right() - batteryWidth(level, content.battery);
         battery(painter, level, colors.ink, background, QPointF(left, middle), content.battery,
                 true);
     }
@@ -771,12 +775,6 @@ void paintWidgets(QPainter &painter, const Frame &frame, const Content &content,
     const auto &left = content.shot.details.left;
     baselineText(painter, remaining, colors.ink, QPointF(layout.left.right() - pad, baseline),
                  left.isEmpty() ? content.shot.remaining : left, Qt::AlignRight);
-}
-
-QVector<QRect> widgetsAreas(const Frame &frame, const sleep::Snapshot &shot)
-{
-    const auto layout = widgetsLayout(frame, shot);
-    return { layout.word.adjusted(-2, -2, 2, 2).toAlignedRect() };
 }
 
 // ---------------------------------------------------------------- C09
@@ -1440,7 +1438,7 @@ QVector<QRect> sleepStatusAreas(QSize size, const sleep::Snapshot &source)
         areas = captionAreas(frame, snapshot, size);
         break;
     case Design::Widgets:
-        areas = widgetsAreas(frame, snapshot);
+        areas = { widgetsStatusRect(frame).adjusted(-2, -2, 2, 2).toAlignedRect() };
         break;
     case Design::Night:
         areas = nightAreas(frame, size);

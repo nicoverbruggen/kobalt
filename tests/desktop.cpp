@@ -18813,6 +18813,18 @@ private slots:
         QVERIFY(fixture.press("rrKeepReaderStandby"));
         QTRY_VERIFY(!fixture.visible("rrStandbyConfirmation"));
 
+        // Real hosts initialize diagnostics before showing Debug settings.
+        // Include a rotated log so its size and removal are visible.
+        QTemporaryDir logs;
+        QVERIFY(logs.isValid());
+        initializeDiagnostics(logs.path());
+        pauseDiagnostics(false);
+        const auto drainLog = qScopeGuard([] { pauseDiagnostics(true); });
+        QFile previous(diagnosticLogPath() + ".previous");
+        QVERIFY(previous.open(QIODevice::WriteOnly));
+        QVERIFY(previous.resize(1000000));
+        previous.close();
+
         // System > Developer > Debug mode shows the Debug tab.
         QVERIFY(revealSettingsOption(fixture, "rrDebugMode"));
         QVERIFY(fixture.press("rrDebugMode"));
@@ -18824,7 +18836,12 @@ private slots:
         QTRY_VERIFY(!static_cast<ui::CaptionButton *>(fixture.widget("rrDebugStorage"))
                              ->caption()
                              .isEmpty());
+        auto *log = static_cast<ui::CaptionButton *>(fixture.widget("rrDebugClearLog"));
+        QCOMPARE(log->caption(), QString("1.0 MB"));
         capturePages(fixture, name + "-settings-debug", "rrSettingsOptions");
+        QVERIFY(revealSettingsOption(fixture, "rrDebugClearLog"));
+        QVERIFY(fixture.press("rrDebugClearLog"));
+        QTRY_COMPARE(log->caption(), QString("0.0 MB"));
         QVERIFY(revealSettingsOption(fixture, "rrDebugEvictCache"));
         QVERIFY(fixture.press("rrDebugEvictCache"));
         QTRY_VERIFY(fixture.visible("rrCacheEviction"));

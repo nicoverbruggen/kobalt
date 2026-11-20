@@ -1,5 +1,7 @@
 # Settings and controls checks
 
+The Debug settings gallery uses a temporary diagnostic log. It checks that the displayed size includes a rotated log and updates when the reader clears the log.
+
 `desktop.settingsLazyPages` opens Settings on an e-reader and a phone. It checks which controls exist before a section is selected, the theme and saved values on its first visit, and reuse of the same controls on its second visit. Closing Settings preserves the default font from an unvisited section. `desktop.settingsZenPage` also checks that Zen can show its account actions and change dark mode before the corresponding full Settings pages are built.
 
 `lifecycle.settingsTeardownReleasesConfirmation` opens the automatic-opening confirmation and destroys Settings while the reader window still exists. It checks that the confirmation is destroyed with Settings.

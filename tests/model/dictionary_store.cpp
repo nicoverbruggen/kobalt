@@ -1,9 +1,12 @@
 #include "dictionaries/manager.h"
 #include "dictionaries/stardict.h"
+#include "support/main_thread.h"
 #include "support/qt_compat.h"
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
-#include <QPointer>
+#include <QEventLoop>
+#include <QThread>
+#include <atomic>
 #include <cstring>
 #include <QMap>
 #include <QCoreApplication>
@@ -393,16 +396,21 @@ protected:
 class DownloadNetwork final : public QNetworkAccessManager
 {
 public:
-    QPointer<BufferedDownload> reply;
-    int requests = 0;
+    explicit DownloadNetwork(std::function<void(BufferedDownload &)> respond)
+        : respond(std::move(respond))
+    {
+    }
 
 protected:
     QNetworkReply *createRequest(Operation, const QNetworkRequest &request, QIODevice *) override
     {
-        ++requests;
-        reply = new BufferedDownload(request, this);
+        auto *reply = new BufferedDownload(request, this);
+        qt::later(0, reply, [this, reply] { respond(*reply); });
         return reply;
     }
+
+private:
+    std::function<void(BufferedDownload &)> respond;
 };
 
 // Checks dictionary downloads, archive limits, source names, installation, lookup and removal, with controlled replies.
@@ -417,70 +425,86 @@ int main(int argc, char **argv)
         const auto entry =
                 *std::min_element(entries.begin(), entries.end(),
                                   [](const auto &a, const auto &b) { return a.size < b.size; });
-        DownloadNetwork network;
+        std::function<void(BufferedDownload &)> response;
+        std::atomic_int requests{ 0 };
         DictionaryManager manager(temp.path() + "/downloads", std::make_unique<Empty>(), nullptr,
-                                  &network);
-        manager.download(entry.id);
-        require(manager.busy() && network.reply, "controlled download starts");
-        network.reply->deliver(entry.size + 3 * 65536);
-        require(!manager.busy(), "oversized buffered reply finishes without a hang");
+                                  [&] {
+                                      return std::make_unique<DownloadNetwork>([&](auto &reply) {
+                                          ++requests;
+                                          response(reply);
+                                      });
+                                  });
+        mainthread::Interaction reading([] { return true; });
+        auto waitForDownload = [&] {
+            QEventLoop loop;
+            QTimer deadline;
+            deadline.setSingleShot(true);
+            QObject::connect(&deadline, &QTimer::timeout, &loop, &QEventLoop::quit);
+            QObject::connect(&manager, &DictionaryManager::changed, &loop, [&] {
+                if (!manager.busy())
+                    loop.quit();
+            });
+            deadline.start(5000);
+            if (manager.busy())
+                loop.exec();
+            require(!manager.busy(), "download finished before deadline");
+            require(QDir(temp.path() + "/downloads")
+                            .entryList(QDir::Files | QDir::Hidden)
+                            .isEmpty(),
+                    "failed download removes temporary data");
+        };
+        auto download = [&](std::function<void(BufferedDownload &)> respond) {
+            response = std::move(respond);
+            manager.download(entry.id);
+            require(manager.busy(), "controlled download starts");
+            waitForDownload();
+        };
+        download([&](auto &reply) {
+            require(QThread::currentThread() != app.thread(),
+                    "download runs off the reader thread");
+            reply.deliver(entry.size + 3 * 65536);
+            require(reply.aborts == 1 && reply.readsAfterAbort == 0,
+                    "abort does not drain more buffered data");
+        });
         require(manager.status() == "Download size or storage error.",
                 "abort preserves the local download failure");
-        require(network.reply->aborts == 1 && network.reply->readsAfterAbort == 0,
-                "abort does not drain more buffered data");
-        require(QDir(temp.path() + "/downloads").entryList(QDir::Files | QDir::Hidden).isEmpty(),
-                "failed download removes temporary data");
-        manager.download(entry.id);
-        require(manager.busy(), "download can restart after failure");
-        manager.cancel();
-        require(!manager.busy() && manager.status() == "Download cancelled.",
-                "user cancellation remains distinct");
-        for (const auto status : { 404, 200 }) {
-            manager.download(entry.id);
-            network.reply->complete(status);
-            require(!manager.busy(), "HTTP failure or truncated response releases the transfer");
+        for (const int status : { 404, 200 }) {
+            download([status](auto &reply) { reply.complete(status); });
             require(manager.status() == "Dictionary checksum or size differs.",
                     "failed HTTP or truncated download is rejected");
             require(!manager.installed(entry.id), "failed download cannot become installed");
         }
-        manager.download(entry.id);
-        network.reply->deliver(entry.size);
-        network.reply->complete();
-        require(!manager.busy() && !manager.installed(entry.id),
-                "correct size with wrong checksum is rejected");
-        require(manager.status() == "Dictionary checksum or size differs.",
+        download([&](auto &reply) {
+            reply.deliver(entry.size);
+            reply.complete();
+        });
+        require(!manager.installed(entry.id)
+                        && manager.status() == "Dictionary checksum or size differs.",
                 "digest is checked after exact-size download");
-        manager.download(entry.id);
-        network.reply->complete(200, {}, QNetworkReply::ConnectionRefusedError);
-        require(!manager.busy() && manager.status() == "Fixture network failure",
-                "network error survives cleanup");
-        manager.download(entry.id);
-        const int beforeUnsafeRedirect = network.requests;
-        network.reply->complete(302, QUrl("http://unsafe.example/dictionary.zip"));
-        require(network.requests == beforeUnsafeRedirect, "HTTPS downgrade never starts a request");
-        require(!manager.busy() && manager.status() == "Unsafe download redirect.",
-                "HTTPS downgrade releases the transfer");
-        manager.download(entry.id);
-        const int beforeRedirectLoop = network.requests;
-        for (int redirect = 0; redirect < 6; ++redirect) {
-            require(manager.busy(), "allowed redirect remains active");
-            network.reply->complete(302, QUrl("/dictionary.zip"));
-        }
-        require(network.requests == beforeRedirectLoop + 5,
-                "redirect limit prevents an unbounded request loop");
-        require(!manager.busy() && manager.status() == "Unsafe download redirect.",
+        download([](auto &reply) {
+            reply.complete(200, {}, QNetworkReply::ConnectionRefusedError);
+        });
+        require(manager.status() == "Fixture network failure", "network error survives cleanup");
+        const int before = requests;
+        download([](auto &reply) {
+            reply.complete(302, QUrl("http://unsafe.example/dictionary.zip"));
+        });
+        require(requests == before + 1 && manager.status() == "Unsafe download redirect.",
+                "HTTPS downgrade never starts a second request");
+        download([](auto &reply) { reply.complete(302, QUrl("/dictionary.zip")); });
+        require(requests == before + 7 && manager.status() == "Unsafe download redirect.",
                 "redirect limit ends the transfer");
-        require(QDir(temp.path() + "/downloads").entryList(QDir::Files | QDir::Hidden).isEmpty(),
-                "all failed transfers remove temporary files");
-        manager.download(entry.id);
-        const int beforeBusy = network.requests;
-        manager.download(entry.id);
+        const int beforeCancel = requests;
+        download([&](auto &) {
+            qt::invoke(&manager, [&] {
+                manager.download(entry.id);
+                manager.cancel();
+            });
+        });
+        require(manager.status() == "Download cancelled.", "user cancellation remains distinct");
         manager.download("../invalid");
-        require(network.requests == beforeBusy, "busy downloader ignores new requests");
-        manager.cancel();
-        manager.download("../invalid");
-        require(!manager.busy() && network.requests == beforeBusy,
-                "unknown dictionary starts no request");
+        require(!manager.busy() && requests == beforeCancel + 1,
+                "busy and invalid requests do not start another download");
     }
     {
         DictionaryManager native(temp.path() + "/new-root", std::make_unique<NativeChoice>());

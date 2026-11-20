@@ -114,19 +114,19 @@ bool saveFolders(QSqlDatabase &db, const QVector<Folder> &folders)
 bool saveRows(QSqlDatabase &db, const Index &index)
 {
     QSqlQuery query(db);
-    if (!query.exec("SELECT key FROM library_books"))
+    if (!query.exec("SELECT CAST(key AS BLOB) FROM library_books"))
         return false;
-    QStringList removed;
+    QList<QByteArray> removed;
     while (query.next())
-        if (!index.books.contains(query.value(0).toString()))
-            removed.append(query.value(0).toString());
+        if (!index.books.contains(text(query.value(0))))
+            removed.append(query.value(0).toByteArray());
     if (query.lastError().isValid())
         return false;
     query.finish();
+    if (!removed.isEmpty() && !query.prepare("DELETE FROM library_books WHERE key=CAST(? AS TEXT)"))
+        return false;
     for (const auto &key : removed) {
-        if (!query.prepare("DELETE FROM library_books WHERE key=?"))
-            return false;
-        query.addBindValue(key);
+        query.bindValue(0, key);
         if (!query.exec())
             return false;
     }

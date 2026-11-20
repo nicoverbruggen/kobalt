@@ -436,6 +436,23 @@ int main(int argc, char **argv)
                 "A deleted book was not reported");
     }
     {
+        const auto directory = root.filePath("literal-book-keys");
+        const QString plain = "book.epub";
+        const QString marked = QChar(0xfeff) + plain;
+        write(directory + "/library.json",
+              R"({"schema":1,"folders":[],"books":[{"key":"book.epub"},{"key":"\ufeffbook.epub"}]})");
+        Index imported;
+        require(imported.loadDatabase(directory), "Could not import the legacy Library");
+        require(imported.books.contains(marked) && imported.books.contains(plain),
+                "Import changed the keys");
+        imported.removeBook(marked);
+        require(imported.saveDatabase(directory), "Could not save the book removal");
+        Index reopened;
+        require(reopened.loadDatabase(directory) && reopened.books.size() == 1
+                        && reopened.books.contains(plain),
+                "A removed book with a leading FEFF returned");
+    }
+    {
         const auto folder = root.filePath("folder-writes");
         Index index;
         require(index.loadDatabase(folder), "Could not open Library folder fixture");

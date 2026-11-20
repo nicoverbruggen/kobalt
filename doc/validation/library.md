@@ -2,7 +2,7 @@
 
 Label `library`. Build `mac-tests`, then run `ctest --preset mac -L library` from `platforms/desktop/`. `ctest --preset mac -N -L library` lists its tests.
 
-`model.library` holds the profile writer busy when the Library save timer fires. It checks that the next event runs while storage is busy, the settings reach storage while the Library is open, and closing saves the most recent edit. It also checks that progress saves and edits to other folders leave unchanged folder rows alone. Folder order and labels survive reopening.
+`model.library` holds the profile writer busy when the Library save timer fires. It checks that the next event runs while storage is busy, the settings reach storage while the Library is open, and closing saves the most recent edit. It also checks that progress saves and edits to other folders leave unchanged folder rows alone. Folder order and labels survive reopening. Removing an imported book whose key starts with U+FEFF preserves the book with the otherwise identical key.
 
 These checks cover Library onboarding, folder scanning, covers, list and grid layouts, the scan caption, action buttons, Library page buttons, text inheritance for new books and reopening finished books. `model.library` checks the catalogue model. The `desktop` checks drive the standalone Library and reader, and the `ui` checks measure Library widgets in pixels. `session.reading-book`, in [Storage and history](storage.md), checks reopening finished books in the session.
 

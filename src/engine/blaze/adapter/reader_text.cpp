@@ -405,25 +405,18 @@ AnnotationToken sourceWord(ColumnView *engine, QSize size, ldomXPointerEx hit,
     auto wordBounds = [&] {
         QTextBoundaryFinder words(QTextBoundaryFinder::Word, text);
         words.setPosition(offset);
-        // Qt reports Han and Thai boundaries without word-item flags. Keep
-        // these boundaries so their text can still be selected. Thai selection
-        // follows these boundaries; it does not use a dictionary segmenter.
-        const auto script = QChar::script(scalar(offset));
-        const bool unflaggedScript = script == QChar::Script_Han || script == QChar::Script_Thai;
-        if (!(words.boundaryReasons() & QTextBoundaryFinder::StartOfItem)
-            && !(unflaggedScript && words.isAtBoundary())) {
-            if (words.toPreviousBoundary() < 0) {
-                return qMakePair(-1, -1);
-            }
-        }
-        if (!(words.boundaryReasons() & QTextBoundaryFinder::StartOfItem) && !unflaggedScript) {
+        if (!words.isAtBoundary() && words.toPreviousBoundary() < 0)
             return qMakePair(-1, -1);
-        }
-        const int begin = words.position(), end = words.toNextBoundary();
+        const int begin = words.position();
+        // Qt can delimit a letter and its marks without classifying it as a word.
+        // Use that segment for lookup and highlighting in unsegmented scripts.
+        const bool letter = QChar::isLetter(scalar(begin));
+        if (!letter && !(words.boundaryReasons() & QTextBoundaryFinder::StartOfItem))
+            return qMakePair(-1, -1);
+        const int end = words.toNextBoundary();
         if (end <= offset || end - begin > 256
-            || (!(words.boundaryReasons() & QTextBoundaryFinder::EndOfItem) && !unflaggedScript)) {
+            || (!letter && !(words.boundaryReasons() & QTextBoundaryFinder::EndOfItem)))
             return qMakePair(-1, -1);
-        }
         return qMakePair(begin, end);
     };
     const auto bounds = wordBounds();

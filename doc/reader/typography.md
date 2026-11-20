@@ -72,7 +72,7 @@ Chapter lists, chapter headers and single-line interface controls use the bundle
 
 Arabic and Hebrew text uses FriBidi for right-to-left ordering and HarfBuzz for letter shaping and mark placement. Paragraphs can mix right-to-left text with Latin words and numbers. Without a publisher or reader alignment override, paragraphs align to the start of their text direction. The bundled Arabic and Hebrew fonts also supply missing glyphs in chapter titles and other interface text. Text direction and EPUB page-turn direction are separate; the spine's page progression still controls taps and swipes.
 
-Thai word selection follows Qt’s Unicode boundaries. It can select a letter cluster rather than a complete dictionary word.
+Word selection in Thai, Lao, Khmer and Myanmar text follows Qt’s Unicode boundaries. A lookup or highlight can select a letter with its vowel marks even when Qt does not identify a complete word.
 
 The book's `dc:language` sets the text language, and `lang` attributes set it for parts of the text. The language selects the hyphenation dictionary and the line-breaking rules. CREngine uses libunibreak for Unicode line breaking and its supported CSS `line-break` and `word-break` rules. Kobalt has dictionaries for English (US and UK), German, Dutch, French, Spanish, Italian, Portuguese (Portugal and Brazil), Estonian, Finnish, Georgian, Hungarian, Latvian, Lithuanian, Polish, Russian, Slovak, Slovenian and Ukrainian. Other languages recognized by CREngine use algorithmic hyphenation when their dictionary is not bundled. Books without a language declaration default to US English patterns. An unrecognized language tag also selects US English patterns. The hyphenation setting still decides whether text is hyphenated.
 

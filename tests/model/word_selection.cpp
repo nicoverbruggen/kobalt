@@ -402,7 +402,8 @@ int main(int argc, char **argv)
         // handle on that page can still reach the preceding page.
         kobalt::EngineDocument sliced(kobalt::test::readerFonts());
         auto files = kobalt::test::engineBook(false, 1, 80);
-        files["OEBPS/c1.xhtml"].replace("</h1>", "</h1><p style='display:none'>HiddenMarker.</p>");
+        files["OEBPS/c1.xhtml"].replace(
+                "</h1>", "</h1><p>ກິ កិ မိ</p><p style='display:none'>HiddenMarker.</p>");
         QMap<QString, qint64> sizes;
         for (auto it = files.cbegin(); it != files.cend(); ++it)
             sizes[it.key()] = it.value().size();
@@ -416,6 +417,17 @@ int main(int argc, char **argv)
         require(sliced.openResources(resources, sizes, { 600, 800 }, { { "font_pixels", 28 } },
                                      &error),
                 qPrintable(error));
+        for (const auto *sample : { "ກິ", "កិ", "မိ" }) {
+            const auto text = QString::fromUtf8(sample);
+            const auto hits = sliced.searchPage(text, 0).hits;
+            require(hits.size() == 1, "Missing selection fixture text");
+            const auto rects = sliced.rangeRects(hits.first().start, hits.first().end);
+            require(!rects.isEmpty(), "Missing selection fixture geometry");
+            const auto point = rects.first().center();
+            require(sliced.wordAt(point).text == text, qPrintable("Lookup missed " + text));
+            require(sliced.annotationTokenAt(point).text == text,
+                    qPrintable("Highlight missed " + text));
+        }
         sliced.setChapterSlices(1);
         require(sliced.showSpineItems(0, 0) && sliced.go(0),
                 "Cannot open sliced selection fixture");

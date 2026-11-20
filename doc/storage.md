@@ -52,7 +52,7 @@ The retired `light_dark_mode_shortcut` preference is removed during normalizatio
 
 `stats_word_scope` is a global reader preference. The default, `main`, uses the active main-text boundaries for the Book figures in Stats. `volume` uses the full publication. The lock screen follows this choice. Book records save `stats_main_percent` and `stats_volume_percent` so the private sleep screen can use the current scope without reopening the book.
 
-`secondary_page_numbers` is a global reader setting. Values are `roman`, `arabic`, `letters`, `prefixed` and `upper_roman`. Missing or invalid values use lowercase Roman numerals. Front and back matter each start a separate count.
+`secondary_page_numbers` is a global reader setting. Values are `roman`, `arabic`, `letters`, `prefixed` and `upper_roman`. Missing or invalid values use uppercase Roman numerals. Front and back matter each start a separate count.
 
 `header_footer_percentage_format` is an optional global string with values `whole` and `decimal`. Missing or invalid values use whole percentages. Decimal shows one decimal place for book and chapter progress in the header, footer and their previews. Both formats count the current page and round down at the selected precision. Settings schema 1, book state, progress accounting and cache identity stay unchanged.
 

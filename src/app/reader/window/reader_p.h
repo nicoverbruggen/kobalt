@@ -791,7 +791,7 @@ private:
 
     QString secondaryNumberStyle() const
     {
-        return preferences.value(secondaryNumberKey).toString("roman");
+        return preferences.value(secondaryNumberKey).toString(secondaryNumberStyles().first());
     }
     QString settingsRenderingMode;
     int settingsDictionaryFontSize = 100;

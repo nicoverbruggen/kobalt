@@ -5652,7 +5652,7 @@ private slots:
         QCOMPARE(words.value("main_words").toInt(),
                  nested ? words.value("total_words").toInt() : 3152);
         QCOMPARE(initial.value("main_first_page").toInt() == 0, nested);
-        QCOMPARE(initial.value("main_page_label").toString(), nested ? QString("1") : QString("i"));
+        QCOMPARE(initial.value("main_page_label").toString(), nested ? QString("1") : QString("I"));
         if (filename == "semantic.epub") {
             QVERIFY(fixture.press("rrPage"));
             QVERIFY(fixture.press("rrNavStats"));
@@ -5722,7 +5722,7 @@ private slots:
                 > relative.value("main_first_page").toInt());
         QVERIFY(relative.value("main_last_page").toInt() < relative.value("pages").toInt() - 1);
         QCOMPARE(relative.value("position"), initial.value("position"));
-        QCOMPARE(relative.value("main_page_label").toString(), QString("i"));
+        QCOMPARE(relative.value("main_page_label").toString(), QString("I"));
         if (!nested)
             QVERIFY(relative.value("main_first_page").toInt()
                     < initial.value("main_first_page").toInt());
@@ -5746,7 +5746,7 @@ private slots:
         QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("1"));
         chapters();
         QVERIFY(fixture.press(nested ? "rrChapter3" : "rrChapter2"));
-        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("i"));
+        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("I"));
         QCOMPARE(fixture.state().value("main_percent").toInt(), 100);
         test::skipPageTurnWindow();
         fixture.window.readerWindow()->pageButton(-1);
@@ -5754,10 +5754,10 @@ private slots:
         QCOMPARE(fixture.state().value("main_percent").toInt(), 100);
         test::skipPageTurnWindow();
         fixture.window.readerWindow()->pageButton(1);
-        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("i"));
+        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("I"));
         test::skipPageTurnWindow();
         fixture.window.readerWindow()->pageButton(1);
-        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("ii"));
+        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("II"));
         const auto appendix = fixture.state().value("position");
         fixture.window.openBook(book);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
@@ -5765,7 +5765,7 @@ private slots:
         fixture.window.openBook(path);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 3, 30000);
         QTRY_COMPARE(fixture.state().value("position"), appendix);
-        QCOMPARE(fixture.state().value("main_page_label").toString(), QString("ii"));
+        QCOMPARE(fixture.state().value("main_page_label").toString(), QString("II"));
         const int oldPages = fixture.state().value("pages").toInt();
         selectPreview(fixture, 2);
         QTRY_VERIFY(!fixture.state().value("busy").toBool()
@@ -5817,7 +5817,7 @@ private slots:
         fixture.window.openBook(fixture.directory.filePath("boundary-anchors.epub"));
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         QTRY_VERIFY(fixture.state().value("main_first_page").toInt() > 0);
-        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("i"));
+        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("I"));
         QVERIFY(fixture.press("rrPage"));
         QVERIFY(fixture.press("rrNavChapters"));
         QTRY_VERIFY(fixture.visible("rrChapter3"));
@@ -10463,7 +10463,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             const auto estimated = [&] { return page->slotContents[2].text.contains('~'); };
             // The cover uses its own label while the main-text count is estimated.
             QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("rough_pages_estimated").toBool(), 10000);
-            QTRY_VERIFY(page->slotContents[2].text.contains("i"));
+            QTRY_VERIFY(page->slotContents[2].text.contains("I"));
             for (int turn = 0; turn < 4; ++turn) {
                 const auto before = fixture.state().value("position").toString();
                 test::skipPageTurnWindow();

@@ -24,7 +24,7 @@ static QString romanPage(int page)
 
 const QStringList &secondaryNumberStyles()
 {
-    static const QStringList styles{ "roman", "arabic", "letters", "prefixed", "upper_roman" };
+    static const QStringList styles{ "upper_roman", "roman", "arabic", "letters", "prefixed" };
     return styles;
 }
 
@@ -50,7 +50,7 @@ QString bookPageLabel(int page, int firstMain, int lastMain, const QString &styl
         return label;
     }
     const auto roman = romanPage(number);
-    return style == "upper_roman" ? roman.toUpper() : roman;
+    return style == "roman" ? roman : roman.toUpper();
 }
 
 // Nickel's reader counts the page on screen as read and rounds down: page 1

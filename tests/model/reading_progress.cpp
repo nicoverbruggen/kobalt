@@ -14,6 +14,10 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
 
+    require(secondaryNumberStyles().first() == "upper_roman" && bookPageLabel(1, 2, 3) == "II"
+                    && bookPageLabel(5, 2, 3, "unknown") == "II",
+            "Secondary numbering should default to uppercase Roman");
+
     struct NumberStyle
     {
         QString style, front, back;

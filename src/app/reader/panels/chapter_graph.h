@@ -19,7 +19,7 @@ public:
     void setData(QVector<ChapterLink> chapters, ChapterSelection selection, bool ready,
                  const QString &error);
     void setProgress(const QString &title, int chapterPage, int chapterPages, int nextChapterPages,
-                     int page, int pages, double bookFraction = -1, bool estimated = false);
+                     int page, int pages, int bookPercent = -1, bool estimated = false);
     // `number` counts from 1 in the contents; 0 when the position is before them.
     void setChapterNumber(int number, int count);
     // `words` is the total for the selected scope, or -1 while unavailable.
@@ -93,7 +93,7 @@ private:
     struct Progress
     {
         int chapterPage = 0, chapterPages = 0, nextChapterPages = 0, page = 0, pages = 0;
-        double bookFraction = -1;
+        int bookPercent = -1;
         // True for page totals that are an estimate.
         bool estimated = false;
     } progress;

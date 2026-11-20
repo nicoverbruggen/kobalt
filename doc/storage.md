@@ -50,7 +50,7 @@ The retired `light_dark_mode_shortcut` preference is removed during normalizatio
 
 `turn_off_wifi_on_open` is an optional global Boolean for the Kobo Wi-Fi power saver. Missing or invalid values use false. False keeps Wi-Fi as Nickel leaves it when a book opens and at sleep. The key keeps its name; the setting is shown as Smart Wi-Fi power saving. While the feature is disabled, the settings cleanup (`cleanPreferences` in `src/reading/appearance_settings.cpp`) removes this key whenever settings are read or written, so Kobalt never saves it and the power saver stays off. This keeps settings schema 1.
 
-`stats_word_scope` is a global reader preference. The default, `main`, uses the active main-text boundaries for the Book figures in Stats. `volume` uses the full publication.
+`stats_word_scope` is a global reader preference. The default, `main`, uses the active main-text boundaries for the Book figures in Stats. `volume` uses the full publication. The lock screen follows this choice. Book records save `stats_main_percent` and `stats_volume_percent` so the private sleep screen can use the current scope without reopening the book.
 
 `secondary_page_numbers` is a global reader setting. Values are `roman`, `arabic`, `letters`, `prefixed` and `upper_roman`. Missing or invalid values use lowercase Roman numerals. Front and back matter each start a separate count.
 

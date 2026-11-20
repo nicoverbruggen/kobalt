@@ -24,6 +24,8 @@ The `component.ui` assertions cover linear chapter lengths above the visible min
 
 `desktop.activityAuthorCaption` compares the rendered Books row and book heading with equivalent comma-separated and multiline authors. It checks the phone and e-reader widths with normal and enlarged text and verifies the original author is still in the Activity records.
 
+The chapter-boundary checks reject an end at or before the detected or manual start in an unopened spine item. The scoped sleep case in `lifecycle.progressPercentagesAgree` switches Stats between Main text and Whole volume. It locks twice at the same position and checks the snapshot, the percentage sent to Nickel and the native bookmark.
+
 These checks do not establish physical Kobo or Android behavior.
 
 `engine.large-toc` generates songbooks at 1,023, 1,024, 1,025, 9,999, 10,000 and 10,001 destinations. It checks the total bound, hierarchy, source-based titles, navigation, native-list fallback, graph lengths, word-count reuse, reflow and cached reopening. It then evicts the songbook from the parsed-book cache, as Settings > Debug does, checks that the next opening parses again, and clears the whole cache. `desktop.largeToc` (label `input`) opens the real reader's last chapter-list page, selects Song 10,000 and checks that row widgets stay bounded by the visible page. Unindexed content beyond the cap retains the existing last-title fallback. These fixtures do not reproduce the original reported songbook.

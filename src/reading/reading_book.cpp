@@ -791,7 +791,8 @@ void ReadingBook::markNativeReading()
     reconciliation.reset(acknowledged);
 }
 
-NativeSaveResult ReadingBook::writeNative(const QString &location, const QString &mappingError)
+NativeSaveResult ReadingBook::writeNative(const QString &location, const QString &mappingError,
+                                          bool wholeVolume)
 {
     if (!bridge) {
         nativeWriteback = NativeSaveResult::localOnly();
@@ -812,7 +813,7 @@ NativeSaveResult ReadingBook::writeNative(const QString &location, const QString
         if (reconciliation.mayWrite(current)) {
             // The same whole percentage as Kobalt's own views. The firmware 4
             // bridge keeps an unfinished book below 100, as Nickel's reader does.
-            const double percent = session_->progressPercent();
+            const double percent = session_->statsPercent(wholeVolume);
             const bool preserveFinished = finishedHere();
             diagnostic("native-save-start");
             const auto activity = readingActivity();
@@ -947,8 +948,11 @@ QJsonObject ReadingBook::checkpointState() const
         state["image_views"] = imageViews;
     // For the Android and desktop library, which shows progress without
     // opening the book.
-    if (session_->pages() > 0)
+    if (session_->pages() > 0) {
         state["percent"] = session_->mainPercent();
+        state["stats_main_percent"] = session_->statsPercent(false);
+        state["stats_volume_percent"] = session_->statsPercent(true);
+    }
     state["native_writeback"] = QString::fromLatin1(nativeWriteback.diagnosticName());
     state["sync_pending"] = reconciliation.pending();
     state["native_writeback_error"] = nativeWriteback.message();

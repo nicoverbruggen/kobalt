@@ -330,7 +330,7 @@ void Reader::saveTransition(quint64 request, bool usb, const QString &location,
                 book->stopReading(true);
                 if (mapped) {
                     mainthread::AllowBlocking allow("final native progress before storage handoff");
-                    const auto result = book->writeNative(location, error);
+                    const auto result = book->writeNative(location, error, statsUseWholeVolume());
                     if (result.failed()) {
                         retry();
                         return;
@@ -650,10 +650,10 @@ sleep::Snapshot Reader::captureSleepScreen(bool poweredOff)
     if (snapshot.image.isNull())
         return {};
     // A book marked as finished is done, wherever its last page sits.
-    const int percent = book->finishedHere() ? 100 : session->mainPercent();
+    const int percent = book->finishedHere() ? 100 : session->statsPercent(statsUseWholeVolume());
     snapshot.orientation = kobalt::shownOrientation(QGuiApplication::primaryScreen());
     snapshot.progress = strings::get("sleep.percent_read").arg(percent);
-    snapshot.remaining = sleepTimeLeft(book->estimates().bookMilliseconds,
+    snapshot.remaining = sleepTimeLeft(book->estimates(statsUseWholeVolume()).bookMilliseconds,
                                        remainingTime::approximate(preferences));
     snapshot.dark = darkTheme;
     snapshot.percent = percent;
@@ -941,12 +941,13 @@ void Reader::saveNativeProgress()
     const auto anchor = session->state().value("position").toString();
     if (anchor.isEmpty()
         || (anchor == savedNativeAnchor && session->page() == savedNativePage
-            && session->pages() == savedNativePages)) {
+            && session->pages() == savedNativePages
+            && session->statsPercent(statsUseWholeVolume()) == savedNativePercent)) {
         return;
     }
     QString error;
     const auto location = session->savedNativePosition(&error);
-    const auto result = book->writeNative(location, error);
+    const auto result = book->writeNative(location, error, statsUseWholeVolume());
     if (result.status() == NativeSaveResult::Status::Conflict) {
         return;
     }
@@ -956,6 +957,7 @@ void Reader::saveNativeProgress()
         savedNativeAnchor = anchor;
         savedNativePage = session->page();
         savedNativePages = session->pages();
+        savedNativePercent = session->statsPercent(statsUseWholeVolume());
     }
 }
 
@@ -3319,7 +3321,7 @@ void Reader::finishExitNative(quint64 request, const QString &location, const QS
     // what that write did not carry, before the reader closes.
     const auto result = [&] {
         mainthread::AllowBlocking allow("final native progress before storage handoff");
-        return book->writeNative(location, error);
+        return book->writeNative(location, error, statsUseWholeVolume());
     }();
     closingTimes.add("native", closeStage);
     closeStage.restart();

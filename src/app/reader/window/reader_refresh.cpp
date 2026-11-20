@@ -877,12 +877,9 @@ void Reader::updateGraph()
     const bool volume = statsUseWholeVolume();
     const int pages = volume ? session->bookPages() : session->mainPages();
     const int page = volume ? session->bookPage() : session->mainPage();
-    const double fraction = pages <= 0 || pages != session->bookPages()
-            ? (volume ? session->progressFraction() : session->mainProgress())
-            : -1;
-    chapterGraph->setProgress(
-            session->chapterTitle(), session->chapterPage(), session->chapterPages(), nextPages,
-            qBound(0, page, qMax(0, pages)), pages, fraction, session->bookPagesEstimated());
+    chapterGraph->setProgress(session->chapterTitle(), session->chapterPage(),
+                              session->chapterPages(), nextPages, qBound(0, page, qMax(0, pages)),
+                              pages, session->statsPercent(volume), session->bookPagesEstimated());
 }
 
 void Reader::updateBatteryIndicators(const BatteryStatus &battery)

@@ -328,19 +328,17 @@ ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
 }
 
 void ChapterGraph::setProgress(const QString &title, int chapterPage, int chapterPages,
-                               int nextChapterPages, int page, int pages, double bookFraction,
+                               int nextChapterPages, int page, int pages, int bookPercent,
                                bool estimated)
 {
     if (this->title == title && progress.chapterPage == chapterPage
         && progress.chapterPages == chapterPages && progress.nextChapterPages == nextChapterPages
-        && progress.page == page && progress.pages == pages && progress.bookFraction == bookFraction
+        && progress.page == page && progress.pages == pages && progress.bookPercent == bookPercent
         && progress.estimated == estimated && progressWeight == ui::interfaceWeight())
         return;
     this->title = title;
     progressWeight = ui::interfaceWeight();
-    progress = {
-        chapterPage, chapterPages, nextChapterPages, page, pages, bookFraction, estimated
-    };
+    progress = { chapterPage, chapterPages, nextChapterPages, page, pages, bookPercent, estimated };
     chapterTitle->setAccessibleName(strings::get("chapter_graph.current_chapter").arg(title));
     this->chapterPage->setText(
             chapterPages > 0 ? strings::get("stats.page_of")
@@ -398,8 +396,8 @@ void ChapterGraph::refreshCells()
 {
     const auto &p = progress;
     const int chapterValue = pageProgressPercent(qMax(1, p.chapterPage) - 1, p.chapterPages);
-    const int bookValue = p.bookFraction >= 0 ? qBound(0, int(p.bookFraction * 100), 100)
-                                              : pageProgressPercent(p.page, p.pages);
+    const int bookValue = p.bookPercent >= 0 ? qBound(0, p.bookPercent, 100)
+                                             : pageProgressPercent(p.page, p.pages);
     const int left = qMax(0, p.chapterPages - p.chapterPage + 1),
               remaining = qMax(0, p.pages - p.page);
     const auto pagesLeft = [](int count) {

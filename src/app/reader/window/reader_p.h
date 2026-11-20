@@ -190,7 +190,7 @@ private:
     // connects its signals.
     void saveNativeProgress();
     QString savedNativeAnchor;
-    int savedNativePage = -1, savedNativePages = -1;
+    int savedNativePage = -1, savedNativePages = -1, savedNativePercent = -1;
     void buildReadingPage();
     ImageViewer *imageViewer = nullptr;
     quint64 imageRequest = 0;

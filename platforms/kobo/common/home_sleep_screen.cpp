@@ -323,8 +323,13 @@ bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &opening
     const auto finished = bookState.value("finished_position").toString();
     const bool completed =
             !finished.isEmpty() && finished == bookState.value("position").toString();
-    if (completed || bookState.value("percent").isDouble()) {
-        source.percent = completed ? 100 : qBound(0, bookState.value("percent").toInt(), 100);
+    const auto key = preferences.value("stats_word_scope").toString() == "volume"
+            ? "stats_volume_percent"
+            : "stats_main_percent";
+    const auto percent =
+            bookState.contains(key) ? bookState.value(key) : bookState.value("percent");
+    if (completed || percent.isDouble()) {
+        source.percent = completed ? 100 : qBound(0, percent.toInt(), 100);
         source.progress = strings::get("sleep.percent_read").arg(source.percent);
     }
     const auto chosen = statusPick(preferences, powerOff);

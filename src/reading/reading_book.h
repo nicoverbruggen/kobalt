@@ -162,7 +162,8 @@ public:
 
     void acknowledge(const ReadingProgress &shown, bool moved);
     void markNativeReading();
-    NativeSaveResult writeNative(const QString &location, const QString &mappingError);
+    NativeSaveResult writeNative(const QString &location, const QString &mappingError,
+                                 bool wholeVolume = false);
     NativeSaveResult nativeSaveResult() const;
 
     // A background checkpoint is queued on the book's writer thread and

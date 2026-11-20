@@ -438,6 +438,13 @@ public:
     double mainProgress() const;
     int mainPercent() const;
 
+    int statsPercent(bool wholeVolume) const
+    {
+        if (!wholeVolume && mainPages() != bookPages())
+            return mainPercent();
+        return bookPages() > 0 ? pageProgressPercent(bookPage(), bookPages()) : progressPercent();
+    }
+
     bool hasMainTextBoundary() const { return frame.state.value("main_text_bounded").toBool(); }
     QJsonObject mainTextMarks() const { return frame.state.value("main_text_marks").toObject(); }
 

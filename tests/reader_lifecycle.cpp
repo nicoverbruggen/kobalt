@@ -12713,15 +12713,25 @@ private slots:
         QTest::newRow("middle") << 1;
         QTest::newRow("last") << 2;
         QTest::newRow("finished") << 3;
+        QTest::newRow("scoped-native-sleep") << 4;
     }
 
     void progressPercentagesAgree()
     {
         QFETCH(int, position);
-        const auto paths = testPaths();
+        QTemporaryDir profile;
+        auto paths = testPaths();
+        paths.directory = profile.path();
         QVERIFY(storage::writeJson(paths.preferences(), { { sleep::preferenceKey, "page" } }));
         auto presentation = std::make_shared<test::SleepPresentationState>();
         ReaderFixture host(paths, testFonts, testPlaceholder);
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        if (position == 4) {
+            host.progress = std::make_shared<test::HostProgress>();
+            host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+            host.positions = nickel::positionCodec();
+        }
         host.configureServices = [presentation](ReaderHostServices &services) {
             services.presentation = [presentation](QWidget *) {
                 return std::make_unique<test::HostPresentation>(presentation);
@@ -12737,6 +12747,52 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         QVERIFY(host.session()->pages() > 7);
         const int pages = host.session()->pages();
+        if (position == 4) {
+            bool applied = false;
+            host.session()->chapterBoundaryActions(1, [&](const auto &actions) {
+                for (const auto &action : actions)
+                    if (action.start && !action.reset)
+                        applied = action.apply();
+            });
+            QTRY_VERIFY(applied && !host.session()->busy());
+            const int inside = host.session()->firstMainPage() + 1;
+            QVERIFY(inside > 1 && inside < pages);
+            QVERIFY(host.session()->go(inside));
+            QTRY_VERIFY(!host.session()->busy());
+            const int main = pageProgressPercent(1, pages - host.session()->firstMainPage());
+            const int volume = pageProgressPercent(inside, pages);
+            QVERIFY(main != volume);
+            for (bool whole : { false, true }) {
+                if (whole) {
+                    auto *page = host.window()->findChild<QWidget *>("rrPage");
+                    QVERIFY(page);
+                    QTest::mouseClick(page, Qt::LeftButton, {}, page->rect().center());
+                    auto *stats = host.window()->findChild<QPushButton *>("rrNavStats");
+                    QVERIFY(stats);
+                    stats->click();
+                    auto *scope = host.window()->findChild<QPushButton *>("rrGraphWordScope");
+                    QVERIFY(scope && scope->isVisible());
+                    scope->click();
+                    auto *option = host.window()->findChild<QAbstractButton *>("rrStatsWordVolume");
+                    QVERIFY(option && option->isVisible());
+                    option->click();
+                    QCOMPARE(host.window()->findChild<QLabel *>("rrGraphBookPercent")->text(),
+                             strings::get("common.percent").arg(volume));
+                }
+                QTRY_VERIFY(host.window()->readyForPresentation());
+                const int expected = whole ? volume : main;
+                QCOMPARE(host.window()->powerScreenSnapshot().percent, expected);
+                QString mappingError;
+                const auto anchor = host.session()->savedNativePosition(&mappingError);
+                QVERIFY2(mappingError.isEmpty(), qPrintable(mappingError));
+                host.window()->sleepReader();
+                QCOMPARE(host.progress->percent, double(expected));
+                QCOMPARE(host.progress->current.location, anchor);
+                host.window()->wakeReader();
+                QTRY_VERIFY(!host.session()->busy());
+            }
+            return;
+        }
         const int target = position == 0 ? 0
                 : position == 2          ? pages - 1
                 : position == 3          ? pages - 1 - pages / 20
@@ -12775,8 +12831,6 @@ private slots:
         QCOMPARE(snapshot.percent, sleepPercent);
         QCOMPARE(snapshot.progress, strings::get("sleep.percent_read").arg(sleepPercent));
         host.window()->checkpoint();
-        const auto identity =
-                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
         QCOMPARE(storage::readBookState(paths, identity).object.value("percent").toInt(-1),
                  percent);
     }

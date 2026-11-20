@@ -13,6 +13,7 @@
 
 *******************************************************/
 
+#include <algorithm>
 #include "crsetup.h"
 #include "../../extensions/css_ancestors.h"
 
@@ -194,6 +195,17 @@ enum css_decl_code {
     cssd_writing_mode_ms,
     cssd_writing_mode_moz,
     cssd_writing_mode_o,
+    cssd_justify_content,
+    cssd_align_items,
+    cssd_flex_direction,
+    cssd_flex_wrap,
+    cssd_flex,
+    cssd_flex_basis,
+    cssd_flex_grow,
+    cssd_flex_shrink,
+    cssd_gap,
+    cssd_row_gap,
+    cssd_column_gap,
     cssd_stop,
     cssd_writing_mode_warning // Internal diagnostic declaration; no author-facing property.
 };
@@ -353,6 +365,17 @@ static const char * css_decl_name[] = {
     "-ms-writing-mode",
     "-moz-writing-mode",
     "-o-writing-mode",
+    "justify-content",
+    "align-items",
+    "flex-direction",
+    "flex-wrap",
+    "flex",
+    "flex-basis",
+    "flex-grow",
+    "flex-shrink",
+    "gap",
+    "row-gap",
+    "column-gap",
     NULL
 };
 
@@ -938,6 +961,21 @@ bool parse_number_value( const char * & str, css_length_t & value,
     if (negative)
         value.value = -value.value;
     return true;
+}
+
+// Blaze: flex factors use the same eight fractional bits as CSS lengths.
+static bool parse_flex_factor(const char *&str, int &factor)
+{
+    const char *start = str;
+    css_length_t number;
+    if (parse_number_value(str, number, false, false, false, false, false, true) &&
+            (number.type == css_val_unspecified || (number.value == 0 &&
+             std::none_of(start, str, [](char c) { return css_is_alpha(c); })))) {
+        factor = number.value;
+        return true;
+    }
+    str = start;
+    return false;
 }
 
 static bool parse_html_length( const char * & str, css_length_t & value, bool parse_as_dimension=false)
@@ -2907,9 +2945,11 @@ static const char * css_d_names[] =
     "run-in",
     "inline",
     "block",
+    "flex",
     "-cr-list-item-final", // non-standard, legacy crengine rendering of list items as final: css_d_list_item_legacy
     "list-item",           // correct rendering of list items as block: css_d_list_item_block
     "inline-block",
+    "inline-flex",
     "inline-table",
     "table", 
     "table-row-group", 
@@ -4217,9 +4257,88 @@ bool LVCssDeclaration::parse( const char * &decl, bool higher_importance, lxmlDo
             case cssd_cr_apply_func:
                 n = parse_name( decl, css_cr_apply_func_names, -1 );
                 break;
+            case cssd_justify_content: {
+                static const char * names[] = { "flex-start", "center", "flex-end", "normal", "start", "end", "space-between", NULL };
+                n = parse_name(decl, names, -1);
+                if (n == 3 || n == 4) n = 0;
+                if (n == 5) n = 2;
+                if (n == 6) n = 3;
+                break;
+            }
+            case cssd_flex_grow:
+            case cssd_flex_shrink:
+                parse_flex_factor(decl, n);
+                break;
+            case cssd_flex_basis:
+            case cssd_flex: {
+                const bool shorthand = prop_code == cssd_flex;
+                int grow = 0, shrink = 256;
+                css_length_t basis(css_val_unspecified, css_generic_auto);
+                if (!shorthand) {
+                    if (!parse_number_value(decl, basis, true, false, true)) break;
+                }
+                else if (substr_icompare("none", decl)) shrink = 0;
+                else if (substr_icompare("initial", decl)) {}
+                else if (substr_icompare("auto", decl)) grow = 256;
+                else if (parse_flex_factor(decl, grow)) {
+                    parse_flex_factor(decl, shrink);
+                    css_length_t explicit_basis;
+                    basis = parse_number_value(decl, explicit_basis, true, false, true)
+                            ? explicit_basis : css_length_t(css_val_percent, 0);
+                }
+                else if (parse_number_value(decl, basis, true)) grow = 256;
+                else break;
+                skip_spaces(decl);
+                if (*decl && *decl != '!' && *decl != ';' && *decl != '}' && *decl != ')') break;
+                lUInt32 flags = importance | parse_important(decl);
+                if (shorthand) {
+                    buf << (lUInt32)(cssd_flex_grow | flags) << (lUInt32)grow;
+                    buf << (lUInt32)(cssd_flex_shrink | flags) << (lUInt32)shrink;
+                }
+                buf << (lUInt32)(cssd_flex_basis | flags) << (lUInt32)basis.type << (lUInt32)basis.value;
+                break;
+            }
+            case cssd_gap:
+            case cssd_column_gap:
+            case cssd_row_gap: {
+                css_length_t first, second;
+                if (!parse_number_value(decl, first, false))
+                    break;
+                second = first;
+                if (prop_code == cssd_gap) {
+                    css_length_t next;
+                    if (parse_number_value(decl, next, false)) second = next;
+                }
+                skip_spaces(decl);
+                if (*decl && *decl != '!' && *decl != ';' && *decl != '}' && *decl != ')') break;
+                lUInt32 flags = importance | parse_important(decl);
+                if (prop_code != cssd_column_gap)
+                    buf << (lUInt32)(cssd_row_gap | flags) << (lUInt32)first.type << (lUInt32)first.value;
+                if (prop_code != cssd_row_gap)
+                    buf << (lUInt32)(cssd_column_gap | flags) << (lUInt32)second.type << (lUInt32)second.value;
+                break;
+            }
+            case cssd_flex_wrap: {
+                static const char * names[] = { "nowrap", "wrap", NULL };
+                n = parse_name(decl, names, -1);
+                break;
+            }
+            case cssd_align_items: {
+                static const char *names[] = { "stretch", "flex-start", "center", "flex-end", NULL };
+                n = parse_name(decl, names, -1);
+                break;
+            }
+            case cssd_flex_direction: {
+                static const char * names[] = { "row", "column", "row-reverse", "column-reverse", NULL };
+                n = parse_name(decl, names, -1);
+                break;
+            }
             case cssd_display:
                 IF_g_SET_n_AND_break(false, css_d_inherit, css_d_inline);
                 n = parse_name( decl, css_d_names, -1 );
+                // Blaze implements a subset. Keep publisher @supports fallbacks active.
+                if ( _check_if_supported && css_is_flex((css_display_t)n) )
+                    n = -1;
                 if (n == css_d_list_item_block && doc && doc->getDOMVersionRequested() < 20180524) {
                     n = css_d_list_item_legacy; // legacy rendering of list-item
                 }
@@ -6232,6 +6351,33 @@ void LVCssDeclaration::apply( css_style_rec_t * style, const ldomNode * node ) c
                 style->Apply( v, &style->border_radius_v[3], imp_bit_border_radius_bl_v, is_important );
             }
             break;
+        case cssd_justify_content:
+            style->Apply((lUInt8)*p++, &style->justify_content, imp_bit_justify_content, is_important);
+            break;
+        case cssd_flex_grow:
+            style->Apply((int)*p++, &style->flex_grow, imp_bit_flex_grow, is_important);
+            break;
+        case cssd_flex_shrink:
+            style->Apply((int)*p++, &style->flex_shrink, imp_bit_flex_shrink, is_important);
+            break;
+        case cssd_flex_basis:
+            style->Apply(read_length(p), &style->flex_basis, imp_bit_flex_basis, is_important);
+            break;
+        case cssd_row_gap:
+            style->Apply(read_length(p), &style->row_gap, imp_bit_row_gap, is_important);
+            break;
+        case cssd_column_gap:
+            style->Apply(read_length(p), &style->column_gap, imp_bit_column_gap, is_important);
+            break;
+        case cssd_flex_wrap:
+            style->Apply((lUInt8)*p++, &style->flex_wrap, imp_bit_flex_wrap, is_important);
+            break;
+        case cssd_align_items:
+            style->Apply((css_flex_align_t)*p++, &style->align_items, imp_bit_align_items, is_important);
+            break;
+        case cssd_flex_direction:
+            style->Apply((lUInt8)*p++, &style->flex_direction, imp_bit_flex_direction, is_important);
+            break;
         case cssd_display:
             style->Apply( (css_display_t) *p++, &style->display, imp_bit_display, is_important );
             break;
@@ -6779,7 +6925,7 @@ void LVCssDeclaration::apply( css_style_rec_t * style, const ldomNode * node ) c
                         // Let's have "display:none" not matched by neither inline nor not-inline
                         return;
                     }
-                    if ( display <= css_d_inline || display == css_d_inline_block || display == css_d_inline_table ) {
+                    if ( display <= css_d_inline || css_is_inline_box(display) ) {
                         // It is inline-like
                         if ( only_if == cr_only_if_not_inline )
                             return; // don't apply anything more of this declaration to this style

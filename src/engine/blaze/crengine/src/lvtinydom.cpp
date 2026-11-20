@@ -7711,7 +7711,7 @@ bool ldomNode::isBoxingInlineBox() const
     if ( getNodeId() == el_inlineBox && BLOCK_RENDERING_N(this, BOX_INLINE_BLOCKS) ) {
         if (getChildCount() == 1) {
             css_display_t d = getChildNode(0)->getStyle()->display;
-            if (d == css_d_inline_block || d == css_d_inline_table) {
+            if (css_is_inline_box(d)) {
                 return true;
             }
             // Also if this box parent is <ruby> and if what this inlineBox
@@ -7737,7 +7737,7 @@ bool ldomNode::isEmbeddedBlockBoxingInlineBox(bool inline_box_checks_done) const
         if (getChildCount() != 1)
             return false;
         css_display_t d = getChildNode(0)->getStyle()->display;
-        if (d == css_d_inline_block || d == css_d_inline_table) {
+        if (css_is_inline_box(d)) {
             return false; // regular boxing inlineBox
         }
         if ( getChildNode(0)->getRendMethod() == erm_table && getParentNode()
@@ -7801,7 +7801,7 @@ void ldomNode::initNodeRendMethod()
     // the way to avoid an extra loop for checking if we have some.
     bool hasInternalTableItems = false;
 
-    int d = getStyle()->display;
+    css_display_t d = getStyle()->display;
     lUInt32 rend_flags = getDocument()->getRenderBlockRenderingFlags();
 
     if ( getNodeId()==el_svg ) {
@@ -8129,6 +8129,9 @@ void ldomNode::initNodeRendMethod()
         } else if ( hasBlockItems && !hasInline ) {
             // only blocks (or floating blocks) inside
             setRendMethod( erm_block );
+        } else if ( css_is_flex(d) && !hasBlockItems && hasInline && !hasFloating ) {
+            autoboxChildren(0, getChildCount() - 1, false);
+            setRendMethod(erm_block);
         } else if ( !hasBlockItems && hasInline ) {
             // only inline (with possibly floating blocks that will
             // be dealt with by renderFinalBlock)
@@ -9155,7 +9158,7 @@ void ldomNode::initNodeRendMethod()
         // - a inlineBox has ALWAYS ->display=css_d_inline and erm_method=erm_inline
         // - a inlineBox child keeps its original ->display, and may have
         //   erm_method = erm_final or erm_block (depending on its content)
-        bool isInlineBlock = (d == css_d_inline_block || d == css_d_inline_table);
+        bool isInlineBlock = (css_is_inline_box(d));
         bool isInlineBox = (getNodeId() == el_inlineBox);
         if ( isInlineBlock || isInlineBox ) {
             ldomNode * parent = getParentNode();
@@ -9172,7 +9175,7 @@ void ldomNode::initNodeRendMethod()
                 css_style_ref_t my_style = getStyle();
                 css_style_ref_t my_new_style( new css_style_rec_t );
                 copystyle(my_style, my_new_style);
-                if (child_style->display == css_d_inline_block || child_style->display == css_d_inline_table) {
+                if (css_is_inline_box(child_style->display)) {
                     my_new_style->display = css_d_inline; // become an inline wrapper
                     // We need it to have the vertical_align from the child
                     // (it's the only style we need for proper inline layout).
@@ -16745,7 +16748,7 @@ public:
             // look at the initial CSS display, as we might have boxed some
             // inline-like elements for rendering purpose.
             css_display_t d = style->display;
-            if ( d <= css_d_inline || d == css_d_inline_block || d == css_d_inline_table ) {
+            if ( d <= css_d_inline || css_is_inline_box(d) ) {
                 // inline, ruby; consider inline-block/-table as inline, in case
                 // they don't contain much (if they do, some inner block element
                 // will set newBlock=true).

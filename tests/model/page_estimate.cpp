@@ -1,4 +1,5 @@
 #include "check.h"
+#include "book_fixtures.h"
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
 #include "engine/blaze/adapter/column_view.h"
@@ -2257,14 +2258,12 @@ void fullDocument()
     // A build that is parked is given up without a wait when the font size
     // changes, and when its book closes.
     int seen = 0;
-    require(other.prepareFullDocument([&] { return ++seen <= 5; })
-                    == Engine::FullDocument::Stopped,
+    require(other.prepareFullDocument([&] { return ++seen <= 5; }) == Engine::FullDocument::Stopped,
             "The build must park");
     require(other.applyAppearance(appearance::Patch(qt::object({ { "font_pixels", 28 } }))),
             "Cannot change the font size with a parked build");
     seen = 0;
-    require(other.prepareFullDocument([&] { return ++seen <= 5; })
-                    == Engine::FullDocument::Stopped,
+    require(other.prepareFullDocument([&] { return ++seen <= 5; }) == Engine::FullDocument::Stopped,
             "A new build must start for the new font size");
     require(other.prepareFullDocument({}) == Engine::FullDocument::Ready,
             "The new build must finish");
@@ -2360,9 +2359,9 @@ void parkedFullDocument(const std::function<void(EngineDocument &)> &openWhole, 
 // The switch to the whole book resolves the place of the page on screen in
 // the whole-book document. Walks a book in chapter mode and asks the whole
 // book for the place of every page.
-void handoffWalk(const QByteArray &text, int slicePages = 0)
+void handoffWalk(const QByteArray &text, int slicePages = 0, QSize viewport = { 600, 800 },
+                 QJsonObject settings = { { "font_pixels", 28 }, { "line_spacing_version", 1 } })
 {
-    const QJsonObject settings{ { "font_pixels", 28 }, { "line_spacing_version", 1 } };
     const auto pixels = [](const QImage &image) {
         return QCryptographicHash::hash(
                 QByteArray::fromRawData(reinterpret_cast<const char *>(image.constBits()),
@@ -2371,13 +2370,13 @@ void handoffWalk(const QByteArray &text, int slicePages = 0)
     };
     QString error;
     EngineDocument whole(test::readerFonts());
-    require(whole.open(text, QSize(600, 800), settings, &error), qPrintable(error));
+    require(whole.open(text, viewport, settings, &error), qPrintable(error));
     EngineDocument model(test::readerFonts());
     const auto previousPages = qgetenv("KOBALT_CHAPTER_PAGES");
     if (slicePages > 0)
         qputenv("KOBALT_CHAPTER_PAGES", QByteArray::number(slicePages));
     setChapterModeOverride(1);
-    const bool opened = model.open(text, QSize(600, 800), settings, &error);
+    const bool opened = model.open(text, viewport, settings, &error);
     if (slicePages > 0) {
         if (previousPages.isNull())
             qunsetenv("KOBALT_CHAPTER_PAGES");
@@ -2437,6 +2436,26 @@ void handoffWalk(const QByteArray &text, int slicePages = 0)
     require(unresolved == 0, "A chapter page has no place in the whole book");
     require(pages == whole.pages() && otherStart == 0 && otherPixels == 0,
             "Chapter pages differ from the whole book");
+}
+
+void flexRowHandoff()
+{
+    QByteArray body;
+    for (int row = 0; row < 100; ++row) {
+        body += "<div style='display:flex;flex-wrap:wrap;justify-content:center'>";
+        for (int item = 0; item < 5; ++item)
+            body += "<div>Series " + QByteArray::number(row) + " item " + QByteArray::number(item)
+                    + ".</div>";
+        body += "</div>";
+    }
+    QTemporaryDir dir;
+    const auto files = test::publisherPackage("en", "Flex rows",
+                                              { { "rows.xhtml", test::publisherHtml(body) } },
+                                              "<itemref idref='rows.xhtml'/>");
+    require(dir.isValid() && test::writeBook(dir.path(), "rows.epub", files), "Create flex rows");
+    QFile file(dir.filePath("rows.epub"));
+    require(file.open(QIODevice::ReadOnly), "Read flex rows");
+    handoffWalk(file.readAll(), 2);
 }
 
 // A parked build must not reuse another book's font bytes, even when the
@@ -3468,6 +3487,17 @@ int main(int argc, char **argv)
     };
     walkFixture("overflowing-float-bookmarks.epub", 3);
     walkFixture("heading-after-floats.epub", 1);
+    flexRowHandoff();
+    QFile titleStack(QStringLiteral(KOBALT_TEST_FIXTURES) + "/large-type-flex-column.epub");
+    require(titleStack.open(QIODevice::ReadOnly), "Open the centered title stack");
+    const int previousPpi = readingPpi.exchange(96);
+    handoffWalk(titleStack.readAll(), 2, { 320, 360 },
+                { { "font_pixels", 40 },
+                  { "margin_pixels", 8 },
+                  { "top_margin_pixels", 4 },
+                  { "bottom_margin_pixels", 4 },
+                  { "text_alignment", "publisher" } });
+    readingPpi.store(previousPpi);
     hiddenHeadingOnChapterReflow();
     hiddenHeadingAtHandoff({ 1072, 758 });
     hiddenHeadingAtHandoff({ 600, 800 });

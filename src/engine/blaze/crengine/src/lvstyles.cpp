@@ -50,16 +50,18 @@ lUInt32 calcHash(css_style_rec_t & rec)
     if ( rec.hash )
         return rec.hash;
     lUInt32 v = 31;
-    v = v * 31 + (lUInt32)rec.important[0];
-    v = v * 31 + (lUInt32)rec.important[1];
-    v = v * 31 + (lUInt32)rec.important[2];
-    v = v * 31 + (lUInt32)rec.importance[0];
-    v = v * 31 + (lUInt32)rec.importance[1];
-    v = v * 31 + (lUInt32)rec.importance[2];
+    for (auto bits : rec.important) v = v * 31 + bits;
+    for (auto bits : rec.importance) v = v * 31 + bits;
     v = v * 31 + (lUInt32)rec.display;
     v = v * 31 + (lUInt32)rec.white_space;
     v = v * 31 + (lUInt32)rec.text_align;
-    v = v * 31 + (lUInt32)rec.text_align_last;
+    v = v * 31 + rec.align_items;
+    v = v * 31 + rec.flex_basis.pack();
+    v = v * 31 + rec.flex_grow;
+    v = v * 31 + rec.flex_shrink;
+    v = v * 31 + rec.row_gap.pack();
+    v = v * 31 + rec.column_gap.pack();
+    v = v * 31 + (lUInt32)rec.text_align_last + (rec.justify_content << 8) + (rec.flex_direction << 16) + (rec.flex_wrap << 24);
     v = v * 31 + (lUInt32)rec.text_decoration;
     v = v * 31 + (lUInt32)rec.text_transform;
     v = v * 31 + (lUInt32)rec.hyphenate;
@@ -150,15 +152,14 @@ lUInt32 calcHash(css_style_rec_t & rec)
 bool operator == (const css_style_rec_t & r1, const css_style_rec_t & r2)
 {
     return 
-           r1.important[0] == r2.important[0] &&
-           r1.important[1] == r2.important[1] &&
-           r1.important[2] == r2.important[2] &&
-           r1.importance[0] == r2.importance[0] &&
-           r1.importance[1] == r2.importance[1] &&
-           r1.importance[2] == r2.importance[2] &&
+           std::equal(r1.important, r1.important + NB_IMP_SLOTS, r2.important) &&
+           std::equal(r1.importance, r1.importance + NB_IMP_SLOTS, r2.importance) &&
            r1.display == r2.display &&
            r1.white_space == r2.white_space &&
            r1.text_align == r2.text_align &&
+           r1.align_items == r2.align_items && r1.flex_basis == r2.flex_basis && r1.flex_grow == r2.flex_grow && r1.flex_shrink == r2.flex_shrink &&
+           r1.column_gap == r2.column_gap && r1.row_gap == r2.row_gap &&
+           r1.flex_wrap == r2.flex_wrap && r1.justify_content == r2.justify_content && r1.flex_direction == r2.flex_direction &&
            r1.text_align_last == r2.text_align_last &&
            r1.text_decoration == r2.text_decoration &&
            r1.text_transform == r2.text_transform &&
@@ -385,15 +386,19 @@ bool css_style_rec_t::serialize( SerialBuf & buf )
     if ( buf.error() )
         return false;
     buf.putMagic(style_magic);
-    buf << important[0];            //    lUInt32              important[0];
-    buf << important[1];            //    lUInt32              important[1];
-    buf << important[2];            //    lUInt32              important[2];
-    buf << importance[0];           //    lUInt32              importance[0];
-    buf << importance[1];           //    lUInt32              importance[1];
-    buf << importance[2];           //    lUInt32              importance[2];
+    for (auto &bits : important) buf << bits;
+    for (auto &bits : importance) buf << bits;
     ST_PUT_ENUM(display);           //    css_display_t        display;
     ST_PUT_ENUM(white_space);       //    css_white_space_t    white_space;
     ST_PUT_ENUM(text_align);        //    css_text_align_t     text_align;
+    ST_PUT_ENUM(justify_content);
+    ST_PUT_ENUM(flex_direction);
+    ST_PUT_ENUM(align_items);
+    ST_PUT_ENUM(flex_wrap);
+    ST_PUT_LEN(flex_basis);
+    buf << (lInt32)flex_grow << (lInt32)flex_shrink;
+    ST_PUT_LEN(row_gap);
+    ST_PUT_LEN(column_gap);
     ST_PUT_ENUM(text_align_last);   //    css_text_align_t     text_align_last;
     ST_PUT_ENUM(text_decoration);   //    css_text_decoration_t text_decoration;
     ST_PUT_ENUM(text_transform);    //    css_text_transform_t text_transform;
@@ -472,15 +477,19 @@ bool css_style_rec_t::deserialize( SerialBuf & buf )
     if ( buf.error() )
         return false;
     buf.putMagic(style_magic);
-    buf >> important[0];                                    //    lUInt32              important[0];
-    buf >> important[1];                                    //    lUInt32              important[1];
-    buf >> important[2];                                    //    lUInt32              important[2];
-    buf >> importance[0];                                   //    lUInt32              importance[0];
-    buf >> importance[1];                                   //    lUInt32              importance[1];
-    buf >> importance[2];                                   //    lUInt32              importance[2];
+    for (auto &bits : important) buf >> bits;
+    for (auto &bits : importance) buf >> bits;
     ST_GET_ENUM(css_display_t, display);                    //    css_display_t        display;
     ST_GET_ENUM(css_white_space_t, white_space);            //    css_white_space_t    white_space;
     ST_GET_ENUM(css_text_align_t, text_align);              //    css_text_align_t     text_align;
+    ST_GET_ENUM(lUInt8, justify_content);
+    ST_GET_ENUM(lUInt8, flex_direction);
+    ST_GET_ENUM(css_flex_align_t, align_items);
+    ST_GET_ENUM(lUInt8, flex_wrap);
+    ST_GET_LEN(flex_basis);
+    buf >> flex_grow >> flex_shrink;
+    ST_GET_LEN(row_gap);
+    ST_GET_LEN(column_gap);
     ST_GET_ENUM(css_text_align_t, text_align_last);         //    css_text_align_t     text_align_last;
     ST_GET_ENUM(css_text_decoration_t, text_decoration);    //    css_text_decoration_t text_decoration;
     ST_GET_ENUM(css_text_transform_t, text_transform);      //    css_text_transform_t text_transform;

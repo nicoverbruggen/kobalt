@@ -893,8 +893,18 @@ bool EngineDocument::pageStartsBlock(int page, int *before) const
 #endif
     // A slice holds whole blocks of the text flow. A table, a float or
     // another such block is laid out as one, so a slice cannot start in it.
+    auto *child = block;
     for (auto *parent = block->getParentNode(); parent && !parent->isNodeName("DocFragment");
-         parent = parent->getParentNode()) {
+         child = parent, parent = parent->getParentNode()) {
+        // Restarting with only the tail of a flex row changes wrapping and
+        // alignment. A slice may start at the first item in the container.
+        if (css_is_flex(parent->getStyle()->display)) {
+            for (int i = 0; i < child->getNodeIndex(); ++i) {
+                auto *sibling = parent->getChildNode(i);
+                if (sibling->isElement() && sibling->getRendMethod() != erm_invisible)
+                    return false;
+            }
+        }
         if (parent->getRendMethod() != erm_block || parent->isFloatingBox())
             return false;
     }

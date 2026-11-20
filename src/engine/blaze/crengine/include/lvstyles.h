@@ -113,17 +113,18 @@ enum css_style_rec_important_bit {
     imp_bit_ruby_position,
     imp_bit_content,
     imp_bit_cr_hint,
-    imp_bit_writing_mode_warning
+    imp_bit_writing_mode_warning,
+    imp_bit_justify_content,
+    imp_bit_flex_direction,
+    imp_bit_flex_wrap,
+    imp_bit_row_gap,
+    imp_bit_column_gap,
+    imp_bit_flex_grow,
+    imp_bit_flex_shrink,
+    imp_bit_flex_basis,
+    imp_bit_align_items
 };
-#define NB_IMP_BITS 88 // The number of lines in the enum above: KEEP IT UPDATED.
-
-#define NB_IMP_SLOTS    ((NB_IMP_BITS-1)>>5)+1
-// In lvstyles.cpp, we have hardcoded important[0] ... importance[2]
-// So once NB_IMP_SLOTS becomes 4 when IMP_BIT_MAX > 96, add in lvstyles.cpp
-// the needed important[3] and importance[3]. Let us know if we forget that:
-#if (NB_IMP_SLOTS != 3)
-    #error "NB_IMP_SLOTS != 3, some updates in lvstyles.cpp (and then here) are needed"
-#endif
+constexpr int NB_IMP_SLOTS = 1 + imp_bit_align_items / 32;
 
 // Style handling flags
 
@@ -151,6 +152,13 @@ struct css_style_rec_tag {
                                                    // (allows for 2 level of !important importance)
     css_display_t        display;
     css_white_space_t    white_space;
+    lUInt8 justify_content; // Blaze: flex-start, center or flex-end
+    int flex_grow, flex_shrink;
+    css_length_t flex_basis;
+    css_length_t row_gap, column_gap;
+    css_flex_align_t align_items;
+    lUInt8 flex_wrap;
+    lUInt8 flex_direction; // row, column, row-reverse or column-reverse
     css_text_align_t     text_align;
     css_text_align_t     text_align_last;
     css_text_decoration_t text_decoration;
@@ -232,6 +240,13 @@ struct css_style_rec_tag {
     , importance{}
     , display( css_d_inline )
     , white_space(css_ws_inherit)
+    , justify_content(0)
+    , flex_grow(0)
+    , flex_shrink(256)
+    , flex_basis(css_val_unspecified, css_generic_auto)
+    , align_items(flex_stretch)
+    , flex_wrap(0)
+    , flex_direction(0)
     , text_align(css_ta_inherit)
     , text_align_last(css_ta_inherit)
     , text_decoration (css_td_inherit)

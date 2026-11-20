@@ -10,6 +10,12 @@ The engine knows a fixed list of hyphenation pattern names. `src/engine/blaze/da
 
 Preserve the GPLv2 notice in `src/engine/blaze/README.TXT`, the license text in `src/engine/blaze/COPYING`, the image-scaler license, and the copyright headers. Keep self-contained Blaze code in `extensions/`. Edit the inherited files where the parser, formatter or font manager needs to call it. The former `dependencies/crengine-patches.txt` series and its patch files are retained in Git history. Their changes are integrated into this source; builds do not apply a second engine patch stack.
 
+## Flex layout
+
+Blaze runs flex layout when the computed display is `flex` or `inline-flex`. Horizontal text rows support wrapping, grow and shrink factors, flex basis, percentage item widths, length gaps and main-axis alignment. Single-line rows can center, stretch or align items at either end of the cross axis. Inline containers use the inline box formatter and measure the row for an automatic width.
+
+A forward column stacks its children with a row gap and can align them horizontally. A short column with a definite height can center or distribute simple text items vertically. Oversized stacks use ordinary text page breaks. General nested layouts, reverse or wrapping columns, and independent fragmentation of side-by-side items remain outside the prototype. Multi-item row layout requires zero item margins and excludes percentage padding or percentage minimum and maximum widths. Blaze keeps the feature query `@supports (display: flex)` false.
+
 ## Bringing in upstream changes
 
 Compare the upstream change with the recorded KOReader base. In `crengine/`, keep upstream file names, indentation and declaration style. Kobalt’s [.clang-format-ignore](../../.clang-format-ignore) excludes these files. Format the adapter under `adapter/` with Kobalt’s Qt style.

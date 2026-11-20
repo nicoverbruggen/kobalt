@@ -189,7 +189,7 @@ int renderBlockElement( LVRendPageContext & context, ldomNode * enode, int x, in
         int usable_left_overflow=0, int usable_right_overflow=0, int direction=REND_DIRECTION_UNSET, int * baseline=NULL );
 /// renders block which contains subblocks
 int renderBlockElement( LVRendPageContext & context, ldomNode * enode, int x, int y, int width,
-        int usable_left_overflow, int usable_right_overflow, int direction, int * baseline, lUInt32 rend_flags );
+        int usable_left_overflow, int usable_right_overflow, int direction, int * baseline, lUInt32 rend_flags, int flex_width = -1 );
 /// renders table element
 int renderTable( LVRendPageContext & context, ldomNode * element, int x, int y, int width,
                  bool shrink_to_fit, int min_width, int & fitted_width, int direction=REND_DIRECTION_UNSET,
@@ -212,9 +212,9 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * node, int x0, int y0, int dx,
 // full function for recursive use:
 void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direction, bool ignorePadding, int rendFlags,
             int &curMaxWidth, int &curWordWidth, bool &collapseNextSpace, int &lastSpaceWidth,
-            int indent, bool nowrap, TextLangCfg * lang_cfg, bool processNodeAsText=false, bool isStartNode=false);
+            int indent, bool nowrap, TextLangCfg * lang_cfg, bool processNodeAsText=false, bool isStartNode=false, bool ignoreStyleWidth=false);
 // simpler function for first call:
-void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direction=REND_DIRECTION_UNSET, bool ignorePadding=false, int rendFlags=0);
+void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direction=REND_DIRECTION_UNSET, bool ignorePadding=false, int rendFlags=0, bool ignoreStyleWidth=false);
 
 // Set/get global document base font weight.
 void LVRendSetBaseFontWeight(int weight);

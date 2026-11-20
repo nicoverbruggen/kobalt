@@ -33,9 +33,11 @@ enum css_display_t {
     css_d_inline,  // All elements starts being css_d_inline, unless otherwise specified in fb2def.h
     // Above are those that define a mostly inline container, below those that define a mostly block container
     css_d_block,
+    css_d_flex, // Blaze: a block container with flex item sizing in enhanced layout
     css_d_list_item_legacy, // display: -cr-list-item-final (was used before 20180524 for display: list-item)
     css_d_list_item_block,  // display: list-item
     css_d_inline_block,
+    css_d_inline_flex,
     css_d_inline_table, // (needs to be before css_d_table, as we use tests like if: (style->display > css_d_table))
     css_d_table, 
     css_d_table_row_group, 
@@ -48,6 +50,12 @@ enum css_display_t {
     css_d_table_caption, 
     css_d_none
 };
+
+inline bool css_is_flex(css_display_t display) { return display == css_d_flex || display == css_d_inline_flex; }
+inline bool css_is_inline_box(css_display_t display) {
+    return display == css_d_inline_block || display == css_d_inline_table || display == css_d_inline_flex;
+}
+enum css_flex_align_t { flex_stretch, flex_start, flex_center, flex_end };
 
 // https://www.w3.org/TR/CSS2/text.html#white-space-prop
 // https://florian.rivoal.net/talks/line-breaking/

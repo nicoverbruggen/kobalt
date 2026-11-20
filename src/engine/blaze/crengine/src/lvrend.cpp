@@ -11,6 +11,9 @@
 
 *******************************************************/
 
+#include "koblaze.h"
+#include <algorithm>
+#include <cmath>
 #include "crsetup.h"
 
 #include <stdlib.h>
@@ -5101,6 +5104,15 @@ void copystyle( css_style_ref_t source, css_style_ref_t dest )
     dest->display = source->display ;
     dest->white_space = source->white_space ;
     dest->text_align = source->text_align ;
+    dest->justify_content = source->justify_content;
+    dest->flex_basis = source->flex_basis;
+    dest->flex_grow = source->flex_grow;
+    dest->flex_shrink = source->flex_shrink;
+    dest->column_gap = source->column_gap;
+    dest->row_gap = source->row_gap;
+    dest->align_items = source->align_items;
+    dest->flex_wrap = source->flex_wrap;
+    dest->flex_direction = source->flex_direction;
     dest->text_align_last = source->text_align_last ;
     dest->text_decoration = source->text_decoration ;
     dest->text_transform = source->text_transform ;
@@ -5401,7 +5413,7 @@ int pagebreakhelper(ldomNode *enode,int width)
 
 // Prototypes of the 2 alternative block rendering recursive functions
 int  renderBlockElementLegacy( LVRendPageContext & context, ldomNode * enode, int x, int y, int width, int usable_right_overflow );
-void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int width, lUInt32 flags );
+void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int width, lUInt32 flags, int flex_alignment = -1, int flex_width = -1 );
 
 // Legacy/original CRE block rendering
 int renderBlockElementLegacy( LVRendPageContext & context, ldomNode * enode, int x, int y, int width, int usable_right_overflow )
@@ -8175,8 +8187,10 @@ int BlockFloatFootprint::getTopShiftX(int final_width, bool get_right_shift)
     return shift_x;
 }
 
+#include "../../extensions/flex_rows.inc"
+
 // Enhanced block rendering
-void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int container_width, lUInt32 flags )
+void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int container_width, lUInt32 flags, int flex_alignment, int flex_width )
 {
     if ( ! enode->isElement() ) {
         crFatalError(111, "Attempting to render Text node");
@@ -8806,7 +8820,10 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                     apply_style_width = true;
             }
         }
-        if ( apply_style_width ) {
+        if (flex_width >= 0) {
+            width = flex_width;
+        }
+        else if ( apply_style_width ) {
             if ( is_fit_content_width ) {
                 int max_content_width = 0;
                 int min_content_width = 0;
@@ -8848,6 +8865,14 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
         else {
             width = container_width - margin_left - margin_right;
             auto_width = true; // no more width tweaks
+            if ( flex_alignment >= 0 ) {
+                // Blaze: size an auto-width flex item to its content. Keep the
+                // original containing width for percentage margins and padding.
+                int preferred = 0, minimum = 0;
+                getRenderedWidths(enode, preferred, minimum, direction, true, flags);
+                width = std::min(width, preferred);
+                auto_width = false;
+            }
         }
         if ( BLOCK_RENDERING(flags, ENSURE_STYLE_WIDTH) ) {
             // Whether there was a style width or not, we need to ensure the computed
@@ -9020,7 +9045,16 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
         // And go again at adjusting this HR position
         auto_width = false;
     }
-    if ( !auto_width ) { // We have a width that may not fill all available space
+    if ( flex_alignment >= 0 ) {
+        int spare = std::max(0, container_width - width - margin_left - margin_right);
+        int shift = flex_alignment == 1 ? spare / 2 : flex_alignment == 2 ? spare : 0;
+        if ( margin_left_auto || margin_right_auto )
+            shift = margin_left_auto ? (margin_right_auto ? spare / 2 : spare) : 0;
+        margin_left += shift;
+        margin_right += spare - shift;
+        dx = margin_left;
+    }
+    else if ( !auto_width ) { // We have a width that may not fill all available space
         // printf("fixed width: %d\n", width);
         // For these initial overflow checks, we use the original container_width
         // and not the adjusted one
@@ -9501,6 +9535,26 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
 
                 // recurse all sub-blocks for blocks
                 int cnt = enode->getChildCount();
+                if (css_is_flex(style->display) && renderFlexRows(flow, enode, padding_left,
+                        width - padding_left - padding_right, direction, flags, style_h - padding_top - padding_bottom))
+                    cnt = 0;
+                int flex_alignment = -1;
+                if ( css_is_flex(style->display) && !(style->flex_direction & 1) && !flow->isVertical() ) {
+                    int items = 0;
+                    for (int i = 0; i < cnt && items < 2; ++i) {
+                        ldomNode * item = enode->getChildNode(i);
+                        if (item->isElement() && item->getRendMethod() != erm_invisible)
+                            ++items;
+                    }
+                    if (items == 1) {
+                        flex_alignment = style->justify_content == 3 ? 0 : style->justify_content;
+                        if (is_rtl != (style->flex_direction == 2))
+                            flex_alignment = 2 - flex_alignment;
+                    }
+                }
+                const bool column = css_is_flex(style->display) && style->flex_direction == 1 && !flow->isVertical();
+                int column_gap = column ? lengthToPx(enode, style->row_gap, 0) : 0;
+                bool column_started = false;
                 int vertical_children_inline_end = 0;
                 for (int i=0; i<cnt; i++) {
                     ldomNode * child = enode->getChildNode( i );
@@ -9569,7 +9623,17 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                         // flow's writing mode for its subtree; remember the mode before and
                         // restore it after so following siblings continue in our mode.
                         int fork_wm_before = flow->getWritingMode();
-                        renderBlockElementEnhanced( flow, child, padding_left, width - padding_left - padding_right, flags );
+                        if (column && child->getRendMethod() != erm_invisible) {
+                            if (column_started && column_gap > 0)
+                                flow->addContentSpace(column_gap, 1, true, true, false);
+                            column_started = true;
+                            if (style->align_items != flex_stretch) {
+                                flex_alignment = style->align_items - flex_start;
+                                if (is_rtl) flex_alignment = 2 - flex_alignment;
+                            }
+                        }
+                        renderBlockElementEnhanced( flow, child, padding_left, width - padding_left - padding_right, flags,
+                                flex_alignment >= 0 && child_style->display == css_d_block ? flex_alignment : -1 );
                         if ( flow->getWritingMode() != fork_wm_before )
                             flow->switchWritingMode( fork_wm_before );
                         if ( flow->isVertical() ) {
@@ -10326,7 +10390,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
 
 // Entry points for rendering the root node, a table cell or a float
 int renderBlockElement(LVRendPageContext & context, ldomNode * enode, int x, int y, int width,
-            int usable_left_overflow, int usable_right_overflow, int direction, int * baseline, lUInt32 rend_flags )
+            int usable_left_overflow, int usable_right_overflow, int direction, int * baseline, lUInt32 rend_flags, int flex_width )
 {
     if ( BLOCK_RENDERING(rend_flags, ENHANCED) ) {
         // Extract writing mode from node style for vertical text support.
@@ -10397,7 +10461,7 @@ int renderBlockElement(LVRendPageContext & context, ldomNode * enode, int x, int
         if (baseline != NULL) {
             flow.setRequestedBaselineType(*baseline);
         }
-        renderBlockElementEnhanced( &flow, enode, x, width, rend_flags );
+        renderBlockElementEnhanced( &flow, enode, x, width, rend_flags, -1, flex_width );
         if (baseline != NULL) {
             // (We pass the top node, so it can find the first table row
             // if needed with inline-table.)
@@ -11336,6 +11400,11 @@ void setNodeStyle( ldomNode * enode, css_style_ref_t parent_style, LVFontRef par
         }
     }
 
+    // Blaze: direct inline children of a flex container generate block items.
+    if (!parent_style.isNull() && css_is_flex(parent_style->display) &&
+            (pstyle->display == css_d_inline || pstyle->display == css_d_inline_block))
+        pstyle->display = css_d_block;
+
     // <br/> can be set to "display: block" by publishers, but
     // Firefox and Calibre do not handle them like other block
     // elements: they won't ensure a "height:" set on them.
@@ -11487,7 +11556,7 @@ void setNodeStyle( ldomNode * enode, css_style_ref_t parent_style, LVFontRef par
                     // child is necessarily css_d_inline_block or css_d_inline_table,
                     // or this node is <inlineBox T=EmbeddedBlock>.
                     // The following 'else's should never trigger.
-                    if (child_style->display == css_d_inline_block || child_style->display == css_d_inline_table) {
+                    if (css_is_inline_box(child_style->display)) {
                         pstyle->display = css_d_inline; // become an inline wrapper
                         pstyle->vertical_align = child_style->vertical_align;
                     }
@@ -11516,7 +11585,7 @@ void setNodeStyle( ldomNode * enode, css_style_ref_t parent_style, LVFontRef par
         // (before enhanced rendering, css_d_inline_block did not exist, so the
         // node probably stayed with the default display: of the element when
         // no other lower specificity CSS set another).
-        if ( pstyle->display == css_d_inline_block || pstyle->display == css_d_inline_table ) {
+        if ( css_is_inline_box(pstyle->display) ) {
             if ( !BLOCK_RENDERING(rend_flags, ENHANCED) && pstyle->display == css_d_inline_table ) {
                 // In legacy mode, inline-table was handled like css_d_block (as all
                 // not specifically handled css_d_* are, so probably unwillingly).
@@ -12217,7 +12286,7 @@ void setNodeStyle( ldomNode * enode, css_style_ref_t parent_style, LVFontRef par
 // Estimate width of node when rendered:
 //   maxWidth: width if it would be rendered on an infinite width area
 //   minWidth: width with a wrap on all spaces (no hyphenation), so width taken by the longest word
-void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direction, bool ignoreMargin, int rendFlags) {
+void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direction, bool ignoreMargin, int rendFlags, bool ignoreStyleWidth) {
     // Setup passed-by-reference parameters for recursive calls
     int curMaxWidth = 0;    // reset on <BR/> or on new block nodes
     int curWordWidth = 0;   // may not be reset to correctly estimate multi-nodes single-word ("I<sup>er</sup>")
@@ -12229,7 +12298,7 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
     bool isStartNode = true; // we are starting measurement on that node
     // Start measurements and recursions:
     getRenderedWidths(node, maxWidth, minWidth, direction, ignoreMargin, rendFlags,
-        curMaxWidth, curWordWidth, collapseNextSpace, lastSpaceWidth, indent, nowrap, NULL, false, isStartNode);
+        curMaxWidth, curWordWidth, collapseNextSpace, lastSpaceWidth, indent, nowrap, NULL, false, isStartNode, ignoreStyleWidth);
     // We took more care with including side bearings into minWidth when considering
     // single words, than into maxWidth: so trust minWidth if larger than maxWidth.
     if ( maxWidth < minWidth)
@@ -12238,7 +12307,7 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
 
 void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direction, bool ignoreMargin, int rendFlags,
     int &curMaxWidth, int &curWordWidth, bool &collapseNextSpace, int &lastSpaceWidth,
-    int indent, bool nowrap, TextLangCfg * lang_cfg, bool processNodeAsText, bool isStartNode)
+    int indent, bool nowrap, TextLangCfg * lang_cfg, bool processNodeAsText, bool isStartNode, bool ignoreStyleWidth)
 {
     // This does mostly what renderBlockElement, renderFinalBlock and lvtextfm.cpp
     // do, but only with widths and horizontal margin/border/padding and indent
@@ -12445,7 +12514,7 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
         css_length_t style_width = style->width;
         // ('width: fit-content' is actually what this function returns as maxWidth)
         bool has_fit_content_width = style_width.type == css_val_unspecified && style_width.value == css_generic_fit_content;
-        if ( BLOCK_RENDERING(rendFlags, ENSURE_STYLE_WIDTH) && !has_fit_content_width ) {
+        if ( !ignoreStyleWidth && BLOCK_RENDERING(rendFlags, ENSURE_STYLE_WIDTH) && !has_fit_content_width ) {
             // Ignore width for table sub-elements - but allow it for our boxing elements, as we can set it
             // for some explicit rendering purpose (i.e. for the MathML <msqrt> mathBox root symbol)
             if ( style->display <= css_d_table || is_boxing_elem ) {
@@ -12783,6 +12852,9 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
             // Block node that contains other stacked block or final nodes
             // Process children, which are all block-like nodes:
             // our *Width are the max of our children *Width
+            bool flex_row = css_is_flex(style->display) && !(style->flex_direction & 1);
+            int gap = flex_row ? lengthToPx(node, style->column_gap, 0) : 0;
+            bool first_item = true;
             for (int i = 0; i < node->getChildCount(); i++) {
                 // New temporary parameters
                 int _maxw = 0;
@@ -12795,7 +12867,13 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
                 }
                 getRenderedWidths(child, _maxw, _minw, direction, false, rendFlags,
                     curMaxWidth, curWordWidth, collapseNextSpace, lastSpaceWidth, indent, nowrap_in, lang_cfg);
-                if (_maxw > _maxWidth)
+                if (flex_row && child->getRendMethod() != erm_invisible) {
+                    _maxWidth += _maxw + (first_item ? 0 : gap);
+                    if (!style->flex_wrap)
+                        _minWidth += _minw + (first_item ? 0 : gap);
+                    first_item = false;
+                }
+                else if (_maxw > _maxWidth)
                     _maxWidth = _maxw;
                 if (_minw > _minWidth)
                     _minWidth = _minw;

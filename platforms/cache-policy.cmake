@@ -14,7 +14,9 @@ set(layout_policy "849b421de582bf6b89f84263eab8e27dabd97cc0a8cfc807504f170a6ac35
 # Version 11: repaginate text using the selected font's small caps.
 # Version 12: repaginate small caps for scripts without native substitutions.
 # Version 13: record forced page endings for chapter alignment in two-column layouts.
-set(rendering_version 13)
+# Version 14: size single flex items to their content.
+# Version 15: column alignment and inline flex sizing.
+set(rendering_version 15)
 file(GLOB cache_patterns CONFIGURE_DEPENDS "${KOBALT_ROOT}/assets/hyph/*.pattern")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${cache_patterns})
 set(cache_hashes "${rendering_version};")

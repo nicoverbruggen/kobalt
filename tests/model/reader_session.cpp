@@ -1912,7 +1912,9 @@ int run(int argc, char **argv)
 
         // A preview can outlive its window while the next opening is queued.
         // Its source must stay separate from the newly authorized reader.
-        const auto previousPages = session->pages();
+        const int previousBookPages = session->bookPages();
+        const auto previousImage = session->image();
+        require(previousBookPages > 0 && !previousImage.isNull(), "Live preview has no readable book");
         auto previewSaved = session->state();
         previewSaved["fingerprint"] = QString::fromLatin1(session->sourceHash());
         const auto previewLease = lease;
@@ -1941,8 +1943,9 @@ int run(int argc, char **argv)
         opened.exec();
         require(session->syncFilenameDigest().isEmpty() && session->syncDigest().size() == 32,
                 "A missing source name disables filename matching without affecting binary identity");
-        require(session->pages() == previousPages && !session->image().isNull()
-                        && session->error().isEmpty(),
+        require(session->bookPages() == previousBookPages
+                        && session->state()["position"] == previewSaved["position"]
+                        && session->image() == previousImage && session->error().isEmpty(),
                 "Reopening with a live old preview lost the readable document");
         preview.reset();
         ReaderSession::drain([&] { drained.quit(); });

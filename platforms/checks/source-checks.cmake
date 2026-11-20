@@ -30,9 +30,13 @@ kobalt_list_sources("${ROOT}" "src;platforms;tests" all_sources)
 
 # Storage writes belong behind the storage helpers, which report themselves to
 # the main-thread guard and run on a writer thread.
-kobalt_scan("${ROOT}" "${interface_sources}"
-    "(writeJson[ \t]*\\(|QSaveFile|QSettings|QSql[A-Z][A-Za-z]*|storage::checkpointProfile[ \t]*\\(|\\.open[ \t]*\\([ \t]*(QIODevice|QFile)::(WriteOnly|Append|ReadWrite))"
-    hits)
+string(CONCAT storage_write
+    "writeJson[ \t]*\\(|QSaveFile|QSettings|QSql[A-Z][A-Za-z]*|storage::checkpointProfile[ \t]*\\("
+    "|\\.open[ \t]*\\([ \t]*(QIODevice|QFile)::(WriteOnly|Append|ReadWrite)"
+    "|QFile::(remove|rename|copy)[ \t]*\\(|removeRecursively[ \t]*\\("
+    "|std::ofstream([^A-Za-z0-9_]|$)"
+    "|(^|[^A-Za-z0-9_])fopen[ \t]*\\([^,]*,[ \t]*\"([wa]|rb?\\+)")
+kobalt_scan("${ROOT}" "${interface_sources}" "${storage_write}" hits)
 kobalt_check_sites("writes storage in app or UI code" "${hits}" "${LISTS}/storage-io.allow" problems)
 
 # Each AllowBlocking scope names why the main thread may wait. A literal reason

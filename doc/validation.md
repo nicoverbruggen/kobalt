@@ -153,7 +153,7 @@ After building `kobalt-desktop-tests`, run `ctest --test-dir build/desktop-mac -
 
 | Check | Allowlist | What fails |
 | --- | --- | --- |
-| Storage writes in interface code | `storage-io.allow` | `writeJson`, `QSaveFile`, `QSettings`, `QSql*`, `storage::checkpointProfile` or a file opened for writing in `src/app/` or `src/ui/`, outside a listed function |
+| Storage writes in interface code | `storage-io.allow` | `writeJson`, `QSaveFile`, `QSettings`, `QSql*`, `storage::checkpointProfile`, Qt file copy, rename or removal, recursive directory removal, `std::ofstream`, or a file opened for writing with Qt or a literal `fopen` mode in `src/app/` or `src/ui/`, outside a listed function |
 | Blocking reasons | `blocking-reasons.allow` | An `AllowBlocking` scope in `src/` or `platforms/` with a reason that is not listed. Name a new reason in [Main-thread guard](#main-thread-guard) as well. |
 | Forwarded blocking reasons | `blocking-forwarders.allow` | An `AllowBlocking` scope that takes its reason from a caller, outside a listed function |
 | Reader names | `reader-properties.allow` | A `"reader_*"` string in `src/`, `platforms/` or `tests/` that is not listed with its meaning. Most are Qt properties, and a misspelled property reads as empty. |

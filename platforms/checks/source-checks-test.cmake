@@ -47,6 +47,20 @@ file(WRITE "${scratch}/src/engine/planted.cpp" [=[#include "engine/planted.h"
 ]=])
 # A reading/ include above reading/ is not checked.
 file(WRITE "${scratch}/src/app/above.cpp" "#include \"reading/above.h\"\n")
+file(WRITE "${scratch}/src/ui/files.cpp" [=[void Files::save()
+{
+    QFile::remove(path);
+    QFile::rename(path, target);
+    QDir(path).removeRecursively();
+    std::fopen(path, "wb");
+    fopen(path, "a");
+    fopen(path, "rb+");
+    std::ofstream stream(path);
+    QFile::copy(path, target);
+    fopen(path, "r+");
+    fopen(path, "rb");
+}
+]=])
 set(empty "${scratch}/empty")
 foreach(list IN ITEMS storage-io blocking-reasons blocking-forwarders reader-properties short-timers
         reading-leaf)
@@ -65,6 +79,15 @@ foreach(expected IN ITEMS
         message(FATAL_ERROR "Planted match not reported as `${expected}`:\n${output}")
     endif()
 endforeach()
+foreach(line RANGE 3 11)
+    string(FIND "${output}" "writes storage in app or UI code: src/ui/files.cpp:${line} in Files::save" found)
+    if(found LESS 0)
+        message(FATAL_ERROR "Missed storage write on line ${line}: ${output}")
+    endif()
+endforeach()
+if(output MATCHES "files.cpp:12 ")
+    message(FATAL_ERROR "Read-only fopen reported as a write: ${output}")
+endif()
 if(output MATCHES "planted.cpp:(7|10)[^0-9]" OR output MATCHES "clean.cpp")
     message(FATAL_ERROR "A comment, a 0 ms timer or a 250 ms timer was reported:\n${output}")
 endif()
@@ -73,7 +96,7 @@ if(output MATCHES "reading/(comment|above)\\.h")
 endif()
 
 set(lists "${scratch}/lists")
-file(WRITE "${lists}/storage-io.allow" "src/app/planted.cpp|Planted::save|Fixture.\n")
+file(WRITE "${lists}/storage-io.allow" "src/app/planted.cpp|Planted::save|Fixture.\nsrc/ui/files.cpp|Files::save|Fixture.\n")
 file(WRITE "${lists}/short-timers.allow" "src/app/planted.cpp|Planted::save|Fixture.\n")
 file(WRITE "${lists}/blocking-forwarders.allow" "src/app/planted.cpp|Planted::wait|Fixture.\n")
 file(WRITE "${lists}/blocking-reasons.allow" "planted wait\n")

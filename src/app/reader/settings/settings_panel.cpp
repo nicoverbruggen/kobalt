@@ -3164,9 +3164,11 @@ void SettingsPanel::updateFeatureOptions()
     }
     if (navigationBarButton) {
         const bool annotations = features::enabled(featurePreferences, features::Annotations);
+        findChild<QWidget *>("rrControlsNavigationBarSection")->setVisible(navigate);
         navigationBarButton->setVisible(navigate);
         annotationInteractionButton->setVisible(annotations);
         findChild<QWidget *>("rrControlsAnnotationsSection")->setVisible(annotations);
+        findChild<QWidget *>("rrControlsMenuSection")->setVisible(navigate || stats);
         menuViewButton->setVisible(navigate || stats);
     }
     auto *syncTab = settingsTabButtons[int(SettingsPage::Kosync)];

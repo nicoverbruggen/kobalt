@@ -14744,6 +14744,17 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(fixture.press("rrDisabledFeaturesDone"));
             QCOMPARE(featuresButton->caption(), pass ? QString("None") : allHidden);
             QCOMPARE(fixture.widget("rrSettingsKosync")->isHidden(), pass == 0);
+            if (!fixture.visible("rrSettingsControls"))
+                QVERIFY(fixture.press("rrSettingsBack"));
+            QVERIFY(fixture.press("rrSettingsControls"));
+            QVERIFY(revealSettingsOption(fixture, "rrControlsLightSection"));
+            const auto output = qEnvironmentVariable("KOBALT_TEST_CAPTURE_DIR");
+            if (!pass && !output.isEmpty()) {
+                QVERIFY(QDir().mkpath(output));
+                QVERIFY(fixture.window.readerWindow()->grab().save(output + "/controls.png"));
+            }
+            QCOMPARE(fixture.widget("rrControlsNavigationBarSection")->isHidden(), pass == 0);
+            QCOMPARE(fixture.widget("rrControlsMenuSection")->isHidden(), pass == 0);
             QVERIFY(fixture.press("rrSettingsClose"));
             QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
             QTRY_VERIFY(!fixture.state().value("busy").toBool());

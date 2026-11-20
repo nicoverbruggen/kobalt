@@ -12083,10 +12083,49 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QCOMPARE(probe->palette().color(QPalette::WindowText),
                      QColor(dark ? Qt::white : Qt::black));
         }
-        QVERIFY(fixture.press("rrMarksSort_newest"));
+        const auto whileWriterHeld = [](const std::function<bool()> &choose) {
+            QSemaphore entered, release;
+            std::atomic_bool timedOut{ false };
+            storage::RecordWriter blocker;
+            if (!blocker.tryPost([&] {
+                    entered.release();
+                    timedOut = !release.tryAcquire(1, 3000);
+                    return true;
+                })
+                || !entered.tryAcquire(1, 3000))
+                return false;
+            const bool selected = choose();
+            release.release();
+            return blocker.flush() && selected && !timedOut;
+        };
+        if (!dark && !pickerExport) {
+            QVERIFY2(whileWriterHeld([&] { return fixture.press("rrMarksSort_newest"); }),
+                     "Selecting the bookmark order waited for the profile writer");
+        } else {
+            QVERIFY(fixture.press("rrMarksSort_newest"));
+        }
         QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("marks_sort").toString(),
                      QString("newest"));
         QTRY_VERIFY(!fixture.widget("rrMarksSortPopup"));
+        if (!dark && !pickerExport) {
+            // Both newer choices fail. The lists must return to the last
+            // persisted order, and the unsupported file must stay intact.
+            const auto path = fixture.paths.preferences();
+            const auto saved = storage::readJson(path);
+            const QJsonObject unsupported{ { "schema", 999 } };
+            QVERIFY(storage::writeJson(path, unsupported));
+            QVERIFY(whileWriterHeld([&] {
+                if (!fixture.press("rrMarksSort") || !fixture.press("rrMarksSort_oldest"))
+                    return false;
+                QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+                return fixture.press("rrMarksSort") && fixture.press("rrMarksSort_position");
+            }));
+            QTRY_VERIFY(fixture.visible("rrSettingsWriteErrorConfirm"));
+            QCOMPARE(storage::readJson(path), unsupported);
+            QVERIFY(storage::writeJson(path, saved));
+            QVERIFY(fixture.press("rrSettingsWriteErrorConfirm"));
+            QTRY_VERIFY(!fixture.widget("rrMarksSortPopup"));
+        }
         QVERIFY(fixture.press("rrBookmarksTab"));
         QTRY_VERIFY(fixture.visible("rrBookmark0"));
         QVERIFY(fixture.press("rrBookmarkListClose"));

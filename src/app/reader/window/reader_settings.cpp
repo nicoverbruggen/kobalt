@@ -921,6 +921,54 @@ void Reader::saveButtonControls(const QJsonObject &actions)
                            });
 }
 
+void Reader::saveMarksSort(const QString &order)
+{
+    const auto before = preferences.value("marks_sort");
+    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
+        bookmarkList->setSortOrder(before.toString("position"));
+        return;
+    }
+    if (wordList)
+        wordList->setSortOrder(order);
+    if (before == order)
+        return;
+    if (!marksSortWrites) {
+        marksSortWrites = std::make_shared<MarksSortWrites>();
+        marksSortWrites->saved = before;
+    }
+    ++marksSortWrites->pending;
+    const auto next = qt::object({ { "marks_sort", order } });
+    logSettingChanges(qt::object({ { "marks_sort", before } }), next);
+    preferences["marks_sort"] = order;
+    QPointer<Reader> guard(this);
+    preferencesWriter.post([path = book->paths().preferences(),
+                            next] { return storage::updatePreferences(path, {}, next); },
+                           [guard, writes = marksSortWrites, order](bool saved) {
+                               qt::invoke(
+                                       QCoreApplication::instance(),
+                                       [guard, writes, order, saved] {
+                                           if (!guard || guard->marksSortWrites != writes)
+                                               return;
+                                           // All writes finish in order. If the final choice fails, use
+                                           // the last choice that reached disk, even after several taps.
+                                           if (saved)
+                                               writes->saved = order;
+                                           if (--writes->pending)
+                                               return;
+                                           guard->marksSortWrites.reset();
+                                           if (saved)
+                                               return;
+                                           guard->preferences["marks_sort"] = writes->saved;
+                                           const auto restored = writes->saved.toString("position");
+                                           guard->bookmarkList->setSortOrder(restored);
+                                           if (guard->wordList)
+                                               guard->wordList->setSortOrder(restored);
+                                           guard->showSettingsWriteError();
+                                       },
+                                       Qt::QueuedConnection);
+                           });
+}
+
 bool Reader::writePreferences(const QJsonObject &next)
 {
     // Do not replace a pending asynchronous dark-mode save.
@@ -945,6 +993,10 @@ bool Reader::writePreferences(const QJsonObject &next)
         showSettingsWriteError();
         return false;
     }
+    // Disabling all three lists clears their saved order. Earlier sort
+    // completions must not put that preference back.
+    if (next.value("marks_sort") != preferences.value("marks_sort"))
+        marksSortWrites.reset();
     logSettingChanges(preferences, next, restoringDefaults);
     return true;
 }

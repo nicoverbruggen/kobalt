@@ -1127,16 +1127,7 @@ void Reader::buildOverlays()
             session->cancelLookup();
     };
     bookmarkList->setSortOrder(preferences.value("marks_sort").toString("position"));
-    bookmarkList->sortRequested = [this](const QString &order) {
-        auto next = preferences;
-        next["marks_sort"] = order;
-        if (writePreferences(next))
-            preferences = next;
-        else
-            bookmarkList->setSortOrder(preferences.value("marks_sort").toString("position"));
-        if (wordList)
-            wordList->setSortOrder(bookmarkList->sortOrder());
-    };
+    bookmarkList->sortRequested = [this](const QString &order) { saveMarksSort(order); };
     bookmarkList->selected = [this](const QString &position) {
         if (bookmarkList->annotationsShown()) {
             for (const auto &item : highlights->highlights()) {

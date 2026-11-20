@@ -1056,6 +1056,13 @@ private:
     bool writePreferences(const QJsonObject &next);
     pageButtons::Buttons buttonControls() const;
     void saveButtonControls(const QJsonObject &actions);
+    void saveMarksSort(const QString &order);
+    struct MarksSortWrites
+    {
+        QJsonValue saved;
+        int pending = 0;
+    };
+    std::shared_ptr<MarksSortWrites> marksSortWrites;
     bool savingButtonControls = false, savingDenseGraph = false;
     // Counts preferences writes. An asynchronous save that fails undoes its
     // change only when no later write started: a later write already carries

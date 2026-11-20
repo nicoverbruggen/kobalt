@@ -45,6 +45,7 @@ public:
     QSize deferredImageSize(const QString &name);
     bool imageReady(const QString &name);
     bool loadNextImage();
+    bool loadImage(const QString &name);
     // Keep dimensions and integrity checks, but no encoded resource bytes.
     void releaseBytes();
 
@@ -55,6 +56,7 @@ public:
     const QStringList &names() const { return names_; }
 
     QByteArray readBounded(const QString &name, qint64 limit);
+    QByteArray readOptional(const QString &name, qint64 limit);
     // After advisory inspection, let the engine retry with its normal resource
     // budget. Transfer, cancellation and changed-byte failures remain fatal.
     bool resumeAfterInspection();
@@ -94,6 +96,7 @@ private:
     QString imageError_;
     qint64 loadNs_ = 0;
     qint64 allocated_ = 0, peak_ = 0, transferred_ = 0, loads_ = 0, evictions_ = 0;
+    bool fetchImage(const QString &name);
     Entry *ensure(const QString &name, qint64 limit = budgetBytes);
     void evict();
 };

@@ -287,7 +287,7 @@ public:
     void textRange(const QString &start, const QString &end,
                    std::function<void(TextRange)> finished, bool withContext = false);
     void wordAt(QPoint point, std::function<void(WordSelection)> finished);
-    void imageAt(QPoint point, std::function<void(QImage)> finished);
+    void imageAt(QPoint point, std::function<void(QImage)> finished, const QString &resource = {});
     void linkDetails(const QString &source, std::function<void(LinkDetails)> finished);
 
     const QVector<PageLink> &pageLinks() const { return frame.links; }

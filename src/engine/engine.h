@@ -167,7 +167,7 @@ public:
     virtual QString pageStart(int page) const = 0;
     virtual QString pageExcerpt(int page) const = 0;
     virtual WordSelection wordAt(QPoint point) = 0;
-    virtual QImage imageAt(QPoint point) = 0;
+    virtual QImage imageAt(QPoint point, const QString &resource = {}) = 0;
     virtual AnnotationPageEdges annotationPageEdges() = 0;
     virtual AnnotationToken annotationTokenAt(QPoint point) = 0;
     virtual AnnotationToken annotationDragTokenAt(QPoint point, const QString &boundary,

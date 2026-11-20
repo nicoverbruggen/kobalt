@@ -28,6 +28,8 @@
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QRegion>
+#include <QUrl>
+#include <QXmlStreamReader>
 #include <QPainter>
 #include <QSet>
 #include <QtMath>
@@ -1997,6 +1999,90 @@ const EngineDocument::ChapterIndex &EngineDocument::chapterIndex(ChapterIndex &i
     return index;
 }
 
+namespace {
+QString chapterImage(ReaderSource &source, ldomNode *node)
+{
+    while (node && !node->isNodeName("DocFragment"))
+        node = node->getParentNode();
+    if (!node)
+        return {};
+    const auto path = qstring(node->getAttributeValue("Source"));
+    const auto known = source.chapterImages.constFind(path);
+    if (known != source.chapterImages.constEnd())
+        return known.value();
+    // Map plates normally have a short wrapper. Bound optional reads on slow storage.
+    constexpr int maxWrapper = 8192;
+    const auto length = source.sizes.value(path, -1);
+    if (length <= 0 || length > maxWrapper || source.chapterImageProbes >= 128)
+        return {};
+    ++source.chapterImageProbes;
+    QByteArray bytes;
+    if (source.resources) {
+        bytes = source.resources->readOptional(path, maxWrapper);
+    } else {
+        auto stream = source.container->OpenStream(cre(path).c_str(), LVOM_READ);
+        if (!stream.isNull() && stream->GetSize() <= maxWrapper) {
+            bytes.resize(int(stream->GetSize()));
+            lvsize_t read = 0;
+            if (stream->Read(bytes.data(), bytes.size(), &read) != LVERR_OK
+                || read != lvsize_t(bytes.size()))
+                bytes.clear();
+        }
+    }
+    QString image;
+    if (!bytes.isEmpty()) {
+        QXmlStreamReader xml(bytes);
+        bool body = false;
+        while (!xml.atEnd()) {
+            xml.readNext();
+            const auto name = xml.name().toString();
+            if (xml.isStartElement()
+                && (name == "base" || xml.attributes().hasAttribute("xml:base"))) {
+                image.clear();
+                break;
+            }
+            if (name == "body" && (xml.isStartElement() || xml.isEndElement())) {
+                body = xml.isStartElement();
+                continue;
+            }
+            if (!body)
+                continue;
+            if (xml.isCharacters() && !xml.isWhitespace()) {
+                image.clear();
+                break;
+            }
+            if (!xml.isStartElement())
+                continue;
+            if (name == "div" || name == "span" || name == "p" || name == "a" || name == "figure"
+                || name == "section" || name == "svg" || name == "g")
+                continue;
+            if ((name != "img" && name != "image") || !image.isEmpty()) {
+                image.clear();
+                break;
+            }
+            auto url = xml.attributes().value(name == "img" ? "src" : "href").toString();
+            if (url.isEmpty() && name == "image")
+                url = xml.attributes().value("http://www.w3.org/1999/xlink", "href").toString();
+            const QUrl relative(url);
+            if (url.isEmpty() || !relative.isRelative() || !relative.authority().isEmpty()
+                || relative.hasQuery() || relative.hasFragment())
+                break;
+            QUrl origin;
+            origin.setPath("/" + path);
+            image = origin.resolved(relative).path().mid(1);
+            if (!source.sizes.contains(image)) {
+                image.clear();
+                break;
+            }
+        }
+        if (xml.hasError())
+            image.clear();
+    }
+    source.chapterImages.insert(path, image);
+    return image;
+}
+} // namespace
+
 QVector<ChapterLink> EngineDocument::tocChapters(ChapterPositions *positions) const
 {
     QVector<ChapterLink> result;
@@ -2011,9 +2097,12 @@ QVector<ChapterLink> EngineDocument::tocChapters(ChapterPositions *positions) co
             const int start = pointer.isNull() || pointer.toPoint().y < 0
                     ? -1
                     : engine_->getBookmarkPage(pointer);
+            auto image = qstring(child->getLabelImage());
+            if (image.isEmpty() && source_ && !pointer.isNull() && !child->getChildCount())
+                image = chapterImage(*source_, pointer.getNode());
             result.append({ qstring(child->getName()),
-                            pointer.isNull() ? QString() : qstring(child->getPath()), start,
-                            depth });
+                            pointer.isNull() ? QString() : qstring(child->getPath()), start, depth,
+                            0, image });
             if (positions)
                 positions->append(ldomXPointerEx(pointer));
             visit(child, depth + 1);

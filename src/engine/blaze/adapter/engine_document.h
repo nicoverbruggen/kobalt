@@ -141,7 +141,7 @@ public:
     QString pageStart(int page) const override;
     QString pageExcerpt(int page) const override;
     WordSelection wordAt(QPoint point) override;
-    QImage imageAt(QPoint point) override;
+    QImage imageAt(QPoint point, const QString &resource = {}) override;
     AnnotationPageEdges annotationPageEdges() override;
     AnnotationToken annotationTokenAt(QPoint point) override;
     AnnotationToken annotationDragTokenAt(QPoint point, const QString &boundary,

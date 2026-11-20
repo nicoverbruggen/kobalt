@@ -23654,7 +23654,7 @@ bool LVTocItem::serialize( SerialBuf & buf )
 //    ldomXPointer    _position;
 //    LVPtrVector<LVTocItem> _children;
 
-    buf << (lUInt32)_level << (lUInt32)_index << (lUInt32)_page << (lUInt32)_percent << (lUInt32)_children.length() << _name << getPath();
+    buf << (lUInt32)_level << (lUInt32)_index << (lUInt32)_page << (lUInt32)_percent << (lUInt32)_children.length() << _name << getPath() << _labelImage;
     if ( buf.error() )
         return false;
     for ( int i=0; i<_children.length(); i++ ) {
@@ -23671,7 +23671,7 @@ bool LVTocItem::deserialize( ldomDocument * doc, SerialBuf & buf )
     if ( buf.error() )
         return false;
     lInt32 childCount = 0;
-    buf >> _level >> _index >> _page >> _percent >> childCount >> _name >> _path;
+    buf >> _level >> _index >> _page >> _percent >> childCount >> _name >> _path >> _labelImage;
 //    CRLog::trace("[%d] %05d  %s  %s", _level, _page, LCSTR(_name), LCSTR(_path));
     if ( buf.error() )
         return false;

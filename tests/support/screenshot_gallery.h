@@ -159,6 +159,8 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "pinned-bookmark-actions", "Bookmark actions" },
         { "pinned-bookmark-limit", "Bookmark shortcut limit" },
         { "chapters", "Chapter list" },
+        { "illustrated-chapters", "Illustrated chapter list" },
+        { "chapter-image-preview", "Chapter illustration preview" },
         { "button-controls-settings", "Controls: button mapping entry" },
         { "button-controls-unavailable", "Controls: no supported buttons" },
         { "button-controls", "Button controls: physical buttons" },

@@ -20,11 +20,12 @@ struct ChapterLink
     QString title, position;
     int page = -1, depth = 0;
     qint64 words = 0;
+    QString labelImage = {};
 
     bool operator==(const ChapterLink &other) const
     {
         return title == other.title && position == other.position && page == other.page
-                && depth == other.depth && words == other.words;
+                && depth == other.depth && words == other.words && labelImage == other.labelImage;
     }
 
     bool operator!=(const ChapterLink &other) const { return !(*this == other); }

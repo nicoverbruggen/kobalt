@@ -19,6 +19,7 @@ struct Choice
     QString detail = {};
     bool placeholder = false;
     QStringList fontFiles = {};
+    QString labelImage = {};
 };
 
 enum class ChapterGroups { Current, All, Off };
@@ -31,6 +32,7 @@ public:
     explicit ChapterContents(QWidget *parent);
     void showChapters(const QString &title, QVector<Choice> choices, const QString &current,
                       ChapterGroups groups = ChapterGroups::Current);
+    std::function<void(const QString &)> previewImage;
     void setPosition(const QString &text);
     void setPages(const QVector<int> &pages);
 
@@ -55,7 +57,7 @@ private:
     QVector<int> parents, visible;
     QVector<bool> expanded;
     QVector<QPushButton *> buttons;
-    QVector<QPushButton *> disclosures;
+    QVector<QPushButton *> disclosures, previews;
     QVector<QLabel *> labels;
     QString current;
     QLabel *title, *position, *summary, *pageHeading, *empty;
@@ -80,6 +82,7 @@ public:
                      Mode presentation = Mode::Chapters,
                      ChapterGroups groups = ChapterGroups::Current);
     void setDropdownGeometry(const QRect &bounds);
+    std::function<void(const QString &)> previewImage;
     void setChapterPosition(const QString &text);
     void setChapterPages(const QVector<int> &pages);
     void selectValue(const QString &value);

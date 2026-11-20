@@ -605,7 +605,10 @@ void Reader::buildReadingPage()
     };
     imageViewer->dismissed = [this](bool cleanPage) {
         ++imageRequest;
-        page->setFocus();
+        if (choices && choices->isVisible())
+            choices->setFocus();
+        else
+            page->setFocus();
         observeReading();
         page->cleanRefresh(cleanPage);
         updateOrientationBlock();
@@ -626,26 +629,36 @@ void Reader::buildReadingPage()
         dismissControls();
         dismissLookup();
         clearAnnotationDraft();
-        const auto safe = safeArea();
-        imageViewer->setGeometry(rect().adjusted(0, safe.top, 0, -safe.bottom));
-        imageViewer->open();
-        observeReading();
-        updateOrientationBlock();
-        const auto request = ++imageRequest;
-        QPointer<Reader> guard(this);
-        session->imageAt(point, [guard, request](QImage image) {
-            if (guard && guard->imageRequest == request && guard->imageViewer->isVisible()
-                && !guard->lifecycleHidden && !guard->closing) {
-                const auto id = imageContentId(image);
-                guard->imageViewer->setImage(std::move(image), guard->book->imageView(id));
-            }
-        });
+        openImagePreview(point);
         return true;
     };
     header = new ChapterHeader(page);
     const auto chrome = kobalt::headerfooter::select(preferences, services.phoneLayout);
     chromePreset = chrome.preset;
     page->chrome = chrome.layout;
+}
+
+void Reader::openImagePreview(QPoint point, const QString &resource)
+{
+    if (session->busy())
+        return;
+    const auto safe = safeArea();
+    imageViewer->setGeometry(rect().adjusted(0, safe.top, 0, -safe.bottom));
+    imageViewer->open();
+    observeReading();
+    updateOrientationBlock();
+    const auto request = ++imageRequest;
+    QPointer<Reader> guard(this);
+    session->imageAt(
+            point,
+            [guard, request](QImage image) {
+                if (guard && guard->imageRequest == request && guard->imageViewer->isVisible()
+                    && !guard->lifecycleHidden && !guard->closing) {
+                    const auto id = imageContentId(image);
+                    guard->imageViewer->setImage(std::move(image), guard->book->imageView(id));
+                }
+            },
+            resource);
 }
 
 void Reader::startClockTimer()

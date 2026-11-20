@@ -1040,6 +1040,7 @@ private:
     void mutateAppearance(std::function<void(ReaderSession &)> operation);
     void finishPreview();
     void resumeAppearanceApply();
+    void openImagePreview(QPoint point, const QString &resource = {});
     void showChapters();
     void toggleGraph();
     void openGraph();

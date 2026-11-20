@@ -8,6 +8,8 @@ These checks cover touch and pointer input, holds, swipes in paged lists, press 
 
 The word-selection check drags a highlight back across a slice boundary within one chapter and checks the selected words on both pages. Longer passages must retain the same source text, sentence context and endpoints as Accurate. An existing highlight whose start is outside the slice must still prevent an overlap. Publisher-hidden text stays excluded. Source-only selection uses the original block methods in memory and keeps the parsed-book and rendering cache formats.
 
+`desktop.illustratedNavigation` opens the artwork from a chapter row, dismisses it without changing reading position.
+
 ## Restored input and paint checks
 
 The UI and reader-window checks keep selected assertions from `tests/android/android_ui_test.cpp` and `tests/native-ui/reader_test.cpp` at `82b8935`. The toolbar invalidation check measures the reader window directly, because a graphics proxy renders widgets into its display cache and adds paint events that do not prove that the reader invalidated them. The annotation-frame checks use the original focused EPUB text and anchors. General reading checks and screenshots still use Type Tester.

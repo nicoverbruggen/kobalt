@@ -51,6 +51,7 @@ public:
 
 #include "../../extensions/spine_fallback.h"
 #include "../../extensions/dtbook.h"
+#include "../../extensions/nav_labels.h"
 
 //static void dumpZip( LVContainerRef arc ) {
 //    lString32 arcName = LVExtractFilenameWithoutExtension( arc->GetName() );
@@ -232,14 +233,8 @@ void ReadEpubNavToc( ldomDocument * doc, ldomNode * mapRoot, LVTocItem * baseToc
         ldomNode * a = li->findChildElement(LXML_NS_ANY, a_id, -1);
         if ( a ) {
             lString32 href = a->getAttributeValue("href");
-            lString32 title = a->getText(' ');
-            if ( title.empty() ) {
-                // "If the a element contains [...] that do not provide intrinsic text alternatives,
-                // it must also include a title attribute with an alternate text rendition of the
-                // link label."
-                title = a->getAttributeValue("title");
-            }
-            title.trimDoubleSpaces(false, false, false);
+            lString32 image;
+            lString32 title = blaze::navLabel(a, appender, image);
             if ( !href.empty() ) {
                 href = DecodeHTMLUrlString(href);
                 lString32 file = href;
@@ -258,6 +253,7 @@ void ReadEpubNavToc( ldomDocument * doc, ldomNode * mapRoot, LVTocItem * baseToc
                     if ( target ) {
                         ldomXPointer ptr(target, 0);
                         tocItem = baseToc->addChild(title, ptr, lString32::empty_str);
+                        tocItem->setLabelImage(image);
                         // Report xpointer to upper parent(s) that didn't have
                         // one (no <a>) - but stop before the root node
                         LVTocItem * tmp = baseToc;
@@ -278,14 +274,14 @@ void ReadEpubNavToc( ldomDocument * doc, ldomNode * mapRoot, LVTocItem * baseToc
             if ( !tocItem ) {
                 // Make a LVTocItem to contain sub items
                 // There can be a <span>, with no href: children will set it to its own xpointer
-                lString32 title;
+                lString32 title, image;
                 ldomNode * span = li->findChildElement(LXML_NS_ANY, span_id, -1);
                 if ( span ) {
-                    title = span->getText(' ');
-                    title.trimDoubleSpaces(false, false, false);
+                    title = blaze::navLabel(span, appender, image);
                 }
                 // If none, let title empty
                 tocItem = baseToc->addChild(title, ldomXPointer(), lString32::empty_str);
+                tocItem->setLabelImage(image);
             }
             ReadEpubNavToc( doc, ol, tocItem, appender );
         }
@@ -1782,10 +1778,7 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
         // http://idpf.org/epub/30/spec/epub30-contentdocs.html#sec-xhtml-nav-def
         navHref = LVCombinePaths(codeBase, navHref);
         LVStreamRef stream = m_arc->OpenStream(navHref.c_str(), LVOM_READ);
-        lString32 codeBase = LVExtractPath( navHref );
-        if ( codeBase.length()>0 && codeBase.lastChar()!='/' )
-            codeBase.append(1, U'/');
-        appender.setCodeBase(codeBase);
+        appender.setCodeBase(navHref);
         if ( !stream.isNull() ) {
             ldomDocument * navDoc = LVParseXMLStream( stream );
             if ( navDoc!=NULL ) {

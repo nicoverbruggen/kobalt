@@ -43,6 +43,39 @@ protected:
                 .paint(&painter, QRect((width() - side) / 2, (height() - side) / 2, side, side));
     }
 };
+
+// Keep the whole cell tappable, including the space around the ring.
+class ChapterImageButton final : public ui::Button
+{
+public:
+    ChapterImageButton(ui::ListRow *row, QWidget *parent) : ui::Button(parent), row(row) { }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        const auto colors = parentWidget()->palette();
+        const auto ink = colors.color(row->isChecked() ? QPalette::Window : QPalette::WindowText);
+        const auto paper = colors.color(row->isChecked() ? QPalette::WindowText : QPalette::Window);
+        const int glyph = chrome::cellIcon;
+        const int diameter = qMin(qMin(width(), height()) - 2 * int(ui::metrics::control::border),
+                                  glyph + glyph / 2);
+        const QRect circle((width() - diameter) / 2, (height() - diameter) / 2, diameter, diameter);
+        QColor outline = ink;
+        outline.setAlphaF(hasFocus() ? 1.0 : 0.55);
+        painter.setPen(QPen(outline, int(ui::metrics::control::border)));
+        if (isDown())
+            painter.setBrush(ink);
+        painter.drawEllipse(circle);
+        ui::controlIcon(ui::ControlIcon::Image, isDown() ? paper : ink)
+                .paint(&painter,
+                       QRect((width() - glyph) / 2, (height() - glyph) / 2, glyph, glyph));
+    }
+
+private:
+    ui::ListRow *row;
+};
 } // namespace
 
 ChapterContents::ChapterContents(QWidget *parent) : Panel(parent)
@@ -248,6 +281,13 @@ void ChapterContents::redraw()
         auto *disclosure = new ChapterDisclosure(this);
         buttons.append(button);
         disclosures.append(disclosure);
+        auto *preview = new ChapterImageButton(button, this);
+        previews.append(preview);
+        connect(preview, &QPushButton::clicked, this, [this, row] {
+            const int index = itemIndex(row);
+            if (index >= 0 && previewImage)
+                previewImage(items[index].labelImage);
+        });
         labels.append(button->titleLabel());
         connect(button, &QPushButton::clicked, this, [this, row] {
             const int index = itemIndex(row);
@@ -275,6 +315,8 @@ void ChapterContents::redraw()
         auto *button = buttons[row];
         auto *disclosure = disclosures[row];
         auto *label = labels[row];
+        const bool hasImage = index >= 0 && !items[index].labelImage.isEmpty();
+        previews[row]->setVisible(hasImage);
         button->setVisible(index >= 0);
         disclosure->setVisible(collapsible && hasChildren(index));
         button->setObjectName({});
@@ -299,6 +341,15 @@ void ChapterContents::redraw()
                             chrome::actionHeight + contents::stripHeight
                                     + row * ui::metrics::list::oneLine,
                             qMax(1, width() - rowLeft), ui::metrics::list::oneLine);
+        const int numberColumn = pagesKnown ? pageWidth : numberWidth;
+        const int previewSpace = hasImage ? chrome::cellWidth + contents::pageGap : 0;
+        if (hasImage) {
+            const int left = width() - ui::metrics::list::inset - numberColumn - previewSpace;
+            previews[row]->setGeometry(left, button->y(), chrome::cellWidth, button->height());
+            previews[row]->setObjectName(item.name + "Image");
+            previews[row]->setAccessibleName(
+                    strings::get("chapter_contents.preview_image").arg(item.label));
+        }
         disclosure->setGeometry(0, button->y(), cellWidth, button->height());
         disclosure->setObjectName(item.name + "Toggle");
         disclosure->setChecked(expanded[index]);
@@ -317,14 +368,15 @@ void ChapterContents::redraw()
             itemRow->setLeading(number, indent);
             itemRow->leadingLabel()->setObjectName(item.name + "Number");
             itemRow->setAccessory(ui::ListRow::Caption{
-                    item.page >= 0 ? QString::number(item.page + 1) : QString(), pageWidth });
+                    item.page >= 0 ? QString::number(item.page + 1) : QString(),
+                    pageWidth + previewSpace });
             itemRow->trailingLabel()->setObjectName(item.name + "Page");
         } else {
             // Without page numbers, the chapter number takes their place at
             // the right edge.
             itemRow->setLeading(QString(), indent);
             itemRow->leadingLabel()->setObjectName({});
-            itemRow->setAccessory(ui::ListRow::Caption{ number, numberWidth });
+            itemRow->setAccessory(ui::ListRow::Caption{ number, numberWidth + previewSpace });
             itemRow->trailingLabel()->setObjectName(item.name + "Number");
         }
         button->setAccessibleName(

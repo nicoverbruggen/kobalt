@@ -48,6 +48,24 @@ void checkNavigation(bool epub3)
     opf.replace("</spine>", "<itemref idref='c3'/></spine>");
     files["OEBPS/source.bin"] = "foreign";
     files["OEBPS/middle.bin"] = "middle";
+    files["OEBPS/label.png"] = files.value("OEBPS/colors.png");
+    if (epub3) {
+        opf.replace("version=\"2.0\"", "version=\"3.0\"");
+        opf.replace(
+                "</manifest>",
+                "<item id='nav' href='nav.xhtml' media-type='application/xhtml+xml' properties='nav'/></manifest>");
+        files["OEBPS/nav.xhtml"] = test::publisherHtml(
+                "<nav epub:type='toc'><ol><li><a href='c1.xhtml'> <span><img alt='Map of the coast' src='label.png'/></span> </a></li>"
+                "<li><span><img src='label.png' title='Coastal routes'/></span><ol><li><a href='c2.xhtml'>Passage <img alt='two' src='label.png'/></a></li></ol></li></ol></nav>"
+                "<nav epub:type='landmarks z3998:frontmatter'><ol><li><a epub:type='bibliography' href='source.bin#kobo.10.1'>References</a></li></ol></nav>"
+                "<nav epub:type='page-list'><ol><li><a href='source.bin#kobo.10.1'>xiv</a></li></ol></nav>");
+    } else {
+        files["OEBPS/toc.ncx"].replace(
+                "</ncx>",
+                "<pageList><pageTarget type='front' value='14'>"
+                "<navLabel><text>xiv</text></navLabel><content src='source.bin#kobo.10.1'/>"
+                "</pageTarget></pageList></ncx>");
+    }
     EngineDocument model(test::readerFonts());
     openPublication(model, files);
     QString error;
@@ -82,6 +100,17 @@ void checkNavigation(bool epub3)
         require(intermediate.goTo(intermediate.chapters().last().position)
                         && intermediate.spineItemOf(intermediate.position()) == 3,
                 "A fallback chain took over an intermediate item's own spine slot");
+    }
+    if (epub3) {
+        const auto chapter = model.chapters().value(0);
+        require(chapter.title == "Map of the coast", "Image text was lost");
+        const auto preview = model.imageAt({}, chapter.labelImage);
+        require(preview.size() == QSize(128, 64) && qGreen(preview.pixel(1, 1)) == 192,
+                "Preview showed a placeholder instead of the artwork");
+        const auto chapters = model.chapters();
+        require(chapters.size() == 3 && chapters[1].title == "Coastal routes"
+                        && !chapters[1].labelImage.isEmpty() && chapters[2].title == "Passage two",
+                "Image-only grouping heading or mixed text label was lost");
     }
 }
 
@@ -291,8 +320,34 @@ int main(int argc, char **argv)
     auto broken = bytes;
     broken[broken.size() - 22 - 20 + 8] = char(0xff);
     require(!publication.inspect(broken, &error), "Invalid ZIP64 locator admitted");
+    for (int i = 1; i < argc; ++i) {
+        // Optional independent fixtures nav-non-text_img and nav-non-text_img_title from W3C.
+        QFile input(QString::fromLocal8Bit(argv[i]));
+        require(input.open(QIODevice::ReadOnly), "Missing W3C navigation fixture");
+        EngineDocument conformance(test::readerFonts());
+        require(conformance.open(input.readAll(), { 600, 800 }, {}, &error), qPrintable(error));
+        const auto toc = conformance.chapters();
+        require(toc.size() == 2 && toc[0].title == "Start page"
+                        && toc[1].title
+                                == QString::fromUtf8("Description of the Abbey of Sénanque"),
+                "W3C non-text navigation labels");
+        for (int j = 0; j < 2; ++j)
+            require(conformance.goTo(toc[j].position)
+                            && conformance.spineItemOf(conformance.position()) == j,
+                    "W3C TOC navigation target");
+    }
+    ResourceCache optional(
+            { "missing", "present" },
+            [](const QString &name, const ResourceCache::Sink &sink, QString *) {
+                return name == "present" && sink("ok", 2);
+            },
+            std::make_shared<std::atomic_bool>(false));
+    require(optional.readOptional("missing", 8192).isEmpty()
+                    && optional.readBounded("present", 8) == "ok",
+            "Optional chapter probe blocked another member");
     checkDtbookChapterWindow();
     checkCodecs();
     checkNavigation(false);
+    checkNavigation(true);
     return 0;
 }

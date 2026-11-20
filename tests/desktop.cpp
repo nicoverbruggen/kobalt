@@ -2008,6 +2008,62 @@ void swipeChoices(Fixture &fixture, const QString &name = {})
 }
 
 // Exercises the real EPUB hierarchy, disclosure hit areas, navigation and reopening.
+void illustratedNavigation(Fixture &fixture, const QString &variant = {})
+{
+    auto files = test::engineBook(true, 3, 12);
+    auto &opf = files["OEBPS/book.opf"];
+    opf.replace("version=\"2.0\"", "version=\"3.0\"");
+    opf.replace(
+            "</manifest>",
+            "<item id='nav' href='nav.xhtml' media-type='application/xhtml+xml' properties='nav'/>"
+            "<item id='label' href='label.png' media-type='image/png'/></manifest>");
+    files["OEBPS/label.png"] = files.value("OEBPS/colors.png");
+    files["OEBPS/nav.xhtml"] = test::publisherHtml(
+            "<nav epub:type='toc'><ol><li><a href='c1.xhtml'><img src='label.png' alt='Map of the coast'/></a></li>"
+            "<li><a href='c2.xhtml'>The crossing</a></li><li><a href='c3.xhtml'>References</a></li></ol></nav>"
+            "<nav epub:type='page-list'><ol><li><a href='c1.xhtml'>xiv</a></li><li><a href='c2.xhtml'>42</a></li></ol></nav>"
+            "<nav epub:type='landmarks'><ol><li><a epub:type='bodymatter' href='c1.xhtml'>Start of text</a></li>"
+            "<li><a epub:type='bibliography' href='c3.xhtml#kobo.10.1'>Bibliography</a></li></ol></nav>");
+    files["OEBPS/c2.xhtml"] = test::publisherHtml(
+            "<p><span><img src='label.png' alt='Map of the crossing'/></span></p>");
+    QVERIFY(writeBook(fixture.directory.path(), "illustrated.epub", files));
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(fixture.directory.filePath("illustrated.epub"));
+    QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    if (!fixture.visible("rrNavChapters"))
+        QVERIFY(fixture.press("rrPage"));
+    QVERIFY(fixture.press("rrNavChapters"));
+    QTRY_COMPARE(labelText(fixture, "rrChapter0Title"), QString("Map of the coast"));
+    auto *preview = fixture.widget("rrChapter0Image");
+    auto *nextPage = fixture.widget("rrChapter2Page");
+    QVERIFY(preview && nextPage);
+    QVERIFY(preview->mapToGlobal(QPoint(preview->width(), 0)).x()
+            <= nextPage->mapToGlobal(QPoint()).x());
+    QVERIFY(!fixture.visible("rrChapter2Image"));
+    auto *panel = fixture.widget("rrContents");
+    auto *otherPreview = fixture.widget("rrChapter1Image");
+    QVERIFY(panel && otherPreview);
+    const auto frame = panel->grab().toImage();
+    for (auto *imageButton : { preview, otherPreview }) {
+        const auto edge = imageButton->mapTo(panel, QPoint(0, imageButton->height() / 2));
+        QCOMPARE(frame.pixelColor(edge + QPoint(1, 0)), frame.pixelColor(edge - QPoint(1, 0)));
+    }
+    if (!variant.isEmpty())
+        QVERIFY(capture(fixture, variant + "-illustrated-chapters"));
+    const auto position = fixture.state().value("position");
+    for (int i = 0; i < 2; ++i) {
+        QVERIFY(fixture.press(i ? "rrChapter1Image" : "rrChapter0Image"));
+        QTRY_VERIFY(fixture.widget("rrImageCanvas")->property("imageReady").toBool());
+        QCOMPARE(fixture.widget("rrImageCanvas")->property("imageSize").toSize(), QSize(128, 64));
+        if (!i && !variant.isEmpty())
+            QVERIFY(capture(fixture, variant + "-chapter-image-preview"));
+        QVERIFY(fixture.press("rrImageClose"));
+        QVERIFY(fixture.visible("rrChapter0Image"));
+        QCOMPARE(fixture.state().value("position"), position);
+    }
+}
+
 void chapterGroups(Fixture &fixture, const QString &name = {})
 {
     const auto previousBook = captureBook;
@@ -5370,6 +5426,13 @@ private slots:
         QVERIFY(fixture.prepared);
         selectPreview(fixture, preset);
         ::swipeChoices(fixture);
+    }
+
+    void illustratedNavigation()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        ::illustratedNavigation(fixture);
     }
 
     void chapterGroups_data() { variants(); }
@@ -17595,6 +17658,18 @@ private slots:
         QVERIFY(fixture.prepared);
         selectPreview(fixture, preset);
         ::swipeChoices(fixture, screenshotVariant(preset, dark));
+    }
+
+    void illustratedNavigation_data() { screenshotVariants(); }
+
+    void illustratedNavigation()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        ::illustratedNavigation(fixture, screenshotVariant(preset, dark));
     }
 
     void chapterGroups_data() { screenshotVariants(); }

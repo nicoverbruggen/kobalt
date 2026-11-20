@@ -257,6 +257,10 @@ ChoiceScreen::ChoiceScreen(QWidget *parent)
     fontPager->hide();
     fontSectionBar->hide();
     contents = new ChapterContents(this);
+    contents->previewImage = [this](const QString &path) {
+        if (previewImage)
+            previewImage(path);
+    };
     contents->selected = [this](const QString &value) {
         if (selected)
             selected(value);

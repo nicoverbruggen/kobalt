@@ -38,6 +38,8 @@ Blaze uses libwebp for still images and for the first composited frame of an ani
 
 ## Cache compatibility
 
+Parsed-book format 16 rebuilds chapter fragments and navigation records for DTBook chapters, manifest fallbacks, illustrated labels and landmarks.
+
 Moving the same source into this repository does not change parsed-book or rendering cache formats. Later parser, preprocessing, shaping or layout changes must follow [Storage compatibility](../storage.md).
 
 The retired chapter page counter and its transient package XML cache are removed. Chapter navigation retains its bounded document cache. Parsing the same package, navigation and NCX input without that XML cache does not change parsed-book content or layout, so this cleanup retains the cache formats and rendering version.

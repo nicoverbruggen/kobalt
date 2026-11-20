@@ -2506,6 +2506,7 @@ private:
     lInt32          _page;
     lInt32          _percent;
     lString32       _name;
+    lString32       _labelImage; // Blaze: artwork in an image-only navigation label.
     lString32       _path;
     ldomXPointer    _position;
     LVPtrVector<LVTocItem> _children;
@@ -2533,6 +2534,8 @@ public:
     int getIndex() const { return _index; }
     /// returns section title
     lString32 getName() const { return _name; }
+    lString32 getLabelImage() const { return _labelImage; }
+    void setLabelImage(const lString32 &image) { _labelImage = image; }
     /// returns position pointer
     ldomXPointer getXPointer();
     /// set position pointer (for cases where we need to create a LVTocItem as a container, but

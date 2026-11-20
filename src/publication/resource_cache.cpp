@@ -88,7 +88,21 @@ bool ResourceCache::loadNextImage()
 {
     if (pendingImages_.isEmpty() || !error_.isEmpty() || (cancelled_ && cancelled_()))
         return false;
-    const auto name = pendingImages_.takeFirst();
+    return fetchImage(pendingImages_.takeFirst());
+}
+
+bool ResourceCache::loadImage(const QString &name)
+{
+    if (!error_.isEmpty() || (cancelled_ && cancelled_()) || failedImages_.contains(name))
+        return false;
+    if (entries_.find(name) != entries_.end())
+        return true;
+    pendingImages_.removeOne(name);
+    return fetchImage(name);
+}
+
+bool ResourceCache::fetchImage(const QString &name)
+{
     const bool loaded = ensure(name) != nullptr;
     if (loaded)
         readyImages_.insert(name);
@@ -253,6 +267,18 @@ QByteArray ResourceCache::readBounded(const QString &name, qint64 limit)
     QByteArray bytes(entry->size, Qt::Uninitialized);
     if (read(name, 0, bytes.data(), bytes.size()) != bytes.size())
         return {};
+    return bytes;
+}
+
+QByteArray ResourceCache::readOptional(const QString &name, qint64 limit)
+{
+    if (!error_.isEmpty())
+        return {};
+    const auto bytes = readBounded(name, limit);
+    if (failure_ == Failure::Transfer || failure_ == Failure::Limit) {
+        error_.clear();
+        failure_ = Failure::None;
+    }
     return bytes;
 }
 

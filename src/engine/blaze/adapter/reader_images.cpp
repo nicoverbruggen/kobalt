@@ -1,4 +1,5 @@
 #include "engine_document.h"
+#include "reader_source.h"
 #include "render/page_content.h"
 #include "column_view.h"
 #include "publication/image_policy.h"
@@ -7,19 +8,28 @@
 #include <QCryptographicHash>
 
 namespace kobalt {
-QImage EngineDocument::imageAt(QPoint point)
+QImage EngineDocument::imageAt(QPoint point, const QString &resource)
 {
-    if (!engine_ || !QRect(QPoint(), size_).contains(point))
+    if (!engine_ || (resource.isEmpty() && !QRect(QPoint(), size_).contains(point)))
         return {};
-    const auto pointer = engine_->getNodeByPoint(lvPoint(point.x(), point.y()), true);
-    auto *node = pointer.isNull() ? nullptr : pointer.getNode();
-    auto source = node ? node->getObjectImageSource() : LVImageSourceRef();
-    // CREngine's synthetic cover has no DOM node.
-    const int current = engine_->getCurPage(true);
-    const auto *pages = engine_->getPageList();
-    if (source.isNull() && current >= 0 && current < pages->length()
-        && (pages->get(current)->flags & RN_PAGE_TYPE_COVER))
-        source = engine_->getCoverPageImage();
+    LVImageSourceRef source;
+    if (!resource.isEmpty()) {
+        // A preview is an explicit pixel request, including for artwork only used in the TOC.
+        if (source_ && source_->resources && !source_->resources->loadImage(resource))
+            return {};
+        source = engine_->getDocument()->getObjectImageSource(
+                Utf8ToUnicode(lString8(resource.toUtf8().constData())));
+    } else {
+        const auto pointer = engine_->getNodeByPoint(lvPoint(point.x(), point.y()), true);
+        auto *node = pointer.isNull() ? nullptr : pointer.getNode();
+        source = node ? node->getObjectImageSource() : LVImageSourceRef();
+        // CREngine's synthetic cover has no DOM node.
+        const int current = engine_->getCurPage(true);
+        const auto *pages = engine_->getPageList();
+        if (source.isNull() && current >= 0 && current < pages->length()
+            && (pages->get(current)->flags & RN_PAGE_TYPE_COVER))
+            source = engine_->getCoverPageImage();
+    }
     if (source.isNull() || source->GetWidth() <= 0 || source->GetHeight() <= 0
         || quint64(source->GetWidth()) * source->GetHeight() > imagePixelLimit)
         return {};

@@ -2120,7 +2120,8 @@ void ReaderSession::wordAt(QPoint point, std::function<void(WordSelection)> fini
             Qt::QueuedConnection);
 }
 
-void ReaderSession::imageAt(QPoint point, std::function<void(QImage)> finished)
+void ReaderSession::imageAt(QPoint point, std::function<void(QImage)> finished,
+                            const QString &resource)
 {
     if (running)
         return;
@@ -2129,9 +2130,9 @@ void ReaderSession::imageAt(QPoint point, std::function<void(QImage)> finished)
     const auto job = revision;
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, job, point, finished] {
+            [engine, guard, job, point, finished, resource] {
                 EngineJob activity;
-                const auto image = engine->imageAt(point);
+                const auto image = engine->imageAt(point, resource);
                 kobalt::qt::invoke(
                         qApp,
                         [guard, job, image, finished] {

@@ -2754,15 +2754,19 @@ void Reader::showChapters()
         const auto name = QString("rrChapter%1").arg(index);
         // The value is the index of the entry: several entries can share a
         // position until chapter mode loads their text.
-        items.append({ chapter.title,
+        items.append({ chapter.title.isEmpty() && !chapter.labelImage.isEmpty()
+                               ? strings::get("chapter_contents.illustrated_entry").arg(index + 1)
+                               : chapter.title,
                        chapter.position.isEmpty() ? QString() : QString::number(index),
                        name,
                        {},
                        chapter.depth,
                        chapter.page });
+        items.last().labelImage = chapter.labelImage;
         if (index == session->contentsSelection().current)
             current = name;
     }
+    choices->previewImage = [this](const QString &resource) { openImagePreview({}, resource); };
     choices->selected = [this](const QString &index) {
         if (session->goToChapter(index.toInt()))
             dismissControls();

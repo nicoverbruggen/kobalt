@@ -4,6 +4,8 @@
 #include "library/library_index.h"
 #include "library/library_store.h"
 #include "library/scanner.h"
+#include "storage/record_writer.h"
+#include <QSemaphore>
 #include <QBuffer>
 #include <QCoreApplication>
 #include <QDir>
@@ -430,6 +432,42 @@ int main(int argc, char **argv)
         run();
         require(removed.size() == 1 && removed.first().endsWith("two.EPUB"),
                 "A deleted book was not reported");
+    }
+    // A slow profile writer must not hold up input when the Library save timer fires.
+    {
+        const auto folder = root.filePath("background-save");
+        Store store(folder, std::make_shared<LocalSource>());
+        QSemaphore started, release;
+        kobalt::storage::RecordWriter blocker;
+        const bool queued = blocker.tryPost([&] {
+            started.release();
+            require(release.tryAcquire(1, 4000),
+                    "Library save timer blocked the event loop on the profile writer");
+            return true;
+        });
+        require(queued && started.tryAcquire(1, 4000), "Could not hold the profile writer busy");
+        // Queue the next event from the actual save timer, after its timeout handler.
+        auto *saveTimer = store.findChild<QTimer *>(QString(), Qt::FindDirectChildrenOnly);
+        require(saveTimer, "Missing Library save timer");
+        QEventLoop nextEvent;
+        QObject::connect(saveTimer, &QTimer::timeout, &nextEvent, &QEventLoop::quit,
+                         Qt::QueuedConnection);
+        Settings settings;
+        settings.view = View::List;
+        store.setSettings(settings);
+        nextEvent.exec();
+        release.release();
+        require(blocker.writeNow([] { return true; }), "Could not drain the queued Library save");
+        Index saved;
+        require(saved.loadDatabase(folder) && saved.settings.view == View::List,
+                "The timer did not persist the Library settings while the store was open");
+        settings.view = View::Home;
+        store.setSettings(settings);
+    }
+    {
+        Store reopened(root.filePath("background-save"), std::make_shared<LocalSource>());
+        require(reopened.index().settings.view == View::Home,
+                "Closing lost the latest Library settings");
     }
     // The store adds single books, keeps the reader's marks and survives a damaged index.
     {

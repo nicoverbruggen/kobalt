@@ -1,5 +1,6 @@
 #pragma once
 #include "scanner.h"
+#include "storage/record_writer.h"
 #include <QTimer>
 
 namespace kobalt::library {
@@ -45,10 +46,12 @@ private:
     Index data;
     Scanner scanner;
     QTimer saving;
+    storage::RecordWriter writer;
     int readCount = 0;
     bool rescan = false;
     bool ready = false;
     void touch();
+    void queueSave();
 };
 
 // The reading position the reader saved for a book, as a percentage, and

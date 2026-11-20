@@ -19,14 +19,15 @@ Store::Store(QString directory, std::shared_ptr<Source> source, QObject *parent)
     : QObject(parent),
       directory(directory),
       coverDirectory(directory + "/library-covers"),
-      scanner(std::move(source), coverDirectory)
+      scanner(std::move(source), coverDirectory),
+      saving(this)
 {
     ready = data.loadDatabase(directory);
     if (!ready)
         diagnostic("library-storage-unavailable", {}, kobalt::DiagnosticSeverity::Warning);
     saving.setSingleShot(true);
     saving.setInterval(500);
-    connect(&saving, &QTimer::timeout, this, &Store::save);
+    connect(&saving, &QTimer::timeout, this, &Store::queueSave);
     scanner.listed = [this](const QString &, const QStringList &removed) {
         for (const auto &key : removed)
             QFile::remove(coverPath(data.removeBook(key)));
@@ -61,7 +62,11 @@ Store::~Store()
 {
     scanner.cancel();
     if (saving.isActive())
-        save();
+        queueSave();
+    if (!writer.idle()) {
+        mainthread::AllowBlocking allow("library save"); // The Library is closing.
+        writer.flush();
+    }
 }
 
 QString Store::coverPath(const QString &name) const
@@ -215,12 +220,24 @@ void Store::setSettings(const Settings &settings)
 
 void Store::save()
 {
-    // Known exception: the Android and desktop library still saves on the
-    // main thread, also while a book is open.
-    mainthread::AllowBlocking allow("library save");
     saving.stop();
-    QDir().mkpath(directory);
-    if (ready && !data.saveDatabase(directory))
+    queueSave();
+    // Explicit saves return after the current index reaches storage.
+    mainthread::AllowBlocking allow("library save");
+    writer.flush();
+}
+
+void Store::queueSave()
+{
+    if (!ready)
+        return;
+    const bool queued = writer.tryPost([directory = directory, index = data] {
+        const bool ok = index.saveDatabase(directory);
+        if (!ok)
+            diagnostic("library-save-failed", {}, kobalt::DiagnosticSeverity::Error);
+        return ok;
+    });
+    if (!queued)
         diagnostic("library-save-failed", {}, kobalt::DiagnosticSeverity::Error);
 }
 

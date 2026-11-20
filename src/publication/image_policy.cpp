@@ -2,6 +2,7 @@
 #include "support/strings.h"
 #include <QtEndian>
 #include <cstring>
+#include <webp/decode.h>
 
 namespace kobalt {
 namespace {
@@ -32,6 +33,16 @@ ImageHeader inspectImageHeader(const QByteArray &data)
             return {};
         return dimensions(qFromLittleEndian<quint16>(bytes + 6),
                           qFromLittleEndian<quint16>(bytes + 8));
+    }
+    if (data.startsWith("RIFF")) {
+        if (data.size() < 12)
+            return {};
+        if (data.mid(8, 4) == "WEBP") {
+            int width, height;
+            if (WebPGetInfo(bytes, data.size(), &width, &height))
+                return dimensions(width, height);
+            return { data.size() < 64 ? ImageHeader::More : ImageHeader::Replace, {} };
+        }
     }
     if (bytes[0] == 0xff && bytes[1] == 0xd8) {
         qsizetype at = 2;
@@ -75,7 +86,7 @@ bool imageFileName(const QString &name)
 {
     const auto suffix = name.mid(name.lastIndexOf('.') + 1).toLower();
     return suffix == "png" || suffix == "jpg" || suffix == "jpeg" || suffix == "gif"
-            || suffix == "svg";
+            || suffix == "svg" || suffix == "webp";
 }
 
 QByteArray imagePlaceholder(QSize original, const QString &systemFont)

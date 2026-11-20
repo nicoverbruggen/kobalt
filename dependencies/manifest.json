@@ -57,5 +57,10 @@
   "hiddenapibypass": {
     "url": "https://repo.maven.apache.org/maven2/org/lsposed/hiddenapibypass/hiddenapibypass/4.3/hiddenapibypass-4.3.aar",
     "sha256": "e9c2b90785b8c0d49aaa5f723a83d8c51d9789cd4f2b1ecf6e3335e6fc561201"
+  },
+  "libwebp": {
+    "url": "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.6.0.tar.gz",
+    "sha256": "e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564",
+    "directory": "libwebp-1.6.0"
   }
 }

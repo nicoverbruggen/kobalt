@@ -1748,6 +1748,8 @@ public:
     static bool CheckPattern( const lUInt8 * buf, int len );
 };
 
+#include "../../extensions/webp_decode.h"
+
 LVWebpImageSource::LVWebpImageSource( ldomNode * node, LVStreamRef stream )
         : LVNodeImageSource(node, stream)
 {
@@ -1758,61 +1760,8 @@ bool LVWebpImageSource::Decode( LVImageDecoderCallback * callback )
 {
     if ( _stream.isNull() )
         return false;
-    const lvsize_t sz = _stream->GetSize();
-    lUInt8 * __restrict buf = new lUInt8[ sz+1 ];
-    lvsize_t bytesRead = 0;
-    _stream->SetPos(0);
-    if ( _stream->Read( buf, sz, &bytesRead )!=LVERR_OK || bytesRead!=sz ) {
-        delete[] buf;
-        return false;
-    }
-    buf[sz] = 0;
-    bool ret = false;
-    if ( callback ) {
-        // Using the simpler option:
-        //   lUInt8 * img = WebPDecodeBGRA(buf, sz, &_width, &_height);
-        // would give a blank canvas with an animated webp.
-        // We need to use WebPAnimDecoder to correctly get the first frame to be shown
-        // as a static image. This works just as well with non-animated webp images.
-        WebPAnimDecoderOptions dec_options;
-        WebPAnimDecoderOptionsInit(&dec_options);
-        dec_options.color_mode = MODE_BGRA;
-        WebPData webp_data;
-        webp_data.bytes = buf;
-        webp_data.size = sz;
-        WebPAnimDecoder* dec = WebPAnimDecoderNew(&webp_data, &dec_options);
-        WebPAnimInfo anim_info;
-        WebPAnimDecoderGetInfo(dec, &anim_info);
-        _width = anim_info.canvas_width;
-        _height = anim_info.canvas_height;
-        uint8_t* img;
-        int timestamp;
-        if ( WebPAnimDecoderGetNext(dec, &img, &timestamp) ) {
-            callback->OnStartDecode(this);
-            lUInt32 * __restrict src = (lUInt32 *)img;
-            lUInt32 * __restrict row = new lUInt32 [ _width ];
-            for (int y=0; y<_height; y++) {
-                size_t px_count = _width;
-                lUInt32 * __restrict dst = row;
-                while (px_count--) {
-                    // lvimg expects BGRA with inverted alpha,
-                    *dst++ = *src++ ^ 0xFF000000;
-                }
-                callback->OnLineDecoded( this, y, row );
-            }
-            delete[] row;
-            callback->OnEndDecode(this, false);
-            ret = true;
-        }
-        WebPAnimDecoderDelete(dec);
-    }
-    else {
-        if ( WebPGetInfo(buf, sz, &_width, &_height) ) {
-            ret = true;
-        }
-    }
-    delete[] buf;
-    return ret;
+    // Blaze: probe dimensions without fetching the whole compressed image.
+    return blaze::decodeWebp(this, _stream, callback, _width, _height);
 }
 
 bool LVWebpImageSource::CheckPattern( const lUInt8 * buf, int len )

@@ -34,6 +34,8 @@ The CSS parser keeps the selector grammar and cascade order. The [ancestor filte
 
 The EPUB importer resolves manifest fallback chains before building chapter fragments.
 
+Blaze uses libwebp for still images and for the first composited frame of an animation. Layout reads the WebP header. A still-image decoder can produce a smaller raster when the drawing destination accepts one.
+
 ## Cache compatibility
 
 Moving the same source into this repository does not change parsed-book or rendering cache formats. Later parser, preprocessing, shaping or layout changes must follow [Storage compatibility](../storage.md).

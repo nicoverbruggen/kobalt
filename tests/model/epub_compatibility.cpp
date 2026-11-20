@@ -2,6 +2,8 @@
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
 #include "engine/blaze/adapter/engine_document.h"
+#include "publication/image_policy.h"
+#include "lvimg.h"
 #include <QGuiApplication>
 #include <QFileInfo>
 #include <QTemporaryFile>
@@ -165,6 +167,67 @@ void checkLargeArchiveOffsets(QByteArray bytes)
             "ZIP64 local offset was truncated");
 }
 
+class Pixels : public LVImageDecoderCallback
+{
+public:
+    int rows = 0;
+    bool reduced = false, offsetFrame = false;
+
+    bool GetRasterTargetSize(int &width, int &height) const override
+    {
+        width = height = 5;
+        return reduced;
+    }
+
+    void OnStartDecode(LVImageSource *) override { }
+
+    bool OnLineDecoded(LVImageSource *, int, lUInt32 *row) override
+    {
+        if (offsetFrame)
+            require(row[0] == 0xff000000 && row[2] == 0xde0c08,
+                    "Wrong first-frame offset or alpha");
+        else
+            require(row[0] == 0xde0c08, "Unexpected WebP pixel");
+        ++rows;
+        return true;
+    }
+
+    void OnEndDecode(LVImageSource *, bool errors) override
+    {
+        require(!errors, "WebP decode failed");
+    }
+};
+
+void checkCodecs()
+{
+    // A solid 20 x 20 red image and a two-glyph TrueType font with a triangular A.
+    auto image = QByteArray::fromBase64("UklGRh4AAABXRUJQVlA4TBEAAAAvE8AEAAdQhnoXof+BiOh/AAA=");
+    require(inspectImageHeader(image).size == QSize(20, 20), "Missing WebP layout dimensions");
+    auto source =
+            LVCreateStreamImageSource(LVCreateMemoryStream(image.data(), image.size(), false));
+    Pixels pixels;
+    require(!source.isNull() && source->Decode(&pixels) && pixels.rows == 20,
+            "WebP pixels missing");
+
+    Pixels thumbnail;
+    thumbnail.reduced = true;
+    require(source->Decode(&thumbnail) && thumbnail.rows == 5 && source->GetWidth() == 20,
+            "WebP thumbnail allocated the original raster or changed layout dimensions");
+
+    auto animated = QByteArray::fromBase64(
+            "UklGRlYAAABXRUJQVlA4WAoAAAACAAAAHQAAEwAAQU5JTQYAAAAAAAAAAABBTk1GKgAAAAEAAAAAABMAABMAAGQAAABWUDhMEQAAAC8TwAQAB1CGeheh/4GI6H8AAA==");
+    auto firstFrame = LVCreateStreamImageSource(
+            LVCreateMemoryStream(animated.data(), animated.size(), false));
+    Pixels canvas;
+    canvas.offsetFrame = true;
+    require(!firstFrame.isNull() && firstFrame->Decode(&canvas) && canvas.rows == 20,
+            "Animated WebP first frame did not render");
+    auto oversized = animated;
+    oversized[24] = oversized[25] = char(0xff);
+    require(inspectImageHeader(oversized).action == ImageHeader::Replace,
+            "Oversized WebP was admitted");
+
+}
 } // namespace
 
 int main(int argc, char **argv)
@@ -190,6 +253,7 @@ int main(int argc, char **argv)
     broken[broken.size() - 22 - 20 + 8] = char(0xff);
     require(!publication.inspect(broken, &error), "Invalid ZIP64 locator admitted");
     checkDtbookChapterWindow();
+    checkCodecs();
     checkNavigation(false);
     return 0;
 }

@@ -108,6 +108,17 @@
   },
   {
     "group": "engine",
+    "name": "libwebp",
+    "version": "1.6.0",
+    "description": "Decodes WebP illustrations.",
+    "license": "BSD 3-Clause",
+    "url": "https://github.com/webmproject/libwebp",
+    "notices": [
+      "libwebp"
+    ]
+  },
+  {
+    "group": "engine",
     "name": "FreeType",
     "version": "2.15.0",
     "description": "Font rasterization and outline emboldening. Portions of this software are copyright © 2026 The FreeType Project (https://freetype.org). All rights reserved.",

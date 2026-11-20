@@ -130,7 +130,7 @@ set(host)
     endif()
 endfunction()
 
-foreach(name freetype harfbuzz fribidi utf8proc libjpeg-turbo xxhash libunibreak koreader-base)
+foreach(name freetype libwebp harfbuzz fribidi utf8proc libjpeg-turbo xxhash libunibreak koreader-base)
     kobalt_source(${name})
 endforeach()
 set(svg_patches "${koreader-base_source}/thirdparty/lunasvg")
@@ -154,6 +154,10 @@ else()
         "Name: libpng\nDescription: libpng from the SDK\nVersion: ${KOBALT_PNG_VERSION}\nLibs: ${png} -lz\nCflags: -I${png_include}\n" @ONLY)
 endif()
 file(CONFIGURE OUTPUT "${prefix}/lib/pkgconfig/zlib.pc" CONTENT "Name: zlib\nDescription: SDK zlib\nVersion: 1\nLibs: -lz\n" @ONLY)
+kobalt_library(libwebp ARCHIVE libwebpdecoder.a OPTIONS -DWEBP_BUILD_ANIM_UTILS=OFF
+    -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF -DWEBP_BUILD_GIF2WEBP=OFF
+    -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF -DWEBP_BUILD_WEBPINFO=OFF
+    -DWEBP_BUILD_LIBWEBPMUX=OFF -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF)
 kobalt_library(freetype ARCHIVE libfreetype.a DEPENDS ${png_dependency} OPTIONS -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BZIP2=ON
     -DFT_DISABLE_BROTLI=ON -DFT_DISABLE_HVF=ON -DFT_DISABLE_PNG=OFF "-DPNG_LIBRARY=${png}" "-DPNG_PNG_INCLUDE_DIR=${png_include}")
 kobalt_library(harfbuzz ARCHIVE libharfbuzz.a DEPENDS dep-freetype OPTIONS -DHB_BUILD_UTILS=OFF

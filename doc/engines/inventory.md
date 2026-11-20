@@ -1,8 +1,8 @@
 # Dependency inventory
 
-This file lists where Kobalt depends on the rendering engine today. Each row separates the requirement of the user from the CREngine mechanism that serves it now. Line numbers refer to `develop` at `0f7c9813`. See [Rendering engines](../engines.md) for the context.
+This inventory records Kobalt’s rendering dependencies on `develop` at `0f7c9813`, before Hybrid rendering. The behavior and line numbers below refer to that revision. See [Rendering engines](../engines.md) for the current implementation.
 
-## The seam today
+## Engine interface
 
 - `EngineDocument` (`src/engine/blaze/adapter/engine_document.h`) is the only engine class. Its public interface uses Qt types.
 - `ReaderSession` (`src/reading/reader_session.h`) owns the `EngineDocument`. It runs each engine call on one worker thread and publishes a `ReaderFrame`. The interface reads the page, the page total and the chapter page from the frame.

@@ -97,6 +97,13 @@ void flexRows()
         require(qAbs(a.x() - (width - count * 110 - (count - 1) * 10) / 2) <= 2,
                 "Row is not centered");
     }
+    const QByteArray labels = "<p class='row'><span>Alpha</span><span>Bravo</span></p>";
+    kobalt::EngineDocument margin(kobalt::test::readerFonts()), gap(kobalt::test::readerFonts());
+    open(margin, labels, ".row{display:flex}.row span:first-child{margin-right:1em}", {},
+         QSize(360, 144));
+    open(gap, labels, ".row{display:flex;gap:1em}", {}, QSize(360, 144));
+    require(margin.image(0) == gap.image(0),
+            "A margin between two text items gives the same pixels as an equal gap");
     kobalt::EngineDocument grow(kobalt::test::readerFonts());
     open(grow, body,
          ".row{display:flex}.row span{flex:1 1 0%;min-width:0}"
@@ -142,6 +149,20 @@ void flexRows()
              {}, QSize(400, 240));
         return ink(page.image(0), true);
     };
+    require(redItem("flex", "", "width:64px;margin-right:1em", "width:80px")
+                    == QRect(80, 0, 80, 32),
+            "A right margin separates items on the same flex line");
+    require(redItem("flex", "gap:4px", "width:64px;margin:0 8px", "margin-left:12px;flex:1")
+                    == QRect(96, 0, 304, 32),
+            "Subtract item margins and the gap before distributing row space");
+    require(redItem("flex", "width:150px;flex-wrap:wrap", "width:64px;margin-right:16px",
+                    "width:80px")
+                    == QRect(0, 32, 80, 32),
+            "Include the right margin when deciding whether the second item fits");
+    require(redItem("flex", "flex-direction:row-reverse", "width:64px;margin-left:12px",
+                    "width:80px;margin-right:4px")
+                    == QRect(240, 0, 80, 32),
+            "A reversed row preserves physical left and right margins");
     require(redItem("flex", "align-items:center;gap:12px", "width:64px;height:64px", "width:160px")
                     == QRect(76, 16, 160, 32),
             "Center a label beside a taller item");

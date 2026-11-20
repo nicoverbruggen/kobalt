@@ -14,7 +14,7 @@ Preserve the GPLv2 notice in `src/engine/blaze/README.TXT`, the license text in 
 
 Blaze runs flex layout when the computed display is `flex` or `inline-flex`. Horizontal text rows support wrapping, grow and shrink factors, flex basis, percentage item widths, length gaps and main-axis alignment. Single-line rows can center, stretch or align items at either end of the cross axis. Inline containers use the inline box formatter and measure the row for an automatic width.
 
-A forward column stacks its children with a row gap and can align them horizontally. A short column with a definite height can center or distribute simple text items vertically. Oversized stacks use ordinary text page breaks. General nested layouts, reverse or wrapping columns, and independent fragmentation of side-by-side items remain outside the prototype. Multi-item row layout requires zero item margins and excludes percentage padding or percentage minimum and maximum widths. Blaze keeps the feature query `@supports (display: flex)` false.
+A forward column stacks its children with a row gap and can align them horizontally. A short column with a definite height can center or distribute simple text items vertically. Oversized stacks use ordinary text page breaks. General nested layouts, reverse or wrapping columns, and independent fragmentation of side-by-side items remain outside the prototype. Multi-item rows support nonnegative fixed-length left and right margins. They exclude auto and percentage margins, nonzero vertical margins, percentage padding and percentage minimum and maximum widths. Blaze keeps the feature query `@supports (display: flex)` false.
 
 ## Bringing in upstream changes
 

@@ -6,6 +6,8 @@ struct BlazeFlexItem {
     int width;
     int minimum, maximum;
     int base, grow, shrink;
+    long long margins = 0;
+    long long outerWidth() const { return (long long)width + margins; }
 };
 
 // Flex sizes are border boxes. CSS lengths on content boxes exclude these insets.
@@ -22,7 +24,7 @@ static void measureFlexItem(BlazeFlexItem &item, int width, int direction, lUInt
 {
     css_style_ref_t css = item.node->getStyle();
     int insets = flexWidthInsets(item.node, width);
-    getRenderedWidths(item.node, item.width, item.minimum, direction, false, flags,
+    getRenderedWidths(item.node, item.width, item.minimum, direction, true, flags,
                       true);
     if (css->width.type != css_val_unspecified && (width > 0 || css->width.type != css_val_percent)) {
         item.width = lengthToPx(item.node, css->width, width) + insets;
@@ -79,8 +81,10 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
         // The independent item flow cannot resolve percentage insets against
         // the full row. Keep these and auto margins on the normal block path.
         for (int side = 0; side < 4; ++side) {
-            if (item->padding[side].type == css_val_percent ||
-                item->margin[side].type == css_val_percent || item->margin[side].value != 0)
+            const auto margin = item->margin[side];
+            if (item->padding[side].type == css_val_percent || margin.type == css_val_percent)
+                return false;
+            if (margin.value && (column || side >= 2 || margin.type == css_val_unspecified || margin.value < 0))
                 return false;
         }
         if (item->max_width.type == css_val_percent ||
@@ -172,6 +176,9 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
     for (auto &item : items) {
         koblazeCheckCancel();
         koblazePausePoint();
+        auto css = item.node->getStyle();
+        item.margins = (long long)lengthToPx(item.node, css->margin[0], width)
+                     + lengthToPx(item.node, css->margin[1], width);
         measureFlexItem(item, width, direction, flags);
     }
 
@@ -184,8 +191,8 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
         long long used = 0;
         do {
             if (end > first) used += gap;
-            used += items[end++].width;
-        } while (end < items.size() && (!style->flex_wrap || used + gap + items[end].width <= width));
+            used += items[end++].outerWidth();
+        } while (end < items.size() && (!style->flex_wrap || used + gap + items[end].outerWidth() <= width));
 
         // Freeze items at their minimum and divide the remaining main size
         // among the unfrozen items. Shrink factors scale with the flex basis.
@@ -195,6 +202,7 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
         long long unscaled = 0;
         for (size_t i = first; i < end; ++i) {
             auto &item = items[i];
+            remaining -= item.margins;
             if (growing ? item.grow == 0 || item.base > item.width
                         : item.shrink == 0 || item.base < item.width || item.base == 0) {
                 remaining -= item.width;
@@ -257,7 +265,7 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
             break;
         }
         used = (long long)gap * (end - first - 1);
-        for (size_t i = first; i < end; ++i) used += items[i].width;
+        for (size_t i = first; i < end; ++i) used += items[i].outerWidth();
         const int free = (int)std::max<long long>(0, width - used);
         int offset = style->justify_content == 1 ? free / 2 : style->justify_content == 2 ? free : 0;
         bool stack = used > width;
@@ -268,8 +276,10 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
             for (size_t i = first; i < end; ++i) {
                 auto &item = items[i];
                 LVRendPageContext context(NULL, flow->getPageHeight(), 0, false);
-                int x = reversed ? width - offset - item.width : offset;
-                int h = renderBlockElement(context, item.node, left + x, 0, item.width,
+                // The block formatter applies the item's margins inside its allocated box.
+                int outer = (int)item.outerWidth();
+                int x = reversed ? width - offset - outer : offset;
+                int h = renderBlockElement(context, item.node, left + x, 0, outer,
                                            0, 0, direction, NULL, flags, item.width);
                 height = std::max(height, h);
                 if (height > flow->getPageHeight()) {
@@ -279,7 +289,7 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
                     break;
                 }
                 links.addAll(*context.getLinkIds());
-                if (i + 1 < end) offset += item.width + gap;
+                if (i + 1 < end) offset += outer + gap;
                 if (style->justify_content == 3 && i + 1 < end)
                     offset += free / (end-first-1) + (i-first < free % (end-first-1));
             }

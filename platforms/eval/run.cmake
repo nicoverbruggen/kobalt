@@ -322,7 +322,12 @@ if("screenshots" IN_LIST PARTS)
         RESULT_VARIABLE screenshots_exit OUTPUT_FILE "${partial}/screenshots.log" ERROR_FILE "${partial}/screenshots.log")
     # APFS clones keep this copy cheap; a later in-place run replaces the gallery.
     if(screenshots_exit STREQUAL "0")
-        execute_process(COMMAND cp -cR "${source}/build/screenshots/${shot_folder}" "${partial}/screenshots"
+        if(desktop_platform STREQUAL "mac")
+            set(copy_gallery cp -cR)
+        else()
+            set(copy_gallery "${CMAKE_COMMAND}" -E copy_directory)
+        endif()
+        execute_process(COMMAND ${copy_gallery} "${source}/build/screenshots/${shot_folder}" "${partial}/screenshots"
             COMMAND_ERROR_IS_FATAL ANY)
     endif()
     finish(screenshots)

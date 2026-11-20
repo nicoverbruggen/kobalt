@@ -86,10 +86,10 @@ bool NativeSyncNetwork::canTurnOff()
     return bool(nativeBindings().turnOff);
 }
 
-NativeSyncNetwork::NativeSyncNetwork(NativeSyncNetworkBindings api)
-    : bindings(std::move(api)), workflow(bindings.workflow)
+NativeSyncNetwork::NativeSyncNetwork(NativeSyncNetworkBindings api,
+                                     std::function<Clock::time_point()> clock)
+    : bindings(std::move(api)), workflow(bindings.workflow), now(std::move(clock))
 {
-    elapsed.invalidate();
     poll.setInterval(100);
     connect(&poll, &QTimer::timeout, this, &NativeSyncNetwork::check);
     if (!bindings.valid())
@@ -132,7 +132,7 @@ void NativeSyncNetwork::prepare(bool showUi, std::function<void(bool)> done)
     interactive = showUi;
     finished = std::move(done);
     setWaiting(true);
-    elapsed.start();
+    started = now();
     poll.setInterval(100);
     poll.start();
     if (!bindings.connecting()) {
@@ -150,14 +150,14 @@ void NativeSyncNetwork::check()
     if (!finished)
         return;
     if (interactive && bindings.inputPending && bindings.inputPending()) {
-        elapsed.restart();
+        started = now();
         poll.setInterval(1000);
         return;
     }
     poll.setInterval(100);
     if (connected())
         finish(true);
-    else if (elapsed.elapsed() >= 10000) {
+    else if (now() - started >= std::chrono::seconds(10)) {
         auto done = std::move(finished);
         cancel();
         done(false);

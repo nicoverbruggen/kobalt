@@ -2,7 +2,7 @@
 #include "platform/api/sync_network.h"
 #include <QObject>
 #include <QPointer>
-#include <QElapsedTimer>
+#include <chrono>
 #include <QTimer>
 
 namespace kobalt {
@@ -29,7 +29,9 @@ class NativeSyncNetwork final : public QObject, public SyncNetwork
     Q_OBJECT
 public:
     NativeSyncNetwork();
-    explicit NativeSyncNetwork(NativeSyncNetworkBindings bindings);
+    using Clock = std::chrono::steady_clock;
+    explicit NativeSyncNetwork(NativeSyncNetworkBindings bindings,
+                               std::function<Clock::time_point()> now = Clock::now);
     // Whether this firmware lets Kobalt turn Wi-Fi off again after a sync.
     static bool canTurnOff();
     // Whether any controller waits for a connection. Nickel's network dialogs
@@ -54,7 +56,8 @@ private:
     NativeSyncNetworkBindings bindings;
     QPointer<QObject> workflow;
     QTimer poll;
-    QElapsedTimer elapsed;
+    std::function<Clock::time_point()> now;
+    Clock::time_point started;
     std::function<void(bool)> finished;
     bool requested = false;
     bool interactive = false;

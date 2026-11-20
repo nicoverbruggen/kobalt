@@ -145,7 +145,8 @@ static void nativePrompt()
         prompt.hide();
         emit workflow.connectionCancelled();
     };
-    kobalt::NativeSyncNetwork network(bindings);
+    kobalt::NativeSyncNetwork::Clock::time_point now{};
+    kobalt::NativeSyncNetwork network(bindings, [&] { return now; });
     network.prepare(true, [&](bool) { ++replies; });
     QApplication::processEvents();
     require(explanation.font() == nativeFont && explanation.palette() == nativePalette,
@@ -164,9 +165,8 @@ static void nativePrompt()
             "native dialog children must remain able to paint");
     require(kobalt::nickel::NativeDialogOverlay::activeFor(&reader),
             "native input must block reader shortcuts");
-    QEventLoop permissionWait;
-    QTimer::singleShot(11200, &permissionWait, &QEventLoop::quit);
-    permissionWait.exec();
+    now += std::chrono::seconds(11);
+    emit workflow.internetPartiallyAccessible();
     require(replies == 0 && prompt.isVisible(),
             "a native permission prompt must not time out while the user is answering");
     network.cancel();
@@ -248,11 +248,13 @@ static void wifiPowerSaver()
     QObject context;
     int replies = 0;
     bool result = true;
+    QEventLoop bluetoothWait;
     const auto save = [&] {
         kobalt::saveNativeWifiPower(&context, bindings, "wifi-off before reader input",
                                     [&](bool value) {
                                         ++replies;
                                         result = value;
+                                        bluetoothWait.quit();
                                     });
     };
     wifi = false;
@@ -283,9 +285,9 @@ static void wifiPowerSaver()
     // A Bluetooth stack that never answers must not hold the opening.
     wifi = true;
     save();
-    QEventLoop loop;
-    QTimer::singleShot(kobalt::nativeWifiPowerDeadlineMs + 500, &loop, &QEventLoop::quit);
-    loop.exec();
+    require(replies == 6, "the Bluetooth query waits for an answer");
+    QTimer::singleShot(5000, &bluetoothWait, &QEventLoop::quit);
+    bluetoothWait.exec();
     require(replies == 7 && !result && turnedOff == 1,
             "an unanswered Bluetooth query keeps Wi-Fi on after the deadline");
     answer(BluetoothPower::Off);
@@ -386,7 +388,8 @@ int main(int argc, char **argv)
         ++replies;
         result = connected;
     };
-    kobalt::NativeSyncNetwork network(bindings);
+    kobalt::NativeSyncNetwork::Clock::time_point now{};
+    kobalt::NativeSyncNetwork network(bindings, [&] { return now; });
     network.prepare(false, done);
     require(replies == 1 && result && requests == 0,
             "reuse an available connection without touching the radio");
@@ -543,13 +546,13 @@ int main(int argc, char **argv)
     kobalt::NativeSyncNetwork unavailable(kobalt::NativeSyncNetworkBindings{});
     unavailable.prepare(true, done);
     require(replies == 6 && !result, "unsupported native APIs fail without a connection attempt");
-    QEventLoop deadline;
-    network.prepare(false, [&](bool connected) {
-        done(connected);
-        deadline.quit();
-    });
-    QTimer::singleShot(12000, &deadline, &QEventLoop::quit);
-    deadline.exec();
+    now += std::chrono::minutes(1);
+    network.prepare(false, done);
+    now += std::chrono::milliseconds(9999);
+    emit workflow.internetPartiallyAccessible();
+    require(replies == 6 && connecting, "a stalled connection gets the full ten seconds");
+    now += std::chrono::milliseconds(1);
+    emit workflow.internetPartiallyAccessible();
     require(replies == 7 && !result && cancelled == 3,
             "a stalled native workflow is cancelled at the bounded deadline");
     require(!connecting, "the deadline leaves no owned connection workflow running");

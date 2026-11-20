@@ -3854,7 +3854,7 @@ bool Reader::save(bool snapshot, bool background, bool persist)
     state["menu_session_text"] = menuSession->text();
     state["menu_clock_font"] = QFontInfo(menuClock->font()).family();
     state["menu_battery_font"] = QFontInfo(menuBattery->font()).family();
-    state["ui_icon_set"] = QStringLiteral("Lucide");
+    state["ui_icon_set"] = QStringLiteral("Phosphor");
     state["typography_button_font"] = QFontInfo(toolbarButtons.typography->font()).family();
     state["benchmark_typography"] = session->temporaryTypography();
     state["display_settings"] = preferences;

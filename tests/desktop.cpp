@@ -5973,6 +5973,59 @@ private slots:
                      900);
     }
 
+    void mainTextHybridRanges_data()
+    {
+        QTest::addColumn<bool>("rtl");
+        QTest::addColumn<bool>("body");
+        QTest::newRow("front-matter-only") << true << false;
+        QTest::newRow("main-text-ltr") << false << true;
+        QTest::newRow("main-text-rtl") << true << true;
+    }
+
+    void mainTextHybridRanges()
+    {
+        QFETCH(bool, rtl);
+        QFETCH(bool, body);
+        renderingMode::setOverride(2);
+        const int quiet = renderingMode::buildQuietMilliseconds();
+        renderingMode::setBuildQuietMilliseconds(60000);
+        const auto restore = qScopeGuard([quiet] {
+            renderingMode::setOverride(-1);
+            renderingMode::setBuildQuietMilliseconds(quiet);
+        });
+        Fixture fixture(false, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.development.detailedStateReports = true;
+        });
+        selectPreview(fixture, 4);
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences["two_columns_landscape"] = true;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        const auto section = [](QByteArray type, int words) {
+            return test::publisherHtml("<section epub:type='" + type + "'><p>"
+                                       + QByteArray("word ").repeated(words) + "</p></section>");
+        };
+        auto files = test::publisherPackage(
+                "en", "Boundaries",
+                { { "first.xhtml", section("frontmatter", 600) },
+                  { "second.xhtml", section(body ? "bodymatter" : "frontmatter", 300) } },
+                "<itemref idref='first.xhtml'/><itemref idref='second.xhtml'/>");
+        if (rtl)
+            files["book.opf"].replace("<spine>", "<spine page-progression-direction='rtl'>");
+        QVERIFY(writeBook(fixture.directory.path(), "bounds.epub", files));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(fixture.directory.filePath("bounds.epub"));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_COMPARE(fixture.state().value("word_counts").toObject().value("total_words").toInt(),
+                     900);
+        const auto state = fixture.state();
+        QVERIFY(state.contains("book_fraction") && !state.value("whole_book_ready").toBool());
+        QCOMPARE(state.value("columns").toInt(), 2);
+        QCOMPARE(state.value("page_progression_rtl").toBool(), rtl);
+        QCOMPARE(state.value("word_counts").toObject().value("main_words").toInt(),
+                 body ? 300 : 900);
+        QCOMPARE(state.value("main_page_label").toString(), body ? QString("I") : QString("1"));
+    }
+
     // Calibre splits a long chapter over several files and lists only the first.
     void mainTextSplitChapterEnd()
     {

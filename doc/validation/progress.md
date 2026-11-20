@@ -54,6 +54,8 @@ Development progress controls are supplied by the host. Lifecycle checks cover a
 
 `lifecycle.progressExitDuringSync` checks the toolbar exit during Kobo sync, automatic close, conflict resolution, cancellation and a local save without a Nickel position write.
 
+`desktop.mainTextHybridRanges` opens left-to-right and right-to-left EPUBs in two columns before Hybrid finishes whole-book pagination. It checks the first page label and the word count for the publisher’s main text. A front-matter-only EPUB uses the whole volume.
+
 `desktop.mainTextBoundaries` checks the Stats scope picker and both word totals across intra-chapter boundaries. `desktop.mainTextChapterAnchors` checks a range within one spine item in Fast mode.
 
 `desktop.mainTextBoundaries` opens EPUBs with explicit structural markup, guide references and a nested TOC without either. It exercises marking and resetting boundaries through Chapters, secondary page labels, reflow and reopening in the appendix.

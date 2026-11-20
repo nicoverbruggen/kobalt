@@ -1783,23 +1783,67 @@ int run(int argc, char **argv)
             if (!session->busy())
                 rendered.quit();
         };
-        if (session->continuesAfter()) {
-            const int lastLocalPage = session->pages() - 1;
-            const auto chapterStart = session->state()["slice_start"];
-            require(session->go(lastLocalPage - 1), "Cannot reach the chapter boundary");
+        {
+            // Hybrid can adopt the whole book between turns. Use source positions
+            // from two separate turns across the same boundary in a whole book.
+            ReaderSession reference(test::readerFonts(), test::readerPlaceholder());
+            auto access = std::make_shared<SourceLease>();
+            auto settings = session->state();
+            settings["fingerprint"] = QString::fromLatin1(session->sourceHash());
+            settings["koblaze_first_spine_item"] = -1;
+            reference.open({ path,
+                             path,
+                             session->image().size(),
+                             settings,
+                             {},
+                             {},
+                             access,
+                             localResourceFactory(path, access) },
+                           [&](OpeningResult result) {
+                               require(result.ready(), qPrintable(openingMessage(result)));
+                               opened.quit();
+                           });
+            opened.exec();
+            QEventLoop frame;
+            reference.updated = [&] {
+                if (!reference.busy())
+                    frame.quit();
+            };
+            require(!reference.state().contains("book_fraction") && reference.goToChapter(1),
+                    "Cannot open the second chapter in the whole-book reference");
+            frame.exec();
+            const int nextChapterPage = reference.page();
+            const auto step = [&](int direction) {
+                require(reference.turn(direction), "Cannot turn across the reference boundary");
+                frame.exec();
+                return reference.state().value("position").toString();
+            };
+            step(-1);
+            const auto before = step(-1);
+            const QStringList expected{ step(1), step(1) };
+            require(!before.isEmpty() && before != expected.first()
+                            && expected.first() != expected.last()
+                            && reference.page() == nextChapterPage,
+                    "Separate turns did not reach the first page of the second chapter");
+            require(session->goTo(before), "Cannot position the buffered-turn fixture");
             rendered.exec();
-            turnFrames.clear();
+            require(session->state().value("position") == before,
+                    "Buffered and separate turns must start at the same passage");
+            QStringList shown;
             boundaryCalls = 0;
-            session->updated = recordTurn;
+            session->updated = [&] {
+                if (!session->busy())
+                    shown.append(session->state().value("position").toString());
+            };
             require(session->turn(1) && session->turn(1), "Cannot buffer a cross-chapter turn");
-            finishBurst([&] { return turnFrames.size() >= 2; });
-            require(turnFrames == QVector<int>({ lastLocalPage, 0 }) && boundaryCalls == 0
-                            && session->state()["slice_start"] != chapterStart,
-                    "Buffered turn did not display the chapter end and the next chapter start");
+            finishBurst([&] { return shown.size() >= 2; });
+            require(shown == expected && boundaryCalls == 0,
+                    "Buffered turns did not display both passages across the chapter boundary");
             session->updated = [&] {
                 if (!session->busy())
                     rendered.quit();
             };
+            reference.updated = {};
         }
         require(session->goToFraction(1), "Cannot reach the end of the book");
         rendered.exec();

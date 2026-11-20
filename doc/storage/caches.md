@@ -43,7 +43,8 @@ Parser format changes:
 | 11 | Embedded font size limit |
 | 12 | Writing-mode state in computed styles |
 | 15 | Flex declarations and computed styles |
-| 16 | Chapter fragments and navigation records for DTBook chapters, manifest fallbacks, illustrated labels and landmarks |
+| 16 | Chapter fragments and navigation records for DTBook chapters, manifest fallbacks and illustrated labels |
+| 17 | Publication paths for printed pages and stored EPUB landmarks |
 
 Older parsed caches add the optional page-note markers for labeled Gutenberg note paragraphs on opening. Source text, IDs and positions do not change.
 

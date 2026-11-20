@@ -62,6 +62,15 @@ struct ReaderSource
     // The part of the text of its spine item before each position that was
     // looked up in the XHTML. It does not depend on the layout.
     QHash<QString, double> textFractions;
+
+    // One entry per saved endpoint, shared by chapter windows for the same appearance.
+    struct SelectionEndpoints
+    {
+        QString appearance;
+        QCache<QString, bool> valid{ 4096 };
+    };
+
+    std::shared_ptr<SelectionEndpoints> selectionEndpoints;
     QHash<QString, qint64> textWordPrefixes;
     // Whether a linked target exists, checked on demand without loading its
     // chapter. Unknown or interrupted checks are not retained.

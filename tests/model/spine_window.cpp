@@ -1,6 +1,7 @@
 #include "check.h"
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
+#include "reader_source_index_probe.h"
 #include "engine/blaze/adapter/engine_document.h"
 #include <QGuiApplication>
 #include <cstdio>
@@ -62,6 +63,89 @@ int main(int argc, char **argv)
     const auto fullInfo = model.pageInfo();
     require(fullInfo.bookPages.exact() && fullInfo.bookPages.value() == wholePages,
             "A whole-book layout must report the exact book total");
+    // Compare the exact text and glyphs with the whole-book layout, including
+    // an entire intervening chapter and an exclusive end in a third one.
+    const auto start = whole.starts[whole.items[1]].at(1);
+    const auto end = whole.starts[whole.items[3]].at(1);
+    auto passage = model.textRange(start, end, true);
+    require(!passage.text.isEmpty(), "Cross-chapter fixture has no selectable text");
+    QString rangeError;
+    const auto malformed = end.section('.', 0, -2) + ".9999999";
+    const auto hitIn = [&](int item) {
+        for (const auto &position : whole.starts[whole.items[item]]) {
+            require(model.goTo(position), "Cannot open the selection fixture page");
+            const auto hits = model.searchPage("reader", model.page()).hits;
+            if (!hits.isEmpty())
+                return hits.first();
+        }
+        return SearchHit();
+    };
+    const auto left = hitIn(1), right = hitIn(3);
+    require(!left.start.isEmpty() && !right.end.isEmpty(), "Missing cross-chapter tokens");
+    const auto selected =
+            model.annotationRange(left.start, left.end, right.start, right.end, true, true);
+    const auto reversed = model.annotationRange(right.start, left.end);
+    const auto hasLookup = [&] {
+        for (int item = 0; item < whole.items.size(); ++item)
+            if (ReaderSourceIndexProbe::lookupIncludes(model, item))
+                return true;
+        return false;
+    };
+    require(model.showSpineItems(0, 0, &rangeError), qPrintable(rangeError));
+    require(model.visibleRanges(QVector<QPair<QString, QString>>(2000, { start, end })).isEmpty()
+                    && !hasLookup(),
+            "Offscreen marks opened a remote chapter");
+    require(model.showSpineItems(2, 2, &rangeError), qPrintable(rangeError));
+    const auto edited =
+            model.annotationRange(left.start, left.end, right.start, right.end, true, true);
+    require(!edited.text.isEmpty() && edited.text == selected.text && edited.start == selected.start
+                    && edited.end == selected.end && edited.chosenStart == selected.chosenStart
+                    && edited.chosenEnd == selected.chosenEnd,
+            "Cross-chapter draft lost its selected words");
+    require(model.annotationRange(right.start, left.end).text == reversed.text,
+            "Reversed selection lost a token outside the displayed chapter");
+    require(model.intersectingRanges(left.start, right.end,
+                                     { { right.start, right.end },
+                                       { right.end, right.start },
+                                       { left.start, malformed } })
+                    == QVector<int>{ 0 },
+            "A cross-chapter edit missed an overlap or accepted an invalid endpoint");
+    require(model.visibleRanges(QVector<QPair<QString, QString>>(2000, { start, end })).size()
+                            == 2000
+                    && ReaderSourceIndexProbe::lookupIncludes(model, 3),
+            "Crossing marks failed to check their remote endpoints");
+    require(model.showSpineItems(1, 1, &rangeError) && model.goTo(start), qPrintable(rangeError));
+    ReaderSourceIndexProbe::discardLookup(model);
+    require(model.rangeVisible(start, end) && !hasLookup(),
+            "The next chapter reopened a verified endpoint");
+    for (int item = 0; item < 5; ++item) {
+        const auto place = whole.starts[whole.items[item]].at(item == 3 ? 0 : 1);
+        require(model.showSpineItems(-1, -1, &rangeError) && model.goTo(place),
+                qPrintable(rangeError));
+        const auto expected = model.annotationGeometry(start, end);
+        require(model.showSpineItems(item, item, &rangeError) && model.goTo(place),
+                qPrintable(rangeError));
+        const auto original = model.position();
+        const auto range = model.textRange(end, start, true);
+        require(range.text == passage.text && range.context == passage.context
+                        && range.start == passage.start && range.end == passage.end,
+                "A chapter window changed the source text or surrounding sentence");
+        const auto actual = model.annotationGeometry(start, end);
+        require(actual.rectangles == expected.rectangles
+                        && actual.start.visible == expected.start.visible
+                        && actual.end.visible == expected.end.visible,
+                "Chapter window changed selection geometry");
+        require(model.rangeVisible(start, end) == !expected.rectangles.isEmpty()
+                        && model.visibleRanges({ { start, end } }).size()
+                                == int(!expected.rectangles.isEmpty()),
+                "Draft and saved cross-chapter ranges disagree");
+        require(model.rangeRects(start, malformed).isEmpty()
+                        && model.annotationGeometry(start, malformed).rectangles.isEmpty()
+                        && !model.rangeVisible(start, malformed),
+                "Invalid endpoint painted a range");
+        require(model.position() == original, "Range query moved the current chapter");
+    }
+    require(model.showSpineItems(-1, -1, &rangeError), qPrintable(rangeError));
     const auto chapter = whole.items[4];
     const auto position = whole.starts[chapter].value(2);
     require(!position.isEmpty() && model.goTo(position), "Cannot go into the fifth spine item");

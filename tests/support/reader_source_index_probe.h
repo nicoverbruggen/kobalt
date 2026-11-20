@@ -29,6 +29,8 @@ struct ReaderSourceIndexProbe
         return model.ahead_ ? currentView(*model.ahead_) : nullptr;
     }
 
+    static void discardLookup(EngineDocument &model) { model.lookupUnit_ = {}; }
+
     static bool lookupIncludes(const EngineDocument &model, int item)
     {
         const auto &lookup = model.lookupUnit_.document;

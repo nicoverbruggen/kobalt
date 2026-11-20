@@ -102,6 +102,7 @@ public:
 
     qint64 wordsInMainText(const QString &first, const QString &after,
                            const std::function<bool()> &current) override;
+
     qint64 totalWords() const override { return totalWords_; }
 
     QString resourceError() const override;
@@ -152,9 +153,9 @@ public:
     TextRange textRange(const QString &start, const QString &end,
                         bool withContext = false) override;
     // Indices of source ranges intersecting [start, end), in input order.
-    // Invalid, empty and reversed ranges are ignored. No text or geometry is read.
+    // Invalid, empty and reversed ranges are ignored. Only source endpoints are compared.
     QVector<int> intersectingRanges(const QString &start, const QString &end,
-                                    const QVector<QPair<QString, QString>> &ranges) const override;
+                                    const QVector<QPair<QString, QString>> &ranges) override;
     // Crossed boundary edits retain both complete words using wordAt segmentation.
     TextRange annotationRange(const QString &start, const QString &end) override;
     // Complete token boundaries preserve explicit punctuation choices when reversed.
@@ -177,9 +178,9 @@ public:
 
     // Source-only current-page intersection. Does not resolve remote geometry.
     // Returns input indices in order; at most 2000 saved ranges plus one draft.
-    QVector<int> visibleRanges(const QVector<QPair<QString, QString>> &ranges) const override;
+    QVector<int> visibleRanges(const QVector<QPair<QString, QString>> &ranges) override;
     // Check a changing draft without rebuilding the saved-range index.
-    bool rangeVisible(const QString &start, const QString &end) const override;
+    bool rangeVisible(const QString &start, const QString &end) override;
     // Text selection excludes images. Links also need their image hit regions.
     AnnotationGeometry annotationGeometry(const QString &start, const QString &end) override;
     QVector<QRect> rangeRects(const QString &start, const QString &end,
@@ -414,6 +415,11 @@ private:
     mutable std::shared_ptr<SourceIndex> sourceIndex_;
     std::shared_ptr<SourceIndex> sourceIndex(const QStringList &positions,
                                              const std::function<bool()> &current = {}) const;
+    EngineDocument *textDocument(int item);
+    QVector<int> textOrder(const QString &anchor);
+    bool validSelectionEndpoint(const QString &anchor);
+    QPair<QString, QString> visibleEndpoints(const QString &start, const QString &end,
+                                             bool validate = true);
     std::shared_ptr<SourceIndex> sourceRanges(const QVector<QPair<QString, QString>> &ranges) const;
     QPair<int, qint64> sourceIndexUsage() const;
     int columns_ = 1, columnSpacing_ = readingPixels(60), columnSpacingPercent_ = 0;
@@ -526,7 +532,8 @@ private:
     std::vector<KeptUnit> kept_;
     // Search and link previews can open another chapter while the next turn keeps its layout.
     KeptUnit lookupUnit_;
-    EngineDocument *openLookupUnit(int item, const std::function<bool()> &current, int last = -1);
+    EngineDocument *openLookupUnit(int item, const std::function<bool()> &current, int last = -1,
+                                   bool borrowAhead = true);
     std::unique_ptr<EngineDocument> loadUnit(int first, const QJsonObject &settings,
                                              const std::function<bool()> &current, QString *error);
     void keepUnit(std::unique_ptr<EngineDocument> document, const QJsonObject &settings,

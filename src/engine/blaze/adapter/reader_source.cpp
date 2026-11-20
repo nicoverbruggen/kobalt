@@ -989,6 +989,8 @@ void EngineDocument::carryTextKnowledge(EngineDocument &next) const
     // book, not to this document.
     if (nativePositions_ && !next.nativePositions_)
         next.nativePositions_ = nativePositions_;
+    if (!to.selectionEndpoints)
+        to.selectionEndpoints = from.selectionEndpoints;
     merge(to.textFractions, from.textFractions);
     merge(to.textWordPrefixes, from.textWordPrefixes);
     merge(to.linkTargets, from.linkTargets);
@@ -1346,7 +1348,7 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
 }
 
 EngineDocument *EngineDocument::openLookupUnit(int item, const std::function<bool()> &current,
-                                               int last)
+                                               int last, bool borrowAhead)
 {
     if (item < 0 || item >= spineItemCount_ || (current && !current()))
         return nullptr;
@@ -1361,7 +1363,7 @@ EngineDocument *EngineDocument::openLookupUnit(int item, const std::function<boo
     document = loadUnit(unit.first, settings, current, nullptr);
 #if __has_include(<koblaze.h>)
     // A lookup still needs its target when the engine has room for only one spare.
-    if (!document && ahead_ && ldomDocument::koblazeFreeDocumentSlots() < 3
+    if (!document && borrowAhead && ahead_ && ldomDocument::koblazeFreeDocumentSlots() < 3
         && (!current || current()) && openAhead(unit.first, current, unit.second))
         document = std::move(ahead_);
 #endif

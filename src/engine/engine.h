@@ -185,10 +185,9 @@ public:
     virtual TextRange textRange(const QString &start, const QString &end,
                                 bool withContext = false) = 0;
     // Indices of source ranges intersecting [start, end), in input order.
-    // Invalid, empty and reversed ranges are ignored. No text or geometry is read.
-    virtual QVector<int>
-    intersectingRanges(const QString &start, const QString &end,
-                       const QVector<QPair<QString, QString>> &ranges) const = 0;
+    // Invalid, empty and reversed ranges are ignored. Only source endpoints are compared.
+    virtual QVector<int> intersectingRanges(const QString &start, const QString &end,
+                                            const QVector<QPair<QString, QString>> &ranges) = 0;
     // Crossed boundary edits retain both complete words using wordAt segmentation.
     virtual TextRange annotationRange(const QString &start, const QString &end) = 0;
     // Complete token boundaries preserve explicit punctuation choices when reversed.
@@ -211,9 +210,9 @@ public:
                                              const QString &origin) = 0;
     // Source-only current-page intersection. Does not resolve remote geometry.
     // Returns input indices in order; at most 2000 saved ranges plus one draft.
-    virtual QVector<int> visibleRanges(const QVector<QPair<QString, QString>> &ranges) const = 0;
+    virtual QVector<int> visibleRanges(const QVector<QPair<QString, QString>> &ranges) = 0;
     // Check a changing draft without rebuilding the saved-range index.
-    virtual bool rangeVisible(const QString &start, const QString &end) const = 0;
+    virtual bool rangeVisible(const QString &start, const QString &end) = 0;
     // Text selection excludes images. Links also need their image hit regions.
     virtual AnnotationGeometry annotationGeometry(const QString &start, const QString &end) = 0;
     virtual QVector<QRect> rangeRects(const QString &start, const QString &end,

@@ -32,6 +32,7 @@ Most Kobo models use one processor core, including the Clara BW. KOReader’s de
 ### Do each piece of work once
 
 - The text measurements of the page estimate, search and links do not depend on the layout. A new document of the same book takes them over, so an appearance change does not measure the book again.
+- A selection that spans chapters reads its text one chapter at a time on the engine worker. To draw a saved highlight, the chapter layout first checks whether the range intersects the page. It checks unfamiliar endpoints against their source chapters and keeps the result for later turns with the same appearance. Only the displayed chapter supplies glyph rectangles and handles.
 - The contents place a spine item without a layout at its start, or by its characters. Neither needs a read of its XHTML.
 - The whole-book build finds the start of each spine item while it builds, in one walk over the fragments. A page turn does not wait for that later.
 - The Nickel position code parses a chapter source once and keeps its text once, with a range for each ID. The reader asks for the place of every page, mostly in the same chapter.

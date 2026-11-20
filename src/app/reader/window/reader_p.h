@@ -817,7 +817,7 @@ private:
 
     QVector<LinkVisit> linkHistory;
     LinkVisit pendingPassage{};
-    quint64 linkEpoch = 0;
+    std::shared_ptr<std::atomic<quint64>> linkEpoch = std::make_shared<std::atomic<quint64>>(0);
     bool linkPending = false, returningFromLink = false;
     bool linksActive() const;
     // What covers the page. Each caller adds the terms that only it needs.

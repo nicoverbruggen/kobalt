@@ -1926,7 +1926,7 @@ void Reader::dismissLinkConfirmation()
 
 void Reader::dismissLinks()
 {
-    ++linkEpoch;
+    ++*linkEpoch;
     linkPending = false;
     if (linkPanel) {
         const bool wasVisible = linkPanel->isVisible();
@@ -1983,7 +1983,7 @@ bool Reader::openLink(QPoint point, bool direct)
         // alone. Restoring the toolbars would cover the link's sheet.
         hideRevealedLinks(false);
         syncNavigation();
-        const auto epoch = ++linkEpoch;
+        const auto epoch = ++*linkEpoch;
         if (orientation)
             orientation->setBlocked(true);
         page->mark(link.rectangles);
@@ -1991,9 +1991,8 @@ bool Reader::openLink(QPoint point, bool direct)
         kobalt::ui::PanelTiming timing("footnote");
         session->linkDetails(
                 link.source,
-                [guard, epoch, bounds, timing](const kobalt::LinkDetails &details) mutable {
-                    if (!guard || guard->linkEpoch != epoch || guard->lifecycleHidden
-                        || guard->services.suspended())
+                [guard, bounds, timing](const kobalt::LinkDetails &details) mutable {
+                    if (!guard || guard->lifecycleHidden || guard->services.suspended())
                         return;
                     timing.stage("details");
                     auto *reader = guard.data();
@@ -2034,7 +2033,8 @@ bool Reader::openLink(QPoint point, bool direct)
                     }
                     reader->updateOrientationBlock();
                     reader->updateLinkReturn();
-                });
+                },
+                [token = linkEpoch, epoch] { return token->load() == epoch; });
         return true;
     }
     return false;

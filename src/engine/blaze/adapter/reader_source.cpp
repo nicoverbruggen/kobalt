@@ -1314,8 +1314,15 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
         return ahead_.get();
     // The document that was here stays in memory while there is room.
     keepUnit(std::move(ahead_), aheadSettings_, aheadSize_);
-    searchUnit_ = {};
-    auto ahead = loadUnit(unit.first, settings, current, error);
+    // Following a previewed link can adopt the unit that supplied the preview.
+    std::unique_ptr<EngineDocument> ahead;
+    if (lookupUnit_.document && lookupUnit_.settings == settings && lookupUnit_.size == size_
+        && lookupUnit_.document->userStyleSheet_ == userStyleSheet_
+        && lookupUnit_.document->slicePages_ == slicePages_)
+        ahead = std::move(lookupUnit_.document);
+    lookupUnit_ = {};
+    if (!ahead)
+        ahead = loadUnit(unit.first, settings, current, error);
     if (!ahead)
         return nullptr;
     ahead_ = std::move(ahead);
@@ -1330,6 +1337,31 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
     Q_UNUSED(error);
     return nullptr;
 #endif
+}
+
+EngineDocument *EngineDocument::openLookupUnit(int item, const std::function<bool()> &current,
+                                               int last)
+{
+    if (item < 0 || item >= spineItemCount_ || (current && !current()))
+        return nullptr;
+    const auto unit = last >= item ? qMakePair(item, last) : unitFrom(item);
+    auto settings = windowSettings(unit.first, unit.second);
+    settings.remove("position");
+    auto &document = lookupUnit_.document;
+    if (document && lookupUnit_.settings == settings && lookupUnit_.size == size_
+        && document->userStyleSheet_ == userStyleSheet_ && document->slicePages_ == slicePages_)
+        return document.get();
+    document.reset();
+    document = loadUnit(unit.first, settings, current, nullptr);
+#if __has_include(<koblaze.h>)
+    // A lookup still needs its target when the engine has room for only one spare.
+    if (!document && ahead_ && ldomDocument::koblazeFreeDocumentSlots() < 3
+        && (!current || current()) && openAhead(unit.first, current, unit.second))
+        document = std::move(ahead_);
+#endif
+    lookupUnit_.settings = std::move(settings);
+    lookupUnit_.size = size_;
+    return document.get();
 }
 
 std::unique_ptr<EngineDocument> EngineDocument::loadUnit(int first, const QJsonObject &settings,
@@ -1728,7 +1760,7 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
     if (!building_) {
         // The whole book needs the room of the documents that only chapter
         // mode uses.
-        searchUnit_ = {};
+        lookupUnit_ = {};
         kept_.clear();
         auto saved = state();
         // The page to show is resolved at adoption. The reader can turn
@@ -1822,7 +1854,7 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
     // made without room shares the nodes of another one. The kept units
     // make room. Without room the build waits for a later idle moment.
     if (ldomDocument::koblazeFreeDocumentSlots() < 3) {
-        searchUnit_ = {};
+        lookupUnit_ = {};
         kept_.clear();
     }
     if (ldomDocument::koblazeFreeDocumentSlots() < 3)
@@ -1937,7 +1969,7 @@ std::unique_ptr<EngineDocument> EngineDocument::takeKept(int first, const QJsonO
 
 void EngineDocument::dropSideDocuments()
 {
-    searchUnit_ = {};
+    lookupUnit_ = {};
     building_.reset();
     full_.reset();
     ahead_.reset();
@@ -1954,7 +1986,7 @@ bool EngineDocument::adoptAhead(int first, int last)
     if (settings != aheadSettings_ || size_ != aheadSize_
         || ahead_->userStyleSheet_ != userStyleSheet_ || ahead_->slicePages_ != slicePages_)
         return false;
-    searchUnit_ = {};
+    lookupUnit_ = {};
     auto next = std::move(ahead_);
     next->setChapters(contents_, graph_);
     next->externalChapters_ = externalChapters_;

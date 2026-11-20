@@ -2236,22 +2236,29 @@ void ReaderSession::imageAt(QPoint point, std::function<void(QImage)> finished,
             Qt::QueuedConnection);
 }
 
-void ReaderSession::linkDetails(const QString &source, std::function<void(LinkDetails)> finished)
+void ReaderSession::linkDetails(const QString &source, std::function<void(LinkDetails)> finished,
+                                std::function<bool()> current)
 {
-    if (running)
+    if (running || !lease_ || lease_->revoked())
         return;
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
     const auto job = revision;
+    const auto stillCurrent = [latest = newest, job, lease = lease_, current] {
+        return latest->load() == job && !lease->revoked() && (!current || current());
+    };
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, job, source, finished] {
+            [engine, guard, job, source, finished, stillCurrent] {
                 EngineJob activity;
-                const auto result = engine->linkDetails(source);
+                if (!stillCurrent())
+                    return;
+                const auto result = engine->linkDetails(source, true, stillCurrent);
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, job, result, finished] {
-                            if (guard && guard->currentSourceFrame(job) && !guard->running)
+                        [guard, job, result, finished, stillCurrent] {
+                            if (guard && guard->currentSourceFrame(job) && !guard->running
+                                && stillCurrent())
                                 finished(result);
                         },
                         Qt::QueuedConnection);

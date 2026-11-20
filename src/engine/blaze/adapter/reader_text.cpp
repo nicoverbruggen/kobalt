@@ -1696,12 +1696,12 @@ EngineDocument::SearchBounds EngineDocument::searchBounds(SearchScope scope, con
     auto *document = this;
     if (windowFirst_ >= 0 && slicePages_ > 0 && item >= 0) {
         document =
-                item >= windowFirst_ && item <= windowLast_ ? this : openSearchUnit(item, current);
+                item >= windowFirst_ && item <= windowLast_ ? this : openLookupUnit(item, current);
         if (document && document->slices()) {
             const int before = document->textBefore(origin);
             if (before < document->sliceFirst_ || before >= document->sliceEnd_) {
                 if (document == this)
-                    document = openSearchUnit(item, current);
+                    document = openLookupUnit(item, current);
                 if (document && !document->showSliceOf(origin))
                     document = nullptr;
             }
@@ -2039,31 +2039,6 @@ EngineDocument *EngineDocument::documentFor(int item, const std::function<bool()
     return openAhead(item, current);
 }
 
-EngineDocument *EngineDocument::openSearchUnit(int item, const std::function<bool()> &current,
-                                               int last)
-{
-    if (item < 0 || item >= spineItemCount_ || (current && !current()))
-        return nullptr;
-    const auto unit = last >= item ? qMakePair(item, last) : unitFrom(item);
-    auto settings = windowSettings(unit.first, unit.second);
-    settings.remove("position");
-    auto &document = searchUnit_.document;
-    if (document && searchUnit_.settings == settings && searchUnit_.size == size_
-        && document->userStyleSheet_ == userStyleSheet_ && document->slicePages_ == slicePages_)
-        return document.get();
-    document.reset();
-    document = loadUnit(unit.first, settings, current, nullptr);
-#if __has_include(<koblaze.h>)
-    // Keep all search results when the engine only has room for one spare.
-    if (!document && ahead_ && ldomDocument::koblazeFreeDocumentSlots() < 3
-        && (!current || current()) && openAhead(unit.first, current, unit.second))
-        document = std::move(ahead_);
-#endif
-    searchUnit_.settings = std::move(settings);
-    searchUnit_.size = size_;
-    return document.get();
-}
-
 // A page of a layout of a part of the book means nothing to the reader.
 // The hit gets the title of its chapter, and an estimated page of the book
 // once the page map has one.
@@ -2133,7 +2108,7 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
         // and the one prepared for the next turn at their reading positions.
         auto *document = loaded && sameWindow && !slices()
                 ? this
-                : openSearchUnit(cursor.firstItem >= 0 ? cursor.firstItem : cursor.item, current,
+                : openLookupUnit(cursor.firstItem >= 0 ? cursor.firstItem : cursor.item, current,
                                  cursor.lastItem);
         if (!document) {
             if (current && !current())
@@ -2161,8 +2136,8 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
             if (!shown) {
                 // Stopped for other work: the document may hold half a
                 // layout. The next call opens it again.
-                if (document == searchUnit_.document.get())
-                    searchUnit_ = {};
+                if (document == lookupUnit_.document.get())
+                    lookupUnit_ = {};
                 break;
             }
         }
@@ -2224,7 +2199,7 @@ SearchBatch EngineDocument::searchText(const QString &query, SearchCursor cursor
     result.cursor = cursor;
     result.done = cursor.item >= spineItemCount_ || (lastItem >= 0 && cursor.item > lastItem);
     if (result.done)
-        searchUnit_ = {};
+        lookupUnit_ = {};
     result.nextPage = result.done ? pages() : 0;
     return result;
 }
@@ -2246,7 +2221,7 @@ QVector<SearchHit> EngineDocument::searchDetails(QVector<SearchHit> hits, Search
     for (const auto &hit : hits) {
         const int item = positionItem(hit.start);
         auto *document =
-                item >= windowFirst_ && item <= windowLast_ ? this : openSearchUnit(item, {});
+                item >= windowFirst_ && item <= windowLast_ ? this : openLookupUnit(item, {});
         // A long spine item has a layout for one part at a time, and only
         // that part has the text around a hit. Another document shows the
         // part of the hit: the one on screen keeps its part.
@@ -2254,7 +2229,7 @@ QVector<SearchHit> EngineDocument::searchDetails(QVector<SearchHit> hits, Search
             const int before = document->textBefore(hit.start);
             if (before < document->sliceFirst_ || before >= document->sliceEnd_) {
                 if (document == this)
-                    document = openSearchUnit(item, {});
+                    document = openLookupUnit(item, {});
                 if (document && document->slices() && !document->showSliceAt(before))
                     document = nullptr;
             }

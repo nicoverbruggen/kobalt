@@ -15,6 +15,10 @@
 namespace kobalt {
 struct ReaderFootnoteProbe
 {
+    static const ColumnView *prepared(const EngineDocument &document)
+    {
+        return document.ahead_ ? document.ahead_->engine_.get() : nullptr;
+    }
     static ColumnView &view(EngineDocument &document) { return *document.engine_; }
 };
 } // namespace kobalt
@@ -632,11 +636,13 @@ void remoteNoteSemantics()
                         "<p><a href='notes.xhtml#note'>remote</a> "
                         "<a role='doc-link' href='notes.xhtml#note'>passage override</a> "
                         "<a href='notes.xhtml#plain'>plain passage</a></p>") },
+              { "middle.xhtml",
+                test::publisherHtml(QByteArray("<p>Intervening chapter.</p>").repeated(1500)) },
               { "notes.xhtml",
                 test::publisherHtml(
                         "<aside role='doc-footnote'><div><p id='note'>Publisher note.</p></div></aside>"
                         "<p id='plain'>Ordinary passage.</p>") } },
-            "<itemref idref='text.xhtml'/><itemref idref='notes.xhtml'/>");
+            "<itemref idref='text.xhtml'/><itemref idref='middle.xhtml'/><itemref idref='notes.xhtml'/>");
     QTemporaryDir directory;
     require(directory.isValid() && test::writeBook(directory.path(), "notes.epub", files),
             "Cannot write the remote note fixture");
@@ -647,8 +653,21 @@ void remoteNoteSemantics()
         EngineDocument model(test::readerFonts());
         QString error;
         require(model.open(bytes, { 900, 900 }, {}, &error), qPrintable(error));
-        if (chapter)
+        const ColumnView *prepared = nullptr;
+        if (chapter) {
+            model.setChapterSlices(2);
             require(model.showSpineItems(0, 0), "Cannot isolate the link chapter");
+            model.prepareAhead();
+            prepared = ReaderFootnoteProbe::prepared(model);
+            require(prepared, "Fixture must prepare the intervening chapter");
+        }
+        if (chapter) {
+            int polls = 0;
+            const auto cancelled = model.linkDetails(model.pageLinks().first().source, true,
+                                                     [&] { return ++polls < 4; });
+            require(polls >= 4 && cancelled.target.isEmpty() && cancelled.html.isEmpty(),
+                    "Opening a remote preview continued after dismissal");
+        }
         // The second lookup exercises cached target semantics.
         for (int lookup = 0; lookup < 2; ++lookup) {
             const auto links = model.pageLinks();
@@ -662,6 +681,10 @@ void remoteNoteSemantics()
                         "Link classification disagrees with its preview");
             }
         }
+        if (chapter)
+            require(ReaderFootnoteProbe::prepared(model) == prepared && model.turnInWindow(1)
+                            && &ReaderFootnoteProbe::view(model) == prepared,
+                    "Preview displaced the chapter prepared for the next page turn");
     }
 }
 

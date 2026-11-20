@@ -198,7 +198,8 @@ public:
                                       bool endTokenPolicy = false, bool startTokenPolicy = false,
                                       std::function<bool()> current = {}) = 0;
     virtual QVector<PageLink> pageLinks() = 0;
-    virtual LinkDetails linkDetails(const QString &source, bool preview = true) = 0;
+    virtual LinkDetails linkDetails(const QString &source, bool preview = true,
+                                    const std::function<bool()> &current = {}) = 0;
     virtual SearchBatch searchPage(const QString &query, int page) = 0;
     // Worker-only, incremental preparation. The cache belongs to this layout.
     virtual bool prepareSearch() = 0;

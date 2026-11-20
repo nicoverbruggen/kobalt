@@ -292,7 +292,9 @@ public:
                    std::function<void(TextRange)> finished, bool withContext = false);
     void wordAt(QPoint point, std::function<void(WordSelection)> finished);
     void imageAt(QPoint point, std::function<void(QImage)> finished, const QString &resource = {});
-    void linkDetails(const QString &source, std::function<void(LinkDetails)> finished);
+    // The engine worker polls current while opening a remote target.
+    void linkDetails(const QString &source, std::function<void(LinkDetails)> finished,
+                     std::function<bool()> current = {});
 
     const QVector<PageLink> &pageLinks() const { return frame.links; }
 

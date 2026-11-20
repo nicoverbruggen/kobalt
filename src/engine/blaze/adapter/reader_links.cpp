@@ -838,10 +838,11 @@ QVector<PageLink> EngineDocument::pageLinks()
     return result;
 }
 
-LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
+LinkDetails EngineDocument::linkDetails(const QString &source, bool preview,
+                                        const std::function<bool()> &current)
 {
     LinkDetails result;
-    if (!engine_)
+    if (!engine_ || (current && !current()))
         return result;
     auto *doc = engine_->getDocument();
     auto pointer = doc->createXPointer(domText(source));
@@ -898,9 +899,9 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview)
             return result;
         }
         if (slicePages_ > 0) {
-            targetDocument = openAhead(item);
+            targetDocument = openLookupUnit(item, current);
         } else {
-            sideWindow = openSide(windowSettings(item, item), {}, nullptr);
+            sideWindow = openSide(windowSettings(item, item), current, nullptr);
             targetDocument = sideWindow.get();
         }
         if (!targetDocument || !targetDocument->engine_)

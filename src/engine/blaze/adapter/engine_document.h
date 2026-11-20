@@ -165,7 +165,8 @@ public:
                               bool endTokenPolicy = false, bool startTokenPolicy = false,
                               std::function<bool()> current = {}) override;
     QVector<PageLink> pageLinks() override;
-    LinkDetails linkDetails(const QString &source, bool preview = true) override;
+    LinkDetails linkDetails(const QString &source, bool preview = true,
+                            const std::function<bool()> &current = {}) override;
     SearchBatch searchPage(const QString &query, int page) override;
     // Worker-only, incremental preparation. The cache belongs to this layout.
     bool prepareSearch() override;
@@ -524,9 +525,9 @@ private:
     };
 
     std::vector<KeptUnit> kept_;
-    // Search can change slices while the next page turn keeps its prepared layout.
-    KeptUnit searchUnit_;
-    EngineDocument *openSearchUnit(int item, const std::function<bool()> &current, int last = -1);
+    // Search and link previews can open another chapter while the next turn keeps its layout.
+    KeptUnit lookupUnit_;
+    EngineDocument *openLookupUnit(int item, const std::function<bool()> &current, int last = -1);
     std::unique_ptr<EngineDocument> loadUnit(int first, const QJsonObject &settings,
                                              const std::function<bool()> &current, QString *error);
     void keepUnit(std::unique_ptr<EngineDocument> document, const QJsonObject &settings,

@@ -149,6 +149,9 @@ void Button::paintEvent(QPaintEvent *)
             else
                 drawOpticalText(painter, rect(), text(), true);
         } else {
+            // Qt treats an ampersand as a mnemonic marker when it paints the label.
+            if (option.text == QLatin1String("&"))
+                option.text = QStringLiteral("&&");
             style()->drawControl(QStyle::CE_PushButton, &option, &painter, this);
         }
         return;

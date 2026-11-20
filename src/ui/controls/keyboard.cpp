@@ -587,7 +587,7 @@ private:
                 const auto shown =
                         caseMode != Case::Lower && !symbolPage ? character.toUpper() : character;
                 key->setProperty("keyboard.character", shown);
-                key->setText(shown == "&" ? QStringLiteral("&&") : shown);
+                key->setText(shown);
                 characterFont(key);
                 key->setVisible(!shown.isEmpty());
                 key->setFixedSize(narrow && rows[row].size() <= 10 ? widthFor(10) : width, height);

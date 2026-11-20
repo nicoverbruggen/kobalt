@@ -999,6 +999,11 @@ private slots:
         typePage();
         QVERIFY(action("widgetKeyboardSymbols"));
         QCOMPARE(panel->findChild<QPushButton *>("widgetKeyboardSymbols")->text(), QString("ABC"));
+        for (auto *key : panel->findChildren<QPushButton *>()) {
+            const auto character = key->property("keyboard.character").toString();
+            if (key->isVisible() && !character.isEmpty())
+                QCOMPARE(key->text(), character);
+        }
         typePage();
         QVERIFY(action("widgetKeyboardSpace"));
         expected += ' ';

@@ -1,5 +1,7 @@
 # Page turns and navigation
 
+In Chapters, tap the three dots beside Close for publisher navigation. Choose Go to printed page, enter a number and tap Go to jump to that page in the print edition. Go is available when the publisher supplied the number. Other page labels lists entries such as Roman numerals. If the book has only those labels, the list opens directly. These labels stay the same when the text size changes. View book landmarks opens named sections such as the bibliography. Each action appears when the book supplies that list. From either list, the same menu can take you back to Chapters.
+
 An illustrated EPUB 3 chapter entry shows the publisher’s alternative text. If the label contains only an image, tap the circled image icon before the page number to view the artwork without leaving your reading position. A text entry can also show this icon when its chapter contains only a single local image, such as a map plate. To limit opening work, Kobalt checks up to 128 short chapter files of at most 8 KiB each.
 
 Normal page turns include non-linear EPUB sections, including covers marked as non-linear. Settings > Books > Hide non-linear fragments skips other non-linear sections during page turns. It is off by default. With two columns and hidden fragments, each non-linear section starts on its own screen. Its text cannot share a screen with ordinary text. Links, Chapters and page-number navigation can still open hidden sections; page turns within a section already open remain available.

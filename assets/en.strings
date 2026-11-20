@@ -256,8 +256,18 @@
 "about.version" = "Version %1 (Qt%2)";
 
 /* chapter_contents */
+"chapter_contents.additional_actions" = "Additional actions";
+"chapter_contents.enter_printed_page" = "Enter a page number from the print edition.";
+"chapter_contents.other_labels" = "Other page labels";
+"chapter_contents.more" = "More navigation options";
+"chapter_contents.go_to_printed_page" = "Go to printed page";
+"chapter_contents.view_landmarks" = "View book landmarks";
+"chapter_contents.landmarks" = "Landmarks";
+"chapter_contents.landmark_count" = "Landmarks · %1";
 "chapter_contents.preview_image" = "View illustration for %1";
 "chapter_contents.illustrated_entry" = "Illustrated entry %1";
+"chapter_contents.printed_pages" = "Printed pages";
+"chapter_contents.printed_count" = "Printed pages · %1";
 "chapter_contents.chapter_destination_unavailable" = "Chapter destination unavailable";
 "chapter_contents.current_chapter" = "Current chapter";
 "chapter_contents.collapse_group" = "Collapse %1";

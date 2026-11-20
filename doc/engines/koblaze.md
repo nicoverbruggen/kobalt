@@ -32,7 +32,7 @@ For a change to text layout, check both the inherited `lvtextfm.cpp` and [Blaze�
 
 The CSS parser keeps the selector grammar and cascade order. The [ancestor filter](../../src/engine/blaze/extensions/css_ancestors.cpp) records the requirements of a parsed selector and checks ancestor element names and classes before a full match. Active stylesheets also index universal selectors that require a class. The matcher merges the candidates in cascade order.
 
-The EPUB importer resolves manifest fallback chains before building chapter fragments.
+The EPUB importer resolves manifest fallback chains before building chapter fragments. Page lists use CREngine’s existing NCX and EPUB navigation parsers. Chapter windows retain the target ID for a printed page outside the loaded chapter. The reader resolves it when the page is selected.
 
 Blaze uses libwebp for still images and for the first composited frame of an animation. Layout reads the WebP header. A still-image decoder can produce a smaller raster when the drawing destination accepts one. FreeType uses Brotli for WOFF2. The embedded font cache retains reconstructed single-face fonts so other sizes and chapter windows can share them. Font collections use FreeType’s collection handling.
 

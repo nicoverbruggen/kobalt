@@ -1041,7 +1041,7 @@ private:
     void finishPreview();
     void resumeAppearanceApply();
     void openImagePreview(QPoint point, const QString &resource = {});
-    void showChapters();
+    void showChapters(ContentsList mode = ContentsList::Chapters);
     void toggleGraph();
     void openGraph();
     void showProgressDebug();

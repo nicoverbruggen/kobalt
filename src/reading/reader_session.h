@@ -83,7 +83,7 @@ struct ReaderFrame
     QImage cover;
     QStringList fonts;
     QVector<ReadingFont> fontCatalog;
-    QVector<ChapterLink> chapters, chapterGraph;
+    QVector<ChapterLink> chapters, chapterGraph, printedPages, landmarks;
     QVector<PageLink> links;
     ChapterSelection contentsSelection, graphSelection;
 };
@@ -508,6 +508,9 @@ public:
 
     QVector<ReadingFont> fontCatalog() const { return frame.fontCatalog; }
 
+    const QVector<ChapterLink> &landmarks() const { return frame.landmarks; }
+
+    const QVector<ChapterLink> &printedPages() const { return frame.printedPages; }
     QVector<ChapterLink> chapters() const { return frame.chapters; }
 
     QVector<ChapterLink> chapterGraph() const { return frame.chapterGraph; }

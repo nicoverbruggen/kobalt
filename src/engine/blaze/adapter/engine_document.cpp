@@ -837,6 +837,8 @@ void EngineDocument::configure(QSize size, const QJsonObject &settings)
     hangingPunctuation_ = saved.value("hanging_punctuation").toBool(false);
     spineNames_.clear();
     spineLocations_.clear();
+    printedPages_.clear();
+    landmarks_.clear();
     engine_ = std::make_unique<ColumnView>();
     engine_->setHangingPunctuation(hangingPunctuation_);
     engine_->setColumns(columns_);
@@ -1042,7 +1044,10 @@ int EngineDocument::turnTarget(int from, int delta) const
 
 bool EngineDocument::goTo(const QString &position)
 {
-    const int item = spineItemIndex(position);
+    const QString prefix = QStringLiteral("#_doc_fragment_");
+    const bool printed = position.startsWith(prefix);
+    const int item = printed ? position.mid(prefix.size()).section('_', 0, 0).toInt()
+                             : spineItemIndex(position);
     if (engine_ && windowFirst_ >= 0 && slicePages_ > 0 && item >= 0
         && (item < windowFirst_ || item > windowLast_)) {
         // A saved position may refer to text that has changed. Resolve it in
@@ -1056,6 +1061,31 @@ bool EngineDocument::goTo(const QString &position)
             return false;
         windowLoadMs_ = loadMs;
         return true;
+    }
+    if (printed) {
+        if (!engine_ || !showSpineItemOf(QString("/body/DocFragment[%1]").arg(item + 1)))
+            return false;
+        auto *doc = engine_->getDocument();
+        const auto id = cre(position.mid(1));
+        auto *target = doc->getNodeById(doc->getAttrValueIndex(id.c_str()));
+        if (!target)
+            return false;
+        ldomXPointerEx pointer(target, 0);
+        if (!pointer.isVisible()) {
+            const auto fragment = [](ldomNode *node) {
+                while (node && !node->isNodeName("DocFragment"))
+                    node = node->getParentNode();
+                return node;
+            };
+            auto *chapter = fragment(target);
+            if (!pointer.nextVisibleText() || fragment(pointer.getNode()) != chapter) {
+                pointer = ldomXPointerEx(target, 0);
+                if (!pointer.prevVisibleText() || fragment(pointer.getNode()) != chapter)
+                    return false;
+                pointer.setOffset(pointer.getNode()->getText().length());
+            }
+        }
+        return goTo(qstring(pointer.toString()));
     }
     if (!engine_ || !showSpineItemOf(position))
         return false;
@@ -1905,6 +1935,39 @@ QImage EngineDocument::image(int pageNumber)
         cache_.insert(pageNumber, result);
     trim();
     return result;
+}
+
+QVector<ChapterLink> EngineDocument::landmarks() const
+{
+    if (!engine_ || !landmarks_.isEmpty())
+        return landmarks_;
+    const auto props = engine_->getDocument()->getProps();
+    const int count = props->getIntDef("blaze.landmarks", 0);
+    for (int i = 0; i < count; ++i) {
+        const auto key = QByteArray("blaze.landmark.") + QByteArray::number(i);
+        landmarks_.append({ qstring(props->getStringDef((key + ".label").constData())),
+                            qstring(props->getStringDef((key + ".href").constData())) });
+    }
+    return landmarks_;
+}
+
+QVector<ChapterLink> EngineDocument::printedPages() const
+{
+    if (!engine_)
+        return {};
+    if (!printedPages_.isEmpty())
+        return printedPages_;
+    auto &pages = printedPages_;
+    auto *map = engine_->getDocument()->getPageMap();
+    if (!map || !map->isDocumentProvided())
+        return pages;
+    for (int i = 0; i < map->getChildCount(); ++i) {
+        auto *entry = map->getChild(i);
+        const auto path = qstring(entry->getPath());
+        if (path.startsWith(QStringLiteral("#_doc_fragment_")))
+            pages.append({ qstring(entry->getLabel()), path });
+    }
+    return pages;
 }
 
 QVector<ChapterLink> EngineDocument::chapters() const

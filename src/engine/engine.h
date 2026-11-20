@@ -400,6 +400,8 @@ public:
     // requested size and 4 million pixels. Empty means neither is usable.
     virtual QImage coverImage(QSize maximumSize, const QString &preferredPath = {},
                               QString *usedPath = nullptr) const = 0;
+    virtual QVector<ChapterLink> landmarks() const = 0;
+    virtual QVector<ChapterLink> printedPages() const = 0;
     virtual QVector<ChapterLink> chapters() const = 0;
     virtual void setChapters(QVector<ChapterLink> contents, QVector<ChapterLink> graph) = 0;
     virtual QVector<ChapterLink> chapterGraph() const = 0;

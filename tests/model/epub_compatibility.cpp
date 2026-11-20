@@ -101,6 +101,12 @@ void checkNavigation(bool epub3)
                         && intermediate.spineItemOf(intermediate.position()) == 3,
                 "A fallback chain took over an intermediate item's own spine slot");
     }
+    const auto pages = model.printedPages();
+    require(pages.size() == 1 && pages.first().title == "xiv", "Publisher label missing");
+    require(model.goTo(pages.first().position), "Whole-book print jump failed");
+    const auto expected = model.position();
+    require(model.spineItemOf(expected) == 2, "Printed page jumped to the wrong chapter");
+    require(model.showSpineItems(0, 0, &error), qPrintable(error));
     if (epub3) {
         const auto chapter = model.chapters().value(0);
         require(chapter.title == "Map of the coast", "Image text was lost");
@@ -111,7 +117,16 @@ void checkNavigation(bool epub3)
         require(chapters.size() == 3 && chapters[1].title == "Coastal routes"
                         && !chapters[1].labelImage.isEmpty() && chapters[2].title == "Passage two",
                 "Image-only grouping heading or mixed text label was lost");
+        const auto marks = model.landmarks();
+        require(marks.size() == 1 && marks.first().title == "References"
+                        && model.goTo(marks.first().position) && model.position() == expected,
+                "Landmark lost the destination outside the loaded chapter");
+        require(model.showSpineItems(0, 0, &error), qPrintable(error));
     }
+    const auto fromChapter = model.printedPages();
+    require(fromChapter.size() == 1 && model.goTo(fromChapter.first().position),
+            "Cross-chapter print jump failed");
+    require(model.position() == expected, "Chapter mode lost the printed page anchor");
 }
 
 void checkDtbookChapterWindow()
@@ -335,6 +350,22 @@ int main(int argc, char **argv)
             require(conformance.goTo(toc[j].position)
                             && conformance.spineItemOf(conformance.position()) == j,
                     "W3C TOC navigation target");
+    }
+    auto hidden = test::engineBook(false, 2, 10);
+    hidden["OEBPS/c1.xhtml"].replace("</body>",
+                                     "<span style='display:none' id='lastMarker'>8</span></body>");
+    hidden["OEBPS/toc.ncx"].replace(
+            "</ncx>",
+            "<pageList><pageTarget type='normal' value='8'><navLabel><text>8</text></navLabel><content src='c1.xhtml#lastMarker'/></pageTarget></pageList></ncx>");
+    EngineDocument markers(test::readerFonts());
+    openPublication(markers, hidden);
+    for (int mode = 0; mode < 2; ++mode) {
+        if (mode)
+            require(markers.showSpineItems(0, 0, &error), qPrintable(error));
+        const auto pages = markers.printedPages();
+        require(pages.size() == 1 && markers.goTo(pages.first().position)
+                        && markers.spineItemOf(markers.position()) == 0,
+                "Trailing hidden page marker left its chapter");
     }
     ResourceCache optional(
             { "missing", "present" },

@@ -2049,6 +2049,13 @@ void illustratedNavigation(Fixture &fixture, const QString &variant = {})
         const auto edge = imageButton->mapTo(panel, QPoint(0, imageButton->height() / 2));
         QCOMPARE(frame.pixelColor(edge + QPoint(1, 0)), frame.pixelColor(edge - QPoint(1, 0)));
     }
+    auto *listSwitch = fixture.widget("rrContentsMore");
+    const auto *close = fixture.widget("rrContentsClose");
+    QCOMPARE(listSwitch->geometry().right() + 1, close->x());
+    QCOMPARE(listSwitch->size(), close->size());
+    QVERIFY(listSwitch->property("text").toString().isEmpty());
+    QCOMPARE(fixture.widget("rrContentsMore")->accessibleName(),
+             strings::get("chapter_contents.more"));
     if (!variant.isEmpty())
         QVERIFY(capture(fixture, variant + "-illustrated-chapters"));
     const auto position = fixture.state().value("position");
@@ -2062,6 +2069,34 @@ void illustratedNavigation(Fixture &fixture, const QString &variant = {})
         QVERIFY(fixture.visible("rrChapter0Image"));
         QCOMPARE(fixture.state().value("position"), position);
     }
+    QVERIFY(fixture.press("rrContentsMore"));
+    QVERIFY(fixture.visible("rrContentsShowPrinted"));
+    if (!variant.isEmpty())
+        QVERIFY(capture(fixture, variant + "-chapter-navigation-menu"));
+    auto *menu = fixture.widget("rrContentsMenu");
+    auto *card = menu->findChild<QWidget *>("rrModalCard");
+    QVERIFY(card);
+    QVERIFY((card->geometry().center() - menu->rect().center()).manhattanLength() <= 2);
+    QVERIFY(fixture.press("rrContentsShowPrinted"));
+    QTRY_VERIFY(fixture.visible("rrPrintedPageNumber"));
+    if (!variant.isEmpty())
+        QVERIFY(capture(fixture, variant + "-printed-page-input"));
+    QVERIFY(fixture.press("rrPrintedPageCancel"));
+    QCOMPARE(fixture.state().value("position"), position);
+    QVERIFY(fixture.press("rrContentsMore"));
+    QTRY_VERIFY(fixture.visible("rrContentsShowLandmarks"));
+    QVERIFY(fixture.press("rrContentsShowLandmarks"));
+    QTRY_COMPARE(labelText(fixture, "rrLandmark1Title"), QString("Bibliography"));
+    if (!variant.isEmpty())
+        QVERIFY(capture(fixture, variant + "-publisher-landmarks"));
+    QVERIFY(fixture.press("rrContentsMore"));
+    QVERIFY(fixture.press("rrContentsShowChapters"));
+    QTRY_VERIFY(fixture.visible("rrChapter0Image"));
+    QVERIFY(fixture.press("rrContentsMore"));
+    QTRY_VERIFY(fixture.visible("rrContentsShowLandmarks"));
+    QVERIFY(fixture.press("rrContentsShowLandmarks"));
+    QVERIFY(fixture.press("rrLandmark1"));
+    QTRY_COMPARE(fixture.state().value("chapter_title").toString(), QString("References"));
 }
 
 void chapterGroups(Fixture &fixture, const QString &name = {})
@@ -5426,6 +5461,47 @@ private slots:
         QVERIFY(fixture.prepared);
         selectPreview(fixture, preset);
         ::swipeChoices(fixture);
+    }
+
+    void printedPageNavigation()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        auto files = test::engineBook(false, 3, 12);
+        files["OEBPS/toc.ncx"].replace(
+                "</ncx>",
+                "<pageList><pageTarget type='front' value='14'>"
+                "<navLabel><text>xiv</text></navLabel><content src='c3.xhtml#kobo.10.1'/>"
+                "</pageTarget><pageTarget type='normal' value='42'><navLabel><text>42</text></navLabel>"
+                "<content src='c2.xhtml#kobo.10.1'/></pageTarget></pageList></ncx>");
+        QVERIFY(writeBook(fixture.directory.path(), "printed.epub", files));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(fixture.directory.filePath("printed.epub"));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        if (!fixture.visible("rrNavChapters"))
+            QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QVERIFY(fixture.press("rrContentsMore"));
+        QVERIFY(!fixture.visible("rrContentsShowLandmarks"));
+        QVERIFY(fixture.press("rrContentsShowPrinted"));
+        QVERIFY(fixture.press("rrPrintedPageKey3"));
+        QVERIFY(!fixture.widget("rrPrintedPageGo")->isEnabled());
+        QVERIFY(fixture.press("rrPrintedPageKey1"));
+        QVERIFY(fixture.widget("rrPrintedPageGo")->isEnabled());
+        QVERIFY(fixture.press("rrPrintedPageGo"));
+        QTRY_COMPARE(fixture.state().value("chapter_title").toString(), QString("Chapter 2"));
+        if (!fixture.visible("rrNavChapters"))
+            QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QVERIFY(fixture.press("rrContentsMore"));
+        QTRY_VERIFY(fixture.visible("rrContentsShowPrinted"));
+        QVERIFY(fixture.press("rrContentsShowPrinted"));
+        QTRY_VERIFY(fixture.visible("rrPrintedOtherLabels"));
+        QVERIFY(fixture.press("rrPrintedOtherLabels"));
+        QTRY_COMPARE(labelText(fixture, "rrPrintedPage0Title"), QString("xiv"));
+        QVERIFY(fixture.press("rrPrintedPage0"));
+        QTRY_COMPARE(fixture.state().value("chapter_title").toString(), QString("Chapter 3"));
     }
 
     void illustratedNavigation()
@@ -10067,7 +10143,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 // rides on the next page turn: that turn still turns one
                 // page, and from then on the reader shows the document of
                 // the whole book.
+                if (!fixture.visible("rrNavChapters"))
+                    QVERIFY(fixture.press("rrPage"));
+                QVERIFY(fixture.press("rrNavChapters"));
+                QTRY_VERIFY(fixture.visible("rrContentsPosition"));
                 QTRY_VERIFY_WITH_TIMEOUT(ready, 15000);
+                QVERIFY(fixture.visible("rrContentsPosition"));
+                QVERIFY(fixture.press("rrContentsClose"));
                 QVERIFY(fixture.state().contains("book_fraction"));
                 // The turn that is already on its way when the document
                 // becomes ready stays in the chapter; the one after it

@@ -10,6 +10,8 @@
 #include <QTimer>
 #include <functional>
 
+class QLineEdit;
+
 namespace kobalt::ui {
 class PagerBar;
 
@@ -206,6 +208,7 @@ class ChoiceModal : public ModalOverlay
 public:
     ChoiceModal(QWidget *parent, const ModalContent &content, const ModalAction &secondary,
                 const ModalAction &primary);
+    QLineEdit *addPageKeypad(const QString &prefix, const QString &placeholder = {});
 
     QLabel *titleLabel() const { return title; }
 

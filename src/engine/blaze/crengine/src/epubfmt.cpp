@@ -168,6 +168,17 @@ void ReadEpubNcxToc( ldomDocument * doc, ldomNode * mapRoot, LVTocItem * baseToc
     }
 }
 
+// Blaze: preserve the publication target even when its chapter is outside the window.
+static void addPrintedPage(ldomDocument *doc, LVPageMap *map, const lString32 &label,
+                           const lString32 &href)
+{
+    ldomNode *target = doc->getNodeById(doc->getAttrValueIndex(href.substr(1).c_str()));
+    if (target)
+        map->addPage(label, ldomXPointer(target, 0), href);
+    else if (koblazeSpineWindowSet() && href.startsWith("#_doc_fragment_"))
+        map->addPage(label, ldomXPointer(), href);
+}
+
 void ReadEpubNcxPageList( ldomDocument * doc, ldomNode * mapRoot, LVPageMap * pageMap, ldomDocumentFragmentWriter & appender ) {
     // http://idpf.org/epub/20/spec/OPF_2.0.1_draft.htm#Section2.4.1.2
     // http://idpf.org/epub/a11y/techniques/techniques-20160711.html#refPackagesLatest
@@ -208,11 +219,7 @@ void ReadEpubNcxPageList( ldomDocument * doc, ldomNode * mapRoot, LVPageMap * pa
         href = appender.convertHref(href);
         if ( href.empty() || href[0]!='#' )
             continue;
-        ldomNode * target = doc->getNodeById(doc->getAttrValueIndex(href.substr(1).c_str()));
-        if ( !target )
-            continue;
-        ldomXPointer ptr(target, 0);
-        pageMap->addPage(title, ptr, lString32::empty_str);
+        addPrintedPage(doc, pageMap, title, href);
     }
 }
 
@@ -311,11 +318,7 @@ void ReadEpubNavPageMap( ldomDocument * doc, ldomNode * mapRoot, LVPageMap * pag
                 href = DecodeHTMLUrlString(href);
                 href = appender.convertHref(href);
                 if ( !href.empty() && href[0]=='#' ) {
-                    ldomNode * target = doc->getNodeById(doc->getAttrValueIndex(href.substr(1).c_str()));
-                    if ( target ) {
-                        ldomXPointer ptr(target, 0);
-                        pageMap->addPage(title, ptr, lString32::empty_str);
-                    }
+                    addPrintedPage(doc, pageMap, title, href);
                 }
             }
         }
@@ -342,11 +345,7 @@ void ReadEpubAdobePageMap( ldomDocument * doc, ldomNode * mapRoot, LVPageMap * p
         href = appender.convertHref(href);
         if ( href.empty() || href[0]!='#' )
             continue;
-        ldomNode * target = doc->getNodeById(doc->getAttrValueIndex(href.substr(1).c_str()));
-        if ( !target )
-            continue;
-        ldomXPointer ptr(target, 0);
-        pageMap->addPage(title, ptr, lString32::empty_str);
+        addPrintedPage(doc, pageMap, title, href);
     }
 }
 
@@ -1800,13 +1799,15 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                         if (nextChildIndex == 0) {
                             if ( n->isElement() && n->getNodeId() == nav_id ) {
                                 lString32 type = n->getAttributeValue("type");
-                                if ( type == U"toc") {
+                                type.trimDoubleSpaces(false,false,false);
+                                type = cs32(" ") + type + " ";
+                                if ( type.pos(U" toc ") >= 0) {
                                     n_toc = n;
                                 }
-                                else if ( type == U"landmarks") {
+                                else if ( type.pos(U" landmarks ") >= 0) {
                                     n_landmarks = n;
                                 }
-                                else if ( type == U"page-list") {
+                                else if ( type.pos(U" page-list ") >= 0) {
                                     n_page_list = n;
                                 }
                             }
@@ -1827,6 +1828,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                             break;
                     }
                 }
+                if (n_landmarks)
+                    blaze::readLandmarks(n_landmarks, m_doc, appender);
                 if ( !n_toc ) {
                     if ( n_landmarks ) {
                         n_toc = n_landmarks;

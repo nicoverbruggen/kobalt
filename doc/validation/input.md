@@ -8,7 +8,7 @@ These checks cover touch and pointer input, holds, swipes in paged lists, press 
 
 The word-selection check drags a highlight back across a slice boundary within one chapter and checks the selected words on both pages. Longer passages must retain the same source text, sentence context and endpoints as Accurate. An existing highlight whose start is outside the slice must still prevent an overlap. Publisher-hidden text stays excluded. Source-only selection uses the original block methods in memory and keeps the parsed-book and rendering cache formats.
 
-`desktop.illustratedNavigation` opens the artwork from a chapter row, dismisses it without changing reading position.
+`desktop.illustratedNavigation` opens the artwork from a chapter row, dismisses it without changing reading position and follows a publisher landmark.
 
 ## Restored input and paint checks
 

@@ -50,6 +50,8 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
     result.state["chapter_title"] = chapter.title;
     result.state["chapter_page"] = chapter.page;
     result.state["chapter_pages"] = chapter.pages;
+    result.printedPages = engine.printedPages();
+    result.landmarks = engine.landmarks();
     result.chapters = engine.chapters();
     result.chapterGraph = engine.chapterGraph();
     result.totalWords = engine.totalWords();

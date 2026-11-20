@@ -256,10 +256,14 @@ ChoiceScreen::ChoiceScreen(QWidget *parent)
     fontHeader->hide();
     fontPager->hide();
     fontSectionBar->hide();
-    contents = new ChapterContents(this);
+    contents = new ChapterContents(this, parent);
     contents->previewImage = [this](const QString &path) {
         if (previewImage)
             previewImage(path);
+    };
+    contents->switchList = [this](ContentsList mode) {
+        if (switchList)
+            switchList(mode);
     };
     contents->selected = [this](const QString &value) {
         if (selected)

@@ -57,4 +57,35 @@ inline lString32 navLabel(ldomNode *link, ldomDocumentFragmentWriter &writer, lS
     return title;
 }
 
+inline void readLandmarks(ldomNode *nav, ldomDocument *doc, ldomDocumentFragmentWriter &writer)
+{
+    auto *xml = nav->getDocument();
+    auto *list = nav->findChildElement(LXML_NS_ANY, xml->getElementNameIndex(U"ol"), -1);
+    if (!list)
+        return;
+    const auto anchor = xml->getElementNameIndex(U"a");
+    auto props = doc->getProps();
+    int count = 0;
+    visitNavChildren(list, [&](ldomNode *link) {
+        if (!link->isElement() || link->getNodeId() != anchor)
+            return true;
+        const auto raw = link->getAttributeValue("href");
+        if (raw.empty())
+            return true;
+        const auto href = writer.convertHref(DecodeHTMLUrlString(raw));
+        if (!href.startsWith("#_doc_fragment_"))
+            return true;
+        lString32 image;
+        auto title = navLabel(link, writer, image);
+        if (title.empty())
+            title = link->getAttributeValue("type");
+        if (title.empty())
+            return true;
+        auto key = lString8("blaze.landmark.") + lString8::itoa(count++);
+        props->setString((key + ".label").c_str(), title);
+        props->setString((key + ".href").c_str(), href);
+        return count < 10000;
+    });
+    props->setInt("blaze.landmarks", count);
+}
 } // namespace blaze

@@ -2742,33 +2742,81 @@ void Reader::toggleLight()
     }
 }
 
-void Reader::showChapters()
+static bool numericPageLabel(const QString &label)
+{
+    return !label.isEmpty() && std::all_of(label.cbegin(), label.cend(), [](QChar c) {
+        return c >= QLatin1Char('0') && c <= QLatin1Char('9');
+    });
+}
+
+void Reader::showChapters(ContentsList mode)
 {
     session->cancelPendingTurn();
     lightPopup->hide();
     chapterGraph->hide();
     QVector<Choice> items;
     QString current;
-    for (const auto &chapter : session->chapters()) {
+    const bool auxiliary = mode != ContentsList::Chapters;
+    const auto list = mode == ContentsList::Landmarks ? session->landmarks()
+            : mode == ContentsList::PrintedPages      ? session->printedPages()
+                                                      : session->chapters();
+    for (const auto &chapter : list) {
+        if (mode == ContentsList::PrintedPages && numericPageLabel(chapter.title.trimmed()))
+            continue;
         const int index = items.size();
-        const auto name = QString("rrChapter%1").arg(index);
+        const auto name = (mode == ContentsList::Landmarks ? QStringLiteral("rrLandmark%1")
+                                   : auxiliary             ? QStringLiteral("rrPrintedPage%1")
+                                                           : QStringLiteral("rrChapter%1"))
+                                  .arg(index);
         // The value is the index of the entry: several entries can share a
         // position until chapter mode loads their text.
         items.append({ chapter.title.isEmpty() && !chapter.labelImage.isEmpty()
                                ? strings::get("chapter_contents.illustrated_entry").arg(index + 1)
                                : chapter.title,
-                       chapter.position.isEmpty() ? QString() : QString::number(index),
+                       auxiliary                            ? chapter.position
+                               : chapter.position.isEmpty() ? QString()
+                                                            : QString::number(index),
                        name,
                        {},
                        chapter.depth,
                        chapter.page });
         items.last().labelImage = chapter.labelImage;
-        if (index == session->contentsSelection().current)
+        if (!auxiliary && index == session->contentsSelection().current)
             current = name;
     }
+    QVector<ContentsList> lists{ ContentsList::Chapters };
+    if (!session->printedPages().isEmpty())
+        lists.append(ContentsList::PrintedPages);
+    if (!session->landmarks().isEmpty())
+        lists.append(ContentsList::Landmarks);
+    choices->setListMode(mode, lists);
+    choices->switchList = [this](ContentsList selected) {
+        if (selected == ContentsList::PrintedPages) {
+            QHash<QString, QString> pages;
+            bool hasOtherLabels = false;
+            for (const auto &page : session->printedPages()) {
+                const auto label = page.title.trimmed();
+                if (!numericPageLabel(label))
+                    hasOtherLabels = true;
+                else if (!pages.contains(label))
+                    pages.insert(label, page.position);
+            }
+            if (!pages.isEmpty()) {
+                choices->showPrintedPageInput(
+                        pages, hasOtherLabels,
+                        [this](const QString &position) {
+                            if (session->goTo(position))
+                                dismissControls();
+                        },
+                        [this] { showChapters(ContentsList::PrintedPages); });
+                return;
+            }
+        }
+        showChapters(selected);
+    };
     choices->previewImage = [this](const QString &resource) { openImagePreview({}, resource); };
-    choices->selected = [this](const QString &index) {
-        if (session->goToChapter(index.toInt()))
+    choices->selected = [this, auxiliary](const QString &value) {
+        if (auxiliary ? session->goTo(value) : session->goToChapter(value.toInt()))
             dismissControls();
     };
     choosingTypography = false;

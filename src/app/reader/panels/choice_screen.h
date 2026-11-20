@@ -8,6 +8,10 @@
 #include <QStringList>
 #include <functional>
 
+namespace kobalt::ui {
+class ModalOverlay;
+}
+
 namespace kobalt {
 // `page` is the zero-based page a chapter starts on, or -1 when it is unknown.
 struct Choice
@@ -22,6 +26,8 @@ struct Choice
     QString labelImage = {};
 };
 
+enum class ContentsList { Chapters, PrintedPages, Landmarks };
+
 enum class ChapterGroups { Current, All, Off };
 
 // The chapter list covers the header's action row with its own Chapters bar.
@@ -29,9 +35,13 @@ enum class ChapterGroups { Current, All, Off };
 class ChapterContents : public ui::Panel
 {
 public:
-    explicit ChapterContents(QWidget *parent);
+    explicit ChapterContents(QWidget *parent, QWidget *overlayHost = nullptr);
     void showChapters(const QString &title, QVector<Choice> choices, const QString &current,
                       ChapterGroups groups = ChapterGroups::Current);
+    void setListMode(ContentsList active, const QVector<ContentsList> &available);
+    void showPrintedPageInput(const QHash<QString, QString> &pages, bool hasOtherLabels,
+                              std::function<void(QString)> jump, std::function<void()> other);
+    std::function<void(ContentsList)> switchList;
     std::function<void(const QString &)> previewImage;
     void setPosition(const QString &text);
     void setPages(const QVector<int> &pages);
@@ -46,6 +56,9 @@ protected:
     void resizeEvent(QResizeEvent *) override;
 
 private:
+    void hideEvent(QHideEvent *event) override;
+    void openListMenu();
+    void closeListMenu();
     void arrange(int anchor = -1);
     void redraw();
     void rebuildVisible();
@@ -62,6 +75,11 @@ private:
     QString current;
     QLabel *title, *position, *summary, *pageHeading, *empty;
     ui::ListHeader *listHeader;
+    ui::CellButton *moreButton;
+    QVector<ContentsList> availableLists;
+    QWidget *modalHost;
+    ui::ModalOverlay *listMenu = nullptr;
+    ContentsList listMode = ContentsList::Chapters;
     ui::CellButton *close;
     ui::PagerBar *pager;
     int page = 0, rows = 1;
@@ -82,7 +100,20 @@ public:
                      Mode presentation = Mode::Chapters,
                      ChapterGroups groups = ChapterGroups::Current);
     void setDropdownGeometry(const QRect &bounds);
+
+    void setListMode(ContentsList active, const QVector<ContentsList> &available)
+    {
+        contents->setListMode(active, available);
+    }
+
+    std::function<void(ContentsList)> switchList;
     std::function<void(const QString &)> previewImage;
+
+    void showPrintedPageInput(const QHash<QString, QString> &pages, bool hasOtherLabels,
+                              std::function<void(QString)> jump, std::function<void()> other)
+    {
+        contents->showPrintedPageInput(pages, hasOtherLabels, std::move(jump), std::move(other));
+    }
     void setChapterPosition(const QString &text);
     void setChapterPages(const QVector<int> &pages);
     void selectValue(const QString &value);

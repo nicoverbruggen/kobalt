@@ -8,8 +8,11 @@
 #include "support/qt_font.h"
 #include "support/strings.h"
 #include "choice_screen.h"
+#include "ui/dialogs/action_menu.h"
 #include "ui/style/styles.h"
 #include "ui/style/fonts.h"
+#include "ui/style/private_text.h"
+#include <QLineEdit>
 #include <QPainter>
 #include <algorithm>
 
@@ -18,6 +21,31 @@ namespace contents = ui::metrics::contents;
 namespace chrome = ui::metrics::chrome;
 
 namespace {
+class ContentsTitle final : public ui::InterfaceLabel
+{
+public:
+    using ui::InterfaceLabel::InterfaceLabel;
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        const auto letters = ui::renderPrivateText(text(), font());
+        if (letters.image.isNull()) {
+            ui::InterfaceLabel::paintEvent(event);
+            return;
+        }
+        QPainter painter(this);
+        painter.setFont(font());
+        painter.setPen(palette().color(QPalette::WindowText));
+        // Center the same cap height for every list. A descender in "Chapters"
+        // extends below the baseline without moving the other letters up.
+        const auto cap = ui::interfaceInkBounds(QStringLiteral("H"), font());
+        const int baseline = (height() - cap.height()) / 2 - cap.top();
+        painter.drawImage(QPoint(0, baseline) + letters.origin,
+                          ui::tintedPrivateText(letters.image, painter.pen().color()));
+    }
+};
+
 // A sibling of the title row, so unresolved headings still have an action.
 class ChapterDisclosure final : public ui::Button
 {
@@ -78,7 +106,8 @@ private:
 };
 } // namespace
 
-ChapterContents::ChapterContents(QWidget *parent) : Panel(parent)
+ChapterContents::ChapterContents(QWidget *parent, QWidget *overlayHost)
+    : Panel(parent), modalHost(overlayHost ? overlayHost : this)
 {
     setObjectName("rrContents");
     close = new ui::CellButton(ui::ControlIcon::Close, this);
@@ -89,10 +118,16 @@ ChapterContents::ChapterContents(QWidget *parent) : Panel(parent)
         if (back)
             back();
     });
-    title = new ui::InterfaceLabel(strings::get("chapter_contents.chapters"), this);
+    title = new ContentsTitle(strings::get("chapter_contents.chapters"), this);
     title->setObjectName("rrContentsTitle");
     title->setTextFormat(Qt::PlainText);
     ui::readerStyle(title, ui::styles::brand(chrome::titleText) + "background:transparent;");
+    moreButton = new ui::CellButton(ui::ControlIcon::More, this);
+    moreButton->setObjectName("rrContentsMore");
+    moreButton->setRule(Qt::LeftEdge);
+    moreButton->setAccessibleName(strings::get("chapter_contents.more"));
+    moreButton->hide();
+    connect(moreButton, &QPushButton::clicked, this, &ChapterContents::openListMenu);
     position = new ui::InterfaceLabel(this);
     position->setObjectName("rrContentsPosition");
     position->setTextFormat(Qt::PlainText);
@@ -124,6 +159,112 @@ ChapterContents::ChapterContents(QWidget *parent) : Panel(parent)
         }
     });
     hide();
+}
+
+void ChapterContents::setListMode(ContentsList active, const QVector<ContentsList> &available)
+{
+    const auto caption = [](ContentsList mode) {
+        if (mode == ContentsList::PrintedPages)
+            return strings::get("chapter_contents.printed_pages");
+        if (mode == ContentsList::Landmarks)
+            return strings::get("chapter_contents.landmarks");
+        return strings::get("chapter_contents.chapters");
+    };
+    listMode = active;
+    title->setText(caption(active));
+    closeListMenu();
+    availableLists = available;
+    moreButton->setVisible(availableLists.size() > 1);
+}
+
+void ChapterContents::openListMenu()
+{
+    closeListMenu();
+    QVector<ui::ActionMenuItem> actions;
+    const auto add = [&](ContentsList mode, const char *label, const char *name,
+                         ui::ControlIcon icon) {
+        if (mode != listMode && availableLists.contains(mode))
+            actions.append(ui::actionItem(strings::get(label), name, icon, [this, mode] {
+                if (switchList)
+                    switchList(mode);
+            }));
+    };
+    add(ContentsList::Chapters, "chapter_contents.chapters", "rrContentsShowChapters",
+        ui::ControlIcon::Chapters);
+    add(ContentsList::PrintedPages, "chapter_contents.go_to_printed_page", "rrContentsShowPrinted",
+        ui::ControlIcon::Scroll);
+    add(ContentsList::Landmarks, "chapter_contents.view_landmarks", "rrContentsShowLandmarks",
+        ui::ControlIcon::Flag);
+    if (actions.isEmpty())
+        return;
+    listMenu = new ui::ActionMenu(
+            modalHost, { {}, strings::get("chapter_contents.additional_actions"), {}, {} },
+            actions);
+    listMenu->setObjectName("rrContentsMenu");
+    listMenu->setDimmed(true);
+    listMenu->dismissed = [this] { closeListMenu(); };
+    listMenu->fitCard();
+    listMenu->show();
+    listMenu->raise();
+    listMenu->setFocus();
+}
+
+void ChapterContents::showPrintedPageInput(const QHash<QString, QString> &pages,
+                                           bool hasOtherLabels, std::function<void(QString)> jump,
+                                           std::function<void()> other)
+{
+    closeListMenu();
+    auto *dialog = new ui::ChoiceModal(modalHost,
+                                       { strings::get("chapter_contents.enter_printed_page"),
+                                         strings::get("chapter_contents.go_to_printed_page"),
+                                         {} },
+                                       { strings::get("common.cancel"), "rrPrintedPageCancel" },
+                                       { strings::get("search_panel.go"), "rrPrintedPageGo" });
+    listMenu = dialog;
+    dialog->dismissed = [this] { closeListMenu(); };
+    auto *number = dialog->addPageKeypad("rrPrintedPage");
+    if (hasOtherLabels) {
+        auto *button = ui::makeModalButton(
+                dialog->card(),
+                { strings::get("chapter_contents.other_labels"), "rrPrintedOtherLabels" }, false);
+        dialog->card()->rows()->insertWidget(2, button);
+        connect(button, &QPushButton::clicked, dialog, [this, other] {
+            closeListMenu();
+            other();
+        });
+    }
+    connect(dialog->secondaryButton(), &QPushButton::clicked, dialog, dialog->dismissed);
+    connect(number, &QLineEdit::textChanged, dialog, [dialog, pages](const QString &value) {
+        dialog->primaryButton()->setEnabled(pages.contains(value));
+    });
+    const auto go = [this, number, pages, jump] {
+        const auto found = pages.constFind(number->text());
+        if (found != pages.constEnd()) {
+            closeListMenu();
+            jump(found.value());
+        }
+    };
+    connect(number, &QLineEdit::returnPressed, dialog, go);
+    connect(dialog->primaryButton(), &QPushButton::clicked, dialog, go);
+    dialog->show();
+    dialog->raise();
+    number->setFocus();
+}
+
+void ChapterContents::closeListMenu()
+{
+    if (listMenu) {
+        listMenu->hide();
+        listMenu->deleteLater();
+        listMenu = nullptr;
+        moreButton->setFocus();
+    }
+}
+
+void ChapterContents::hideEvent(QHideEvent *event)
+{
+    closeListMenu();
+    Panel::hideEvent(event);
 }
 
 void ChapterContents::setPosition(const QString &text)
@@ -173,7 +314,7 @@ void ChapterContents::toggleGroup(int index)
 
 void ChapterContents::setPages(const QVector<int> &pages)
 {
-    if (pages.size() != items.size())
+    if ((listMode != ContentsList::Chapters) || pages.size() != items.size())
         return;
     bool changed = false;
     for (int i = 0; i < items.size(); ++i) {
@@ -248,9 +389,11 @@ void ChapterContents::arrange(int anchor)
     const int barHeight = chrome::actionHeight - chrome::heavyRule,
               closeLeft = width() - chrome::cellWidth;
     close->setGeometry(closeLeft, 0, chrome::cellWidth, barHeight);
-    title->setGeometry(chrome::inset, 0, qMax(1, width() / 2 - chrome::inset), barHeight);
-    position->setGeometry(width() / 2, 0, qMax(1, closeLeft - chrome::inset - width() / 2),
-                          barHeight);
+    const int actionsLeft = closeLeft - (moreButton->isHidden() ? 0 : int(chrome::cellWidth));
+    moreButton->setGeometry(actionsLeft, 0, chrome::cellWidth, barHeight);
+    const int middle = actionsLeft / 2;
+    title->setGeometry(chrome::inset, 0, qMax(1, middle - chrome::inset), barHeight);
+    position->setGeometry(middle, 0, qMax(1, actionsLeft - chrome::inset - middle), barHeight);
     listHeader->setGeometry(0, chrome::actionHeight, width(), ui::metrics::list::headerHeight);
     pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
     empty->setGeometry(chrome::inset, top, qMax(1, width() - 2 * chrome::inset),
@@ -264,6 +407,11 @@ void ChapterContents::redraw()
     summary->setText(items.size() == 1
                              ? strings::get("chapter_contents.summary_one")
                              : strings::get("chapter_contents.summary").arg(items.size()));
+    if (listMode != ContentsList::Chapters)
+        summary->setText((listMode == ContentsList::Landmarks
+                                  ? strings::get("chapter_contents.landmark_count")
+                                  : strings::get("chapter_contents.printed_count"))
+                                 .arg(items.size()));
     int lastPage = -1;
     for (const auto &item : items)
         lastPage = qMax(lastPage, item.page);
@@ -364,7 +512,10 @@ void ChapterContents::redraw()
         label->setObjectName(item.name + "Title");
         const auto number = QString("%1").arg(index + 1, digits, 10, QChar('0'));
         const int indent = qBound(0, item.depth - rootDepth, 6) * contents::indent;
-        if (pagesKnown) {
+        if (listMode != ContentsList::Chapters) {
+            itemRow->setLeading({}, 0);
+            itemRow->setAccessory(ui::ListRow::Caption{ {}, 0 });
+        } else if (pagesKnown) {
             itemRow->setLeading(number, indent);
             itemRow->leadingLabel()->setObjectName(item.name + "Number");
             itemRow->setAccessory(ui::ListRow::Caption{
@@ -380,7 +531,9 @@ void ChapterContents::redraw()
             itemRow->trailingLabel()->setObjectName(item.name + "Number");
         }
         button->setAccessibleName(
-                strings::get("common.numbered_title").arg(index + 1).arg(item.label));
+                (listMode != ContentsList::Chapters)
+                        ? item.label
+                        : strings::get("common.numbered_title").arg(index + 1).arg(item.label));
     }
     if (changed && isVisible())
         changed();

@@ -305,67 +305,8 @@ void SearchPanel::choosePage()
     dialog->setGeometry(rect());
     dialog->setDimmed(true);
     dialog->dismissed = [this] { closePopup(); };
-    auto *card = dialog->card();
-    auto *entry = new QWidget(card);
-    auto *layout = new QVBoxLayout(entry);
-    layout->setContentsMargins(chrome::inset, 0, chrome::inset,
-                               metrics::notice::cardMargins.bottom());
-    ui::readerStyle(dialog->descriptionLabel(), ui::styles::font(chrome::labelText));
-    layout->setSpacing(metrics::notice::cardGap);
-    auto *number = new QLineEdit(entry);
-    number->setObjectName("rrSearchPageNumber");
-    number->setAccessibleName(strings::get("search_panel.go_to_page"));
-    number->setAttribute(Qt::WA_InputMethodEnabled, false);
+    auto *number = dialog->addPageKeypad("rrSearchPage", QString::number(resultPage + 1));
     number->setValidator(new QIntValidator(1, resultPageCount, number));
-    number->setAlignment(Qt::AlignCenter);
-    number->setMinimumHeight(chrome::actionHeight);
-    ui::readerStyle(number,
-                    "QLineEdit{border:1px solid palette(mid);background:palette(window);"
-                            + ui::styles::font(chrome::labelText) + "}");
-    number->setPlaceholderText(QString::number(resultPage + 1));
-    dialog->primaryButton()->setEnabled(false);
-    layout->addWidget(number);
-    auto *keys = new QGridLayout;
-    keys->setSpacing(ui::px(12));
-    layout->addLayout(keys);
-    const int columns = width() > height() ? 6 : 3;
-    for (int position = 0; position < 12; ++position) {
-        // Landscape keeps digits together and puts Clear after Backspace.
-        const int i =
-                columns == 6 && position >= 9 ? (position == 11 ? 9 : position + 1) : position;
-        const QString value = i < 9 ? QString::number(i + 1) : i == 10 ? "0" : QString();
-        auto *button =
-                ui::makeButton(entry, nullptr, qPrintable(QString("rrSearchPageKey%1").arg(i)),
-                               value, [number, value, i] {
-                                   if (i == 9)
-                                       number->clear();
-                                   else if (i == 11)
-                                       number->backspace();
-                                   else
-                                       number->insert(value);
-                               });
-        button->setFocusPolicy(Qt::NoFocus);
-        ui::readerStyle(
-                button,
-                QString("QPushButton{border:%1px solid palette(mid);border-radius:%2px;min-height:%3px;max-height:%3px;"
-                        "background:palette(window);color:palette(window-text);padding:0;")
-                                .arg(int(ui::px(2)))
-                                .arg(int(ui::px(12)))
-                                .arg(columns == 6 ? ui::px(80) : int(chrome::actionHeight))
-                        + ui::styles::font(i == 9 ? int(chrome::descriptionText)
-                                                  : int(chrome::queryText))
-                        + "}QPushButton:pressed{background:palette(midlight);}");
-        if (i == 9) {
-            button->setText(strings::get("search_panel.clear_number"));
-            button->setAccessibleName(strings::get("search_panel.clear_page"));
-        } else if (i == 11) {
-            ui::buttonIcon(button, ui::ControlIcon::KeyboardBackspace);
-            button->setIconSize(QSize(ui::px(48), ui::px(48)));
-            button->setAccessibleName(strings::get("search_panel.erase_digit"));
-        }
-        keys->addWidget(button, position / columns, position % columns);
-    }
-    card->rows()->insertWidget(1, entry);
     const auto go = [this, number] {
         if (!number->hasAcceptableInput())
             return;

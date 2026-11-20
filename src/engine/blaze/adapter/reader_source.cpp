@@ -1966,6 +1966,8 @@ bool EngineDocument::adoptAhead(int first, int last)
     fullFailed_ = std::move(old->fullFailed_);
     fullUncached_ = std::move(old->fullUncached_);
     fullSize_ = old->fullSize_;
+    // Idle cleanup runs on the displayed document after a chapter turn.
+    retired_ = std::move(old->retired_);
     kept_ = std::move(old->kept_);
     visitedUnits_ = std::move(old->visitedUnits_);
     visitedSource_ = old->visitedSource_;

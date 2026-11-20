@@ -2922,7 +2922,15 @@ void retiredUntilIdle()
                                  {}, {})
                     && Probe::retired(model) == 1,
             "The whole book must wait for idle time");
+    const int first = Probe::windowFirst(model);
+    while (Probe::windowFirst(model) == first) {
+        model.prepareAhead();
+        require(model.turnInWindow(1), "The fixture must cross into a prepared chapter");
+    }
+    const int freeSlots = ldomDocument::koblazeFreeDocumentSlots();
     model.releaseRetired();
+    require(ldomDocument::koblazeFreeDocumentSlots() > freeSlots,
+            "Crossing a chapter kept the retired whole book alive through idle time");
     require(Probe::retired(model) == 0 && model.turnInWindow(1),
             "The chapter must read on after the release");
 }

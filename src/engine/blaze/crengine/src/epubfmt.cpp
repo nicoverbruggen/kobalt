@@ -15,19 +15,11 @@ public:
     lString32 id;
     lString32 title;
     bool is_xhtml;
-    bool nonlinear;
-    EpubItem()
-    { }
-    EpubItem( const EpubItem & v )
-        : href(v.href), mediaType(v.mediaType), id(v.id), is_xhtml(v.is_xhtml)
-    { }
-    EpubItem & operator = ( const EpubItem & v )
-    {
-        href = v.href;
-        mediaType = v.mediaType;
-        id = v.id;
-        return *this;
-    }
+    // Blaze: cache fallback resolution across repeated spine references.
+    lString32 fallback;
+    EpubItem * resolved = NULL;
+    bool resolving = false;
+    bool hasSpineAlias = false;
 };
 
 class EpubItems {
@@ -56,6 +48,8 @@ public:
         return NULL;
     }
 };
+
+#include "../../extensions/spine_fallback.h"
 
 //static void dumpZip( LVContainerRef arc ) {
 //    lString32 arcName = LVExtractFilenameWithoutExtension( arc->GetName() );
@@ -1094,6 +1088,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
 
     EpubItems epubItems;
     LVArray<EpubItem*> spineItems;
+    LVArray<EpubItem*> originalItems;
+    LVArray<int> linearFlags;
 
     lString32 codeBase = LVExtractPath(rootfilePath, false);
     // CRLog::trace("codeBase=%s", LCSTR(codeBase));
@@ -1511,6 +1507,7 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                 epubItem->href = href;
                 epubItem->id = id;
                 epubItem->mediaType = mediaType;
+                epubItem->fallback = item->getAttributeValue("fallback");
                 epubItem->is_xhtml = mediaType == "application/xhtml+xml";
                 epubItems.add( epubItem );
 
@@ -1579,8 +1576,11 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                         continue;
                     EpubItem * epubItem = epubItems.findById( item->getAttributeValue("idref") );
                     if ( epubItem ) {
-                        epubItem->nonlinear = lString32(item->getAttributeValue("linear")).lowercase() == U"no";
-                        spineItems.add( epubItem );
+                        originalItems.add(epubItem);
+                        linearFlags.add(lString32(item->getAttributeValue("linear")).lowercase() != U"no");
+                        // Blaze: retain the spine slot even when several items share a fallback.
+                        EpubItem * selected = blaze::spineFallback(epubItem, epubItems);
+                        spineItems.add(selected ? selected : epubItem);
                     }
                 }
             }
@@ -1644,8 +1644,22 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
             lString32 name = LVCombinePaths(codeBase, spineItems[i]->href);
             lString32 subst = cs32("_doc_fragment_") + fmt::decimal(i);
             appender.addPathSubstitution( name, subst );
+            if (originalItems[i] != spineItems[i])
+                spineItems[i]->hasSpineAlias = true;
+            // Blaze: links may address the original manifest item.
+            for (EpubItem *alias = originalItems[i]; alias && alias != spineItems[i] && !alias->hasSpineAlias;
+                 alias = epubItems.findById(alias->fallback)) {
+                appender.addPathSubstitution(LVCombinePaths(codeBase, alias->href), subst);
+                alias->hasSpineAlias = true;
+            }
             //CRLog::trace("subst: %s => %s", LCSTR(name), LCSTR(subst));
         }
+    }
+    // A direct spine reference owns its href even when another slot uses it as a fallback.
+    for (size_t i = 0; i < spineItemsNb; ++i) {
+        if (originalItems[i]->hasSpineAlias)
+            appender.addPathSubstitution(LVCombinePaths(codeBase, originalItems[i]->href),
+                                         cs32("_doc_fragment_") + fmt::decimal(i));
     }
     int lastProgressPercent = 5;
     for ( size_t i=0; i<spineItemsNb; i++ ) {
@@ -1666,8 +1680,10 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                 // ones and get all xpointers (highlights, last page) invalid
                 // because their DocFragment index has been shifted.
                 bool handled = false;
-                appender.setCodeBase( name );
-                appender.setNonLinearFlag(spineItems[i]->nonlinear);
+                appender.setCodeBase(name, cs32("_doc_fragment_") + fmt::decimal(i),
+                                     originalItems[i] == spineItems[i] ? lString32::empty_str
+                                             : LVCombinePaths(codeBase, originalItems[i]->href));
+                appender.setNonLinearFlag(!linearFlags[i]);
                 appender.setFragmentType(); // unset
                 if ( !koblazeSpineItemLoaded((int)i) ) {
                     // Blaze: keep an empty DocFragment so saved positions retain their spine indices.
@@ -1877,8 +1893,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
         LVTocItem * baseToc = m_doc->getToc();
         for ( size_t i=0; i<spineItemsNb; i++ ) {
             if (relaxed_spine || spineItems[i]->is_xhtml) {
-                lString32 title = spineItems[i]->id; // nothing much else to use
-                lString32 href = appender.convertHref(spineItems[i]->href);
+                lString32 title = originalItems[i]->id; // nothing much else to use
+                lString32 href = cs32("#_doc_fragment_") + fmt::decimal(i);
                 if ( href.empty() || href[0]!='#' )
                     continue;
                 ldomNode * target = m_doc->getNodeById(m_doc->getAttrValueIndex(href.substr(1).c_str()));

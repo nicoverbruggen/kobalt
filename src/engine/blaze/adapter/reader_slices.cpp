@@ -227,7 +227,7 @@ QVector<int> EngineDocument::spineItemStarts(int first, int last,
     // A large book has hundreds of spine items. Each group takes a moment,
     // and `current` can park the work between groups.
     static constexpr int group = 32;
-    const auto items = spineItems();
+    const auto items = spineLocationNames();
     last = qMin(last, int(items.size()) - 1);
     if (!engine_)
         return {};
@@ -239,8 +239,7 @@ QVector<int> EngineDocument::spineItemStarts(int first, int last,
             auto *node = root->getChildNode(i);
             if (!node->isElement() || !node->isNodeName("DocFragment"))
                 continue;
-            const auto href =
-                    QString::fromUtf8(UnicodeToUtf8(node->getAttributeValue("Source")).c_str());
+            const auto href = enginelocation::spineHref(node);
             if (!fragments.contains(href))
                 fragments.insert(href, node);
         }
@@ -593,7 +592,7 @@ EngineDocument::RoughPlace EngineDocument::roughPlace() const
         }
         return place;
     }
-    const auto items = spineItems();
+    const auto items = spineLocationNames();
     place.item = qBound(windowFirst_, spineItemOf(position()), windowLast_);
     QStringList starts;
     for (const int index : { place.item, place.item + 1 }) {
@@ -818,8 +817,7 @@ int EngineDocument::estimatedBookPage(const QString &position) const
     const int before = textBefore(position);
     if (!body || before < 0)
         return -1;
-    const int item = int(spineItems().indexOf(
-            QString::fromUtf8(UnicodeToUtf8(fragment->getAttributeValue("Source")).c_str())));
+    const int item = int(spineLocationNames().indexOf(enginelocation::spineHref(fragment)));
     // The characters of the item end with its last text.
     auto *last = body;
     while (last && last->isElement() && last->getChildCount() > 0)
@@ -1304,7 +1302,7 @@ QVector<int> EngineDocument::chapterBookPages(const QStringList &positions,
     auto &map = pageMap();
     const bool known = map.complete() && map.total() > 0;
     const int last = qMax(1, qRound(map.total()));
-    const auto items = spineItems();
+    const auto items = spineLocationNames();
     // The pages of the spine items of the window, for a unit of several.
     QVector<int> itemStarts;
     if (!slices()) {
@@ -1455,8 +1453,8 @@ bool EngineDocument::goToFraction(double fraction)
         return go(page);
     }
     Location start, next;
-    start.href = spineItems().value(item);
-    next.href = spineItems().value(item + 1);
+    start.href = spineLocationNames().value(item);
+    next.href = spineLocationNames().value(item + 1);
     const auto bounds =
             pagesOf({ positionOf(start), item < windowLast_ ? positionOf(next) : QString() });
     const int first = qMax(0, bounds.value(0, 0));

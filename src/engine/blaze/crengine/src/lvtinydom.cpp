@@ -16989,7 +16989,7 @@ lString32 ldomDocumentFragmentWriter::convertHref( lString32 href )
 
     if (href[0] == '#') {
         // Link to anchor in the same docFragment
-        lString32 replacement = pathSubstitutions.get(filePathName);
+        const lString32 &replacement = codeBasePrefix;
         if (replacement.empty())
             return href;
         lString32 p = cs32("#") + replacement + "_" + " " + href.substr(1);
@@ -17043,10 +17043,12 @@ lString32 ldomDocumentFragmentWriter::convertHref( lString32 href )
     return p;
 }
 
-void ldomDocumentFragmentWriter::setCodeBase( lString32 fileName )
+void ldomDocumentFragmentWriter::setCodeBase( lString32 fileName, lString32 fragmentPrefix, lString32 originalPath )
 {
     filePathName = fileName;
-    codeBasePrefix = pathSubstitutions.get(fileName);
+    originalSpinePath = originalPath;
+    // Blaze: two spine items may use the same fallback file.
+    codeBasePrefix = fragmentPrefix.empty() ? pathSubstitutions.get(fileName) : fragmentPrefix;
     codeBase = LVExtractPath(filePathName);
     if ( codeBasePrefix.empty() ) {
         CRLog::trace("codeBasePrefix is empty for path %s", LCSTR(fileName));
@@ -17198,6 +17200,8 @@ ldomNode * ldomDocumentFragmentWriter::OnTagOpen( const lChar32 * nsname, const 
                 parent->OnAttribute(U"", U"NonLinear", U"" );
             if ( !fragmentType.empty() ) // let it known if any
                 parent->OnAttribute(U"", U"T", fragmentType.c_str() );
+            if (!originalSpinePath.empty())
+                parent->OnAttribute(U"", U"SpineHref", originalSpinePath.c_str());
             if ( !filePathName.empty() ) // may help users find the file to investigate in the EPUB
                 parent->OnAttribute(U"", U"Source", filePathName.c_str() );
 

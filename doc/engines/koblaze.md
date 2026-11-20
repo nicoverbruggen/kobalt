@@ -32,6 +32,8 @@ For a change to text layout, check both the inherited `lvtextfm.cpp` and [Blazeâ
 
 The CSS parser keeps the selector grammar and cascade order. The [ancestor filter](../../src/engine/blaze/extensions/css_ancestors.cpp) records the requirements of a parsed selector and checks ancestor element names and classes before a full match. Active stylesheets also index universal selectors that require a class. The matcher merges the candidates in cascade order.
 
+The EPUB importer resolves manifest fallback chains before building chapter fragments.
+
 ## Cache compatibility
 
 Moving the same source into this repository does not change parsed-book or rendering cache formats. Later parser, preprocessing, shaping or layout changes must follow [Storage compatibility](../storage.md).

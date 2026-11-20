@@ -2075,7 +2075,7 @@ bool EngineDocument::turnInWindow(int delta)
             passedHiddenPages |= linear;
         }
     }
-    const auto items = spineItems();
+    const auto items = spineLocationNames();
     const int count = items.size();
     const int item = adjacentSpineItem(delta > 0 ? 1 : -1);
     if (item < 0)

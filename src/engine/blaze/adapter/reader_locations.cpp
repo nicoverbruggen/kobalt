@@ -70,7 +70,7 @@ ldomNode *fragmentFor(ldomDocument *doc, const QString &href)
     for (int i = 0; i < root->getChildCount(); ++i) {
         auto *node = root->getChildNode(i);
         if (node->isElement() && node->isNodeName("DocFragment")
-            && qstring(node->getAttributeValue("Source")) == href)
+            && enginelocation::spineHref(node) == href)
             return node;
     }
     return nullptr;
@@ -78,6 +78,12 @@ ldomNode *fragmentFor(ldomDocument *doc, const QString &href)
 } // namespace
 
 namespace enginelocation {
+QString spineHref(ldomNode *fragment)
+{
+    auto href = fragment->getAttributeValue("SpineHref");
+    return qstring(href.empty() ? fragment->getAttributeValue("Source") : href);
+}
+
 bool wrapper(ldomNode *node)
 {
     for (const char *name :
@@ -178,17 +184,29 @@ QStringList EngineDocument::spineItems() const
     auto *root = engine_ ? engine_->getDocument()->nodeFromXPath(U"/body") : nullptr;
     for (int i = 0; root && i < root->getChildCount(); ++i) {
         auto *node = root->getChildNode(i);
-        if (node->isElement() && node->isNodeName("DocFragment"))
+        if (node->isElement() && node->isNodeName("DocFragment")) {
             items.append(qstring(node->getAttributeValue("Source")));
+            const auto original = node->getAttributeValue("SpineHref");
+            if (!original.empty() && spineLocations_.isEmpty())
+                spineLocations_ = items.mid(0, items.size() - 1);
+            if (!original.empty() || !spineLocations_.isEmpty())
+                spineLocations_.append(original.empty() ? items.last() : qstring(original));
+        }
     }
     spineNames_ = items;
     return items;
 }
 
+QStringList EngineDocument::spineLocationNames() const
+{
+    const auto files = spineItems();
+    return spineLocations_.isEmpty() ? files : spineLocations_;
+}
+
 int EngineDocument::spineItemOf(const QString &position) const
 {
     Location location;
-    return locationOf(position, &location) ? int(spineItems().indexOf(location.href)) : -1;
+    return locationOf(position, &location) ? int(spineLocationNames().indexOf(location.href)) : -1;
 }
 
 bool EngineDocument::locationOf(const QString &position, Location *location, bool *exact) const
@@ -204,7 +222,7 @@ bool EngineDocument::locationOf(const QString &position, Location *location, boo
     if (!fragment)
         return false;
     Location result;
-    result.href = qstring(fragment->getAttributeValue("Source"));
+    result.href = spineHref(fragment);
     if (result.href.isEmpty())
         return false;
     auto *root = body(fragment);

@@ -834,6 +834,7 @@ void EngineDocument::configure(QSize size, const QJsonObject &settings)
         columnSpacing_ = qRound(pixels_ * columnSpacingPercent_ / 100.0);
     hangingPunctuation_ = saved.value("hanging_punctuation").toBool(false);
     spineNames_.clear();
+    spineLocations_.clear();
     engine_ = std::make_unique<ColumnView>();
     engine_->setHangingPunctuation(hangingPunctuation_);
     engine_->setColumns(columns_);

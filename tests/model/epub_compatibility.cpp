@@ -13,6 +13,75 @@
 using namespace kobalt;
 
 namespace {
+void openPublication(EngineDocument &model, const test::BookFiles &files)
+{
+    QMap<QString, qint64> sizes;
+    for (auto it = files.cbegin(); it != files.cend(); ++it)
+        sizes[it.key()] = it.value().size();
+    auto source = std::make_shared<ResourceCache>(
+            files.keys(),
+            [files](const QString &name, const ResourceCache::Sink &sink, QString *) {
+                const auto bytes = files.value(name);
+                return sink(bytes.constData(), bytes.size());
+            },
+            std::make_shared<std::atomic_bool>(false), ResourceCache::Statistics{},
+            [](const QString &name) {
+                return name.endsWith("label.png") ? QSize(128, 64) : QSize();
+            });
+    QString error;
+    require(model.openResources(source, sizes, { 600, 800 }, {}, &error), qPrintable(error));
+}
+
+void checkNavigation(bool epub3)
+{
+    auto files = test::engineBook(true, 3, 12);
+    auto &opf = files["OEBPS/book.opf"];
+    opf.replace(
+            "</manifest>",
+            "<item id='foreign' href='source.bin' media-type='application/octet-stream' fallback='via'/>"
+            "<item id='via' href='middle.bin' media-type='application/octet-stream' fallback='c3'/></manifest>");
+    opf.replace("idref=\"c3\"", "idref=\"foreign\"");
+    // The same XHTML also appears in its own spine slot. Both anchors must survive.
+    opf.replace("</spine>", "<itemref idref='c3'/></spine>");
+    files["OEBPS/source.bin"] = "foreign";
+    files["OEBPS/middle.bin"] = "middle";
+    EngineDocument model(test::readerFonts());
+    openPublication(model, files);
+    QString error;
+    require(model.spineItems().value(2) == "OEBPS/c3.xhtml", "Manifest fallback did not resolve");
+    const auto names = model.spineLocationNames();
+    require(names.value(2) == "OEBPS/source.bin" && names.value(3) == "OEBPS/c3.xhtml",
+            "Shared fallback lost its original spine identity");
+    for (int slot : { 2, 3 }) {
+        Location start;
+        start.href = names[slot];
+        const auto position = model.positionOf(start);
+        Location restored;
+        require(model.spineItemOf(position) == slot && model.locationOf(position, &restored)
+                        && restored == start,
+                "Shared fallback location did not round trip");
+    }
+    // Direct spine links must keep their own slot when a later item falls back to it.
+    if (!epub3) {
+        auto reverse = files;
+        reverse["OEBPS/book.opf"].replace("idref='c3'", "idref='foreign'");
+        reverse["OEBPS/book.opf"].replace("idref=\"foreign\"", "idref=\"c3\"");
+        EngineDocument direct(test::readerFonts());
+        openPublication(direct, reverse);
+        require(direct.goTo(direct.chapters().last().position)
+                        && direct.spineItemOf(direct.position()) == 2,
+                "A later fallback took over a direct NCX destination");
+        auto middle = files;
+        middle["OEBPS/book.opf"].replace("idref='c3'", "idref='via'");
+        middle["OEBPS/toc.ncx"].replace("c3.xhtml", "middle.bin");
+        EngineDocument intermediate(test::readerFonts());
+        openPublication(intermediate, middle);
+        require(intermediate.goTo(intermediate.chapters().last().position)
+                        && intermediate.spineItemOf(intermediate.position()) == 3,
+                "A fallback chain took over an intermediate item's own spine slot");
+    }
+}
+
 // Move the central directory and all resources after mimetype past the ZIP32
 // offset limit. A sparse file gives the reader real 64-bit seeks without a large fixture.
 void checkLargeArchiveOffsets(QByteArray bytes)
@@ -86,5 +155,6 @@ int main(int argc, char **argv)
     auto broken = bytes;
     broken[broken.size() - 22 - 20 + 8] = char(0xff);
     require(!publication.inspect(broken, &error), "Invalid ZIP64 locator admitted");
+    checkNavigation(false);
     return 0;
 }

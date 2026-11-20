@@ -1,5 +1,6 @@
 #pragma once
 #include <QVector>
+#include <QString>
 
 struct ldomNode;
 
@@ -8,6 +9,7 @@ struct ldomNode;
 // and elements for generated content; neither is in the source XHTML, so a
 // source path passes through wrappers and ignores generated content.
 namespace kobalt::enginelocation {
+QString spineHref(ldomNode *fragment);
 bool wrapper(ldomNode *node);
 bool generated(ldomNode *node);
 // The <body> of a spine item, or null when it does not have exactly one.

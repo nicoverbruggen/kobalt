@@ -198,6 +198,7 @@ public:
     // The paths of the spine items in spine order, and the index of the
     // spine item of a position, or -1.
     QStringList spineItems() const;
+    QStringList spineLocationNames() const;
     int spineItemOf(const QString &position) const;
     // Turns `delta` pages. At an edge of the window it loads the next or the
     // previous spine item with its neighbors and continues there. False at
@@ -414,7 +415,7 @@ private:
     std::function<bool()> interrupt_;
     bool layoutInterrupted_ = false;
     // The spine items that have their text, or -1 for the whole book.
-    mutable QStringList spineNames_;
+    mutable QStringList spineNames_, spineLocations_;
     int windowFirst_ = -1, windowLast_ = -1, spineItemCount_ = 0;
     // Keep traversed group boundaries after their rendered documents are evicted.
     mutable QMap<int, int> visitedUnits_;

@@ -3399,6 +3399,7 @@ private:
     lString32 baseTagReplacement;
     lString32 codeBase;
     lString32 filePathName;
+    lString32 originalSpinePath;
     lString32 fragmentType;
     lString32 codeBasePrefix;
     lString32 tmpStylesheetLink;
@@ -3439,7 +3440,7 @@ public:
     bool hasMetBaseTag() { return baseTagMet; }
     void setFragmentType( lString32 fragment_type=lString32::empty_str ) { fragmentType = fragment_type; }
 
-    void setCodeBase( lString32 filePath );
+    void setCodeBase( lString32 filePath, lString32 fragmentPrefix=lString32::empty_str, lString32 originalPath=lString32::empty_str );
     /// returns flags
     virtual lUInt32 getFlags() { return parent->getFlags(); }
     /// sets flags

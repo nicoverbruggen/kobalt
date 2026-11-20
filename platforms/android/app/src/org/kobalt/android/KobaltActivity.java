@@ -563,7 +563,9 @@ public class KobaltActivity extends QtActivity {
     private void receive(Intent intent) {
         if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction())) importBook(intent.getData());
     }
-    private void toast(String message) { Toast.makeText(this, message, Toast.LENGTH_LONG).show(); }
+    private void toast(String message) {
+        runOnUiThread(() -> Toast.makeText(this, message, Toast.LENGTH_LONG).show());
+    }
     private void importBook(Uri uri) {
         if (uri == null || !"content".equals(uri.getScheme())) {
             toast("Open an EPUB through Android's document picker.");

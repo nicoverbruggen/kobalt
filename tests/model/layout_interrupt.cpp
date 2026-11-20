@@ -175,6 +175,26 @@ int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
 #if __has_include(<koblaze.h>)
+    // A layout destructor can reach a second cancellation check while the first unwinds.
+    int cancellationChecks = 0;
+    koblazeSetCancelCheck(
+            [](void *context) {
+                ++*static_cast<int *>(context);
+                return true;
+            },
+            &cancellationChecks);
+    try {
+        struct CheckOnUnwind
+        {
+            ~CheckOnUnwind() { koblazeCheckCancel(); }
+        } check;
+
+        koblazeCheckCancel();
+        require(false, "The first check did not cancel layout");
+    } catch (const KoblazeRenderCancelled &) {
+        require(cancellationChecks == 1, "Layout asked to cancel again while unwinding");
+    }
+    koblazeSetCancelCheck(nullptr, nullptr);
     interruptedViewportChange();
     cancelledStylesDiscardSavedLayout();
     cancelledPageSplit();

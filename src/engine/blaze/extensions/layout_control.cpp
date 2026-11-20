@@ -40,7 +40,14 @@ void koblazeCheckCancel()
 {
     // A destructor that runs while a stop unwinds the stack can reach a
     // check again. A second exception there would end the program.
-    if ( !koblaze_cancel_check || koblaze_no_cancel > 0 || std::uncaught_exception() )
+    if ( !koblaze_cancel_check || koblaze_no_cancel > 0 )
+        return;
+#ifdef __cpp_lib_uncaught_exceptions
+    if ( std::uncaught_exceptions() > 0 )
+#else
+    // The Qt 5 Kobo SDK uses libstdc++ 4.9.
+    if ( std::uncaught_exception() )
+#endif
         return;
     if ( koblaze_cancel_check(koblaze_cancel_context) )
         throw KoblazeRenderCancelled();

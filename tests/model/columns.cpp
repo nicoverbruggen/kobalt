@@ -512,6 +512,16 @@ int main(int argc, char **argv)
                                                 kobalt::maximumMarginPixels() + 1 } })),
                             "Invalid column spacing was accepted");
                 }
+    for (bool rtl : { false, true }) {
+        kobalt::EngineDocument full(kobalt::test::readerFonts()),
+                clipped(kobalt::test::readerFonts());
+        const QByteArray body = "<p>" + QByteArray("A B C D E F ").repeated(100) + "</p>";
+        const QJsonObject settings{ { "columns", 2 }, { "column_spacing", 0 } };
+        open(full, body, {}, settings, { 160, 240 }, rtl);
+        open(clipped, body, {}, settings, { 123, 240 }, rtl);
+        require(clipped.image(0) == full.image(0).copy(0, 0, 123, 240),
+                "A column beyond the viewport must be clipped at the screen edge");
+    }
     kobalt::EngineDocument cramped(kobalt::test::readerFonts());
     open(cramped, "<p>" + QByteArray("Amber birch cedar dogwood elm fir. ").repeated(100) + "</p>",
          {}, { { "columns", 2 }, { "margin_pixels", 120 }, { "column_spacing", 120 } },

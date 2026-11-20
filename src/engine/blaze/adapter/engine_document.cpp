@@ -193,13 +193,17 @@ class PageDrawBuffer : public LVColorDrawBuf
 {
 public:
     PageDrawBuffer(QImage &image, bool dark, bool smooth, bool normalizeTextColors,
-                   QMap<std::tuple<quintptr, int, int>, bool> *inversion = nullptr)
-        : LVColorDrawBuf(image.width(), image.height(), image.bits(), 32),
-          pageSize(image.size()),
+                   QMap<std::tuple<quintptr, int, int>, bool> *inversion = nullptr, int x = 0,
+                   int width = -1)
+        : LVColorDrawBuf(width < 0 ? image.width() : width, image.height(), image.bits() + 4 * x,
+                         32),
+          pageSize(GetWidth(), image.height()),
           dark(dark),
           normalizeTextColors(normalizeTextColors),
           inversion(inversion)
     {
+        // A column starts partway into each scanline of the full page.
+        _rowsize = image.bytesPerLine();
         setInvertColors(dark);
         setSmoothScalingImages(smooth);
     }
@@ -1898,20 +1902,28 @@ QImage EngineDocument::image(int pageNumber)
         engine_->drawColumn(buffer, pageNumber, 0);
     } else {
         result.fill(Qt::white);
-        QImage column(engine_->columnWidth(), size_.height(), QImage::Format_RGB32);
-        if (column.isNull())
-            return {};
-        QPainter painter(&result);
+        const int width = engine_->columnWidth();
         for (int i = 0; i < columns_; ++i) {
-            PageDrawBuffer part(column, darkMode_, true, normalizeTextColors_, &imageInversion_);
+            const int x = engine_->columnOffset(i);
+            // CREngine enforces a minimum column width. On a narrower viewport,
+            // keep the full column for layout and clip its pixels to the page.
+            QImage clipped;
+            if (x < 0 || x > result.width() - width) {
+                clipped = QImage(width, result.height(), QImage::Format_RGB32);
+                if (clipped.isNull())
+                    return {};
+            }
+            PageDrawBuffer part(clipped.isNull() ? result : clipped, darkMode_, true,
+                                normalizeTextColors_, &imageInversion_, clipped.isNull() ? x : 0,
+                                width);
             engine_->drawColumn(part, pageNumber, i);
             buffer.hasTable |= part.hasTable;
             buffer.visibleImages += part.visibleImages;
             buffer.hasImages |= part.hasImages;
             buffer.hasText |= part.hasText;
             buffer.hasUnsupportedFormatting |= part.hasUnsupportedFormatting;
-            const int x = engine_->columnOffset(i);
-            painter.drawImage(x, 0, column);
+            if (!clipped.isNull())
+                QPainter(&result).drawImage(x, 0, clipped);
             for (const auto &region : part.imageRegions)
                 buffer.imageRegions.append(region.translated(x, 0));
         }

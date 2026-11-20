@@ -1,6 +1,7 @@
 #include "column_view.h"
 #include "engine_document.h"
 #include "reader_locations.h"
+#include "reader_source.h"
 #include <lvdocview.h>
 
 namespace kobalt {
@@ -201,6 +202,31 @@ QStringList EngineDocument::spineLocationNames() const
 {
     const auto files = spineItems();
     return spineLocations_.isEmpty() ? files : spineLocations_;
+}
+
+QString EngineDocument::afterChapter(const QVector<ChapterLink> &links, int index) const
+{
+    const int depth = links[index].depth;
+    int lastItem = spineItemIndex(links[index].position);
+    for (int i = index + 1; i < links.size(); ++i) {
+        if (links[i].position.isEmpty())
+            continue;
+        const int item = spineItemIndex(links[i].position);
+        if (links[i].depth <= depth) {
+            if (item == lastItem) {
+                const auto next = chapterBoundaryPosition(links, i);
+                if (next != chapterBoundaryPosition(links, index))
+                    return next;
+            }
+            if (item > lastItem)
+                break;
+            continue;
+        }
+        lastItem = qMax(lastItem, item);
+    }
+    Location next;
+    next.href = spineLocationNames().value(lastItem + 1);
+    return lastItem >= 0 && next.valid() ? positionOf(next) : QString();
 }
 
 int EngineDocument::spineItemOf(const QString &position) const

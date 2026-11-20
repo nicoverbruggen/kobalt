@@ -49,3 +49,7 @@ Development progress controls are supplied by the host. Lifecycle checks cover a
 `engine.reader` also checks the original KEPUB whitespace reproduction, every span in its affected chapter, and import/export within the reported span. Synthetic cases cover collapsed whitespace boundaries and text ends, supplementary Unicode and invalid offsets, inline elements, preformatted text, CDATA, entities and XML line endings. Duplicate IDs remain rejected after normalization. Entity whitespace or block structure that does not match the complete engine text retains the existing fallback. These checks run against the production codec, without Nickel or a sync server.
 
 `lifecycle.progressExitDuringSync` checks the toolbar exit during Kobo sync, automatic close, conflict resolution, cancellation and a local save without a Nickel position write.
+
+`desktop.mainTextBoundaries` checks the Stats scope picker and both word totals across intra-chapter boundaries. `desktop.mainTextChapterAnchors` checks a range within one spine item in Fast mode.
+
+`desktop.mainTextBoundaries` opens EPUBs with explicit structural markup, guide references and a nested TOC without either. It exercises marking and resetting boundaries through Chapters, secondary page labels, reflow and reopening in the appendix.

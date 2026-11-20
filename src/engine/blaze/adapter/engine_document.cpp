@@ -744,6 +744,8 @@ void EngineDocument::configure(QSize size, const QJsonObject &settings)
     graph_.clear();
     externalChapters_ = false;
     totalWords_ = -1;
+    countedRange_ = {};
+    rangeWords_ = -1;
     nativeLocation_ = saved.value("imported_native_location").toString();
     cache_.clear();
     spareImage_ = {};

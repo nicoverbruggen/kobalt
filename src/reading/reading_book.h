@@ -116,7 +116,7 @@ public:
 
     bool readingActive() const { return activeReading.isValid(); }
 
-    ReadingEstimates estimates() const;
+    ReadingEstimates estimates(bool wholeVolume = false) const;
 
     void onEstimatesChanged(std::function<void()> changed)
     {

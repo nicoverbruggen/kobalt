@@ -508,6 +508,19 @@ Content content(Field field, const Values &values, bool uppercase)
         result.text = bookStatus(values);
         break;
     }
+    if (!values.matterPage.isEmpty()) {
+        if (field == Field::BookPercent)
+            result.text = percent(values.page <= 0 ? 0 : 1000, values.decimalPercentages);
+        if (field == Field::BookPage) {
+            result.text = values.matterPage;
+            return result;
+        }
+        if (field == Field::TitleAndPage) {
+            result.text =
+                    joined(uppercase ? values.title.toUpper() : values.title, values.matterPage);
+            return result;
+        }
+    }
     if (uppercase) {
         result.text = result.text.toUpper();
         result.chapterTitle = result.chapterTitle.toUpper();

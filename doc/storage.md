@@ -10,6 +10,8 @@ The Reader and the standalone Library share `reader-settings.json`. Each applies
 
 ## Saved reading data
 
+The optional book-record object `main_text_marks` stores a manual start and end independently. Each choice records the TOC entry and its source position. The resolved start points to the first included passage. The end points to the first excluded passage, or to the end of the spine. Missing choices use the publication defaults. Book-record format 1 stays unchanged. The reader recalculates page numbers after reflow. The resume position and bookmarks keep their original source locations.
+
 Chapter traversal keeps visited group boundaries in memory so reversing a turn rebuilds the same group after document eviction. This history belongs to the open source and grouping budget. It changes no saved-data or cache format.
 
 Bookmarks use the source position captured with the displayed page. Background slice preparation updates local page coordinates before it reports completion. This changes no saved-data or cache format.
@@ -47,6 +49,10 @@ The retired `light_dark_mode_shortcut` preference is removed during normalizatio
 `disable_navigate`, `disable_stats`, `disable_annotations`, `disable_bookmarks`, `disable_kosync`, `disable_words`, `disable_highlight_links` and `disable_activity` are optional global Booleans. Missing or invalid values use false. They hide UI entry points; `disable_kosync` also stops KOSync activity and `disable_words` stops saving looked-up words. `disable_highlight_links` hides manual link discovery without changing `tappable_links`, long-press Follow link or saved annotations. Activity is hidden whenever Stats is hidden. The separate Activity preference retains its value when Stats changes. A hidden Navigate or Stats default menu view resets to None. Hiding Navigate resets its button action, hiding Stats resets Compact chapter graphs, and hiding annotations resets Minimal annotation mode. Hiding bookmarks, annotations and My Words together resets their shared sort order. Hiding My Words resets `save_looked_up_words`. Saved reading data, reading history, time estimates and sync credentials are retained. Settings schema 1 stays unchanged.
 
 `turn_off_wifi_on_open` is an optional global Boolean for the Kobo Wi-Fi power saver. Missing or invalid values use false. False keeps Wi-Fi as Nickel leaves it when a book opens and at sleep. The key keeps its name; the setting is shown as Smart Wi-Fi power saving. While the feature is disabled, the settings cleanup (`cleanPreferences` in `src/reading/appearance_settings.cpp`) removes this key whenever settings are read or written, so Kobalt never saves it and the power saver stays off. This keeps settings schema 1.
+
+`stats_word_scope` is a global reader preference. The default, `main`, uses the active main-text boundaries for the Book figures in Stats. `volume` uses the full publication.
+
+`secondary_page_numbers` is a global reader setting. Values are `roman`, `arabic`, `letters`, `prefixed` and `upper_roman`. Missing or invalid values use lowercase Roman numerals. Front and back matter each start a separate count.
 
 `header_footer_percentage_format` is an optional global string with values `whole` and `decimal`. Missing or invalid values use whole percentages. Decimal shows one decimal place for book and chapter progress in the header, footer and their previews. Both formats count the current page and round down at the selected precision. Settings schema 1, book state, progress accounting and cache identity stay unchanged.
 

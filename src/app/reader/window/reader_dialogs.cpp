@@ -973,6 +973,25 @@ void Reader::openChoicePopup(QPointer<ui::ModalOverlay> &slot, const QString &na
         slot->setFocus();
 }
 
+void Reader::openStatsWordScope()
+{
+    openChoicePopup(wordScopePopup, "rrStatsWordScope", strings::get("stats.count_words_in"),
+                    strings::get("stats.scope_hint"),
+                    { { "rrStatsWordMain", strings::get("stats.scope_main"),
+                        strings::get("stats.scope_main_hint") },
+                      { "rrStatsWordVolume", strings::get("stats.scope_volume"),
+                        strings::get("stats.scope_volume_hint") } },
+                    statsUseWholeVolume() ? 1 : 0,
+                    [this](int index) {
+                        auto next = preferences;
+                        next["stats_word_scope"] = index ? QStringLiteral("volume") : QStringLiteral("main");
+                        if (savePreferences(next)) {
+                            closePopup(wordScopePopup);
+                            updateGraph();
+                        }
+                    });
+}
+
 void Reader::openScreenRefresh()
 {
     QVector<ChoiceOption> options;
@@ -1049,8 +1068,7 @@ bool Reader::saveSleepPreferences(const QJsonObject &next)
 sleep::Snapshot Reader::sleepPreviewSample()
 {
     sleep::Snapshot sample;
-    const int percent =
-            book && session ? (book->finishedHere() ? 100 : session->progressPercent()) : 0;
+    const int percent = book && session ? (book->finishedHere() ? 100 : session->mainPercent()) : 0;
     sample.percent = percent;
     sample.progress = strings::get("sleep.percent_read").arg(percent);
     if (book) {

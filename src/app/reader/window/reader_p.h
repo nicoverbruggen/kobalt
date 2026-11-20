@@ -102,7 +102,13 @@ public:
     ~Reader() override;
     Reader(std::unique_ptr<kobalt::ReadingBook> openedBook, kobalt::ReaderOrientation *orientation,
            kobalt::ReaderHostServices hostServices);
+    bool statsUseWholeVolume() const
+    {
+        return !session->hasMainTextBoundary()
+                || preferences.value("stats_word_scope").toString() == "volume";
+    }
     void updateGraph();
+    void openStatsWordScope();
     void refresh();
     void refreshRenderNotice();
     bool readyForPresentation() const override;
@@ -765,7 +771,12 @@ private:
     void loadThemeSettings();
     void markThemeCustom();
     QString settingsDictionaryFontFace;
-    QString settingsTimeRemainingFormat, settingsPercentageFormat;
+    QString settingsTimeRemainingFormat, settingsPercentageFormat, settingsSecondaryNumbers;
+
+    QString secondaryNumberStyle() const
+    {
+        return preferences.value(secondaryNumberKey).toString("roman");
+    }
     QString settingsRenderingMode;
     int settingsDictionaryFontSize = 100;
     QString interfaceTheme() const;
@@ -1042,6 +1053,8 @@ private:
     void resumeAppearanceApply();
     void openImagePreview(QPoint point, const QString &resource = {});
     void showChapters(ContentsList mode = ContentsList::Chapters);
+    void syncChapterBoundaries();
+    void showChapterActions(int index);
     void toggleGraph();
     void openGraph();
     void showProgressDebug();
@@ -1077,7 +1090,7 @@ private:
     int pagesSinceFlash = 0;
     kobalt::ScreenRefresh screenRefreshMode = kobalt::ScreenRefresh::Smart;
     kobalt::ui::CaptionButton *refreshButton = nullptr;
-    QPointer<kobalt::ui::ModalOverlay> refreshPopup;
+    QPointer<kobalt::ui::ModalOverlay> refreshPopup, wordScopePopup;
     kobalt::ui::CaptionButton *sleepScreenButton = nullptr, *sessionTimeoutButton = nullptr;
     QPointer<kobalt::ui::ModalOverlay> sleepPopup;
     QPointer<kobalt::reader::SleepGallery> sleepGallery;

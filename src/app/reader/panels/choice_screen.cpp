@@ -265,6 +265,13 @@ ChoiceScreen::ChoiceScreen(QWidget *parent)
         if (switchList)
             switchList(mode);
     };
+    contents->boundaryRequested = [this](int i) {
+        if (boundaryRequested)
+            boundaryRequested(i);
+    };
+    contents->pageLabel = [this](int page) {
+        return pageLabel ? pageLabel(page) : QString::number(page + 1);
+    };
     contents->selected = [this](const QString &value) {
         if (selected)
             selected(value);

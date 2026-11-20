@@ -114,7 +114,201 @@ struct Prefix
     qint64 words = -1;
     int order = -1;
 };
+
+qint64 countPrefixes(ldomDocument *document, const QVector<ldomXPointerEx> &positions,
+                     QVector<Prefix> &prefixes, const std::function<bool()> &current,
+                     bool countToEnd = true)
+{
+    int requested = 0;
+    QHash<ldomNode *, QVector<Event>> events;
+    prefixes.resize(positions.size());
+    for (int i = 0; i < positions.size(); ++i) {
+        const auto &pointer = positions[i];
+        if (pointer.isNull()) {
+            continue;
+        }
+        auto *node = pointer.getNode();
+        int offset = pointer.getOffset();
+        if (node->isElement() && offset > 0) {
+            if (offset > node->getChildCount()) {
+                continue;
+            }
+            if (offset == node->getChildCount()) {
+                offset = -1;
+            } else {
+                node = node->getChildNode(offset);
+                offset = 0;
+            }
+        }
+        events[node].append({ offset, i });
+        ++requested;
+    }
+    for (auto it = events.begin(); it != events.end(); ++it) {
+        std::stable_sort(it->begin(), it->end(),
+                         [](const Event &a, const Event &b) { return a.offset < b.offset; });
+    }
+
+    LogicalWordCounter counter;
+    int order = 0;
+    const auto capture = [&](const Event &event) {
+        prefixes[event.chapter] = { counter.words(), order++ };
+    };
+    const auto checkpoint = [&] {
+        engineActivity().checkpoint();
+        return !current || current();
+    };
+
+    struct Frame
+    {
+        ldomNode *node;
+        int child = -1;
+    };
+
+    std::vector<Frame> stack{ { document->getRootNode() } };
+    unsigned nodes = 0;
+    unsigned characters = 0;
+    while (!stack.empty() && (countToEnd || order < requested)) {
+        if (++nodes % 128 == 0 && !checkpoint()) {
+            return -1;
+        }
+        auto &frame = stack.back();
+        auto *node = frame.node;
+        if (frame.child < 0) {
+            if (node->isElement() && excluded(node)) {
+                stack.pop_back();
+                continue;
+            }
+            const auto found = events.constFind(node);
+            if (node->isText()) {
+                const auto text = node->getText();
+                int offset = 0;
+                const auto scan = [&](int end) {
+                    for (; offset < end; ++offset) {
+                        if (++characters % chunkCharacters == 0 && !checkpoint()) {
+                            return false;
+                        }
+                        counter.append(text[offset]);
+                    }
+                    return true;
+                };
+                if (found != events.cend()) {
+                    for (const auto &event : found.value()) {
+                        if (event.offset < 0 || event.offset > text.length()) {
+                            continue;
+                        }
+                        if (!scan(event.offset)) {
+                            return -1;
+                        }
+                        capture(event);
+                    }
+                }
+                if (!scan(text.length())) {
+                    return -1;
+                }
+                stack.pop_back();
+                continue;
+            }
+            if (found != events.cend()) {
+                for (const auto &event : found.value()) {
+                    if (event.offset == 0) {
+                        capture(event);
+                    }
+                }
+            }
+            if (block(node)) {
+                counter.boundary();
+            }
+            frame.child = 0;
+        }
+        if (frame.child < node->getChildCount()) {
+            if (stack.size() >= maximumDepth) {
+                return -1;
+            }
+            auto *child = node->getChildNode(frame.child++);
+            stack.push_back({ child });
+        } else {
+            const auto found = events.constFind(node);
+            if (found != events.cend()) {
+                for (const auto &event : found.value()) {
+                    if (event.offset == -1) {
+                        capture(event);
+                    }
+                }
+            }
+            if (block(node)) {
+                counter.boundary();
+            }
+            stack.pop_back();
+        }
+    }
+    if (!checkpoint()) {
+        return -1;
+    }
+    return counter.words();
+}
+
 } // namespace
+
+qint64 EngineDocument::wordsInMainText(const QString &first, const QString &after,
+                                       const std::function<bool()> &current)
+{
+    if (totalWords_ < 0 || (first.isEmpty() && after.isEmpty()))
+        return totalWords_;
+    const QPair<QString, QString> range{ first, after };
+    if (range == countedRange_)
+        return rangeWords_;
+
+    qint64 begin = 0, end = totalWords_;
+    if (windowFirst_ >= 0) {
+        auto &map = pageMap();
+        if (!map.allMeasured())
+            return -1;
+        const auto prefix = [&](const QString &position) -> qint64 {
+            const int item = spineItemIndex(position);
+            if (item < 0 || item >= map.items())
+                return -1;
+            textFraction(item, position, false, current);
+            qint64 count = source_->textWordPrefixes.value(position, -1);
+            if (count < 0)
+                return -1;
+            for (int i = 0; i < item; ++i) {
+                const auto words = map.itemWords(i);
+                if (words < 0)
+                    return -1;
+                count += words;
+            }
+            return count;
+        };
+        if (!first.isEmpty())
+            begin = prefix(first);
+        if (!after.isEmpty())
+            end = prefix(after);
+    } else {
+        auto *document = engine_->getDocument();
+        const auto pointer = [document](const QString &position) {
+            if (position.isEmpty())
+                return ldomXPointerEx();
+            ldomXPointerEx anchor(
+                    document->createXPointer(Utf8ToUnicode(position.toUtf8().constData())));
+            // A bare element path denotes the start of its contents.
+            if (!anchor.isNull() && anchor.getNode()->isElement() && anchor.getOffset() < 0)
+                anchor.setOffset(0);
+            return anchor;
+        };
+        QVector<Prefix> prefixes;
+        if (countPrefixes(document, { pointer(first), pointer(after) }, prefixes, current, false) < 0)
+            return -1;
+        if (!first.isEmpty())
+            begin = prefixes[0].words;
+        if (!after.isEmpty())
+            end = prefixes[1].words;
+    }
+    if (current && !current())
+        return -1;
+    countedRange_ = range;
+    rangeWords_ = begin >= 0 && end >= begin && end <= totalWords_ ? end - begin : -1;
+    return rangeWords_;
+}
 
 DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current)
 {
@@ -212,132 +406,13 @@ DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current)
         return publish(std::move(cached));
     }
 
-    QHash<ldomNode *, QVector<Event>> events;
-    QVector<Prefix> prefixes(chapters.size());
+    QVector<Prefix> prefixes;
     DocumentWordCounts result;
-    for (int i = 0; i < chapters.size(); ++i) {
-        result.chapters.append({ chapters[i].position, -1 });
-        const auto &pointer = positions[i];
-        if (pointer.isNull()) {
-            continue;
-        }
-        auto *node = pointer.getNode();
-        int offset = pointer.getOffset();
-        if (node->isElement() && offset > 0) {
-            if (offset > node->getChildCount()) {
-                continue;
-            }
-            if (offset == node->getChildCount()) {
-                offset = -1;
-            } else {
-                node = node->getChildNode(offset);
-                offset = 0;
-            }
-        }
-        events[node].append({ offset, i });
-    }
-    for (auto it = events.begin(); it != events.end(); ++it) {
-        std::stable_sort(it->begin(), it->end(),
-                         [](const Event &a, const Event &b) { return a.offset < b.offset; });
-    }
-
-    LogicalWordCounter counter;
-    int order = 0;
-    const auto capture = [&](const Event &event) {
-        prefixes[event.chapter] = { counter.words(), order++ };
-    };
-    const auto checkpoint = [&] {
-        engineActivity().checkpoint();
-        return !current || current();
-    };
-
-    struct Frame
-    {
-        ldomNode *node;
-        int child = -1;
-    };
-
-    std::vector<Frame> stack{ { document->getRootNode() } };
-    unsigned nodes = 0;
-    unsigned characters = 0;
-    while (!stack.empty()) {
-        if (++nodes % 128 == 0 && !checkpoint()) {
-            return {};
-        }
-        auto &frame = stack.back();
-        auto *node = frame.node;
-        if (frame.child < 0) {
-            if (node->isElement() && excluded(node)) {
-                stack.pop_back();
-                continue;
-            }
-            const auto found = events.constFind(node);
-            if (node->isText()) {
-                const auto text = node->getText();
-                int offset = 0;
-                const auto scan = [&](int end) {
-                    for (; offset < end; ++offset) {
-                        if (++characters % chunkCharacters == 0 && !checkpoint()) {
-                            return false;
-                        }
-                        counter.append(text[offset]);
-                    }
-                    return true;
-                };
-                if (found != events.cend()) {
-                    for (const auto &event : found.value()) {
-                        if (event.offset < 0 || event.offset > text.length()) {
-                            continue;
-                        }
-                        if (!scan(event.offset)) {
-                            return {};
-                        }
-                        capture(event);
-                    }
-                }
-                if (!scan(text.length())) {
-                    return {};
-                }
-                stack.pop_back();
-                continue;
-            }
-            if (found != events.cend()) {
-                for (const auto &event : found.value()) {
-                    if (event.offset == 0) {
-                        capture(event);
-                    }
-                }
-            }
-            if (block(node)) {
-                counter.boundary();
-            }
-            frame.child = 0;
-        }
-        if (frame.child < node->getChildCount()) {
-            if (stack.size() >= maximumDepth) {
-                return {};
-            }
-            auto *child = node->getChildNode(frame.child++);
-            stack.push_back({ child });
-        } else {
-            const auto found = events.constFind(node);
-            if (found != events.cend()) {
-                for (const auto &event : found.value()) {
-                    if (event.offset == -1) {
-                        capture(event);
-                    }
-                }
-            }
-            if (block(node)) {
-                counter.boundary();
-            }
-            stack.pop_back();
-        }
-    }
-    if (!checkpoint()) {
+    result.total = countPrefixes(document, positions, prefixes, current);
+    if (result.total < 0)
         return {};
-    }
-    result.total = counter.words();
+    for (const auto &chapter : chapters)
+        result.chapters.append({ chapter.position, -1 });
     QVector<int> ordered;
     for (int i = 0; i < prefixes.size(); ++i) {
         if (prefixes[i].order >= 0) {
@@ -352,7 +427,8 @@ DocumentWordCounts EngineDocument::wordCounts(std::function<bool()> current)
         result.chapters[ordered[i]].words = end - start;
     }
     const auto bytes = encode(result);
-    if (!checkpoint()) {
+    engineActivity().checkpoint();
+    if (current && !current()) {
         return {};
     }
     if (!bytes.isEmpty() && bytes.size() <= maximumCacheBytes) {

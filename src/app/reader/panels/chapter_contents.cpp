@@ -14,6 +14,9 @@
 #include "ui/style/private_text.h"
 #include <QLineEdit>
 #include <QPainter>
+#include <QMouseEvent>
+#include "ui/input/hold_timer.h"
+#include "ui/input/input.h"
 #include <algorithm>
 
 namespace kobalt {
@@ -43,6 +46,101 @@ protected:
         const int baseline = (height() - cap.height()) / 2 - cap.top();
         painter.drawImage(QPoint(0, baseline) + letters.origin,
                           ui::tintedPrivateText(letters.image, painter.pen().color()));
+    }
+};
+
+class ChapterRow final : public ui::ListRow
+{
+public:
+    explicit ChapterRow(QWidget *parent) : ui::ListRow(parent)
+    {
+        timer.setInterval(ui::metrics::input::longPressMilliseconds);
+        timer.setSingleShot(true);
+        connect(&timer, &QTimer::timeout, this, [this] { trigger(); });
+    }
+
+    std::function<void()> held;
+
+    void setBoundaryMarkers(bool start, bool end, int numberWidth)
+    {
+        startMarker = start;
+        endMarker = end;
+        numberColumn = numberWidth;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        ListRow::paintEvent(event);
+        if (!startMarker && !endMarker)
+            return;
+        QPainter painter(this);
+        const int side = markerSize();
+        int x = trailingLabel()->geometry().right() + 1 - numberColumn
+                - (int(startMarker) + int(endMarker)) * (side + int(chrome::selectorGap));
+        const auto ink = titleLabel()->palette().color(QPalette::WindowText);
+        for (auto icon : { ui::ControlIcon::BookStart, ui::ControlIcon::BookEnd }) {
+            if (icon == ui::ControlIcon::BookStart ? !startMarker : !endMarker)
+                continue;
+            ui::controlIcon(icon, ink).paint(&painter, QRect(x, (height() - side) / 2, side, side));
+            x += side + chrome::selectorGap;
+        }
+    }
+
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        consumed = false;
+        ListRow::mousePressEvent(event);
+        if (property("reader_swipe_hold").toBool() && event->button() == Qt::LeftButton && isDown()) {
+            origin = ui::mousePosition(event).toPoint();
+            timer.start(event);
+        }
+    }
+
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if ((ui::mousePosition(event).toPoint() - origin).manhattanLength() > ui::px(12))
+            timer.stop();
+        ListRow::mouseMoveEvent(event);
+    }
+
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        if (timer.finish(event)
+            && (ui::mousePosition(event).toPoint() - origin).manhattanLength() <= ui::px(12))
+            trigger();
+        if (consumed) {
+            event->accept();
+            return;
+        }
+        ListRow::mouseReleaseEvent(event);
+    }
+
+    bool event(QEvent *event) override
+    {
+        if (event->type() == QEvent::Hide || event->type() == QEvent::Leave
+            || event->type() == QEvent::TouchCancel)
+            timer.stop();
+        return ListRow::event(event);
+    }
+
+private:
+    int markerSize() const { return titleLabel()->fontMetrics().height(); }
+
+    bool startMarker = false, endMarker = false;
+    int numberColumn = 0;
+    ui::HoldTimer timer;
+    QPoint origin;
+    bool consumed = false;
+
+    void trigger()
+    {
+        if (held && isDown() && isVisible()) {
+            consumed = true;
+            setDown(false);
+            held();
+        }
     }
 };
 
@@ -312,6 +410,18 @@ void ChapterContents::toggleGroup(int index)
             disclosures[row]->setFocus(Qt::OtherFocusReason);
 }
 
+void ChapterContents::setBoundaries(int start, int end, int firstPage, int lastPage)
+{
+    if (start == startRow && end == endRow && firstPage == firstMainPage
+        && lastPage == lastMainPage)
+        return;
+    startRow = start;
+    endRow = end;
+    firstMainPage = firstPage;
+    lastMainPage = lastPage;
+    redraw();
+}
+
 void ChapterContents::setPages(const QVector<int> &pages)
 {
     if ((listMode != ContentsList::Chapters) || pages.size() != items.size())
@@ -425,7 +535,12 @@ void ChapterContents::redraw()
     pager->setBlankArea({ chrome::inset, used, width() - 2 * chrome::inset, pager->y() - used });
     while (buttons.size() < qMin(rows, int(visible.size()))) {
         const int row = buttons.size();
-        auto *button = new ui::ListRow(this);
+        auto *button = new ChapterRow(this);
+        button->held = [this, row] {
+            const int index = itemIndex(row);
+            if (index >= 0 && !items[index].value.isEmpty() && boundaryRequested)
+                boundaryRequested(index);
+        };
         auto *disclosure = new ChapterDisclosure(this);
         buttons.append(button);
         disclosures.append(disclosure);
@@ -449,9 +564,17 @@ void ChapterContents::redraw()
     for (const auto &item : items)
         rootDepth = qMin(rootDepth, qMax(0, item.depth));
     // Every row reserves the widest page caption, so titles end in one column.
-    const int pageWidth = pagesKnown
+    int pageWidth = pagesKnown
             ? ui::interfaceTextWidth(QString::number(lastPage + 1), ui::captionFont())
             : 0;
+    if (pagesKnown && pageLabel && (firstMainPage > 0 || lastMainPage < lastPage))
+        for (int row = 0; row < buttons.size(); ++row) {
+            const int index = itemIndex(row);
+            if (index >= 0)
+                pageWidth = qMax(
+                        pageWidth,
+                        ui::interfaceTextWidth(pageLabel(items[index].page), ui::captionFont()));
+        }
     const int digits = qMax(2, int(QString::number(items.size()).size()));
     const int numberWidth = ui::interfaceTextWidth(QString(digits, QChar('0')), ui::captionFont());
     const bool grouped = collapsible
@@ -489,10 +612,19 @@ void ChapterContents::redraw()
                             chrome::actionHeight + contents::stripHeight
                                     + row * ui::metrics::list::oneLine,
                             qMax(1, width() - rowLeft), ui::metrics::list::oneLine);
+        auto *itemRow = static_cast<ChapterRow *>(button);
+        const bool chapter = listMode == ContentsList::Chapters;
+        itemRow->setProperty("reader_swipe_hold", chapter);
         const int numberColumn = pagesKnown ? pageWidth : numberWidth;
+        itemRow->setBoundaryMarkers(chapter && index == startRow, chapter && index == endRow,
+                                    numberColumn);
+        const int markerCount = chapter && (startRow >= 0 || endRow >= 0)
+                ? (startRow == endRow ? 2 : 1)
+                : 0;
+        const int markerWidth = markerCount * (label->fontMetrics().height() + chrome::selectorGap);
         const int previewSpace = hasImage ? chrome::cellWidth + contents::pageGap : 0;
         if (hasImage) {
-            const int left = width() - ui::metrics::list::inset - numberColumn - previewSpace;
+            const int left = width() - ui::metrics::list::inset - numberColumn - markerWidth - previewSpace;
             previews[row]->setGeometry(left, button->y(), chrome::cellWidth, button->height());
             previews[row]->setObjectName(item.name + "Image");
             previews[row]->setAccessibleName(
@@ -507,7 +639,14 @@ void ChapterContents::redraw()
                                               .arg(item.label));
         disclosure->setAccessibleDescription(strings::get(
                 expanded[index] ? "chapter_contents.expanded" : "chapter_contents.collapsed"));
-        auto *itemRow = static_cast<ui::ListRow *>(button);
+        QString title = item.label;
+        if (chapter && (index == startRow || index == endRow)) {
+            const auto marker =
+                    strings::get(index == startRow && index == endRow ? "chapter_contents.both"
+                                         : index == startRow          ? "chapter_contents.start"
+                                                                      : "chapter_contents.end");
+            title = marker + QStringLiteral(" · ") + title;
+        }
         itemRow->setTitle(item.label);
         label->setObjectName(item.name + "Title");
         const auto number = QString("%1").arg(index + 1, digits, 10, QChar('0'));
@@ -519,21 +658,23 @@ void ChapterContents::redraw()
             itemRow->setLeading(number, indent);
             itemRow->leadingLabel()->setObjectName(item.name + "Number");
             itemRow->setAccessory(ui::ListRow::Caption{
-                    item.page >= 0 ? QString::number(item.page + 1) : QString(),
-                    pageWidth + previewSpace });
+                    item.page >= 0
+                            ? (pageLabel ? pageLabel(item.page) : QString::number(item.page + 1))
+                            : QString(),
+                    pageWidth + markerWidth + previewSpace });
             itemRow->trailingLabel()->setObjectName(item.name + "Page");
         } else {
             // Without page numbers, the chapter number takes their place at
             // the right edge.
             itemRow->setLeading(QString(), indent);
             itemRow->leadingLabel()->setObjectName({});
-            itemRow->setAccessory(ui::ListRow::Caption{ number, numberWidth + previewSpace });
+            itemRow->setAccessory(ui::ListRow::Caption{ number, numberWidth + markerWidth + previewSpace });
             itemRow->trailingLabel()->setObjectName(item.name + "Number");
         }
         button->setAccessibleName(
                 (listMode != ContentsList::Chapters)
                         ? item.label
-                        : strings::get("common.numbered_title").arg(index + 1).arg(item.label));
+                        : strings::get("common.numbered_title").arg(index + 1).arg(title));
     }
     if (changed && isVisible())
         changed();

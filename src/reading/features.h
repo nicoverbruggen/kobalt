@@ -38,8 +38,10 @@ inline void normalize(QJsonObject &preferences)
         preferences["default_menu_view"] = QStringLiteral("none");
     if (!enabled(preferences, Navigate))
         preferences.remove("navigation_bar_buttons");
-    if (!enabled(preferences, Stats))
+    if (!enabled(preferences, Stats)) {
         preferences.remove("dense_stats_chart");
+        preferences.remove("stats_word_scope");
+    }
     if (!enabled(preferences, Annotations)) {
         preferences.remove("minimal_annotation_mode");
         preferences.remove("annotation_interaction");

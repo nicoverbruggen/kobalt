@@ -1,3 +1,4 @@
+#include "reading/reading_progress.h"
 #include "appearance_settings.h"
 #include "features.h"
 #include "support/qt_compat.h"
@@ -197,6 +198,8 @@ QJsonObject cleanPreferences(QJsonObject preferences)
         preferences.remove(sleep::greetingKey);
     textpresets::clean(preferences);
     choice("time_remaining_format", { "detailed", "approximate" });
+    choice("stats_word_scope", { "main", "volume" });
+    choice(secondaryNumberKey, secondaryNumberStyles());
     choice(headerfooter::percentageFormatKey, { "whole", "decimal" });
     choice(renderingMode::preferenceKey, { "hybrid", "fast", "accurate" });
     if (preferences.contains(sessionTimeout::preferenceKey)

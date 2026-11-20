@@ -237,13 +237,8 @@ void Reader::syncFrameState()
         for (const auto &chapter : session->chapters())
             pages.append(chapter.page);
         choices->setChapterPages(pages);
-        choices->setChapterPosition(
-                session->bookPages() > 0
-                        ? strings::get("stats.page_of")
-                                  .arg(session->bookPage() + 1)
-                                  .arg(headerfooter::pageTotal(session->bookPages(),
-                                                               session->bookPagesEstimated()))
-                        : strings::get("common.percent").arg(session->progressPercent()));
+        syncChapterBoundaries();
+        choices->setChapterPosition(session->displayBookPosition(secondaryNumberStyle()));
     }
     syncBookmarks();
     if (!session->busy() && !pendingSearchHit.start.isEmpty()) {
@@ -515,7 +510,7 @@ void Reader::paintTurn()
     QElapsedTimer painting;
     if (turnStarted.isValid())
         painting.start();
-    page->progressFraction = session->progressFraction();
+    page->progressFraction = session->mainProgress();
     page->preparedDamage = session->damage();
     page->preparedFrom = session->damageFrom();
     // The Refresh the screen setting decides which turns flash.
@@ -671,7 +666,7 @@ void Reader::syncReadingState()
         else
             pageScrubber->cancel();
     }
-    page->progressFraction = session->progressFraction();
+    page->progressFraction = session->mainProgress();
     if (!session->busy())
         applyingText = false;
     refreshRenderNotice();
@@ -692,12 +687,12 @@ void Reader::syncReadingControls()
         chapters.append({ chapter.page, chapter.title });
     // The turn may adopt Hybrid's whole-book layout. Keep the open Navigate
     // panel until it can show the new reading page in whole-book coordinates.
-    const bool keepNavigation = seekOpen && !chapterBar && !session->busy()
-            && !resizePending && !appearanceEdit.applying() && pageScrubber->chapterNavigationPending();
+    const bool keepNavigation = seekOpen && !chapterBar && !session->busy() && !resizePending
+            && !appearanceEdit.applying() && pageScrubber->chapterNavigationPending();
     pageScrubber->setChapterBar(chapterBar, keepNavigation);
     pageScrubber->setChapterJumps(chapterBar
-                                  || pageNavigation::barButtons(preferences)
-                                          == pageNavigation::BarButtons::Chapters,
+                                          || pageNavigation::barButtons(preferences)
+                                                  == pageNavigation::BarButtons::Chapters,
                                   keepNavigation);
     if (chapterBar) {
         const bool before =
@@ -709,17 +704,19 @@ void Reader::syncReadingControls()
         for (const auto &chapter : chapters)
             chapterPages.append(chapter.first);
         pageScrubber->setChapterPosition(session->contentsSelection().current, chapters.size(),
-                                         session->chapterTitle(), session->progressPercent(),
+                                         session->chapterTitle(), session->mainPercent(),
                                          session->bookPage(), session->bookPages(), chapterPages);
     } else {
-        pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size());
+        pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size(),
+                              session->firstMainPage(), session->lastMainPage(),
+                              secondaryNumberStyle());
     }
     pageScrubber->setEnabled(!session->busy());
     const auto chapter = session->chapterTitle().isEmpty() ? strings::get("reader.contents")
                                                            : session->chapterTitle();
     chapterButton->setText(chapter);
     chapterButton->setAccessibleName(strings::get("reader.contents_detail").arg(chapter));
-    page->progressFraction = session->progressFraction();
+    page->progressFraction = session->mainProgress();
     if (!session->busy())
         applyingText = false;
     refreshRenderNotice();
@@ -857,6 +854,7 @@ void Reader::openPendingDestination()
 void Reader::updateGraph()
 {
     const bool counted = session->totalWords() >= 0;
+    chapterGraph->setWordScopeAvailable(session->hasMainTextBoundary());
     const auto graph = counted
             ? session->chapterGraph()
             : kobalt::chapterPageLengths(session->chapters(), session->bookPages());
@@ -876,11 +874,15 @@ void Reader::updateGraph()
     }
     chapterGraph->setChapterNumber(session->contentsSelection().current + 1, contents.size());
     updateReadingStats();
-    chapterGraph->setProgress(session->chapterTitle(), session->chapterPage(),
-                              session->chapterPages(), nextPages, session->bookPage(),
-                              session->bookPages(),
-                              session->bookPages() > 0 ? -1 : session->progressFraction(),
-                              session->bookPagesEstimated());
+    const bool volume = statsUseWholeVolume();
+    const int pages = volume ? session->bookPages() : session->mainPages();
+    const int page = volume ? session->bookPage() : session->mainPage();
+    const double fraction = pages <= 0 || pages != session->bookPages()
+            ? (volume ? session->progressFraction() : session->mainProgress())
+            : -1;
+    chapterGraph->setProgress(
+            session->chapterTitle(), session->chapterPage(), session->chapterPages(), nextPages,
+            qBound(0, page, qMax(0, pages)), pages, fraction, session->bookPagesEstimated());
 }
 
 void Reader::updateBatteryIndicators(const BatteryStatus &battery)
@@ -961,10 +963,12 @@ void Reader::updateMenuStatus(bool refreshDevice)
 void Reader::updateReadingStats()
 {
     const auto reading = book->sessionReadingMilliseconds();
-    const auto estimates = book->estimates();
-    chapterGraph->setReading(int(reading / 60000), session->totalWords(),
+    const bool volume = statsUseWholeVolume();
+    const auto estimates = book->estimates(volume);
+    chapterGraph->setReading(int(reading / 60000),
+                             volume ? session->totalWords() : session->mainWords(),
                              estimates.chapterMilliseconds, estimates.bookMilliseconds,
-                             book->sessionPageTurns());
+                             book->sessionPageTurns(), volume);
 }
 
 } // namespace kobalt::reader

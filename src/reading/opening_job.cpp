@@ -338,6 +338,7 @@ OpeningOutput runOpening(OpeningJob &job)
     inspectSource(job, state);
     if (outcome.ready()) {
         mergeSavedState(job, state);
+        job.engine->mainTextMarks = job.saved.value("main_text_marks").toObject();
         bindResources(job, state);
         if (state.retainedHit && outcome.ready())
             openRetained(job, state);

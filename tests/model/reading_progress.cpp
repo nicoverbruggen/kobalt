@@ -14,6 +14,24 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
 
+    struct NumberStyle
+    {
+        QString style, front, back;
+    };
+
+    for (const NumberStyle &example :
+         { NumberStyle{ "roman", "xxvii", "xxvii" }, NumberStyle{ "arabic", "27", "27" },
+           NumberStyle{ "letters", "aa", "aa" }, NumberStyle{ "prefixed", "F27", "B27" },
+           NumberStyle{ "upper_roman", "XXVII", "XXVII" } }) {
+        require(bookPageLabel(26, 27, 30, example.style) == example.front,
+                "Incorrect front matter label");
+        require(bookPageLabel(57, 27, 30, example.style) == example.back,
+                "Incorrect back matter label");
+        require(bookPageLabel(27, 27, 30, example.style) == "1"
+                        && bookPageLabel(30, 27, 30, example.style) == "4",
+                "Secondary style changed main text numbering");
+    }
+
     struct Display
     {
         int page, pages, percent;

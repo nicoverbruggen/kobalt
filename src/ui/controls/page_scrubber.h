@@ -21,7 +21,8 @@ public:
 
     SettingSlider *slider() const { return position; }
 
-    void setBook(int page, int pages, const QVector<QPair<int, QString>> &chapters, QSize pageSize);
+    void setBook(int page, int pages, const QVector<QPair<int, QString>> &chapters, QSize pageSize,
+                 int firstMain = 0, int lastMain = -1, const QString &style = {});
     void setChapterJumps(bool enabled, bool keepNavigation = false);
     void setChapterBar(bool enabled, bool keepNavigation = false);
     void setChapterPosition(int index, int count, QString title, int percent, int bookPage,
@@ -107,6 +108,8 @@ private:
     QPoint pressPosition;
     bool pointerActive = false, pointerMoved = false;
     int pressedCard = -1;
+    QString secondaryStyle;
+    int firstMainPage = 0, lastMainPage = 0;
     bool chapterBar = false, currentPageBookmarked = false;
     bool chapterJumps = false, barVisible = true, relocating = false, overviewExpanded = false;
     void choose(int page);

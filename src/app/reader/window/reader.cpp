@@ -1,3 +1,4 @@
+#include "ui/dialogs/action_menu.h"
 #include "reading/header_footer.h"
 #include "app/reader/settings/sleep_editor.h"
 #include "app/reader/settings/sleep_gallery.h"
@@ -649,7 +650,7 @@ sleep::Snapshot Reader::captureSleepScreen(bool poweredOff)
     if (snapshot.image.isNull())
         return {};
     // A book marked as finished is done, wherever its last page sits.
-    const int percent = book->finishedHere() ? 100 : session->progressPercent();
+    const int percent = book->finishedHere() ? 100 : session->mainPercent();
     snapshot.orientation = kobalt::shownOrientation(QGuiApplication::primaryScreen());
     snapshot.progress = strings::get("sleep.percent_read").arg(percent);
     snapshot.remaining = sleepTimeLeft(book->estimates().bookMilliseconds,
@@ -1000,6 +1001,7 @@ QVector<QWidget *> Reader::popups() const
              syncDialog.data(),
              finishDialog.data(),
              refreshPopup.data(),
+             wordScopePopup.data(),
              sleepPopup.data(),
              pageNavigationPopup.data(),
              tapZonesPopup.data(),
@@ -2742,6 +2744,78 @@ void Reader::toggleLight()
     }
 }
 
+void Reader::syncChapterBoundaries()
+{
+    const auto marks = session->mainTextMarks();
+    const auto links = session->chapters();
+    int start = -1, end = -1;
+    for (int i = 0; i < links.size(); ++i) {
+        if (links[i].page < 0 || links[i].position.isEmpty())
+            continue;
+        if (links[i].page <= session->firstMainPage()
+            && (start < 0 || links[start].page < links[i].page))
+            start = i;
+        if (links[i].page <= session->lastMainPage())
+            end = i;
+    }
+    start = marks.value("start").toObject().value("index").toInt(start);
+    end = marks.value("end").toObject().value("index").toInt(end);
+    choices->setChapterBoundaries(start, end, session->firstMainPage(), session->lastMainPage());
+}
+
+void Reader::showChapterActions(int index)
+{
+    const auto links = session->chapters();
+    if (index < 0 || index >= links.size())
+        return;
+    const auto marks = session->mainTextMarks();
+    QVector<ui::ActionMenuItem> actions;
+    for (bool start : { true, false }) {
+        const auto key = start ? "start" : "end";
+        const auto other = marks.value(start ? "end" : "start").toObject();
+        const int otherIndex = other.value("index").toInt(-1);
+        int end = start ? otherIndex : index;
+        while (end >= 0 && end < links.size() - 1
+               && links[end + 1].depth > links[start ? otherIndex : index].depth)
+            ++end;
+        const bool valid = otherIndex < 0 || otherIndex >= links.size()
+                || (start ? index <= end : otherIndex <= end);
+        const auto apply = [this, index, start](bool reset) {
+            session->markChapter(index, start, reset);
+            QJsonObject state;
+            book->checkpoint(&state, true);
+            syncChapterBoundaries();
+        };
+        if (valid)
+            actions.append(ui::actionItem(strings::get(start ? "chapter_contents.mark_start"
+                                                             : "chapter_contents.mark_end"),
+                                          start ? "rrMarkStart" : "rrMarkEnd",
+                                          start ? ui::ControlIcon::BookStart
+                                                : ui::ControlIcon::BookEnd,
+                                          [apply] { apply(false); }));
+        if (marks.contains(key))
+            actions.append(ui::actionItem(strings::get(start ? "chapter_contents.reset_start"
+                                                             : "chapter_contents.reset_end"),
+                                          start ? "rrResetStart" : "rrResetEnd",
+                                          ui::ControlIcon::PinOff, [apply] { apply(true); }));
+    }
+    ui::ActionMenuHeader header;
+    header.title = links[index].title;
+    auto *actionsMenu = new ui::ActionMenu(this, header, actions);
+    actionsMenu->setObjectName("rrChapterActions");
+    actionsMenu->setProperty("reader_standard_modal", true);
+    actionsMenu->dismissed = [actionsMenu] {
+        actionsMenu->hide();
+        actionsMenu->deleteLater();
+    };
+    actionsMenu->setDimmed(true);
+    actionsMenu->setGeometry(rect());
+    actionsMenu->fitCard();
+    actionsMenu->show();
+    actionsMenu->raise();
+    actionsMenu->setFocus();
+}
+
 static bool numericPageLabel(const QString &label)
 {
     return !label.isEmpty() && std::all_of(label.cbegin(), label.cend(), [](QChar c) {
@@ -2756,6 +2830,10 @@ void Reader::showChapters(ContentsList mode)
     chapterGraph->hide();
     QVector<Choice> items;
     QString current;
+    choices->boundaryRequested = [this](int i) { showChapterActions(i); };
+    choices->pageLabel = [this](int p) {
+        return session->displayPageLabel(p, secondaryNumberStyle());
+    };
     const bool auxiliary = mode != ContentsList::Chapters;
     const auto list = mode == ContentsList::Landmarks ? session->landmarks()
             : mode == ContentsList::PrintedPages      ? session->printedPages()
@@ -2826,13 +2904,8 @@ void Reader::showChapters(ContentsList mode)
     const int top = navigation ? navigation->statusHeight() : 0;
     choices->setGeometry(0, top, width(),
                          (navigation ? navigation->contentBottom(size()) : height()) - top);
-    choices->setChapterPosition(
-            session->bookPages() > 0
-                    ? strings::get("stats.page_of")
-                              .arg(session->bookPage() + 1)
-                              .arg(headerfooter::pageTotal(session->bookPages(),
-                                                           session->bookPagesEstimated()))
-                    : strings::get("common.percent").arg(session->progressPercent()));
+    syncChapterBoundaries();
+    choices->setChapterPosition(session->displayBookPosition(secondaryNumberStyle()));
     const auto groups = preferences.value("chapter_groups").toString();
     choices->showChoices(session->title(), std::move(items), current, ChoiceScreen::Mode::Chapters,
                          groups == "off"           ? ChapterGroups::Off
@@ -3711,6 +3784,13 @@ bool Reader::save(bool snapshot, bool background, bool persist)
         return saved;
     state["page"] = session->page();
     state["pages"] = session->pages();
+    if (services.development.detailedStateReports) {
+        state["main_first_page"] = session->firstMainPage();
+        state["main_last_page"] = session->lastMainPage();
+        state["main_page_label"] =
+                session->displayPageLabel(session->bookPage(), secondaryNumberStyle());
+        state["main_percent"] = session->mainPercent();
+    }
     state["cached_pages"] = session->cachedPages();
     state["chapters"] = session->chapters().size();
     if (services.development.detailedStateReports) {
@@ -3734,6 +3814,7 @@ bool Reader::save(bool snapshot, bool background, bool persist)
         state["word_counts"] =
                 kobalt::qt::object({ { "ready", session->totalWords() >= 0 },
                                      { "total_words", double(session->totalWords()) },
+                                     { "main_words", double(session->mainWords()) },
                                      { "words", counts },
                                      { "positions", positions },
                                      { "titles", titles },

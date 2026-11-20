@@ -2597,7 +2597,7 @@ int main(int argc, char **argv)
                                                        .toString(chapters[20].words));
         require(text("rrGraphChapterWords") == get("stats.chapter_words").arg(13).arg(chapterWords)
                         && text("rrGraphBookWords")
-                                == get("stats.book_words").arg(get("stats.words").arg("35,706")),
+                                == get("stats.main_words").arg(get("stats.words").arg("35,706")),
                 "The word totals below the chart are missing");
         graph.setChapterNumber(0, 24);
         require(text("rrGraphChapterWords") == get("stats.this_chapter_words").arg(chapterWords),

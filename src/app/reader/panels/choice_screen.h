@@ -45,9 +45,12 @@ public:
     std::function<void(const QString &)> previewImage;
     void setPosition(const QString &text);
     void setPages(const QVector<int> &pages);
+    void setBoundaries(int start, int end, int firstPage, int lastPage);
 
     int currentPage() const { return page; }
 
+    std::function<void(int)> boundaryRequested;
+    std::function<QString(int)> pageLabel;
     std::function<void(const QString &)> selected;
     std::function<void()> back, changed;
 
@@ -84,12 +87,15 @@ private:
     ui::PagerBar *pager;
     int page = 0, rows = 1;
     bool collapsible = true;
+    int startRow = -1, endRow = -1, firstMainPage = -1, lastMainPage = -1;
 };
 
 class ChoiceScreen : public kobalt::ui::Panel
 {
 public:
     enum class Mode { Chapters, Fonts, Sizes };
+    std::function<void(int)> boundaryRequested;
+    std::function<QString(int)> pageLabel;
     std::function<void(const QString &)> selected;
     std::function<void()> back, changed;
     std::function<void(const QString &, bool instructions)> defaultRequested;
@@ -116,6 +122,12 @@ public:
     }
     void setChapterPosition(const QString &text);
     void setChapterPages(const QVector<int> &pages);
+
+    void setChapterBoundaries(int start, int end, int firstPage, int lastPage)
+    {
+        contents->setBoundaries(start, end, firstPage, lastPage);
+    }
+
     void selectValue(const QString &value);
     int chapterPage() const;
     int fontPanelHeight() const;

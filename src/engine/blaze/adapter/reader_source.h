@@ -43,6 +43,15 @@ struct ReaderSource
     // Positive and negative image-only chapter lookups survive chapter-window changes.
     QHash<QString, QString> chapterImages;
     int chapterImageProbes = 0;
+
+    struct TocAnchor
+    {
+        QString title, path, id, position;
+    };
+
+    QVector<TocAnchor> tocAnchors;
+    bool mainTextChecked = false;
+    QPair<QString, QString> mainTextHints;
     // EPUB spine flags, including fragments whose text the chapter window omitted.
     QVector<bool> nonLinearItems;
     // The plain text of each spine item, folded for a quick check whether a

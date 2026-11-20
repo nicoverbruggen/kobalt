@@ -29,6 +29,7 @@ class LayoutProgress
 {
 public:
     int percent() const { return percent_.load(); }
+
     bool estimateComplete() const { return estimateComplete_.load(); }
 
     void reset()
@@ -56,6 +57,7 @@ public:
     const std::shared_ptr<LayoutProgress> progress = std::make_shared<LayoutProgress>();
 
     Engine &operator=(Engine &&) { return *this; }
+
     virtual ~Engine() = default;
     // The name of the engine, for cache identity and for code that still
     // needs one specific engine.
@@ -106,6 +108,7 @@ public:
         Q_UNUSED(allBooks);
         return false;
     }
+
     // Shared count, on the owning engine thread. Populates the Stats graph
     // from source anchors. Counts visible source text once, including
     // non-linear spine fragments; excludes SVG and ruby annotation text.
@@ -113,6 +116,11 @@ public:
     // properties, so reflow and cached reopening do not scan text again.
     virtual DocumentWordCounts wordCounts(std::function<bool()> current = {}) = 0;
     virtual qint64 totalWords() const = 0;
+    virtual qint64 wordsInMainText(const QString &first, const QString &after,
+                                   const std::function<bool()> &)
+    {
+        return first.isEmpty() && after.isEmpty() ? totalWords() : -1;
+    }
     virtual QString resourceError() const = 0;
     virtual QJsonObject resourceStats() const = 0;
     virtual bool openPreview(Engine &source, QSize size, QString *error) = 0;
@@ -246,6 +254,7 @@ public:
     // replaced. Their teardown can write the parsed-book cache, so it waits
     // for idle time instead of holding up the turn.
     virtual void releaseRetired() { }
+
     // Compares the cached images of two pages ahead of a turn between them.
     // Cache key of a page's cached image, or 0. Never draws.
     virtual qint64 cachedImageKey(int page) const = 0;
@@ -283,6 +292,24 @@ public:
         // every part of the spine item, had a layout.
         bool pagesEstimated = true, itemPagesEstimated = true;
     };
+
+    QJsonObject mainTextMarks;
+
+    virtual QString chapterBoundaryPosition(const QVector<ChapterLink> &links, int index) const
+    {
+        return links[index].position;
+    }
+
+    virtual QString afterChapter(const QVector<ChapterLink> &links, int index) const
+    {
+        const int depth = links[index].depth;
+        while (++index < links.size())
+            if (links[index].depth <= depth && !links[index].position.isEmpty())
+                return links[index].position;
+        return {};
+    }
+
+    virtual QPair<QString, QString> mainTextHints() const { return {}; }
 
     virtual RoughPages roughPages() const = 0;
 
@@ -418,6 +445,7 @@ public:
         Q_UNUSED(request);
         return {};
     }
+
     virtual QJsonObject state() const = 0;
     // state() without the page estimate, which costs more to make. Enough
     // to compare the settings.

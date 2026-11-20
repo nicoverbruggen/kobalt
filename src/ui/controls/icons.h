@@ -162,7 +162,9 @@ enum class ControlIcon {
     Palette,
     Percent,
     TextT,
-    TextTSlash
+    TextTSlash,
+    BookStart,
+    BookEnd
 };
 enum class IconStyle { Monochrome, Color, Pastel, Rings };
 QString iconStyleId(IconStyle style);

@@ -1,3 +1,4 @@
+#include "reading/reading_progress.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/icons.h"
 #include "ui/controls/rows.h"
@@ -1133,6 +1134,9 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
     percentageFormatButton = listAction(systemPage, nullptr, "rrPercentageFormat",
                                         strings::get("settings.percentage_format"), [] { });
     systemRows->addWidget(percentageFormatButton);
+    secondaryNumbersButton = listAction(systemPage, nullptr, "rrSecondaryNumbers",
+                                        strings::get("settings.secondary_numbers"), [] { });
+    systemRows->addWidget(secondaryNumbersButton);
     openingCoverOption =
             settingsOption(systemPage, "rrHideOpeningCover", strings::get("settings.opening_cover"),
                            strings::get("settings.opening_cover_description"));
@@ -1180,6 +1184,7 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
            std::pair{ sleepScreenButton, ui::ControlIcon::MoonStars },
            std::pair{ sessionTimeoutButton, ui::ControlIcon::ClockCountdown },
            std::pair{ timeRemainingFormatButton, ui::ControlIcon::Clock },
+           std::pair{ secondaryNumbersButton, ui::ControlIcon::ChapterTree },
            std::pair{ percentageFormatButton, ui::ControlIcon::Percent },
            std::pair{ themingButton, ui::ControlIcon::Palette },
            std::pair{ dictionaryFontButton, ui::ControlIcon::TextT },
@@ -2288,6 +2293,36 @@ void SettingsPanel::showTimeRemainingFormats(const QString &current,
                                               .constData()));
     presentChoices(formats.indexOf(current),
                    [chosen, formats](int index) { chosen(formats[index]); });
+}
+
+QString SettingsPanel::secondaryNumberLabel(const QString &style)
+{
+    return strings::get(("settings.secondary_" + style).toLatin1().constData());
+}
+
+void SettingsPanel::showSecondaryNumbers(const QString &current,
+                                         std::function<void(const QString &)> chosen)
+{
+    if (sheet)
+        return;
+    auto *choices =
+            openChoiceSheet("rrSecondaryNumbers", strings::get("settings.secondary_numbers"),
+                            strings::get("settings.secondary_numbers_hint"));
+    const auto &styles = secondaryNumberStyles();
+    if (choices->options().isEmpty())
+        for (const auto &style : styles) {
+            QStringList front, back;
+            // One main-text page between two 27-page sections.
+            for (int n : { 1, 2, 27 }) {
+                front.append(bookPageLabel(n - 1, 27, 27, style));
+                back.append(bookPageLabel(27 + n, 27, 27, style));
+            }
+            choices->add("rrSecondaryNumbers_" + style, secondaryNumberLabel(style),
+                         strings::get("settings.secondary_preview")
+                                 .arg(front.join(", "), back.join(", ")));
+        }
+    presentChoices(styles.indexOf(current),
+                   [chosen](int index) { chosen(secondaryNumberStyles()[index]); });
 }
 
 QString SettingsPanel::percentageFormatLabel(const QString &format)

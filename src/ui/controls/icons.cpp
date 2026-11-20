@@ -542,6 +542,24 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         phosphorGeometry(icon == ControlIcon::FolderPlus ? QStringLiteral("folder-plus")
                                                          : QStringLiteral("folders"),
                          path);
+    } else if (icon == ControlIcon::BookStart || icon == ControlIcon::BookEnd) {
+        result.filled = true;
+        path.setFillRule(Qt::WindingFill);
+        path.addRect(10, 7, 4, 50);
+        if (icon == ControlIcon::BookStart) {
+            path.moveTo(13, 7);
+            path.lineTo(56, 20);
+            path.lineTo(13, 34);
+            path.closeSubpath();
+        } else {
+            for (int row = 0; row < 3; ++row)
+                for (int column = 0; column < 4; ++column)
+                    if ((row + column) % 2 == 0)
+                        path.addRect(14 + column * 10, 8 + row * 9, 10, 9);
+            path.addRect(14, 7, 40, 2);
+            path.addRect(52, 7, 2, 28);
+            path.addRect(14, 33, 40, 2);
+        }
     } else if (icon == ControlIcon::SelectionStart || icon == ControlIcon::SelectionEnd) {
         const bool start = icon == ControlIcon::SelectionStart;
         const int caret = start ? 12 : 52;
@@ -902,6 +920,7 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons)
             && icon != ControlIcon::BookmarkRemove && icon != ControlIcon::ExportAction
             && icon != ControlIcon::FitImage && icon != ControlIcon::Door
             && icon != ControlIcon::PreviousChapter && icon != ControlIcon::NextChapter
+            && icon != ControlIcon::BookStart && icon != ControlIcon::BookEnd
             && icon != ControlIcon::Sync && icon != ControlIcon::Sort
             && icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight
             && icon != ControlIcon::Bold && icon != ControlIcon::WordsAdd

@@ -2,6 +2,57 @@
 #include "reading_progress.h"
 
 namespace kobalt {
+static QString romanPage(int page)
+{
+    QString result;
+
+    static constexpr struct
+    {
+        int value;
+        const char *digits;
+    } numerals[] = { { 1000, "m" }, { 900, "cm" }, { 500, "d" }, { 400, "cd" }, { 100, "c" },
+                     { 90, "xc" },  { 50, "l" },   { 40, "xl" }, { 10, "x" },   { 9, "ix" },
+                     { 5, "v" },    { 4, "iv" },   { 1, "i" } };
+
+    for (const auto &numeral : numerals)
+        while (page >= numeral.value) {
+            result += QLatin1String(numeral.digits);
+            page -= numeral.value;
+        }
+    return result;
+}
+
+const QStringList &secondaryNumberStyles()
+{
+    static const QStringList styles{ "roman", "arabic", "letters", "prefixed", "upper_roman" };
+    return styles;
+}
+
+QString bookPageLabel(int page, int firstMain, int lastMain, const QString &style)
+{
+    if (page < 0)
+        return {};
+    if (page >= firstMain && page <= lastMain)
+        return QString::number(page - firstMain + 1);
+    const bool front = page < firstMain;
+    int number = front ? page + 1 : page - lastMain;
+    if (style == "arabic")
+        return QString::number(number);
+    if (style == "prefixed")
+        return (front ? QStringLiteral("F") : QStringLiteral("B")) + QString::number(number);
+    if (style == "letters") {
+        QString label;
+        while (number > 0) {
+            --number;
+            label.prepend(QChar('a' + number % 26));
+            number /= 26;
+        }
+        return label;
+    }
+    const auto roman = romanPage(number);
+    return style == "upper_roman" ? roman.toUpper() : roman;
+}
+
 // Nickel's reader counts the page on screen as read and rounds down: page 1
 // of 83 is 1%, page 82 is 98% and the last page is 100%. Kobalt uses the same
 // count, so Kobo's library shows the number that Kobalt shows.
@@ -87,8 +138,14 @@ bool resetNativeUnread(QJsonObject &checkpoint, const ReadingProgress &current)
                 || (saved.status == 0 && !preferNativeProgress(current, saved)))))
         return false;
     const bool hideBook = checkpoint.value("hide_book_on_sleep_screen").toBool(false);
+    const auto fingerprint = checkpoint.value("fingerprint");
+    const auto marks = checkpoint.value("main_text_marks").toObject();
     const auto positions = checkpoint.value("sleep_positions").toObject();
     checkpoint = qt::object({ { "book", current.book } });
+    if (!marks.isEmpty()) {
+        checkpoint["main_text_marks"] = marks;
+        checkpoint["fingerprint"] = fingerprint;
+    }
     if (hideBook)
         checkpoint["hide_book_on_sleep_screen"] = true;
     if (!positions.isEmpty())

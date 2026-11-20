@@ -1,3 +1,4 @@
+#include "reading/header_footer.h"
 #include <cmath>
 #include "support/qt_compat.h"
 #include "support/strings.h"
@@ -69,6 +70,49 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
         bookPages(result.chapters);
         bookPages(result.chapterGraph);
     }
+    const auto hints = engine.mainTextHints();
+    QString first = hints.first, after = hints.second;
+    const auto &marks = engine.mainTextMarks;
+    for (bool start : { true, false }) {
+        const auto key = start ? "start" : "end";
+        auto mark = marks.value(key).toObject();
+        if (mark.isEmpty())
+            continue;
+        if (!mark.contains("anchor")) {
+            const int i = mark.value("index").toInt(-1);
+            if (i < 0 || i >= result.chapters.size())
+                continue;
+            const auto &link = result.chapters[i];
+            if (link.title != mark.value("title").toString() || link.position.isEmpty())
+                continue;
+            // An unloaded spine item can have one placeholder for several TOC entries.
+            // Resolve the selected entry against the source before retaining its anchor.
+            mark["anchor"] = start ? engine.chapterBoundaryPosition(result.chapters, i)
+                                   : engine.afterChapter(result.chapters, i);
+            engine.mainTextMarks[key] = mark;
+        }
+        // An empty exclusive end explicitly includes the last spine item.
+        (start ? first : after) = mark.value("anchor").toString();
+    }
+    result.state["main_text_marks"] = marks;
+    QVector<int> bounds;
+    if (!first.isEmpty() || !after.isEmpty())
+        bounds = engine.bookPages({ first, after }, current, true);
+    int firstPage = first.isEmpty() ? -1 : bounds.value(0, -1);
+    int lastPage = after.isEmpty() ? -1 : bounds.value(1, -1);
+    if (firstPage > 0 && lastPage > 0 && firstPage > lastPage) {
+        if (marks.contains("start")) {
+            after.clear();
+            lastPage = -1;
+        } else {
+            first.clear();
+            firstPage = -1;
+        }
+    }
+    result.state["main_text_bounded"] = !first.isEmpty() || !after.isEmpty() || !marks.isEmpty();
+    result.mainWords = engine.wordsInMainText(first, after, current);
+    result.state["main_text_first"] = firstPage;
+    result.state["main_text_last"] = lastPage;
     if (const double fraction = engine.bookFraction(); fraction >= 0) {
         result.state["book_fraction"] = fraction;
         result.state["whole_book_failed"] = engine.fullDocumentFailed();
@@ -116,19 +160,24 @@ public:
         static std::atomic<quint64> sequence{ 0 };
         id = ++sequence;
         timer.start();
-        diagnostic("engine-work-start", { { "work", QString::fromLatin1(work) },
-                                          { "work_id", double(id) } }, false);
+        diagnostic("engine-work-start",
+                   { { "work", QString::fromLatin1(work) }, { "work_id", double(id) } }, false);
     }
 
     ~BackgroundDiagnostic()
     {
         if (!id)
             return;
-        diagnostic("engine-work-end", { { "work", QString::fromLatin1(work) },
-                { "work_id", double(id) }, { "elapsed_ms", timer.nsecsElapsed() / 1e6 },
-                { "completed", !current || current() }, { "cached_pages", engine.cachedPages() },
-                { "book_fraction", engine.bookFraction() },
-                { "loaded_pages", engine.pages() }, { "resources", engine.resourceStats() } }, false);
+        diagnostic("engine-work-end",
+                   { { "work", QString::fromLatin1(work) },
+                     { "work_id", double(id) },
+                     { "elapsed_ms", timer.nsecsElapsed() / 1e6 },
+                     { "completed", !current || current() },
+                     { "cached_pages", engine.cachedPages() },
+                     { "book_fraction", engine.bookFraction() },
+                     { "loaded_pages", engine.pages() },
+                     { "resources", engine.resourceStats() } },
+                   false);
     }
 
 private:
@@ -289,6 +338,7 @@ bool ReaderSession::publishPageEstimate(Engine &engine, const std::function<bool
                 bool changed = frame.chapters != estimate.chapters
                         || frame.chapterGraph != estimate.chapterGraph
                         || frame.totalWords != estimate.totalWords
+                        || frame.mainWords != estimate.mainWords
                         || frame.contentsSelection != estimate.contentsSelection
                         || frame.graphSelection != estimate.graphSelection;
                 for (auto it = estimate.state.begin(); it != estimate.state.end(); ++it) {
@@ -300,6 +350,7 @@ bool ReaderSession::publishPageEstimate(Engine &engine, const std::function<bool
                 frame.chapters = estimate.chapters;
                 frame.chapterGraph = estimate.chapterGraph;
                 frame.totalWords = estimate.totalWords;
+                frame.mainWords = estimate.mainWords;
                 frame.contentsSelection = estimate.contentsSelection;
                 frame.graphSelection = estimate.graphSelection;
                 // Refresh for the first count, the exact count, or new spread labels.
@@ -980,8 +1031,10 @@ void ReaderSession::openPreview(const ReaderSession &source, QSize size,
                 else if (!engine->openPreview(*book, size, &error))
                     result.error = error;
                 else if (latest->load() != job) {
-                    diagnostic("preview-end", { { "elapsed_ms", double(timer.elapsed()) },
-                                                { "completed", false } }, false);
+                    diagnostic(
+                            "preview-end",
+                            { { "elapsed_ms", double(timer.elapsed()) }, { "completed", false } },
+                            false);
                     return;
                 } else
                     result = capture(*engine, positions, false, markup, markupGeneration);
@@ -2624,6 +2677,79 @@ void ReaderSession::resize(QSize size)
     request(true, RenderReason::PageLayout);
 }
 
+int ReaderSession::firstMainPage() const
+{
+    return qBound(0, frame.state.value("main_text_first").toInt() - 1, qMax(0, bookPages() - 1));
+}
+
+int ReaderSession::lastMainPage() const
+{
+    const int last = frame.state.value("main_text_last").toInt();
+    return last > 0 ? qBound(firstMainPage(), last - 1, qMax(0, bookPages() - 1)) : bookPages() - 1;
+}
+
+double ReaderSession::mainProgress() const
+{
+    if (firstMainPage() == 0 && lastMainPage() == bookPages() - 1)
+        return progressFraction();
+    return mainPage() < 0 ? 0 : pageProgressFraction(mainPage(), mainPages());
+}
+
+int ReaderSession::mainPercent() const
+{
+    if (firstMainPage() == 0 && lastMainPage() == bookPages() - 1)
+        return progressPercent();
+    return mainPage() < 0 ? 0 : pageProgressPercent(mainPage(), mainPages());
+}
+
+QString ReaderSession::displayPageLabel(int absolute, const QString &style) const
+{
+    return bookPageLabel(absolute, firstMainPage(), lastMainPage(), style);
+}
+
+QString ReaderSession::displayBookPosition(const QString &style) const
+{
+    if (bookPages() <= 0)
+        return strings::get("common.percent").arg(mainPercent());
+    const auto label = displayPageLabel(bookPage(), style);
+    if (mainPage() < 0 || mainPage() >= mainPages())
+        return label;
+    return strings::get("stats.page_of")
+            .arg(label)
+            .arg(headerfooter::pageTotal(mainPages(), bookPagesEstimated()));
+}
+
+void ReaderSession::markChapter(int index, bool start, bool reset)
+{
+    if (index < 0 || index >= frame.chapters.size() || !lease_ || lease_->revoked())
+        return;
+    const auto &entry = frame.chapters[index];
+    if (entry.position.isEmpty())
+        return;
+    auto marks = mainTextMarks();
+    const auto key = start ? "start" : "end";
+    if (reset) {
+        marks.remove(key);
+    } else {
+        QJsonObject mark;
+        mark["index"] = index;
+        mark["position"] = entry.position;
+        mark["title"] = entry.title;
+        marks[key] = mark;
+    }
+    frame.state["main_text_marks"] = marks;
+    const auto engine = engine_;
+    const auto lease = lease_;
+    qt::invoke(
+            engineWorker(),
+            [engine, lease, marks] {
+                if (!lease->revoked())
+                    engine->mainTextMarks = marks;
+            },
+            Qt::QueuedConnection);
+    request();
+}
+
 void ReaderSession::setChapters(QVector<ChapterTarget> contents, QVector<ChapterTarget> graph)
 {
     const auto positions = positions_;
@@ -2652,6 +2778,7 @@ void ReaderSession::setChapters(QVector<ChapterTarget> contents, QVector<Chapter
                             guard->frame.chapters = result.chapters;
                             guard->frame.chapterGraph = result.chapterGraph;
                             guard->frame.totalWords = result.totalWords;
+                            guard->frame.mainWords = result.mainWords;
                             guard->frame.contentsSelection = result.contentsSelection;
                             guard->frame.graphSelection = result.graphSelection;
                             for (auto it = result.state.begin(); it != result.state.end(); ++it)
@@ -3022,7 +3149,8 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                     result.error = strings::get("error.could_not_update_text");
                 else {
                     appearanceChanged = !unchanged && !refused
-                            && ((modeChanged && !swap) || !appearance::same(before, engine->settingsState())
+                            && ((modeChanged && !swap)
+                                || !appearance::same(before, engine->settingsState())
                                 || oldSize != engine->viewport());
                     if (swap && modeChanged && !refused) {
                         // The same page in the document of the whole book:

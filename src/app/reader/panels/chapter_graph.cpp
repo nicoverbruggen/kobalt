@@ -271,6 +271,16 @@ ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
         if (denseChanged)
             denseChanged(dense);
     });
+    wordScope = new ui::CellButton(ui::ControlIcon::Books, this);
+    wordScope->hide();
+    wordScope->setObjectName("rrGraphWordScope");
+    wordScope->setAccessibleName(strings::get("stats.count_words_in"));
+    wordScope->setToolTip(strings::get("stats.count_words_in"));
+    wordScope->setRule(ui::Edges(Qt::LeftEdge) | Qt::BottomEdge);
+    connect(wordScope, &QPushButton::clicked, this, [this] {
+        if (wordScopeRequested)
+            wordScopeRequested();
+    });
     pager = new ui::PagerBar(this, "rrGraph");
     pager->previous->setAccessibleName(strings::get("chapter_contents.previous_chapters"));
     pager->next->setAccessibleName(strings::get("chapter_contents.next_chapters"));
@@ -353,13 +363,15 @@ void ChapterGraph::setChapterNumber(int number, int count)
 }
 
 void ChapterGraph::setReading(int minutes, qint64 total, qint64 chapterMilliseconds,
-                              qint64 bookMilliseconds, int pageTurns)
+                              qint64 bookMilliseconds, int pageTurns, bool wholeVolume)
 {
     if (this->minutes == minutes && words == total && chapterTime == chapterMilliseconds
-        && bookTime == bookMilliseconds && this->pageTurns == pageTurns)
+        && bookTime == bookMilliseconds && this->pageTurns == pageTurns
+        && this->wholeVolume == wholeVolume)
         return;
     this->minutes = minutes;
     this->pageTurns = pageTurns;
+    this->wholeVolume = wholeVolume;
     words = total;
     chapterTime = chapterMilliseconds;
     bookTime = bookMilliseconds;
@@ -438,7 +450,10 @@ void ChapterGraph::refreshCells()
             : chapterNumber
             ? strings::get("stats.chapter_words").arg(chapterNumber).arg(wordTotal(chapterTotal))
             : strings::get("stats.this_chapter_words").arg(wordTotal(chapterTotal));
-    bookWordsText = words >= 0 ? strings::get("stats.book_words").arg(wordTotal(words)) : QString();
+    bookWordsText = words >= 0
+            ? strings::get(wholeVolume ? "stats.volume_words" : "stats.main_words")
+                      .arg(wordTotal(words))
+            : QString();
     arrangeWords();
 }
 
@@ -667,10 +682,18 @@ void ChapterGraph::arrangeWords()
     bookWords->setText(ui::elideInterfaceText(bookWordsText, metrics, bookWidth));
 }
 
+void ChapterGraph::setWordScopeAvailable(bool available)
+{
+    if (available == !wordScope->isHidden())
+        return;
+    wordScope->setVisible(available);
+    arrange();
+}
+
 void ChapterGraph::arrange()
 {
     const int inner = qMax(1, width() - 2 * chrome::inset);
-    const int rowInner = qMax(1, inner - int(chrome::cellWidth));
+    const int rowInner = qMax(1, inner - (wordScope->isHidden() ? 1 : 2) * int(chrome::cellWidth));
     // A change of height or paging can move the word totals in or out of the cells.
     if (wordsInCells() != cellWords) {
         cellWords = !cellWords;
@@ -694,6 +717,8 @@ void ChapterGraph::arrange()
     const int pagerWidth = inlinePager() ? 3 * int(chrome::cellWidth) : 0;
     const int titleWidth = qMax(
             1, rowInner - int(chrome::inset) - (pagerWidth ? pagerWidth + int(chrome::inset) : 0));
+    wordScope->setGeometry(width() - 2 * chrome::cellWidth, topPadding, chrome::cellWidth,
+                           chapters::rowHeight);
     mode->setGeometry(width() - chrome::cellWidth, topPadding, chrome::cellWidth,
                       chapters::rowHeight);
     // "Contents · 8 of 23 · Page 1 of 65". The page keeps its full text; a

@@ -281,7 +281,7 @@ void Reader::mapActivityBook(const QString &key)
     }
     ActivityOpenBook open;
     open.book = key;
-    open.percent = book->finishedHere() ? 100 : session->progressPercent();
+    open.percent = book->finishedHere() ? 100 : session->mainPercent();
     open.remainingMilliseconds = book->estimates().bookMilliseconds;
     activityView->setOpenBook(open);
     if (positions.isEmpty())

@@ -112,6 +112,8 @@ public:
                                   std::function<void(const QString &)> chosen);
     static QString timeRemainingFormatLabel(const QString &format);
     void showPercentageFormats(const QString &current, std::function<void(const QString &)> chosen);
+    void showSecondaryNumbers(const QString &current, std::function<void(const QString &)> chosen);
+    static QString secondaryNumberLabel(const QString &style);
     static QString percentageFormatLabel(const QString &format);
     void showRenderingModes(const QString &current, std::function<void(const QString &)> chosen);
     static QString renderingModeLabel(const QString &mode);
@@ -219,7 +221,8 @@ public:
                       *monoFontButton = nullptr;
     ui::CaptionButton *dictionaryFontButton = nullptr, *dictionaryFontSizeButton = nullptr;
     ui::CaptionButton *columnsButton = nullptr;
-    ui::CaptionButton *timeRemainingFormatButton = nullptr, *percentageFormatButton = nullptr;
+    ui::CaptionButton *timeRemainingFormatButton = nullptr, *percentageFormatButton = nullptr,
+                      *secondaryNumbersButton = nullptr;
     ui::CaptionButton *renderingButton = nullptr;
     ui::CaptionButton *verticalSpacingButton = nullptr;
     ui::CaptionButton *wordSpacingButton = nullptr, *trackingButton = nullptr,

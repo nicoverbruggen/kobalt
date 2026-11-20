@@ -22,13 +22,14 @@ public:
                      int page, int pages, double bookFraction = -1, bool estimated = false);
     // `number` counts from 1 in the contents; 0 when the position is before them.
     void setChapterNumber(int number, int count);
-    // `words` is the shared whole-book total, or -1 when counting failed.
+    // `words` is the total for the selected scope, or -1 while unavailable.
     // The times are the rest of
     // the chapter and of the book at the session's pace, or -1 without a pace.
     void setReading(int minutes, qint64 words, qint64 chapterMilliseconds = -1,
-                    qint64 bookMilliseconds = -1, int pageTurns = 0);
+                    qint64 bookMilliseconds = -1, int pageTurns = 0, bool wholeVolume = false);
     // Dense charts show every chapter on one row; sparse charts page 20 at a time.
     void setDense(bool value);
+    void setWordScopeAvailable(bool available);
 
     void setModeEnabled(bool enabled) { mode->setEnabled(enabled); }
 
@@ -36,7 +37,7 @@ public:
     // the streak. Hidden without a handler.
     void setActivity(const QString &summary);
     QString activitySummary() const;
-    std::function<void()> activityRequested;
+    std::function<void()> activityRequested, wordScopeRequested;
 
     void open();
 
@@ -102,10 +103,11 @@ private:
     QString title;
     int progressWeight = -1;
     ui::PagerBar *pager;
-    ui::CellButton *mode;
+    ui::CellButton *mode, *wordScope;
     ChapterBars *bars;
     QLabel *chapterWords, *bookWords;
     QString chapterWordsText, bookWordsText;
+    bool wholeVolume = false;
     StatsCell *chapterCell, *bookCell, *sessionCell;
     int capacity() const;
     void refreshCells();

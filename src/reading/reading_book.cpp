@@ -288,23 +288,30 @@ ReadingActivity ReadingBook::readingActivity() const
              error.isEmpty() ? nativePosition : QString() };
 }
 
-ReadingEstimates ReadingBook::estimates() const
+ReadingEstimates ReadingBook::estimates(bool wholeVolume) const
 {
-    if (speed) {
-        return speed->estimates(readingActivity());
-    }
+    const int remaining = wholeVolume ? qMax(0, session_->bookPages() - session_->bookPage())
+            : qBound(0, session_->mainPages() - session_->mainPage(), session_->mainPages());
+    const auto mainTime = [&](ReadingEstimates estimate) {
+        if (!wholeVolume && estimate.bookMilliseconds >= 0 && session_->mainPages() != session_->bookPages()) {
+            const int wholeRemaining = qMax(1, session_->bookPages() - session_->bookPage());
+            estimate.bookMilliseconds =
+                    qint64(double(estimate.bookMilliseconds) * remaining / wholeRemaining);
+        }
+        return estimate;
+    };
+    if (speed)
+        return mainTime(speed->estimates(readingActivity()));
     if (bridge && !released && bridge->writable()) {
         ReadingEstimates result;
         if (bridge->estimates(readingActivity(), &result))
-            return result;
+            return mainTime(result);
     }
     const auto reading = readingMilliseconds();
     const int chapterLeft = session_->chapterPages() > 0
             ? session_->chapterPages() - session_->chapterPage() + 1
             : -1;
-    const int bookLeft = session_->bookPages() > 0 && session_->bookPage() >= 0
-            ? session_->bookPages() - session_->bookPage()
-            : -1;
+    const int bookLeft = session_->bookPages() > 0 && session_->bookPage() >= 0 ? remaining : -1;
     return { pace_.estimate(chapterLeft, reading), pace_.estimate(bookLeft, reading),
              pace_.estimate(0, reading) < 0 };
 }
@@ -916,6 +923,9 @@ bool ReadingBook::rememberImageView(const QString &id, const QJsonObject &view)
 QJsonObject ReadingBook::checkpointState() const
 {
     auto state = session_->state();
+    state.remove("main_text_bounded");
+    state.remove("main_text_first");
+    state.remove("main_text_last");
     state["book"] = identity_;
     state["fingerprint"] = QString::fromLatin1(digest);
     for (auto it = layoutPreferences_.begin(); it != layoutPreferences_.end(); ++it)
@@ -938,7 +948,7 @@ QJsonObject ReadingBook::checkpointState() const
     // For the Android and desktop library, which shows progress without
     // opening the book.
     if (session_->pages() > 0)
-        state["percent"] = session_->progressPercent();
+        state["percent"] = session_->mainPercent();
     state["native_writeback"] = QString::fromLatin1(nativeWriteback.diagnosticName());
     state["sync_pending"] = reconciliation.pending();
     state["native_writeback_error"] = nativeWriteback.message();

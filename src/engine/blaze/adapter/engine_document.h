@@ -101,6 +101,8 @@ public:
     // properties, so reflow and cached reopening do not scan text again.
     DocumentWordCounts wordCounts(std::function<bool()> current = {}) override;
 
+    qint64 wordsInMainText(const QString &first, const QString &after,
+                           const std::function<bool()> &current) override;
     qint64 totalWords() const override { return totalWords_; }
 
     QString resourceError() const override;
@@ -199,6 +201,9 @@ public:
     // spine item of a position, or -1.
     QStringList spineItems() const;
     QStringList spineLocationNames() const;
+    QPair<QString, QString> mainTextHints() const override;
+    QString chapterBoundaryPosition(const QVector<ChapterLink> &links, int index) const override;
+    QString afterChapter(const QVector<ChapterLink> &links, int index) const override;
     int spineItemOf(const QString &position) const;
     // Turns `delta` pages. At an edge of the window it loads the next or the
     // previous spine item with its neighbors and continues there. False at
@@ -679,7 +684,8 @@ private:
     QVector<ChapterLink> contents_, graph_;
     // Native chapter metadata is separate from a graph derived from the DOM.
     bool externalChapters_ = false;
-    qint64 totalWords_ = -1;
+    qint64 totalWords_ = -1, rangeWords_ = -1;
+    QPair<QString, QString> countedRange_;
     using ChapterPositions = QVector<ldomXPointerEx>;
     QVector<ChapterLink> chapterPages(QVector<ChapterLink> links,
                                       ChapterPositions *positions) const;

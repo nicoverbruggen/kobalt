@@ -1,3 +1,4 @@
+#include "reading/reading_progress.h"
 #include "page_scrubber.h"
 #include "render/bookmark_paint.h"
 #include "buttons.h"
@@ -340,11 +341,18 @@ PageScrubber::PageScrubber(QWidget *parent)
 }
 
 void PageScrubber::setBook(int page, int pages, const QVector<QPair<int, QString>> &values,
-                           QSize size)
+                           QSize size, int firstMain, int lastMain, const QString &style)
 {
     const int count = qMax(1, pages);
     const bool changed = count != totalPages || chapters != values;
-    const bool unchanged = !changed && current == qBound(0, page, count - 1)
+    if (lastMain < 0)
+        lastMain = count - 1;
+    const bool sameRange =
+            firstMainPage == firstMain && lastMainPage == lastMain && style == secondaryStyle;
+    secondaryStyle = style;
+    firstMainPage = firstMain;
+    lastMainPage = lastMain;
+    const bool unchanged = sameRange && !changed && current == qBound(0, page, count - 1)
             && (!size.isValid() || pageSize == size) && !rangeLabel->text().isEmpty();
     if (unchanged) {
         return;
@@ -427,9 +435,11 @@ void PageScrubber::syncRange(bool chaptersChanged)
     rangeLabel->setText(
             chapterBar ? strings::get("chapter_graph.book_progress").arg(bookPercent).toUpper()
                        : scope.toUpper());
-    rangeStart->setText(QString::number(rangeFirst + 1));
-    rangeEnd->setText(QString::number(rangeLast + 1));
-    overviewEnd->setText(QString::number(totalPages));
+    rangeStart->setText(bookPageLabel(rangeFirst, firstMainPage, lastMainPage, secondaryStyle));
+    rangeEnd->setText(bookPageLabel(rangeLast, firstMainPage, lastMainPage, secondaryStyle));
+    overviewStart->setText(bookPageLabel(0, firstMainPage, lastMainPage, secondaryStyle));
+    overviewEnd->setText(
+            bookPageLabel(totalPages - 1, firstMainPage, lastMainPage, secondaryStyle));
     updateButtons();
 }
 
@@ -1112,7 +1122,11 @@ void PageScrubber::updateCaption()
             chapterName = chapter.second.toUpper();
         }
     }
-    const QString pageLabel = strings::get("reader.menu_page_of").arg(page + 1).arg(totalPages);
+    QString pageLabel = bookPageLabel(page, firstMainPage, lastMainPage, secondaryStyle);
+    if (page >= firstMainPage && page <= lastMainPage)
+        pageLabel = strings::get("reader.menu_page_of")
+                            .arg(pageLabel)
+                            .arg(lastMainPage - firstMainPage + 1);
     const QString label = chapterBar ? chapterTitle.toUpper()
             : chapterName.isEmpty()  ? pageLabel
                                      : pageLabel + QStringLiteral(" · ") + chapterName;

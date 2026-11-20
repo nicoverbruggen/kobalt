@@ -78,7 +78,7 @@ struct ReaderFrame
     QString title, author, error;
     // Source identity of the painted page, independent of later slice preparation.
     QString pageStart;
-    qint64 totalWords = -1;
+    qint64 totalWords = -1, mainWords = -1;
     QString nativePosition, nativePositionError;
     QImage cover;
     QStringList fonts;
@@ -231,6 +231,7 @@ public:
 
     // Source and pagination generation. Navigation within the same layout keeps it.
     int layoutProgressPercent() const { return engine_->progress->percent(); }
+
     quint64 layoutRevision() const { return newestLayout->load(); }
 
     // Milliseconds since the opening or the last new layout, which is a new
@@ -424,6 +425,24 @@ public:
         return pageProgressPercent(page(), pages());
     }
 
+    // The physical page numbers above also drive sync, completion and navigation.
+    int firstMainPage() const;
+    int lastMainPage() const;
+    QString displayPageLabel(int absolute, const QString &style) const;
+    QString displayBookPosition(const QString &style) const;
+
+    int mainPages() const { return qMax(0, lastMainPage() - firstMainPage() + 1); }
+
+    int mainPage() const { return bookPage() - firstMainPage(); }
+
+    double mainProgress() const;
+    int mainPercent() const;
+
+    bool hasMainTextBoundary() const { return frame.state.value("main_text_bounded").toBool(); }
+    QJsonObject mainTextMarks() const { return frame.state.value("main_text_marks").toObject(); }
+
+    void markChapter(int index, bool start, bool reset);
+
     // The page a forward turn reaches, or page() on the last page of the text.
     int nextPage() const { return frame.state.value("next_page").toInt(page()); }
 
@@ -519,6 +538,7 @@ public:
 
     ChapterSelection graphSelection() const { return frame.graphSelection; }
 
+    qint64 mainWords() const { return frame.mainWords; }
     qint64 totalWords() const { return frame.totalWords; }
 
     void setChapters(QVector<ChapterTarget> contents, QVector<ChapterTarget> graph);

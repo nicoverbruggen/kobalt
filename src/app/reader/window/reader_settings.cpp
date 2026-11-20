@@ -112,6 +112,13 @@ kobalt::headerfooter::Values Reader::chromeValues(ChromeFields fields)
                     int(1000LL * qBound(1, state.value("rough_item_page").toInt(), itemPages)
                         / itemPages);
     }
+    if (values.pages > 0) {
+        values.page = session->mainPage() + 1;
+        values.pages = session->mainPages();
+        if (values.page <= 0 || values.page > values.pages)
+            values.matterPage =
+                    session->displayPageLabel(session->bookPage(), secondaryNumberStyle());
+    }
     values.deviceStatus = !hideNativeStatus();
     // The chooser previews every field. The slot map also previews assigned
     // fields in disabled strips, which it draws dimmed.
@@ -463,6 +470,7 @@ void Reader::openSettings()
     settingsDictionaryFontSize = preferences.value("dictionary_font_size").toInt(100);
     settingsTimeRemainingFormat =
             remainingTime::approximate(preferences) ? "approximate" : "detailed";
+    settingsSecondaryNumbers = secondaryNumberStyle();
     settingsPercentageFormat = headerfooter::decimalPercentages(preferences) ? "decimal" : "whole";
     settingsRenderingMode = renderingMode::value(renderingMode::fromPreferences(preferences));
     panel->selectTheme(interfaceTheme(), themeDraft);
@@ -963,6 +971,7 @@ void Reader::applySettings()
     if (services.readerStandbySupported)
         next[disableReaderStandbyKey] = disableStandbyOption.checked();
     next[remainingTime::preferenceKey] = settingsTimeRemainingFormat;
+    next[secondaryNumberKey] = settingsSecondaryNumbers;
     next[headerfooter::percentageFormatKey] = settingsPercentageFormat;
     next[renderingMode::preferenceKey] = settingsRenderingMode;
     for (const auto *key : appearance::fallbackFontKeys)
@@ -1701,6 +1710,8 @@ void Reader::showSettingsFonts(SettingsPage section)
         button->setTypefacePreview(family);
     };
     if (section == SettingsPage::System) {
+        panel->secondaryNumbersButton->setCaption(
+                SettingsPanel::secondaryNumberLabel(settingsSecondaryNumbers).toUpper());
         panel->percentageFormatButton->setCaption(
                 SettingsPanel::percentageFormatLabel(settingsPercentageFormat).toUpper());
         panel->timeRemainingFormatButton->setCaption(

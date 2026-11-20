@@ -295,6 +295,49 @@ bool createBook(const QString &directory, const QString &filename = "text.epub")
                "<spine toc=\"ncx\">"
              + spine + "</spine></package>")
                     .toUtf8();
+    if (filename == "guided.epub" || filename == "semantic.epub") {
+        // Twenty paragraphs remain in the start item and fifteen precede the end.
+        int split = files["c2.xhtml"].indexOf("<p>");
+        for (int i = 0; i < 10; ++i)
+            split = files["c2.xhtml"].indexOf("<p>", split + 1);
+        files["c2.xhtml"].insert(
+                split,
+                "<section id='body' xmlns:e='http://www.idpf.org/2007/ops' e:type='bodymatter'>");
+        files["c2.xhtml"].replace("</body>", "</section></body>");
+        int appendix = files["c3.xhtml"].indexOf("<p>");
+        for (int i = 0; i < 15; ++i)
+            appendix = files["c3.xhtml"].indexOf("<p>", appendix + 1);
+        files["c3.xhtml"].insert(
+                appendix,
+                "<section id='back' xmlns:e='http://www.idpf.org/2007/ops' e:type='backmatter'>");
+        files["c3.xhtml"].replace("</body>", "</section></body>");
+        if (filename == "guided.epub")
+            files["book.opf"].replace(
+                    "</package>",
+                    "<guide><reference type='text' href='c2.xhtml#body'/><reference type='index' href='c3.xhtml#back'/></guide></package>");
+        else
+            files["book.opf"].replace("version=\"2.0\"", "version=\"3.0\"");
+    }
+    if (filename == "boundary-anchors.epub") {
+        auto &doc = files["c3.xhtml"];
+        for (int n = 2; n >= 1; --n) {
+            const int where = doc.indexOf("<p>", n * doc.size() / 3);
+            doc.replace(where, 3,
+                        "<p style='page-break-before:always' id='a" + QByteArray::number(n) + "'>");
+        }
+        // Both rows point inside the same unopened spine item.
+        navigation = chapterEntries[0] + chapterEntries[2]
+                + "<navPoint><navLabel><text>Body</text></navLabel><content src='c3.xhtml#a1'/></navPoint>"
+                  "<navPoint><navLabel><text>Appendix</text></navLabel><content src='c3.xhtml#a2'/></navPoint>";
+        files["book.opf"].replace("version=\"2.0\"", "version=\"3.0\"");
+        files["book.opf"].replace(
+                "</manifest>",
+                "<item id='nav' properties='nav' media-type='application/xhtml+xml' href='nav.xhtml'/></manifest>");
+        files["nav.xhtml"] =
+                "<html xmlns='http://www.w3.org/1999/xhtml' xmlns:e='http://www.idpf.org/2007/ops'><body>"
+                "<nav e:type='toc'><ol><li><a href='c1.xhtml'>First</a></li><li><a href='c3.xhtml'>Last item</a></li><li><a href='c3.xhtml#a1'>Body</a></li><li><a href='c3.xhtml#a2'>Appendix</a></li></ol></nav><nav e:type='landmarks'><ol><li><a e:type='bodymatter' href='c3.xhtml#a1'>Begin</a></li>"
+                "<li><a e:type='backmatter' href='c3.xhtml#a2'>End</a></li></ol></nav></body></html>";
+    }
     files["toc.ncx"] =
             ("<ncx xmlns=\"http://www.daisy.org/z3986/2005/ncx/\" version=\"2005-1\"><head>"
              "<meta name=\"dtb:uid\" content=\"kobalt-fixture\"/></head><docTitle><text>Native reader fixture</text>"
@@ -2124,8 +2167,22 @@ void chapterGroups(Fixture &fixture, const QString &name = {})
     QVERIFY(!fixture.visible("rrChapter4"));
     const auto initialPage = fixture.state().value("page");
     const auto graph = fixture.state().value("word_counts").toObject().value("positions");
-    if (!name.isEmpty())
+    if (!name.isEmpty()) {
+        QVERIFY(fixture.press("rrNavStats"));
+        QTRY_VERIFY(fixture.visible("rrChapterGraph"));
+        QVERIFY(!fixture.visible("rrGraphWordScope"));
+        QVERIFY(capture(fixture, name + "-stats-unmarked-volume"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrContents"));
         QVERIFY(capture(fixture, name + "-chapters-groups"));
+        auto *row = fixture.widget("rrChapter1");
+        QTest::mousePress(row, Qt::LeftButton);
+        QTRY_VERIFY(fixture.visible("rrChapterActions"));
+        QTest::mouseRelease(row, Qt::LeftButton);
+        QVERIFY(capture(fixture, name + "-chapters-boundaries"));
+        QVERIFY(fixture.press("rrMarkStart"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    }
     QVERIFY(fixture.press("rrChapter0Toggle"));
     QVERIFY(!fixture.visible("rrChapter1") && !fixture.visible("rrChapter2"));
     QCOMPARE(fixture.state().value("page"), initialPage);
@@ -3599,11 +3656,25 @@ void checkPercentageFormat(int preset, bool dark, bool screenshots)
     QVERIFY(fixture.press("rrPercentageFormat"));
     QTRY_VERIFY(fixture.visible("rrPercentageFormatPopup"));
     QVERIFY(fixture.press("rrPercentageFormat_whole"));
+    QVERIFY(revealSettingsOption(fixture, "rrSecondaryNumbers"));
+    QVERIFY(fixture.press("rrSecondaryNumbers"));
+    QTRY_VERIFY(fixture.visible("rrSecondaryNumbersPopup"));
+    for (const auto &style : secondaryNumberStyles()) {
+        auto *option = fixture.widget(qPrintable("rrSecondaryNumbers_" + style));
+        QVERIFY(option);
+        QVERIFY(option->accessibleDescription().contains("Front"));
+        QVERIFY(option->accessibleDescription().contains("Back"));
+    }
+    if (screenshots)
+        capturePages(fixture, name + "-settings-secondary-numbers", "rrSecondaryNumbers");
+    QVERIFY(fixture.press("rrSecondaryNumbers_prefixed"));
     QVERIFY(fixture.press("rrSettingsClose"));
     QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
     QTRY_COMPARE(
             storage::readJson(fixture.paths.preferences()).value(headerfooter::percentageFormatKey),
             QJsonValue("whole"));
+    QCOMPARE(storage::readJson(fixture.paths.preferences()).value(secondaryNumberKey).toString(),
+             QString("prefixed"));
     QVERIFY(!page->slotContents[5].text.contains('.'));
 }
 
@@ -5509,6 +5580,221 @@ private slots:
         Fixture fixture;
         QVERIFY(fixture.prepared);
         ::illustratedNavigation(fixture);
+    }
+
+    void mainTextBoundaries_data()
+    {
+        QTest::addColumn<QString>("filename");
+        QTest::newRow("manual") << QString("nested-chapters.epub");
+        QTest::newRow("guide") << QString("guided.epub");
+        QTest::newRow("semantics") << QString("semantic.epub");
+    }
+
+    // Bookmarks the main text from Chapters and checks automatic, reset and resume positions.
+    void mainTextBoundaries()
+    {
+        QFETCH(QString, filename);
+        renderingMode::setOverride(0);
+        const auto restore = qScopeGuard([] { renderingMode::setOverride(-1); });
+        Fixture fixture(false, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.development.detailedStateReports = true;
+        });
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, 1);
+        QVERIFY(createBook(fixture.directory.path(), filename));
+        const auto path = fixture.directory.filePath(filename);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(path);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_VERIFY(fixture.state().contains("main_page_label"));
+        const bool nested = filename.startsWith("nested");
+        const auto initial = fixture.state();
+        const auto words = initial.value("word_counts").toObject();
+        QCOMPARE(words.value("main_words").toInt(),
+                 nested ? words.value("total_words").toInt() : 3152);
+        QCOMPARE(initial.value("main_first_page").toInt() == 0, nested);
+        QCOMPARE(initial.value("main_page_label").toString(), nested ? QString("1") : QString("i"));
+        if (filename == "semantic.epub") {
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrNavStats"));
+            // The two anchors enclose 35 paragraphs of 3 x 30 words and one two-word heading.
+            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"),
+                         QString("Main text · 3,152 words"));
+            const auto mainPagesLeft = initial.value("main_last_page").toInt()
+                    - initial.value("main_first_page").toInt() + 1;
+            QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), mainPagesLeft);
+            QVERIFY(fixture.press("rrGraphWordScope"));
+            QVERIFY(fixture.press("rrStatsWordVolume"));
+            QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), initial.value("pages").toInt());
+            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Volume · 8,106 words"));
+            QCOMPARE(storage::readJson(fixture.paths.preferences())
+                             .value("stats_word_scope")
+                             .toString(),
+                     QString("volume"));
+            QTRY_VERIFY(!fixture.widget("rrStatsWordScopePopup"));
+            QVERIFY(fixture.press("rrGraphWordScope"));
+            QTRY_VERIFY(fixture.visible("rrStatsWordMain"));
+            QVERIFY(fixture.press("rrStatsWordMain"));
+            QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), mainPagesLeft);
+            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"),
+                         QString("Main text · 3,152 words"));
+            QVERIFY(fixture.press("rrPage"));
+        }
+        const auto chapters = [&] {
+            QVERIFY(fixture.press("rrPage"));
+            QTRY_VERIFY(fixture.visible("rrNavChapters"));
+            QVERIFY(fixture.press("rrNavChapters"));
+            QTRY_VERIFY(fixture.visible("rrContents"));
+        };
+        const auto mark = [&](const char *row, const char *action) {
+            auto *button = fixture.widget(row);
+            QVERIFY(button && button->isVisible());
+            QTest::mousePress(button, Qt::LeftButton);
+            QTRY_VERIFY(fixture.visible("rrChapterActions"));
+            QTest::mouseRelease(button, Qt::LeftButton);
+            QVERIFY(fixture.press(action));
+            QTRY_VERIFY(!fixture.visible("rrChapterActions")
+                        && !fixture.state().value("busy").toBool());
+            QVERIFY(fixture.visible("rrContents"));
+        };
+        const auto checkScopeFromChapters = [&](bool expected) {
+            QVERIFY(fixture.press("rrNavStats"));
+            QTRY_VERIFY(fixture.visible("rrChapterGraph"));
+            QCOMPARE(fixture.visible("rrGraphWordScope"), expected);
+            QVERIFY(labelText(fixture, "rrGraphBookWords").startsWith(expected ? "Main text" : "Volume"));
+            QVERIFY(fixture.press("rrNavChapters"));
+            QTRY_VERIFY(fixture.visible("rrContents"));
+        };
+        chapters();
+        checkScopeFromChapters(!nested);
+        const char *middle = nested ? "rrChapter2" : "rrChapter1";
+        mark(middle, "rrMarkStart");
+        checkScopeFromChapters(true);
+        QCOMPARE(fixture.state().value("main_last_page"), initial.value("main_last_page"));
+        mark(nested ? "rrChapter3" : "rrChapter2", "rrMarkEnd");
+        QTRY_COMPARE(fixture.state().value("main_last_page").toInt(),
+                     initial.value("pages").toInt() - 1);
+        mark(middle, "rrMarkEnd");
+        QTRY_VERIFY(fixture.state().value("main_first_page").toInt() > 0);
+        QTRY_VERIFY(fixture.widget(middle)->accessibleName().contains("Start and end"));
+        QCOMPARE(fixture.state().value("word_counts").toObject().value("main_words").toInt(), 2702);
+        const auto relative = fixture.state();
+        QVERIFY(relative.value("main_last_page").toInt()
+                > relative.value("main_first_page").toInt());
+        QVERIFY(relative.value("main_last_page").toInt() < relative.value("pages").toInt() - 1);
+        QCOMPARE(relative.value("position"), initial.value("position"));
+        QCOMPARE(relative.value("main_page_label").toString(), QString("i"));
+        if (!nested)
+            QVERIFY(relative.value("main_first_page").toInt()
+                    < initial.value("main_first_page").toInt());
+        mark("rrChapter0", "rrMarkStart");
+        QTRY_COMPARE(fixture.state().value("main_first_page").toInt(), 0);
+        mark(middle, "rrMarkStart");
+        QVERIFY(fixture.press(middle));
+        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("1"));
+        chapters();
+        QVERIFY(fixture.press(nested ? "rrChapter3" : "rrChapter2"));
+        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("i"));
+        QCOMPARE(fixture.state().value("main_percent").toInt(), 100);
+        test::skipPageTurnWindow();
+        fixture.window.readerWindow()->pageButton(-1);
+        QTRY_COMPARE(fixture.state().value("page"), relative.value("main_last_page"));
+        QCOMPARE(fixture.state().value("main_percent").toInt(), 100);
+        test::skipPageTurnWindow();
+        fixture.window.readerWindow()->pageButton(1);
+        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("i"));
+        test::skipPageTurnWindow();
+        fixture.window.readerWindow()->pageButton(1);
+        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("ii"));
+        const auto appendix = fixture.state().value("position");
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 30000);
+        QTRY_VERIFY(fixture.state().value("main_text_marks").toObject().isEmpty());
+        fixture.window.openBook(path);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 3, 30000);
+        QTRY_COMPARE(fixture.state().value("position"), appendix);
+        QCOMPARE(fixture.state().value("main_page_label").toString(), QString("ii"));
+        const int oldPages = fixture.state().value("pages").toInt();
+        selectPreview(fixture, 2);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool()
+                    && fixture.state().value("pages").toInt() != oldPages);
+        QCOMPARE(fixture.state().value("main_percent").toInt(), 100);
+        selectPreview(fixture, 1);
+        QTRY_COMPARE(fixture.state().value("pages").toInt(), oldPages);
+        chapters();
+        mark(nested ? "rrChapter3" : "rrChapter2", "rrResetStart");
+        mark(nested ? "rrChapter3" : "rrChapter2", "rrResetEnd");
+        QTRY_COMPARE(fixture.state().value("main_first_page"), initial.value("main_first_page"));
+        QTRY_COMPARE(fixture.state().value("main_last_page"), initial.value("main_last_page"));
+        checkScopeFromChapters(!nested);
+        if (nested) {
+            QVERIFY(fixture.press("rrChapter3"));
+            QTRY_VERIFY(!fixture.visible("rrContents") && !fixture.state().value("busy").toBool());
+            test::skipPageTurnWindow();
+            if (!fixture.visible("rrSettings"))
+                QVERIFY(fixture.press("rrPage"));
+            QTRY_VERIFY(fixture.visible("rrSettings"));
+            QVERIFY(fixture.press("rrSettings"));
+            QVERIFY(fixture.press("rrSettingsSystem"));
+            QVERIFY(revealSettingsOption(fixture, "rrSecondaryNumbers"));
+            QVERIFY(fixture.press("rrSecondaryNumbers"));
+            QVERIFY(fixture.press("rrSecondaryNumbers_prefixed"));
+            QVERIFY(fixture.press("rrSettingsClose"));
+            QVERIFY(createBook(fixture.directory.path(), "guided.epub"));
+            fixture.window.openBook(fixture.directory.filePath("guided.epub"));
+            QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 4, 30000);
+            QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("F1"));
+            chapters();
+            mark("rrChapter1", "rrMarkEnd");
+            QVERIFY(fixture.press("rrChapter2"));
+            QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("B1"));
+        }
+    }
+
+    // Fast can resolve anchors in another spine item without laying out the whole book.
+    void mainTextChapterAnchors()
+    {
+        renderingMode::setOverride(1);
+        const auto restore = qScopeGuard([] { renderingMode::setOverride(-1); });
+        Fixture fixture(false, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.development.detailedStateReports = true;
+        });
+        QVERIFY(createBook(fixture.directory.path(), "boundary-anchors.epub"));
+        selectPreview(fixture, 1);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(fixture.directory.filePath("boundary-anchors.epub"));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(fixture.state().value("main_first_page").toInt() > 0);
+        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("i"));
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrChapter2"));
+        for (const char *action : { "rrMarkStart", "rrMarkEnd" }) {
+            auto *row = fixture.widget("rrChapter2");
+            QTest::mousePress(row, Qt::LeftButton);
+            QTRY_VERIFY(fixture.visible("rrChapterActions"));
+            QTest::mouseRelease(row, Qt::LeftButton);
+            QVERIFY(fixture.press(action));
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        }
+        QTRY_VERIFY(fixture.state()
+                            .value("main_text_marks")
+                            .toObject()
+                            .value("end")
+                            .toObject()
+                            .contains("anchor"));
+        const auto marks = fixture.state().value("main_text_marks").toObject();
+        const auto start = marks.value("start").toObject().value("anchor").toString();
+        const auto after = marks.value("end").toObject().value("anchor").toString();
+        QVERIFY(start.contains("DocFragment[3]/body") && after.contains("DocFragment[3]/body"));
+        QVERIFY(start != after);
+        QTRY_COMPARE(fixture.state().value("word_counts").toObject().value("main_words").toInt(),
+                     900);
+        QVERIFY(fixture.press("rrChapter2"));
+        QTRY_COMPARE(fixture.state().value("main_page_label").toString(), QString("1"));
+        QVERIFY(fixture.state().contains("book_fraction"));
+        QVERIFY(!fixture.state().value("whole_book_ready").toBool());
     }
 
     void chapterGroups_data() { variants(); }
@@ -7568,7 +7854,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             else
                 qputenv("KOBALT_CHAPTER_PAGES", previousPages);
         });
-        Fixture fixture;
+        Fixture fixture(false, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.development.detailedStateReports = true;
+        });
         QVERIFY(fixture.prepared);
         selectPreview(fixture, 1);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
@@ -7619,11 +7907,15 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.visible("rrNavChapters"));
         QVERIFY(fixture.press("rrNavChapters"));
         QTRY_VERIFY(fixture.visible("rrContentsPosition"));
+        const auto bounds = fixture.state();
+        const int first = bounds.value("main_first_page").toInt();
+        const int last = bounds.value("main_last_page").toInt();
+        QVERIFY(first > 0); // Type Tester declares the start of its main text.
         QTRY_COMPARE(fixture.widget("rrContentsPosition")->property("text").toString(),
                      strings::get("stats.page_of")
-                             .arg(fixture.state().value("rough_page").toInt())
+                             .arg(fixture.state().value("rough_page").toInt() - first)
                              .arg(headerfooter::pageTotal(
-                                     fixture.state().value("rough_pages").toInt(),
+                                     last - first + 1,
                                      fixture.state().value("rough_pages_estimated").toBool())));
         // The total of a book that is not counted is an estimate, with its mark.
         QVERIFY(fixture.state().value("rough_pages_estimated").toBool());
@@ -7636,8 +7928,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.visible("rrGraphBookFigure"));
         QTRY_COMPARE(fixture.widget("rrGraphBookFigure")->property("text").toString().toInt(),
                      qMax(0,
-                          fixture.state().value("rough_pages").toInt()
-                                  - fixture.state().value("rough_page").toInt() + 1));
+                          last + 2 - fixture.state().value("rough_page").toInt()));
         QVERIFY(fixture.press("rrNavSeek"));
         QTRY_VERIFY(fixture.visible("rrBookPositionIndicator"));
         QTRY_VERIFY(navigator->previewReady());
@@ -10070,8 +10361,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
             QVERIFY(page);
             const auto estimated = [&] { return page->slotContents[2].text.contains('~'); };
-            // The estimate comes first, also without a page turn.
-            QTRY_VERIFY_WITH_TIMEOUT(estimated(), 10000);
+            // The cover uses its own label while the main-text count is estimated.
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("rough_pages_estimated").toBool(), 10000);
+            QTRY_VERIFY(page->slotContents[2].text.contains("i"));
             for (int turn = 0; turn < 4; ++turn) {
                 const auto before = fixture.state().value("position").toString();
                 test::skipPageTurnWindow();
@@ -20116,6 +20408,9 @@ private slots:
         QVERIFY(rule);
         rule->move(0, graph->y());
         QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-stats-lengths"));
+        QVERIFY(fixture.press("rrGraphWordScope"));
+        QVERIFY(fixture.visible("rrStatsWordScopePopup"));
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-stats-word-scope"));
     }
 
     void chapterGraphBook_data() { screenshotVariants(); }

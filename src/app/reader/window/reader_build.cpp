@@ -1039,6 +1039,7 @@ void Reader::buildOverlays()
 {
     chapterGraph = new kobalt::ChapterGraph(this, services.phoneLayout);
     chapterGraph->changed = [this] { saveSoon(); };
+    chapterGraph->wordScopeRequested = [this] { openStatsWordScope(); };
     chapterGraph->denseChanged = [this](bool dense) { setDenseGraph(dense); };
     chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
     choices = new ChoiceScreen(this);
@@ -1908,6 +1909,12 @@ void Reader::connectSettingsPage(SettingsPage section)
                                                   settingsDictionaryFontSize = percent;
                                                   showSettingsFonts();
                                               });
+        });
+        connect(settings->secondaryNumbersButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showSecondaryNumbers(settingsSecondaryNumbers, [this](const QString &style) {
+                settingsSecondaryNumbers = style;
+                showSettingsFonts();
+            });
         });
         connect(settings->percentageFormatButton, &QPushButton::clicked, this, [this, settings] {
             settings->showPercentageFormats(settingsPercentageFormat,

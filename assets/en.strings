@@ -268,6 +268,13 @@
 "chapter_contents.illustrated_entry" = "Illustrated entry %1";
 "chapter_contents.printed_pages" = "Printed pages";
 "chapter_contents.printed_count" = "Printed pages · %1";
+"chapter_contents.mark_start" = "Mark as start of book";
+"chapter_contents.mark_end" = "Mark as end of book";
+"chapter_contents.reset_start" = "Restore default start";
+"chapter_contents.reset_end" = "Restore default end";
+"chapter_contents.start" = "Start";
+"chapter_contents.end" = "End";
+"chapter_contents.both" = "Start and end";
 "chapter_contents.chapter_destination_unavailable" = "Chapter destination unavailable";
 "chapter_contents.current_chapter" = "Current chapter";
 "chapter_contents.collapse_group" = "Collapse %1";
@@ -869,6 +876,15 @@
 "settings.section_links" = "Links";
 "settings.section_annotations" = "Annotations";
 "settings.section_chapter_list" = "Chapter List";
+"settings.secondary_numbers" = "Secondary page numbers";
+"settings.secondary_numbers_hint" = "Choose how pages before and after the main text are numbered in every book.";
+"settings.secondary_roman" = "Lowercase Roman";
+"settings.secondary_arabic" = "Arabic numerals";
+"settings.secondary_letters" = "Lowercase letters";
+"settings.secondary_prefixed" = "Section-prefixed numbers";
+"settings.secondary_upper_roman" = "Uppercase Roman";
+/* Arguments: front-matter examples, back-matter examples */
+"settings.secondary_preview" = "Front  %1   ·   Back  %2";
 "settings.chapter_groups" = "Collapsible chapters";
 "settings.chapter_groups_hint" = "Choose whether chapter groups can collapse and how they open.";
 "settings.chapter_groups_current" = "Current section";
@@ -1174,7 +1190,14 @@
 /* The same, for a position before the contents. %1 is the total. Arguments: %1 */
 "stats.this_chapter_words" = "This chapter · %1";
 /* The book's word total below the Stats chart. Arguments: %1 */
-"stats.book_words" = "Book · %1";
+"stats.count_words_in" = "Book stats for";
+"stats.scope_hint" = "Choose which pages, words and reading time the Book figures cover. This choice applies to all books.";
+"stats.scope_main" = "Main text";
+"stats.scope_main_hint" = "From the start to the end marked in Chapters or supplied by the book.";
+"stats.scope_volume" = "Whole volume";
+"stats.scope_volume_hint" = "Include the front and back matter and every book in the volume.";
+"stats.main_words" = "Main text · %1";
+"stats.volume_words" = "Volume · %1";
 "stats.last_chapter" = "Last chapter";
 "stats.counting" = "Counting words…";
 /* Arguments: %1 */

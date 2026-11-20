@@ -1,9 +1,11 @@
 #include "reading/appearance_settings.h"
 #include "reading/reading_density.h"
 #include "reading/text_presets.h"
+#include "storage/reader_storage.h"
 #include "support/qt_compat.h"
 #include "check.h"
 #include <QJsonArray>
+#include <QTemporaryDir>
 
 using namespace kobalt;
 using namespace kobalt::textpresets;
@@ -74,6 +76,30 @@ int main()
     require(load(normalized).size() == maximumCount
                     && normalized.value(listKey).toArray().size() == maximumCount,
             "The settings cleanup did not normalize the preset list");
+
+    // Check the on-disk list before the user edits another preset.
+    {
+        QTemporaryDir dir;
+        require(dir.isValid(), "Create the isolated preset profile");
+        const auto path = dir.filePath("reader-settings.json");
+        auto raw = list;
+        auto first = raw.first().toObject();
+        first["font_face"] = "Uninstalled Typeface From Another Device";
+        raw[0] = first;
+        require(storage::writeJson(path, qt::object({ { listKey, raw } })), "Write raw presets");
+        auto prefs = storage::readPreferences(path).object;
+        require(storage::readJson(path).value(listKey).toArray().size() == maximumCount,
+                "Reading preferences did not persist the cleaned list");
+        auto edited = load(prefs);
+        require(edited.size() == maximumCount, "Read the supported presets");
+        edited[1].name = "Renamed";
+        store(prefs, edited);
+        require(storage::writePreferences(path, prefs), "Write the renamed preset");
+        const auto saved = storage::readJson(path).value(listKey).toArray();
+        require(saved.size() == maximumCount && saved.first().toObject() == first
+                        && saved[1].toObject().value("name") == "Renamed",
+                "Unexpected persisted font, preset count or rename");
+    }
 
     // A state matches a preset when every value agrees, in any density.
     const auto previousPpi = readingPpi.load();

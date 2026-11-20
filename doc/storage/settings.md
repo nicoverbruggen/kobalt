@@ -78,7 +78,7 @@ The text values of a book (`font_face`, `font_pixels`, `line_spacing`, `text_ali
 - The array order is the order in the Text panel. New custom presets go first. Loading puts custom presets before examples and keeps the order in each group. Use, rename and update do not change the order.
 - A missing array means the four examples. An empty array means the user deleted all presets.
 - `id` is at most 64 characters and `name` at most 24. `font_face` is at most 512 characters, and empty means Publisher fonts. `half_points` is 12 to 96.
-- Cleanup drops entries that break these rules, duplicate IDs and entries after the eighth. Invalid optional values use their defaults.
+- Reading settings writes the cleaned list back to disk when it changes. Cleanup drops entries that break these rules, duplicate IDs and entries after the eighth. Invalid optional values use their defaults. A preset keeps its font name even when that font is unavailable.
 - Books keep their own text values. Changing or deleting a preset never changes a book. The book-state field `text_preset` records the preset last applied; see [Book state](book-state.md).
 
 ## Headers, footers and progress

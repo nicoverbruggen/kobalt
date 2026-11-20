@@ -1670,6 +1670,34 @@ void parkWholeBook(EngineDocument &model)
             "The whole-book build must have started and parked");
 }
 
+void parkedBookLanguage()
+{
+    auto files = pagesBook();
+    EngineDocument book(test::readerFonts());
+    book.setChapterSlices(2);
+    openResources(book, files,
+                  { { "koblaze_first_spine_item", 0 }, { "koblaze_last_spine_item", 0 } });
+    parkWholeBook(book);
+    const auto original = TextLangMan::getMainLang();
+    files["book.opf"].replace("<dc:language>en</dc:language>", "<dc:language>fr</dc:language>");
+    {
+        EngineDocument preview(test::readerFonts());
+        openResources(preview, files, {});
+    }
+    require(TextLangMan::getMainLang() == U"fr" && original != U"fr",
+            "The other book must change the active language");
+    bool resume = true;
+    lString32 resumedLanguage;
+    book.prepareFullDocument([&] {
+        // The caller checks once before waking the parked build.
+        if (std::exchange(resume, false))
+            return true;
+        resumedLanguage = TextLangMan::getMainLang();
+        return false;
+    });
+    require(resumedLanguage == original, "The parked build resumed with the other book's language");
+}
+
 void returnToEvictedBookmark()
 {
     const auto files = test::engineBook(false, 10, 36);
@@ -3524,6 +3552,7 @@ int main(int argc, char **argv)
     offscreenRangeEnd();
     selectionAcrossSliceAfterReflow();
     savedPlaceOutsideOpeningWindow();
+    parkedBookLanguage();
     returnToEvictedBookmark();
     reopenAfterWholeBookPreparation();
     nestedSliceHonorsCancellation();

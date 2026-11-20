@@ -17,7 +17,8 @@ set(layout_policy "849b421de582bf6b89f84263eab8e27dabd97cc0a8cfc807504f170a6ac35
 # Version 14: size single flex items to their content.
 # Version 15: column alignment and inline flex sizing.
 # Version 16: correct constrained flex rows and intrinsic inline flex sizing.
-set(rendering_version 16)
+# Version 17: rebuild layouts that resumed with another publication’s language.
+set(rendering_version 17)
 file(GLOB cache_patterns CONFIGURE_DEPENDS
     "${KOBALT_ROOT}/assets/hyph/*.pattern" "${KOBALT_ROOT}/assets/hyph/*.khg")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${cache_patterns})

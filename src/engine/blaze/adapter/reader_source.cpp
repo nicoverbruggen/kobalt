@@ -1501,6 +1501,7 @@ struct EngineDocument::FullBuild
         // document: the stop check, the quote levels of the languages and
         // the cache of parsed books. A chapter that has the engine meanwhile
         // must not write to that cache.
+        const auto mainLanguage = TextLangMan::getMainLang();
         const auto levels = TextLangMan::koblazeQuoteLevels();
         const int fontWeight = LVRendGetBaseFontWeight();
         const float opticalSize = LVRendGetFontOpticalSize();
@@ -1530,6 +1531,7 @@ struct EngineDocument::FullBuild
 #  endif
         ldomDocCache::koblazeSuspend(false);
         koblazeSwapCancelScopes(&noCancel, &parserCanStop);
+        TextLangMan::setMainLang(mainLanguage);
         TextLangMan::koblazeSetQuoteLevels(levels);
         LVRendSetBaseFontWeight(fontWeight);
         LVRendSetFontOpticalSize(opticalSize);

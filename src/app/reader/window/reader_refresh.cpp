@@ -57,7 +57,7 @@ void Reader::refresh()
     if (lifecycleHidden)
         return;
     recoverSleepSave();
-    // A KOSync result that waited while the reader was hidden continues now.
+    // Apply a waiting KOSync result once the visible reader has settled.
     if (syncCoordinator && isVisible() && !services.suspended())
         syncCoordinator->resume();
     const bool darkReady = publishPendingDarkMode();

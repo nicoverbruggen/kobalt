@@ -33,11 +33,9 @@ SyncCoordinator::SyncCoordinator(Client &client, SyncNetworkFactory network, Con
     readerRetry_.setParent(this);
     deadline_.setObjectName("rrKosyncDeadline");
     deadline_.setSingleShot(true);
-    readerRetry_.setInterval(100);
-    connect(&readerRetry_, &QTimer::timeout, this, [this] {
-        if (readerReady_)
-            whenReady(std::move(readerReady_));
-    });
+    readerRetry_.setSingleShot(true);
+    readerRetry_.setInterval(1000);
+    connect(&readerRetry_, &QTimer::timeout, this, &SyncCoordinator::resume);
     connect(&deadline_, &QTimer::timeout, this, [this] {
         const auto code = connecting_ ? "kosync.connection_timeout"
                 : readerReady_        ? "kosync.reader_timeout"
@@ -301,28 +299,29 @@ void SyncCoordinator::flush(bool enabled, Done done)
 
 void SyncCoordinator::resume()
 {
-    if (readerReady_ && !readerRetry_.isActive())
-        whenReady(std::move(readerReady_));
+    if (readerReady_)
+        whenReady({});
 }
 
 void SyncCoordinator::whenReady(Done ready)
 {
     const auto current = context();
-    if (current.readiness != Readiness::Ready) {
-        readerReady_ = std::move(ready);
-        if (current.readiness == Readiness::Hidden)
-            readerRetry_.stop();
-        if (!readerRetry_.isActive()) {
-            diagnostic("kosync-reader-wait", current.waitEvidence);
-            if (current.readiness != Readiness::Hidden)
-                readerRetry_.start();
-            notify(EventKind::Status, strings::get("kosync.syncing"));
-        }
+    if (current.readiness == Readiness::Ready) {
+        readerRetry_.stop();
+        if (!ready)
+            ready.swap(readerReady_);
+        ready();
         return;
     }
-    readerRetry_.stop();
-    readerReady_ = {};
-    ready();
+    if (current.readiness == Readiness::Hidden)
+        readerRetry_.stop();
+    else if (!readerRetry_.isActive())
+        readerRetry_.start();
+    if (ready) {
+        readerReady_ = std::move(ready);
+        diagnostic("kosync-reader-wait", current.waitEvidence);
+        notify(EventKind::Status, strings::get("kosync.syncing"));
+    }
 }
 
 void SyncCoordinator::exchange(bool finalUpload)

@@ -130,7 +130,7 @@ void lateConnection(const QString &path)
             "A connection answer outlived its coordinator");
 }
 
-void waitingRead(const QString &path)
+void waitingRead(const QString &path, Coordinator::Readiness readiness, bool notifyReady = true)
 {
     Http http;
     kosync::Client client(path, nullptr, &http);
@@ -144,17 +144,29 @@ void waitingRead(const QString &path)
             },
             false);
     owner.start(Coordinator::Connection::Existing, false);
-    current.readiness = Coordinator::Readiness::Hidden;
+    current.readiness = readiness;
     http.finish(0);
-    require(owner.busy() && http.uploads.isEmpty(),
-            "Hidden reading state accepted a fetched position");
-    for (const auto *timer : owner.findChildren<QTimer *>())
-        require(!timer->isActive() || timer->isSingleShot(), "Hidden reading state kept polling");
+    require(owner.busy() && http.uploads.isEmpty(), "Unsettled reader accepted a fetched position");
+    for (const auto *timer : owner.findChildren<QTimer *>()) {
+        if (!timer->isActive())
+            continue;
+        require(timer->isSingleShot(), "Waiting for the reader left a repeating timer running");
+        if (timer->objectName() != "rrKosyncDeadline") {
+            require(readiness != Coordinator::Readiness::Hidden,
+                    "Hidden reader kept a readiness timer");
+            require(timer->interval() >= 1000, "Busy reader kept a fast readiness timer");
+        }
+    }
     current.local.position = "chapter-two";
     current.local.percentage = .6;
     current.readiness = Coordinator::Readiness::Ready;
-    owner.resume();
-    await([&] { return http.uploads.size() == 1; });
+    if (notifyReady) {
+        owner.resume();
+        require(http.uploads.size() == 1,
+                "Reader readiness notification did not resume the upload");
+    } else {
+        await([&] { return http.uploads.size() == 1; });
+    }
     require(http.uploads[0].value("progress") == "chapter-two" && http.replies.size() == 2,
             "A retained read repeated HTTP or uploaded the old local position");
     http.finish(1);
@@ -353,7 +365,9 @@ int main(int argc, char **argv)
     kosync::overrideAccount(account);
     const auto path = directory.filePath("account.json");
     lateConnection(path);
-    waitingRead(path);
+    waitingRead(path, Coordinator::Readiness::Hidden);
+    waitingRead(path, Coordinator::Readiness::Waiting);
+    waitingRead(path, Coordinator::Readiness::Waiting, false);
     documentMetadata(path, account);
     observerLifetime(path);
     finalUpload(path, false);

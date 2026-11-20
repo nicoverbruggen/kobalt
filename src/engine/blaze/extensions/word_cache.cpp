@@ -6,23 +6,10 @@
 
 namespace blaze {
 
-void WordCache::Language::clearRecords()
-{
-    words.clear();
-    table.clear();
-    count = 0;
-    glyphs.space_kern[0].clear();
-    glyphs.space_kern[1].clear();
-    glyphs.char_glyph.clear();
-    glyphs.char_advance.clear();
-    glyphs.pair_kern.clear();
-}
-
 void WordCache::clear()
 {
     others.clear();
-    active.language = HB_LANGUAGE_INVALID;
-    active.clearRecords();
+    active = Language{};
 }
 
 void WordCache::selectLanguage(hb_language_t language)
@@ -42,8 +29,10 @@ void WordCache::selectLanguage(hb_language_t language)
         }
         std::swap(active, others[slot]);
     }
-    if ( active.count > max_words )
-        active.clearRecords();
+    if (active.count > max_words) {
+        active = Language{};
+        active.language = language;
+    }
 }
 
 WordCache::Lookup WordCache::findOrAdd(const lChar32 * text, int len, unsigned int hash)

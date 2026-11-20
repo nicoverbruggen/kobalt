@@ -46,12 +46,29 @@ void checkWordCache()
                     && cache.record(ink.offset)[blaze::word::KW_LAST_ADVANCE] == 17,
             "Changing language and growing the table must preserve earlier word metrics");
 
+    cache.glyphs().char_glyph.resize(4096);
+    cache.glyphs().pair_kern.reserve(4096);
     cache.clear();
+    require(cache.glyphs().char_glyph.capacity() == 0
+                    && cache.glyphs().pair_kern.bucket_count()
+                            == blaze::WordCache::Glyphs{}.pair_kern.bucket_count(),
+            "Clearing a face retained its glyph storage");
+
     for (const auto language : { english, turkish }) {
         cache.selectLanguage(language);
         require(cache.findOrAdd(U"ink", 3, 42).inserted,
                 "Clearing the face must discard records in every language");
     }
+    // A language that reaches the word limit starts a fresh cache on the next run.
+    for (unsigned i = 0; i <= 50000; ++i) {
+        const lChar32 letter = 0x10000 + i;
+        cache.findOrAdd(&letter, 1, i);
+    }
+    cache.glyphs().char_advance.resize(4096);
+    cache.selectLanguage(turkish);
+    require(cache.language() == turkish && cache.glyphs().char_advance.capacity() == 0
+                    && cache.findOrAdd(U"ink", 3, 42).inserted,
+            "The word limit did not release storage and restart the selected language");
 }
 
 void open(EngineDocument &model, const QByteArray &body, const QString &face)

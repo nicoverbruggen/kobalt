@@ -51,7 +51,6 @@ private:
         std::vector<unsigned int> table; // record offset plus one, zero for an empty slot
         unsigned int count = 0;
         Glyphs glyphs;
-        void clearRecords();
     };
     Language active;
     std::vector<Language> others;

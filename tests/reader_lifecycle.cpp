@@ -3066,8 +3066,11 @@ private slots:
             }
         } resetDiagnostics;
 
+        const auto start = host.session()->state().value("position").toString();
+        QVERIFY(!start.isEmpty());
         host.window()->pageButton(-1);
         QVERIFY(!host.session()->busy());
+        QCOMPARE(host.session()->state().value("position").toString(), start);
         // Real idle time before the input that turns: the diagnostics clocks
         // measure it and the check below must exclude it. 100 ms is well
         // above the 20 ms tolerance. The skip passes the duplicate-turn filter.
@@ -3075,7 +3078,8 @@ private slots:
         QTest::qWait(100);
         host.window()->pageButton(1);
         QTRY_VERIFY(!painted.isEmpty());
-        QCOMPARE(host.session()->page(), 1);
+        const auto next = host.session()->state().value("position").toString();
+        QVERIFY(!next.isEmpty() && next != start);
         // Both values use monotonic clocks. Rendering speed does not affect
         // this comparison; idle time before the real input must be excluded.
         const auto inputToPaint =
@@ -3088,7 +3092,8 @@ private slots:
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);
-        host.open(fixture(), nativeSize);
+        // Keep the input sequence in one chapter so its local page numbers are consecutive.
+        host.open(textBook, nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         Canvas canvas(host.window(), nativeSize);
         canvas.resize(900, 900);
@@ -3458,7 +3463,8 @@ private slots:
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);
-        host.open(fixture(), nativeSize);
+        // Keep the input sequence in one chapter so its local page numbers are consecutive.
+        host.open(textBook, nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         Canvas canvas(host.window(), nativeSize);
         canvas.resize(900, 900);

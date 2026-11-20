@@ -58,6 +58,36 @@ void checkChapterImageWrappers()
     require(chapters[3].labelImage.isEmpty(), "Chapter preview accepted a long entity declaration");
 }
 
+void checkUnresolvedSpineFallbacks()
+{
+    auto files = test::engineBook(false, 4, 2);
+    auto &opf = files["OEBPS/book.opf"];
+    // The original resources contain readable XHTML despite their unrecognized media type.
+    const QByteArray fallbackIds[] = { "absent", "c2", "alternate" };
+    int chapter = 0;
+    for (const auto &fallback : fallbackIds) {
+        const auto href = "href=\"c" + QByteArray::number(++chapter) + ".xhtml\"";
+        const auto original = href + " media-type=\"application/xhtml+xml\"";
+        require(opf.contains(original), "Missing chapter in the fallback fixture manifest");
+        opf.replace(original,
+                    href + " media-type='application/octet-stream' fallback='" + fallback + "'");
+    }
+    opf.replace(
+            "</manifest>",
+            "<item id='alternate' href='alternate.bin' media-type='application/octet-stream' fallback='c3'/></manifest>");
+    files["OEBPS/alternate.bin"] = test::publisherHtml("<p>Alternate resource.</p>");
+    EngineDocument model(test::readerFonts());
+    openPublication(model, files);
+    const auto chapters = model.chapters();
+    require(chapters.size() == 4, "An unresolved fallback lost a contents entry");
+    for (int index = 0; index < chapters.size(); ++index) {
+        const auto href = QString("OEBPS/c%1.xhtml").arg(index + 1);
+        require(model.spineItems().value(index) == href && model.goTo(chapters[index].position)
+                        && model.spineItemOf(model.position()) == index,
+                "An unresolved fallback changed the original chapter destination");
+    }
+}
+
 void checkNavigation(bool epub3)
 {
     auto files = test::engineBook(true, 3, 12);
@@ -451,6 +481,7 @@ int main(int argc, char **argv)
     checkDtbookChapterWindow();
     checkCodecs();
     checkChapterImageWrappers();
+    checkUnresolvedSpineFallbacks();
     checkNavigation(false);
     checkNavigation(true);
     return 0;

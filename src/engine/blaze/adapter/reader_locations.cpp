@@ -223,8 +223,10 @@ QString EngineDocument::afterChapter(const QVector<ChapterLink> &links, int inde
                 if (next != first)
                     return next;
             }
+            // Unlisted files before the next chapter, such as the later
+            // parts of a split chapter, belong to this one.
             if (item > lastItem)
-                break;
+                return QString("/body/DocFragment[%1]").arg(item + 1);
             continue;
         }
         lastItem = qMax(lastItem, item);

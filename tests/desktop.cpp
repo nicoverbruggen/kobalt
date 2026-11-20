@@ -5962,6 +5962,53 @@ private slots:
                      900);
     }
 
+    // Calibre splits a long chapter over several files and lists only the first.
+    void mainTextSplitChapterEnd()
+    {
+        Fixture fixture(false, false, false, true, false, false, [](ReaderHostServices &services) {
+            services.development.detailedStateReports = true;
+        });
+        const auto paragraph = [](int words) {
+            QByteArray text = "<p>word";
+            for (int i = 1; i < words; ++i)
+                text += " word";
+            return text + "</p>";
+        };
+        test::BookFiles files;
+        files["c1.xhtml"] = test::publisherHtml(paragraph(30));
+        files["c1-split.xhtml"] = test::publisherHtml(paragraph(40));
+        files["c2.xhtml"] = test::publisherHtml(paragraph(50));
+        files["nav.xhtml"] =
+                test::publisherHtml("<nav epub:type='toc'><ol><li><a href='c1.xhtml'>One</a></li>"
+                                    "<li><a href='c2.xhtml'>Two</a></li></ol></nav>");
+        files = test::publisherPackage(
+                "en", "Split chapter", files,
+                "<itemref idref=\"c1.xhtml\"/><itemref idref=\"c1-split.xhtml\"/>"
+                "<itemref idref=\"c2.xhtml\"/>");
+        files["book.opf"].replace("id=\"nav.xhtml\"", "id=\"nav.xhtml\" properties=\"nav\"");
+        QVERIFY(writeBook(fixture.directory.path(), "split.epub", files));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(fixture.directory.filePath("split.epub"));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_COMPARE(fixture.state().value("word_counts").toObject().value("main_words").toInt(),
+                     120);
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavChapters"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrChapter0"));
+        auto *row = fixture.widget("rrChapter0");
+        QTest::mousePress(row, Qt::LeftButton);
+        QTRY_VERIFY(fixture.visible("rrChapterActions"));
+        QTest::mouseRelease(row, Qt::LeftButton);
+        QVERIFY(fixture.press("rrMarkEnd"));
+        QTRY_VERIFY(!fixture.visible("rrChapterActions")
+                    && !fixture.state().value("busy").toBool());
+        // The unlisted second file is part of chapter One, not back matter.
+        QTRY_COMPARE(fixture.state().value("word_counts").toObject().value("main_words").toInt(),
+                     70);
+    }
+
     void chapterGroups_data() { variants(); }
 
     void chapterGroups()

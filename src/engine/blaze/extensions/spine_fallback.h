@@ -8,7 +8,7 @@ inline EpubItem *spineFallback(EpubItem *item, EpubItems &manifest)
 {
     LVArray<EpubItem *> path;
     while (item && !item->resolved && !item->resolving) {
-        if (item->is_xhtml || item->mediaType == "image/svg+xml" || item->mediaType == "text/html") {
+        if (item->is_xhtml || item->mediaType == "application/x-dtbook+xml" || item->mediaType == "image/svg+xml" || item->mediaType == "text/html") {
             item->resolved = item;
             break;
         }

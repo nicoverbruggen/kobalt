@@ -50,6 +50,7 @@ public:
 };
 
 #include "../../extensions/spine_fallback.h"
+#include "../../extensions/dtbook.h"
 
 //static void dumpZip( LVContainerRef arc ) {
 //    lString32 arcName = LVExtractFilenameWithoutExtension( arc->GetName() );
@@ -1700,8 +1701,15 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                 if ( !stream.isNull() ) {
                     // Blaze: a host can stop the load of a chapter.
                     KoblazeParserCanStop canStop;
+                    if (spineItems[i]->mediaType == "application/x-dtbook+xml") {
+                        blaze::DtbookWriter dtbook(appender);
+                        LVXMLParser xml(stream, &dtbook, false);
+                        handled = xml.Parse() && appender.hasMetBaseTag();
+                        if (handled) ++fragmentCount;
+                        stream->SetPos(0);
+                    }
                     LVHTMLParser parser(stream, &appender);
-                    if ( parser.CheckFormat() && parser.Parse() && appender.hasMetBaseTag() ) {
+                    if ( !handled && parser.CheckFormat() && parser.Parse() && appender.hasMetBaseTag() ) {
                         // CheckFormat() is not perfect (the two bytes "ul" in some encrypted stream
                         // will get CheckFormat() to succeed) and Parse() won't complain.
                         // Checking hasMetBaseTag() ensures we have met a <body> and that

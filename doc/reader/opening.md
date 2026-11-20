@@ -4,7 +4,7 @@ On Kobo, the first reading page after opening a book gets a full-screen refresh 
 
 The default build opens unencrypted local EPUBs selected through Nickel, regardless of their folder. This includes onboard and SD storage, hidden folders, Kobo's built-in Dropbox and Google Drive downloads, and folders used by third-party sync services. Local files can have any filename or use a symlink; Nickel's EPUB MIME type and Kobalt's archive inspection determine whether they are supported. DRM-free Kobo purchases and downloaded Kobo Cloud EPUBs also open, including extensionless books stored by Nickel. Embedded TrueType and OpenType fonts using IDPF or Adobe font obfuscation are supported. Kobalt skips embedded fonts larger than 16 MiB and uses the book's font fallback. Kobalt checks obfuscated fonts with FreeType from smallest to largest, up to 64 MiB in total. It skips optional fonts declared as fonts in the EPUB manifest that exceed either limit. The book’s CSS still determines font preference. Adobe font obfuscation requires a UUID in the book's metadata. These font embedding methods are not DRM. Other resource encryption and unsupported font obfuscation still use Nickel. Book previews, PDFs and protected books use Nickel's reader.
 
-When a spine item declares an unsupported format, Blaze follows its manifest fallback to an XHTML or SVG chapter.
+When a spine item declares an unsupported format, Blaze follows its manifest fallback to an XHTML, SVG or DTBook chapter.
 
 When Kobalt is the default reader, the library’s long-press menu offers Read with Nickel for EPUBs, including protected books and books remembered as needing the native reader. This choice does not require Kobalt to read the publication. When Nickel is the default reader, Read with Kobalt still requires Kobalt eligibility. Previews, unsupported formats and disabled native Read now actions keep their native menu. The choice applies only to that opening.
 
@@ -48,6 +48,8 @@ On Kobo, closing a book also saves its parsed document and its pages in `.adds/k
 
 Protected-book routing checks Adobe and LCP flags, Kobo key-record presence, and Tolino protection metadata on both firmware brands. Adobe DRM, Kobo DRM, Tolino encryption and unknown protection flags stay in the built-in reader. A watermark alone does not exclude a book. Protection queries read classifications and record presence, never key values. A metadata query failure keeps the built-in reader active.
 
+
+EPUB 2 books can use DTBook XML for chapters. Blaze reads headings, paragraphs and links, including NCX links to a passage inside a chapter. This covers text reading only.
 
 ## Limits
 

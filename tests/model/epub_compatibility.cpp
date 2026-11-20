@@ -82,6 +82,33 @@ void checkNavigation(bool epub3)
     }
 }
 
+void checkDtbookChapterWindow()
+{
+    auto files = test::engineBook(false, 2, 25);
+    files["OEBPS/book.opf"].replace(R"(href="c2.xhtml" media-type="application/xhtml+xml")",
+                                    R"(href="chapter.xml" media-type="application/x-dtbook+xml")");
+    files["OEBPS/toc.ncx"].replace("c2.xhtml", "chapter.xml#harbour");
+    files.remove("OEBPS/c2.xhtml");
+    files["OEBPS/chapter.xml"] =
+            "<dtbook xmlns='http://www.daisy.org/z3986/2005/dtbook/' version='2005-3' xml:lang='en'>"
+            "<head/><book><bodymatter><level><hd>Estuary</hd><p>Water.</p>"
+            "<level><hd>Harbour</hd><p id='harbour'>The cormorant returns.</p></level>"
+            "</level></bodymatter></book></dtbook>";
+    EngineDocument model(test::readerFonts());
+    openPublication(model, files);
+    const auto entries = model.chapters();
+    require(entries.size() == 2 && model.goTo(entries.last().position),
+            "Missing NCX destination in nested DTBook section");
+    const auto expected = model.position();
+    QString error;
+    require(model.spineItemOf(expected) == 1 && model.showSpineItems(0, 0, &error),
+            qPrintable(error));
+    require(model.goTo(entries.last().position) && model.position() == expected,
+            "DTBook fragment changed across chapter windows");
+    require(model.searchText("cormorant", {}, 2).hits.size() == 1,
+            "Text in nested DTBook section was lost");
+}
+
 // Move the central directory and all resources after mimetype past the ZIP32
 // offset limit. A sparse file gives the reader real 64-bit seeks without a large fixture.
 void checkLargeArchiveOffsets(QByteArray bytes)
@@ -151,10 +178,18 @@ int main(int argc, char **argv)
     QString error;
     Publication publication;
     require(publication.inspect(bytes, &error) && publication.zip64(), qPrintable(error));
+    EngineDocument book(test::readerFonts());
+    require(book.open(bytes, { 600, 800 }, {}, &error), qPrintable(error));
+    require(book.searchText("kingfisher", {}, 2).hits.size() == 1, "DTBook paragraph lost");
+    const auto links = book.chapters();
+    require(links.size() == 1 && links.first().title == "The passage"
+                    && book.goTo(links.first().position),
+            "DTBook NCX anchor lost");
     checkLargeArchiveOffsets(bytes);
     auto broken = bytes;
     broken[broken.size() - 22 - 20 + 8] = char(0xff);
     require(!publication.inspect(broken, &error), "Invalid ZIP64 locator admitted");
+    checkDtbookChapterWindow();
     checkNavigation(false);
     return 0;
 }

@@ -16,6 +16,7 @@
 #include "ui/style/scale.h"
 #include "ui/style/theme.h"
 #include "app/reader/views/reading_page.h"
+#include "app/reader/views/appearance_preview.h"
 #include "render/page_refresh_regions.h"
 #include "app/reader/views/kosync_notice.h"
 #include "app/reader/views/sync_choice.h"
@@ -2712,6 +2713,70 @@ bool previewSettled(Fixture &fixture)
     return !state.value("busy").toBool() && !state.value("preview_queued").toBool()
             && !state.value("preview_busy").toBool()
             && !state.value("appearance_preview_pending").toBool();
+}
+
+void textPreviewPages()
+{
+    Fixture fixture;
+    selectPreview(fixture, 1);
+    const QByteArray image = "<img src='art.svg' width='64' height='64'/>";
+    const QList<QByteArray> bodies{
+        image,
+        "<p>A readable page.</p>",
+        "<div style='height:100px'>&#160;</div>",
+        image + "<p>An illustration with a caption.</p>",
+        image + image,
+        "<table><tr><td style='height:100px;width:100px'> </td></tr></table>",
+        "<div style='height:100px;border:4px solid black'></div>"
+    };
+    QByteArray html;
+    for (const auto &body : bodies)
+        html += "<div style='page-break-before:always'>" + body + "</div>";
+    const auto files = test::publisherPackage(
+            "en", "Preview pages",
+            { { "text.xhtml", test::publisherHtml(html) },
+              { "art.svg",
+                "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'>"
+                "<rect width='64' height='64' fill='black'/></svg>" } },
+            "<itemref idref='text.xhtml'/>");
+    QVERIFY(writeBook(fixture.directory.path(), "preview.epub", files));
+    QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+    fixture.window.openBook(fixture.directory.filePath("preview.epub"));
+    QTRY_COMPARE(opened.count(), 1);
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    for (int i = 0; i < bodies.size(); ++i) {
+        const bool sample = i == 0 || i == 2;
+        const auto position = fixture.state().value("position");
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        const auto before = page->image;
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavText"));
+        auto *preview =
+                static_cast<reader::AppearancePreview *>(fixture.widget("rrAppearancePreview"));
+        QTRY_VERIFY(preview && preview->isVisible() && previewSettled(fixture));
+        QCOMPARE(preview->showsSample(), sample);
+        QCOMPARE(page->image, before);
+        if (i == 0) {
+            const auto rendered = preview->grab().toImage();
+            QVERIFY(fixture.press("rrLarger"));
+            QTRY_VERIFY(previewSettled(fixture) && preview->grab().toImage() != rendered);
+            QVERIFY(preview->showsSample());
+            selectPreview(fixture, 4);
+            QTRY_VERIFY(preview->width() > before.width() && previewSettled(fixture));
+            QVERIFY(preview->showsSample());
+            selectPreview(fixture, 1);
+            QTRY_VERIFY(preview->width() == before.width() && previewSettled(fixture));
+        }
+        QCOMPARE(fixture.state().value("position"), position);
+        QVERIFY(fixture.press("rrNavText"));
+        QTRY_VERIFY(!preview->isVisible() && previewSettled(fixture));
+        if (fixture.visible("rrControlsTop"))
+            QVERIFY(fixture.press("rrPage"));
+        if (i + 1 < bodies.size()) {
+            QVERIFY(fixture.turnPage(1));
+            QTRY_VERIFY(fixture.state().value("position") != position && previewSettled(fixture));
+        }
+    }
 }
 
 // A reader view and the reader window as it shows that view.
@@ -6090,6 +6155,8 @@ private slots:
     }
 
     // Checks the image viewer from Zoom image and a cover hold: zoom, pan, Fit, touch gestures, dismissal and kept zoom and pan.
+    void settingsTextPreviewPages() { textPreviewPages(); }
+
     void imageViewer_data() { screenshotVariants(); }
 
     void imageViewer()
@@ -21163,6 +21230,27 @@ private slots:
         QVERIFY(fixture.prepared);
         selectPreview(fixture, preset);
         formattingWarningTour(fixture, screenshotVariant(preset, dark));
+    }
+
+    void textSample_data() { screenshotVariants(); }
+
+    void textSample()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavText"));
+        auto *preview =
+                static_cast<reader::AppearancePreview *>(fixture.widget("rrAppearancePreview"));
+        QTRY_VERIFY(preview && preview->isVisible() && preview->showsSample()
+                    && previewSettled(fixture));
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-text-sample"));
     }
 
     void screens_data() { screenshotVariants(); }

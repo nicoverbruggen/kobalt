@@ -271,8 +271,9 @@ public:
     void previewAdjacentPage(int direction, QSize bounds, QStringList bookmarkPositions,
                              std::function<void(QImage, bool)> finished);
     void cancelPagePreview();
-    // One screen of text in the current layout that starts at the reading position.
-    void anchoredPage(bool stayInChapter, std::function<void(QImage)> finished);
+    // Layout and Text start at the reading position. Sample opens a separate in-memory passage.
+    enum class PreviewPage { Layout, Text, Sample };
+    void appearancePage(PreviewPage kind, std::function<void(QImage)> finished);
     // One worker job resolves all eligible passages. Stale replies contain no indices.
     void intersectingRanges(const QString &start, const QString &end,
                             QVector<QPair<QString, QString>> ranges,

@@ -9,6 +9,7 @@
 #include "render/highlight_paint.h"
 #include "render/page_content.h"
 #include "appearance_settings.h"
+#include "style_sample.h"
 #include "engine/engine_activity.h"
 #include "support/diagnostics.h"
 #include <QElapsedTimer>
@@ -1953,7 +1954,7 @@ void ReaderSession::previewAdjacentPage(int direction, QSize bounds, QStringList
             Qt::QueuedConnection);
 }
 
-void ReaderSession::anchoredPage(bool stayInChapter, std::function<void(QImage)> finished)
+void ReaderSession::appearancePage(PreviewPage kind, std::function<void(QImage)> finished)
 {
     cancelPagePreview();
     if (running || retiring || !lease_ || lease_->revoked())
@@ -1967,12 +1968,15 @@ void ReaderSession::anchoredPage(bool stayInChapter, std::function<void(QImage)>
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, stayInChapter, finished, request, token, latest, job, lease] {
+            [engine, guard, kind, fonts = fonts_, page = image().size(), settings = state(),
+             finished, request, token, latest, job, lease] {
                 if (token->load() != request || latest->load() != job || lease->revoked())
                     return;
                 EngineJob activity;
                 DiagnosticOperation operation("appearance-preview-page");
-                const auto image = engine->imageFromAnchor(stayInChapter);
+                const auto image = kind == PreviewPage::Sample
+                        ? drawReadingTextSample(fonts, page, settings)
+                        : engine->imageFromAnchor(kind == PreviewPage::Layout);
                 kobalt::qt::invoke(
                         qApp,
                         [guard, image, finished, token, latest, job, request, lease] {

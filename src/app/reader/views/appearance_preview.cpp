@@ -58,7 +58,8 @@ void AppearancePreview::setContent(Content next)
             && content.horizontalMargin == next.horizontalMargin
             && content.verticalMargin == next.verticalMargin && same(content.header, next.header)
             && same(content.footer, next.footer) && same(content.body, next.body)
-            && content.text == next.text && content.cropTop == next.cropTop;
+            && content.sample == next.sample && content.text == next.text
+            && content.cropTop == next.cropTop;
     content = std::move(next);
     // Created on first use: a hidden child repaints the Layout preview once more when
     // it first appears, and each repaint is a visible e-ink update.
@@ -180,17 +181,39 @@ void AppearancePreview::paintCaption(QPainter &painter, int right) const
     painter.restore();
 }
 
+QRect AppearancePreview::noticeRect() const
+{
+    const int inset = ui::metrics::panel::contentMargins.left();
+    const int room = qMax(1, width() - 2 * inset);
+    const auto font = ui::interfaceFont(ui::metrics::chrome::descriptionText);
+    const int lines = content.sample
+            ? ui::wrappedInterfaceTextHeight(strings::get("reader.text_preview_sample"), font, room)
+            : 0;
+    return { inset, textHeader->sizeHint().height() + (content.sample ? int(ui::px(8)) : 0), room,
+             lines };
+}
+
 QRect AppearancePreview::textCard() const
 {
-    const int top = textHeader->sizeHint().height();
+    const int top = noticeRect().bottom() + 1;
     int available = qMax(0, height() - top);
     if (content.body.isNull() || available <= 0)
         return { 0, top, width(), available };
     // End at the gap under the last whole line, so that no line is cut in half.
     const QRgb paper = content.body.pixel(0, content.cropTop);
-    int last = qMin(content.cropTop + available, content.body.height()) - 1;
+    const int bottom = qMin(content.cropTop + available, content.body.height()) - 1;
+    int last = bottom;
     while (last > content.cropTop && !blankRow(content.body, last, paper))
         --last;
+    // A very large sample can have a first line taller than the available space.
+    // Show that line clipped if trimming would leave just its top margin.
+    if (content.sample && last < bottom) {
+        int row = last;
+        while (row >= content.cropTop && blankRow(content.body, row, paper))
+            --row;
+        if (row <= content.cropTop)
+            last = bottom;
+    }
     return { 0, top, width(), qMax(1, last + 1 - content.cropTop) };
 }
 
@@ -214,6 +237,12 @@ void AppearancePreview::paintText(QPainter &painter)
     painter.fillRect(0, top, width(), height() - top,
                      content.body.isNull() ? ui::themeColors(this).paper
                                            : QColor(content.body.pixel(0, content.cropTop)));
+    if (content.sample) {
+        painter.setFont(ui::interfaceFont(ui::metrics::chrome::descriptionText));
+        painter.setPen(ui::themeColors(this).secondaryInk);
+        ui::drawWrappedInterfaceText(painter, noticeRect(),
+                                     strings::get("reader.text_preview_sample"));
+    }
     const QRect card = textCard();
     if (card.isEmpty() || content.body.isNull())
         return;

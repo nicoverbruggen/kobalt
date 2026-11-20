@@ -42,6 +42,8 @@ class GLDrawBuf; // workaround for no-rtti builds
 class LVDrawBuf : public CacheableObject
 {
 public:
+    // A table can occupy the page even when none of its cells contain text.
+    virtual void OnTableDrawn() {}
     // Blaze: the host records unsupported formatting when the affected ink reaches the page.
     virtual void SetUnsupportedFormatting(bool unsupported) { (void)unsupported; }
     // Report alpha-bearing image pixels after scaling and clipping, without a second decode.

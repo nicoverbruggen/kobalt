@@ -357,6 +357,11 @@ bool Reader::appearancePreviewFits() const
     return appearancePreviewSpace().height() >= ui::px(minimumHeight);
 }
 
+ReaderSession *Reader::appearanceSession() const
+{
+    return appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
+}
+
 void Reader::syncAppearancePreview()
 {
     using Axis = kobalt::reader::AppearancePreview::Axis;
@@ -376,14 +381,15 @@ void Reader::syncAppearancePreview()
         appearancePreview->clear();
         return;
     }
-    // Each kind of preview draws its own bookmark page.
-    if (previewPageForText != textOpen) {
-        previewPageForText = textOpen;
+    auto *settings = appearanceSession();
+    using Kind = ReaderSession::PreviewPage;
+    const bool sample = textOpen && pageNeedsTextSample(settings->image());
+    const auto kind = sample ? Kind::Sample : textOpen ? Kind::Text : Kind::Layout;
+    if (previewPageKind != kind) {
+        previewPageKind = kind;
         previewPageKey = previewPageRequested = 0;
         previewPage = {};
     }
-    auto *settings =
-            appearanceEdit.edited() && appearanceEdit.ready() ? appearanceEdit.preview() : session;
     const int side = kobalt::readingPixels(marginSlider->value());
     const int vertical = kobalt::readingPixels(verticalMarginSlider->value());
     kobalt::reader::AppearancePreview::Content content;
@@ -399,6 +405,7 @@ void Reader::syncAppearancePreview()
     content.verticalMargin = vertical;
     content.axis = appearancePreviewAxis;
     content.text = textOpen;
+    content.sample = sample;
     content.cropTop = qMax(0, settings->topMargin() - int(ui::px(16)));
     appearancePreview->setGeometry(appearancePreviewSpace());
     if (!appearancePreview->isVisible())
@@ -413,7 +420,7 @@ void Reader::syncAppearancePreview()
         previewPageRequested = 0;
     // An unedited page already starts at the reading position. A short page has too little
     // text to judge, so the Text preview continues with the text that follows it.
-    const bool usePage = settled && !appearanceEdit.edited()
+    const bool usePage = !sample && settled && !appearanceEdit.edited()
             && (!textOpen || appearancePreview->fillsTextCrop(settings->image(), content.cropTop));
     // One change is one screen update. The picture stays during a drag and while
     // a layout runs, so that nothing draws an in-between state.
@@ -428,7 +435,7 @@ void Reader::syncAppearancePreview()
             const QPointer<Reader> guard(this);
             // The page starts at the bookmark, so the same text stays in place at every
             // setting. Real page breaks would move it.
-            settings->anchoredPage(!textOpen, [guard, key](QImage image) {
+            settings->appearancePage(kind, [guard, key](QImage image) {
                 if (!guard || guard->previewPageRequested != key)
                     return;
                 guard->previewPageKey = key;
@@ -436,9 +443,11 @@ void Reader::syncAppearancePreview()
                 guard->syncAppearancePreview();
             });
         }
-        if (appearancePreview->isVisible() && appearancePreview->showsText() == textOpen)
+        if (appearancePreview->isVisible() && appearancePreview->showsText() == textOpen
+            && appearancePreview->showsSample() == sample)
             return;
-        content.body = settings->image();
+        if (!sample)
+            content.body = settings->image();
     }
     appearancePreview->setContent(std::move(content));
     appearancePreview->show();

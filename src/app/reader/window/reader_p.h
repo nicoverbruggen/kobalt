@@ -506,6 +506,7 @@ private:
     void syncAppearancePreview();
     void paintTurn();
     void syncAppearanceControls(bool pickingFont);
+    ReaderSession *appearanceSession() const;
     void fitAppearance();
     void syncReadingControls();
     // After a page turn with the menu and every panel hidden, refresh() skips
@@ -684,7 +685,7 @@ private:
     // The page drawn from the bookmark, for the frame with this image key.
     QImage previewPage;
     qint64 previewPageKey = 0, previewPageRequested = 0;
-    bool previewPageForText = false;
+    ReaderSession::PreviewPage previewPageKind = ReaderSession::PreviewPage::Layout;
     kobalt::ui::PageScrubber *pageScrubber = nullptr;
     QPushButton *resetDefaults = nullptr, *chapterButton;
     QStackedWidget *settingsPages = nullptr;

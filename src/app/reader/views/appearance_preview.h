@@ -29,7 +29,7 @@ public:
         int horizontalMargin = 0, verticalMargin = 0;
         Axis axis = Axis::None;
         // Show the page text at its true size, from cropTop in the body image.
-        bool text = false;
+        bool text = false, sample = false;
         int cropTop = 0;
     };
 
@@ -38,6 +38,7 @@ public:
     void setStrips(const QImage &header, const QImage &footer);
     void clear();
 
+    bool showsSample() const { return content.sample; }
     bool showsText() const { return content.text; }
 
     // True when the page has text in most of the space that the Text preview shows.
@@ -62,6 +63,7 @@ private:
 
     const QImage &scaled(ScaledImage &cache, const QImage &source, QSize target) const;
     void paintCaption(QPainter &painter, int right) const;
+    QRect noticeRect() const;
     QRect textCard() const;
     void paintText(QPainter &painter);
     qreal scale() const;

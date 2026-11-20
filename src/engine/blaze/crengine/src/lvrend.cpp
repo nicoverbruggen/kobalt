@@ -10581,6 +10581,9 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * enode, int x0, int y0, int dx
         // flag and won't be drawn.
         bool isHidden = style->visibility >= css_v_hidden && !drawbuf.WantsHiddenContent();
 
+        if (rm == erm_table && draw_content && !isHidden)
+            drawbuf.OnTableDrawn();
+
         // Check and draw background
         bool restoreBackgroundColor = false;
         // If not css_val_color, it must be (css_val_unspecified, css_generic_currentcolor)

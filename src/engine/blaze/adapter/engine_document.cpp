@@ -212,6 +212,10 @@ public:
 
     void OnImageDrawn(bool visiblePixels) override { imageHasVisiblePixels = visiblePixels; }
 
+    void OnTableDrawn() override { hasTable = true; }
+
+    bool hasTable = false;
+    int visibleImages = 0;
     bool hasImages = false, hasText = false, hasUnsupportedFormatting = false;
     QVector<QRect> imageRegions;
     using LVColorDrawBuf::Draw;
@@ -256,6 +260,8 @@ public:
         const auto style = node ? node->getStyle() : css_style_ref_t();
         const bool unsupportedImage =
                 !style.isNull() && style->writing_mode_warning == css_wmw_unsupported;
+        if (right > left && bottom > top)
+            ++visibleImages;
         if (!imageRegionsFull && right > left && bottom > top) {
             if (imageRegions.size() < 128)
                 imageRegions.append(
@@ -1898,6 +1904,8 @@ QImage EngineDocument::image(int pageNumber)
         for (int i = 0; i < columns_; ++i) {
             PageDrawBuffer part(column, darkMode_, true, normalizeTextColors_, &imageInversion_);
             engine_->drawColumn(part, pageNumber, i);
+            buffer.hasTable |= part.hasTable;
+            buffer.visibleImages += part.visibleImages;
             buffer.hasImages |= part.hasImages;
             buffer.hasText |= part.hasText;
             buffer.hasUnsupportedFormatting |= part.hasUnsupportedFormatting;
@@ -1922,6 +1930,17 @@ QImage EngineDocument::image(int pageNumber)
     PageContent content;
     content.images = { true, buffer.imageRegions };
     content.imageOnly = buffer.imageRegions.size() == 1 && !buffer.hasText;
+    if (!buffer.hasTable && !buffer.hasText) {
+        // A border or rule can draw visible content without glyphs or images.
+        const auto paper = *reinterpret_cast<const quint32 *>(result.constScanLine(0));
+        bool blank = buffer.visibleImages == 0;
+        for (int y = 0; blank && y < result.height(); ++y) {
+            const auto *row = reinterpret_cast<const quint32 *>(result.constScanLine(y));
+            blank = std::all_of(row, row + result.width(),
+                                [paper](quint32 pixel) { return pixel == paper; });
+        }
+        content.sampleText = blank || buffer.visibleImages == 1;
+    }
     content.colours.known = true;
     content.colours.rectangles = hasColor
             ? (boundedTiles ? colorTileRegions(colorTiles, tileColumns, tileRows, result.size())

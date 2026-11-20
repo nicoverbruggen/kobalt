@@ -92,6 +92,8 @@ void renderStyleSample(EngineFontInputs fonts, StyleSampleRequest request, QObje
 // image.
 void renderTextSample(EngineFontInputs fonts, TextSampleRequest request, QObject *context,
                       std::function<void(QImage)> finished);
+// Render the fixed Text panel passage on the engine worker in an isolated document.
+QImage drawReadingTextSample(const EngineFontInputs &fonts, QSize page, const QJsonObject &state);
 // Text for the Text Presets gallery, with breakable words near the start.
 void setTextSampleText(TextSampleRequest &request);
 // Reading settings without the book-specific keys a sample cannot use.

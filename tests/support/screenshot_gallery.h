@@ -448,6 +448,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "links-rectangle-pressed", "Pressed link rectangle" },
         { "tappable-links-settings", "Direct link settings" },
         { "text", "Text controls" },
+        { "text-sample", "Text controls on the cover" },
         { "text-presets", "Text presets" },
         { "text-presets-changed", "Changed text preset" },
         { "text-presets-save", "Save text preset" },

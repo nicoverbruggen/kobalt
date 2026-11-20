@@ -61,3 +61,5 @@ Reader teardown checks observe child-panel callbacks through window destruction,
 `component.ui` checks the shared button feedback: its triangle overlaps the target button, it can appear beside a button or below one at the top of the screen, a side offset moves the card without moving the arrow tip, it lets input pass through, and it dismisses automatically.
 
 Background preset samples yield to reader requests queued after them and retry after the reader becomes idle. `desktop.backgroundStyleSamplesYieldToReader` checks that a queued tile yields, the reader runs first, and the tile can render afterward. `desktop.fastConsecutiveChapterJumps` retains its 100 ms queue-delay limit with simulated slow rendering.
+
+`desktop.settingsTextPreviewPages` opens Text on a single illustration, prose, a blank page, a captioned illustration, two images, an empty table and a border. It checks the sample choice, the reading image and position, size changes, rotation and reopening on the next page. The `textSample` gallery case captures Text on the cover.

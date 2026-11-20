@@ -1,5 +1,6 @@
 #include <QKeyEvent>
 #include "reading/remaining_time.h"
+#include "render/page_content.h"
 #include "reading/rendering_mode.h"
 #include "reading/sleep_screen.h"
 #include "ui/controls/buttons.h"
@@ -863,7 +864,11 @@ void Reader::fitAppearance()
 {
     const int top = navigation ? navigation->toolbarHeight() : int(metrics::panel::toolbarHeight);
     const int bottom = navigation ? navigation->contentBottom(size()) : height();
-    const int height = menu->fitHeight(width(), bottom - top);
+    // Leave space for the passage on short screens too. The sheet pages its controls.
+    const bool sample = panels->currentIndex() == int(AppearancePage::Typography)
+            && pageNeedsTextSample(appearanceSession()->image());
+    const int reserved = sample ? qMin(int(ui::px(320)), (bottom - top) * 9 / 20) : 0;
+    const int height = menu->fitHeight(width(), bottom - top - reserved);
     menu->setGeometry(panelBounds(height));
 }
 

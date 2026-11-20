@@ -79,12 +79,16 @@ QString regionMetadata(const QVector<QRect> &regions)
 PageContent pageContent(const QImage &image)
 {
     return { parseRegions(image, "kobalt.image_regions"),
-             parseRegions(image, "kobalt.colour_regions"), pageTextOnly(image),
-             image.text("kobalt.image_only") == "true", pageFormattingWarning(image) };
+             parseRegions(image, "kobalt.colour_regions"),
+             pageTextOnly(image),
+             image.text("kobalt.image_only") == "true",
+             pageFormattingWarning(image),
+             pageNeedsTextSample(image) };
 }
 
 void setPageContent(QImage &image, const PageContent &content)
 {
+    image.setText("kobalt.sample_text", content.sampleText ? "true" : "false");
     image.setText("kobalt.image_regions",
                   content.images.known ? regionMetadata(content.images.rectangles) : QString());
     image.setText("kobalt.colour_regions",
@@ -102,6 +106,11 @@ bool pageFormattingWarning(const QImage &image)
 bool pageTextOnly(const QImage &image)
 {
     return image.text("kobalt.animation_text_only") == "true";
+}
+
+bool pageNeedsTextSample(const QImage &image)
+{
+    return image.text("kobalt.sample_text") == "true";
 }
 
 bool pageHasColour(const QImage &image)

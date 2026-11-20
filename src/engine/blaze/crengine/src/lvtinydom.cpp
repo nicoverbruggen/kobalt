@@ -16897,11 +16897,9 @@ ldomDocument * LVParseXMLStream( LVStreamRef stream,
         throw;
     }
     delete parser;
+    if ( error )
+        return NULL; // stopped deletes the document after the writer is destroyed.
     stopped.doc = NULL;
-    if ( error ) {
-        delete doc;
-        doc = NULL;
-    }
     return doc;
 }
 
@@ -16945,11 +16943,9 @@ ldomDocument * LVParseHTMLStream( LVStreamRef stream,
         throw;
     }
     delete parser;
+    if ( error )
+        return NULL; // stopped deletes the document after the writer is destroyed.
     stopped.doc = NULL;
-    if ( error ) {
-        delete doc;
-        doc = NULL;
-    }
     return doc;
 }
 

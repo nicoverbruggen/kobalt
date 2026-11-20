@@ -1655,6 +1655,8 @@ void Reader::applyThemeFonts()
 
 void Reader::applyInterfaceFonts()
 {
+    if (diagnosticsActive())
+        diagnostic("interface-fonts-applied", QJsonObject(), DiagnosticSeverity::Activity);
     for (const auto &face : { themeDraft.mainFace, settingsMonoFace, settingsStripFace })
         if (!face.isEmpty())
             registerPickerFonts(face);

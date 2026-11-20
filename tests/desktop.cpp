@@ -14574,11 +14574,26 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         checkCustomFonts();
+        // Count the times the reader applies its interface fonts again.
+        QTemporaryDir logs;
+        QVERIFY(logs.isValid());
+        initializeDiagnostics(logs.path());
+        pauseDiagnostics(false);
+        std::atomic_int applied{ 0 };
+        setDiagnosticObserver([&](const QJsonObject &event) {
+            if (event.value("event") == QLatin1String("interface-fonts-applied"))
+                ++applied;
+        });
+        const auto resetDiagnostics = qScopeGuard([] {
+            setDiagnosticObserver({});
+            pauseDiagnostics(true);
+        });
         QVERIFY(fixture.press("rrPage"));
         QVERIFY(fixture.press("rrSettings"));
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
         checkCustomFonts();
+        QCOMPARE(applied.load(), 0);
         const auto saved = storage::readJson(fixture.paths.preferences());
         for (auto it = custom.begin(); it != custom.end(); ++it)
             QCOMPARE(saved.value(it.key()), it.value());
@@ -14602,6 +14617,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrSettingsWriteErrorConfirm"));
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        QVERIFY(applied.load() > 0);
         QCOMPARE(ui::interfaceFont().family(), QStringLiteral("IBM Plex Sans"));
         QCOMPARE(ui::chromeFont().family(), QStringLiteral("IBM Plex Mono"));
         QCOMPARE(ui::headerFooterFont().family(), QStringLiteral("IBM Plex Mono"));

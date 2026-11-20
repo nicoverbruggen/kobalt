@@ -42,7 +42,8 @@ int resolveEffectiveDrawWritingMode(ldomNode *enode, LVDrawBuf &drawbuf)
 
 static bool forkVerticalBoxDebugEnabled()
 {
-    return getenv("KO_DEBUG_VERT_BG") != NULL;
+    static const bool enabled = getenv("KO_DEBUG_VERT_BG") != nullptr;
+    return enabled;
 }
 
 static bool isForkVerticalBoxDebugClass(ldomNode *enode)

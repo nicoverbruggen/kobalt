@@ -91,7 +91,8 @@ void ltext_record_vert_border_trace(int owner_id, int x0, int y0, int x1, int y1
 
 bool verticalTextDebugEnabled()
 {
-    return getenv("KO_DEBUG_VERT_BG") != NULL;
+    static const bool enabled = getenv("KO_DEBUG_VERT_BG") != nullptr;
+    return enabled;
 }
 
 static bool verticalSpacingDebugEnabled()

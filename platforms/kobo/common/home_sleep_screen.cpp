@@ -541,8 +541,9 @@ void HomeSleepScreen::compose()
 
 void HomeSleepScreen::present()
 {
+    // Nickel owned the outgoing screen. Clean it when the cover first paints.
     if (!snapshot.image.isNull())
-        presentation->presentSleepScreen(snapshot.image, snapshot.orientation);
+        presentation->presentSleepScreen(snapshot.image, snapshot.orientation, true);
 }
 
 void HomeSleepScreen::clear()

@@ -86,6 +86,13 @@ QString usbPath(QString path)
     return path;
 }
 
+bool externalScreenVisible(const QWidget *reader)
+{
+    auto *active = QApplication::activeWindow();
+    return !reader->isVisible() || NativeDialogOverlay::activeFor(reader)
+            || (active && active != reader && !reader->isAncestorOf(active));
+}
+
 QPointer<ReaderCoordinator> activeCoordinator;
 #if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
 bool benchmarkTypographyEnabled = false;
@@ -289,7 +296,7 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
             if (BrowserHandoff::activeFor(run.reader))
                 run.reader->checkpoint();
             else
-                run.reader->sleepReader();
+                run.reader->sleepReader(externalScreenVisible(run.reader));
         } else if (run.fallbackAlert) {
             disposeForTransition([] { });
         }
@@ -1046,7 +1053,7 @@ void ReaderCoordinator::poll()
     if (run.reader && !busy) {
         const bool hide = kobalt::NativeLifecycle::suspended();
         if (hide && run.reader->isVisible())
-            run.reader->sleepReader();
+            run.reader->sleepReader(externalScreenVisible(run.reader));
         else if (!hide && !run.reader->isVisible() && !BrowserHandoff::activeFor(run.reader)) {
             authorization->setBlocked(false);
             if (!authorization->checkNow() || !run.reader)

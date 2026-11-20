@@ -62,7 +62,7 @@ public:
 
     virtual sleep::Snapshot powerScreenSnapshot() { return {}; }
 
-    virtual void sleepReader() = 0;
+    virtual void sleepReader(bool externalScreenVisible = false) = 0;
 
     // A bounded final upload can briefly keep the CPU awake after the sleep view appears.
     virtual bool pendingNetworkSync() const { return false; }

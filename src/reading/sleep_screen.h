@@ -9,6 +9,10 @@
 #include <QVector>
 
 namespace kobalt::sleep {
+// Sample an captured reader overlay without copying or scaling its pixels.
+// A missing or translucent capture cannot rule out an image underneath it.
+bool needsImageCleanup(const QImage &frame, bool colorDisplay);
+
 // The backdrop. Plain is a blank page for designs that draw everything
 // themselves. Wallpaper is one of the reader's own images, filling the screen.
 // Neither is ever saved in the legacy `sleep_screen` preference.

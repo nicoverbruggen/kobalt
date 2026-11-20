@@ -49,6 +49,8 @@ The highlight sleep regression holds the engine at save preparation and text col
 
 Private previews compare every design against a sanitized backdrop with anonymous progress and deliberately identifying source metadata and book pixels. `lifecycle.sleepPrivateBookCloseSavesAnonymousDesign` checks close-time handoff and reopening. The overlay check also exercises partial alpha above a private opaque page. The native power-screen check restores a private snapshot's anonymous progress through a fresh screen owner.
 
+`lifecycle.sleepRefreshUsesDisplayedContent` checks the outgoing text page, an illustration with the next text page queued, colored highlights, and the full-screen image viewer. `lifecycle.sleepClassifiesReaderOverlay` checks plain text in both themes, a color thumbnail and a grayscale image. A native dialog over the text page still requests cleanup. `platform.kobo-power-screen` checks that text, gray and colored screens in Nickel each request one full refresh and that duplicate presentations request none. Physical ghosting still needs device validation.
+
 The sleep-screen settings check toggles Follow reading orientation and verifies both saved Boolean values and confirmation messages. Gallery previews use the reading shape when enabled and portrait when disabled. The sleep gallery captures include both rotation-button states, their confirmation popups and landscape private designs. These headless checks do not establish physical-device orientation behavior.
 
 The sleep rotation button uses the shared `CheckCellButton`: an icon slightly left of center and a separate lower-right checkbox. `component.ui` checks its visible checked state, toggle delivery, disabled behavior and stable icon position across screen densities.

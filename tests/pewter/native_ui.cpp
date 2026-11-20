@@ -2,7 +2,14 @@
 #include "platforms/kobo/common/native_light.h"
 #include "platforms/kobo/common/native_ui.h"
 #include "platform/api/kobo_refresh.h"
+#include "platforms/kobo/display/sleep_refresh.h"
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+#  include "platforms/kobo/nickel-qt5/refresh.h"
+#else
+#  include "platforms/kobo/nickel-qt6/refresh.h"
+#endif
 #include <QApplication>
+#include <QBackingStore>
 #include <QWidget>
 #include <cstdio>
 #include <cstring>
@@ -125,9 +132,124 @@ static void checkBattery()
             "repeated battery readings resolved hardware symbols again");
 }
 
+namespace {
+using namespace kobalt::platform;
+QRegion submitted;
+quint64 submittedFlags;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+bool lookupDuringFlush = true;
+#endif
+
+template <typename Flags>
+void captureSleepFlush(QBackingStore *, const QRegion &region, QWindow *, const QPoint &,
+                       const Flags &flags)
+{
+    require(flags.size() == 1, "Power screen must have one native update policy");
+    submitted = region;
+    submittedFlags = flags.first().second;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (lookupDuringFlush)
+        lookupReaderRefreshFlags(nullptr, submittedFlags, region.boundingRect());
+#endif
+}
+
+void checkSleepRefresh()
+{
+    QWidget home, unrelated;
+    unrelated.show();
+    home.resize(300, 400);
+    QWidget frame(&home);
+    frame.setGeometry(home.rect());
+    home.show();
+    QApplication::processEvents();
+    QBackingStore native(home.windowHandle()), other(unrelated.windowHandle());
+    native.resize(home.size());
+    other.resize(unrelated.size());
+    nativeFlush = captureSleepFlush<FlushFlags>;
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    nativeFlush32 = captureSleepFlush<FlushFlags32>;
+    const int firstAttribute = 128;
+    const int abis = 2;
+#else
+    // The compositor finds Nickel's old partial policy even when flush carries
+    // different flags. The matching lookup must retain the requested cleanup.
+    nativeRefreshFlags = [](void *, quint64 &flags, const QRect &) { flags = 4; };
+    const int firstAttribute = Qt::WA_KoboEpdFlagsStart;
+    const int abis = 1;
+#endif
+    const quint64 clean = (quint64(1) << (Qt::WA_KoboEpdWfModeGC16 - firstAttribute))
+            | (quint64(1) << (Qt::WA_KoboEpdUpdateModeFull - firstAttribute));
+    const QRect status(3, 4, 24, 20);
+    SleepRefresh request;
+    for (int abi = 0; abi < abis; ++abi) {
+        auto send = [&](QBackingStore &store) {
+            submitted = {};
+            submittedFlags = 0;
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+            if (abi == 1)
+                flushReader32(&store, status, store.window(), {}, { { status, 4 } });
+            else
+#endif
+                flushReader(&store, status, store.window(), {}, { { status, 4 } });
+        };
+        request.begin(true);
+        send(native);
+        require(submittedFlags == 4, "Unpainted sleep frame consumed the flash");
+        request.painted(&frame);
+        send(other);
+        require(submittedFlags == 4, "Unrelated window consumed the sleep flash");
+        send(native);
+        require(submittedFlags == clean && submitted == QRegion(home.rect()),
+                "First power-frame flush did not clear the whole screen with full GC16");
+        request.painted(&frame);
+        send(native);
+        require(submittedFlags == 4 && submitted == QRegion(status),
+                "Status update repeated the sleep flash");
+        request.begin(false);
+        request.painted(&frame);
+        send(native);
+        require(submittedFlags == 4, "Clean text requested a flash");
+        request.begin(true);
+        request.painted(&frame);
+        request.reset();
+        send(native);
+        require(submittedFlags == 4, "Wake left a pending sleep flash");
+    }
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    lookupDuringFlush = false;
+    request.begin(true);
+    request.painted(&frame);
+    flushReader(&native, status, native.window(), {}, { { status, 4 } });
+    require(submitted == QRegion(home.rect()) && submittedFlags == clean,
+            "Deferred MTK lookup had no full-frame submission");
+    flushReader(&native, status, native.window(), {}, { { status, 4 } });
+    require(submitted == QRegion(status) && submittedFlags == 4,
+            "Second backing-store flush resubmitted the full screen");
+    quint64 flags = 0;
+    lookupReaderRefreshFlags(nullptr, flags, home.rect());
+    require(flags == clean, "Delayed MTK lookup replaced GC16 with Nickel's stale policy");
+    lookupReaderRefreshFlags(nullptr, flags, home.rect());
+    require(flags == 4, "Delayed MTK lookup repeated the cleanup");
+    request.begin(true);
+    request.painted(&frame);
+    lookupReaderRefreshFlags(nullptr, flags, status);
+    require(flags == 4, "An unrelated compositor rectangle consumed the sleep flash");
+    lookupReaderRefreshFlags(nullptr, flags, home.rect());
+    require(flags == clean, "Direct native composition missed the sleep flash without a reader");
+    lookupReaderRefreshFlags(nullptr, flags, home.rect());
+    require(flags == 4, "Direct native composition repeated the sleep flash");
+    nativeRefreshFlags = nullptr;
+#else
+    nativeFlush32 = nullptr;
+#endif
+    nativeFlush = nullptr;
+}
+} // namespace
+
 int main(int argc, char **argv)
 {
     QApplication application(argc, argv);
+    checkSleepRefresh();
     checkBattery();
     require(!kobalt::nativeLandscapeBezelOnLeft(), "other panels keep the standard landscape turn");
     pewter::options().claraColour = true;

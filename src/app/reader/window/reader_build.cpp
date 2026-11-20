@@ -603,11 +603,11 @@ void Reader::buildReadingPage()
             book->checkpoint(&snapshot, true);
         }
     };
-    imageViewer->dismissed = [this] {
+    imageViewer->dismissed = [this](bool cleanPage) {
         ++imageRequest;
         page->setFocus();
         observeReading();
-        page->cleanRefresh(true);
+        page->cleanRefresh(cleanPage);
         updateOrientationBlock();
         progressTick();
     };

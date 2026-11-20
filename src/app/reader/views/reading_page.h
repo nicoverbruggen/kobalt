@@ -156,6 +156,7 @@ public:
     ReadingPage(QWidget *parent, std::function<void()> cancelAnimation);
     // Copy the cached page and chrome without widget layout or backing-store work.
     QImage snapshot(bool sleeping = false) const;
+    bool needsImageCleanup(bool colorDisplay);
     // Cached chrome with the bookmark ribbon, without copying the page body.
     QImage stripSnapshot(bool footer) const;
     void cleanRefresh(bool clean);

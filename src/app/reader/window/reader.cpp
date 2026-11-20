@@ -660,12 +660,14 @@ sleep::Snapshot Reader::captureSleepScreen(bool poweredOff)
     return snapshot;
 }
 
-void Reader::sleepReader()
+void Reader::sleepReader(bool externalScreenVisible)
 {
     // The device is going to sleep; no tap can turn the page until it wakes.
     mainthread::AllowBlocking allow("sleep");
-    if (imageViewer && imageViewer->isVisible())
-        imageViewer->closeImage();
+    const bool viewingImage = imageViewer && imageViewer->isVisible();
+    const bool viewerHasImage = viewingImage && imageViewer->hasImage();
+    if (viewingImage)
+        imageViewer->closeImage(false); // The sleep frame will clear the image.
     book->retryFailedReadingSave();
     if (orientation) {
         orientation->freeze();
@@ -680,7 +682,16 @@ void Reader::sleepReader()
     sleepSave = SleepSave::Waiting;
     sleepSavePosition = session->state().value("position").toString();
     clearPendingExit();
-    setProperty("reader_sleep_clean_pending", true);
+    const bool color = colorAnnotations();
+    if (externalScreenVisible)
+        sleepNeedsImageCleanup = true;
+    else if (viewingImage)
+        sleepNeedsImageCleanup = viewerHasImage;
+    else if ((sleepGallery && sleepGallery->isVisible())
+             || (sleepEditor && sleepEditor->isVisible()) || activityOpen())
+        sleepNeedsImageCleanup = sleepViewNeedsImageCleanup(*this, color);
+    else
+        sleepNeedsImageCleanup = page->needsImageCleanup(color);
     session->cancelPendingTurn();
     book->sleepReading(preferences);
     auto snapshot = captureSleepScreen();
@@ -833,20 +844,20 @@ void Reader::sleepViewReady()
 {
     if (!lifecycleHidden || !isVisible())
         return;
-    if (!sleepImage.isNull()) {
-        const bool presented = presentation->presentSleepScreen(sleepImage, sleepOrientation);
-        if (!presented && book->hideBookOnSleepScreen())
-            return;
-    }
+    const bool presented = !sleepImage.isNull()
+            && presentation->presentSleepScreen(sleepImage, sleepOrientation,
+                                                sleepNeedsImageCleanup);
+    if (!presented && book->hideBookOnSleepScreen())
+        return;
     // Hiding a top-level window immediately submits the backing store
     // underneath it. Paint Nickel's sleep view first, or that store still
     // contains the library. Do not pump unrelated events during handoff.
-    // Submit that paint as one full GC16 refresh. It replaces the page, which
-    // Nickel's own partial sleep refreshes on colour screens would leave
-    // behind, so the panel flashes once on every device.
     setProperty("reader_preparing_handoff", true);
     presentation->resumeAndRepaintBackground();
     setProperty("reader_preparing_handoff", false);
+    // Custom frames request their own waveform; Nickel's stock view keeps
+    // the full-screen handoff refresh.
+    setProperty("reader_sleep_clean_pending", !presented);
     setProperty("reader_sleep_handoff", true);
     hide();
     setProperty("reader_sleep_handoff", false);

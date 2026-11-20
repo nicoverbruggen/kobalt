@@ -9,11 +9,28 @@
 
 #include <QPainter>
 #include <QPolygonF>
+#include <QWidget>
 #include <QtMath>
 
 #include <cmath>
 
 namespace kobalt::reader {
+bool sleepViewNeedsImageCleanup(QWidget &view, bool colorDisplay)
+{
+    if (view.size().isEmpty())
+        return true;
+    // Render a thumbnail only at sleep, when this view has no page metadata.
+    QImage sample(view.size().scaled(256, 256, Qt::KeepAspectRatio), QImage::Format_RGB32);
+    if (sample.isNull())
+        return true;
+    sample.fill(Qt::white);
+    QPainter painter(&sample);
+    painter.scale(qreal(sample.width()) / view.width(), qreal(sample.height()) / view.height());
+    view.render(&painter);
+    painter.end();
+    return sleep::needsImageCleanup(sample, colorDisplay);
+}
+
 void portraitSleepSnapshot(sleep::Snapshot &snapshot)
 {
     // Portrait reading keeps its top edge. Landscape still uses upright portrait.

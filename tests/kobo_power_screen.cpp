@@ -1,4 +1,5 @@
 #include "platforms/kobo/common/home_sleep_screen.h"
+#include "platforms/kobo/display/sleep_refresh.h"
 #include "platforms/kobo/common/native_ui.h"
 #include "platforms/kobo/common/reader_environment.h"
 #include "support/font_fixtures.h"
@@ -16,6 +17,7 @@
 #include <QTemporaryDir>
 #include <QPointer>
 #include <QPainter>
+#include <QLabel>
 #include <QTest>
 #include <QScreen>
 #include <QScopeGuard>
@@ -761,6 +763,33 @@ private slots:
                 != reader::sleepDesignImage(expected.image, expected, 67,
                                             reader::SleepStatus::PoweredOff));
         owner.clear();
+        // Every transition from Nickel requests one flash, even from a text-only screen.
+        QLabel title(QStringLiteral("My Books"), &window);
+        title.adjustSize();
+        title.show();
+        power.raise();
+        for (auto design : { sleep::Design::Seal, sleep::Design::Page }) {
+            choose(design);
+            for (const auto &paper : { QColor(Qt::white), QColor(140, 140, 140), QColor(Qt::red) }) {
+                power.hide();
+                auto palette = window.palette();
+                palette.setColor(QPalette::Window, paper);
+                window.setPalette(palette);
+                window.setAutoFillBackground(true);
+                window.repaint();
+                QVERIFY(owner.prepareHomeScreen());
+                power.show();
+                owner.present();
+                auto *cover = power.findChild<QWidget *>("rrSleepFrame");
+                QVERIFY(cover && !cover->grab().isNull());
+                QVERIFY(platform::SleepRefresh::take(window.windowHandle()));
+                owner.present();
+                QCOMPARE(power.findChild<QWidget *>("rrSleepFrame"), cover);
+                QVERIFY(!cover->grab().isNull());
+                QVERIFY(!platform::SleepRefresh::take(window.windowHandle()));
+                owner.clear();
+            }
+        }
         // A last book Kobalt never opened keeps Nickel's screen.
         QVERIFY(query.exec("UPDATE content SET ContentID = 'nickel-book'"));
         QVERIFY(!owner.prepareHomeScreen());

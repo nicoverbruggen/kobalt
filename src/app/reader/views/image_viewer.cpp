@@ -44,6 +44,8 @@ public:
     std::function<void(QJsonObject)> rememberView;
     std::function<void(bool, qreal)> controlsChanged;
 
+    bool hasImage() const { return !image.isNull(); }
+
     QJsonObject view() const
     {
         if (image.isNull())
@@ -390,13 +392,18 @@ void ImageViewer::open()
     setFocus();
 }
 
+bool ImageViewer::hasImage() const
+{
+    return canvas->hasImage();
+}
+
 void ImageViewer::setImage(QImage image, const QJsonObject &view)
 {
     imageId = imageContentId(image);
     canvas->setImage(std::move(image), view);
 }
 
-void ImageViewer::closeImage()
+void ImageViewer::closeImage(bool cleanPage)
 {
     if (!imageId.isEmpty() && rememberView)
         rememberView(imageId, canvas->view());
@@ -404,7 +411,7 @@ void ImageViewer::closeImage()
     hide();
     canvas->clear();
     if (dismissed)
-        dismissed();
+        dismissed(cleanPage);
 }
 
 void ImageViewer::keyPressEvent(QKeyEvent *event)

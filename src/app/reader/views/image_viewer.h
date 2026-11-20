@@ -12,9 +12,10 @@ class ImageViewer final : public ui::Panel
 public:
     explicit ImageViewer(QWidget *parent);
     void open();
+    bool hasImage() const;
     void setImage(QImage image, const QJsonObject &view = {});
-    void closeImage();
-    std::function<void()> dismissed;
+    void closeImage(bool cleanPage = true);
+    std::function<void(bool)> dismissed;
     std::function<void(QString, QJsonObject)> rememberView;
 
 protected:

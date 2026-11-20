@@ -8,8 +8,10 @@
 #include <QVector>
 
 class QPainter;
+class QWidget;
 
 namespace kobalt::reader {
+bool sleepViewNeedsImageCleanup(QWidget &view, bool colorDisplay);
 enum class SleepStatus { Sleeping, Charging, Charged, PoweredOff };
 QString sleepStatusText(SleepStatus status);
 // Keep inverted portrait; fit landscape backdrops into upright portrait without

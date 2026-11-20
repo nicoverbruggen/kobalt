@@ -806,6 +806,15 @@ PageRefreshRegions ReadingPage::refreshRegions(const QImage &source)
     return regionCache[0].regions;
 }
 
+bool ReadingPage::needsImageCleanup(bool colorDisplay)
+{
+    if (renderedBody.isNull())
+        return true;
+    const auto regions = refreshRegions(renderedBody);
+    return colorDisplay ? !regions.colour.isEmpty() || !annotationColorRegion.isEmpty()
+                        : !regions.mono.isEmpty();
+}
+
 QRegion ReadingPage::renderStrips(bool geometryChanged, qint64 paletteKey)
 {
     const int weight = kobalt::ui::interfaceWeight() + kobalt::ui::headerFooterAddedWeight();

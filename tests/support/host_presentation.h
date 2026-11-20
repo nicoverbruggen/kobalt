@@ -12,6 +12,7 @@ struct SleepPresentationState
     int savedCount = 0;
     Qt::ScreenOrientation orientation = Qt::PrimaryOrientation;
     int presented = 0;
+    bool clean = false;
     int updated = 0;
     QRect damage;
 };
@@ -46,13 +47,14 @@ public:
 
     bool supportsSleepScreen() const override { return bool(sleep); }
 
-    bool presentSleepScreen(QImage image, Qt::ScreenOrientation orientation) override
+    bool presentSleepScreen(QImage image, Qt::ScreenOrientation orientation, bool clean) override
     {
         if (!sleep) {
             return false;
         }
         sleep->image = std::move(image);
         sleep->orientation = orientation;
+        sleep->clean = clean;
         ++sleep->presented;
         return true;
     }

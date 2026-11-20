@@ -28,6 +28,7 @@
 #include "ui/style/metrics.h"
 #include "ui/style/scale.h"
 #include "app/reader/views/reading_page.h"
+#include "render/page_content.h"
 #include "app/reader/panels/bookmark_list.h"
 #include "app/reader/views/appearance_preview.h"
 #include "app/reader/settings/settings_panel.h"
@@ -6012,6 +6013,97 @@ private slots:
         QTRY_VERIFY(host.window()->readyForPresentation());
         QCOMPARE(page->size(), readingSize);
         QCOMPARE(host.session()->page(), readingPage);
+    }
+
+    void sleepClassifiesReaderOverlay()
+    {
+        QVERIFY(sleep::needsImageCleanup({}, false));
+        QImage frame(240, 320, QImage::Format_RGB32);
+        for (bool dark : { false, true }) {
+            frame.fill(dark ? Qt::black : Qt::white);
+            QPainter p(&frame);
+            p.setPen(dark ? Qt::white : Qt::black);
+            for (int y = 15; y < frame.height(); y += 16)
+                p.drawText(5, y, QStringLiteral("An ordinary page of text."));
+            p.end();
+            QVERIFY(!sleep::needsImageCleanup(frame, false));
+            QVERIFY(!sleep::needsImageCleanup(frame, true));
+        }
+        frame.fill(Qt::white);
+        QPainter p(&frame);
+        p.fillRect(0, 0, 60, 80, Qt::red);
+        p.end();
+        QVERIFY(sleep::needsImageCleanup(frame, true));
+        QVERIFY(!sleep::needsImageCleanup(frame, false));
+        QPainter photo(&frame);
+        QLinearGradient tones(0, 0, 120, 160);
+        tones.setColorAt(0, Qt::black);
+        tones.setColorAt(1, Qt::white);
+        photo.fillRect(0, 0, 120, 160, tones);
+        photo.end();
+        QVERIFY(sleep::needsImageCleanup(frame, false));
+    }
+
+    void sleepRefreshUsesDisplayedContent()
+    {
+        const auto paths = testPaths();
+        QVERIFY(storage::writePreferences(paths.preferences(), { { sleep::designKey, "letter" } }));
+        auto state = std::make_shared<test::SleepPresentationState>();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [state](ReaderHostServices &services) {
+            services.colorDisplay = [] { return true; };
+            services.presentation = [state](QWidget *) {
+                return std::make_unique<test::HostPresentation>(state);
+            };
+        };
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(fixture());
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        auto *page = static_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
+        auto *viewer =
+                static_cast<ImageViewer *>(host.window()->findChild<QWidget *>("rrImageViewer"));
+        QVERIFY(page && viewer);
+        auto content = PageContent{};
+        content.images.known = content.colours.known = true;
+        content.textOnly = true;
+        setPageContent(page->image, content);
+        page->refreshContent();
+        QVERIFY(!page->needsImageCleanup(true));
+        const auto handoff = [&](bool clean, bool externalScreenVisible = false) {
+            const int before = state->presented;
+            host.window()->sleepReader(externalScreenVisible);
+            host.window()->sleepViewReady();
+            QCOMPARE(state->presented, before + 1);
+            QCOMPARE(state->clean, clean);
+            QVERIFY(!host.window()->property("reader_sleep_clean_pending").toBool());
+            host.window()->wakeReader();
+            QTRY_VERIFY(host.window()->readyForPresentation());
+        };
+        handoff(false);
+        handoff(true, true);
+        content.textOnly = false;
+        content.images.rectangles = { page->image.rect() };
+        setPageContent(page->image, content);
+        page->refreshContent();
+        QVERIFY(page->needsImageCleanup(false));
+        // A queued text frame has not replaced the illustration yet.
+        content.images.rectangles.clear();
+        content.textOnly = true;
+        setPageContent(page->image, content);
+        handoff(true);
+        setPageContent(page->image, content);
+        page->refreshContent();
+        page->setSavedHighlights({ { { QRect(20, 20, 80, 20) }, QStringLiteral("yellow") } });
+        QVERIFY(page->needsImageCleanup(true));
+        QVERIFY(!page->needsImageCleanup(false));
+        page->setSavedHighlights({});
+        viewer->open();
+        viewer->setImage(page->image);
+        handoff(true);
+        QVERIFY(!viewer->isVisible());
     }
 
     void sleepBackdropsUsePortrait()

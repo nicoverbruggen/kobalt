@@ -12,11 +12,13 @@
 #include "platforms/kobo/display/page_animation_hook.h"
 #include "platforms/kobo/display/page_transition.h"
 #include "platforms/kobo/display/refresh_policy.h"
+#include "platforms/kobo/display/sleep_refresh.h"
 #include <QPushButton>
 #include <QVariant>
 #include <QPointer>
 #include <QApplication>
 #include <QThread>
+#include <QScopedValueRollback>
 #include <QBackingStore>
 #include <QImage>
 #include <QWindow>
@@ -34,6 +36,8 @@ bool previousDark = false;
 // The area that a selection drag drew with the direct waveform.
 QRegion dragArea;
 KeyboardRefreshCache keyboardPixels;
+// An MTK lookup inside a backing-store flush belongs to this window.
+QWindow *flushingWindow = nullptr;
 
 constexpr quint64 bit(Qt::WidgetAttribute attribute)
 {
@@ -111,6 +115,22 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
         return;
     if (!qApp || QThread::currentThread() != qApp->thread()) {
         nativeFlush(store, region, target, offset, flags);
+        return;
+    }
+    auto *window = store->window();
+    const QScopedValueRollback<QWindow *> submission(flushingWindow, target ? target : window);
+    if (window && (!readerWindow || window != readerWindow->windowHandle())
+        && (!target || target == window) && offset.isNull() && !region.isEmpty()
+        && SleepRefresh::submit(
+                window,
+                readerWindow && readerWindow->property("reader_sleep_handoff").toBool()
+                        ? readerWindow.data()
+                        : nullptr,
+                nativeRefreshFlags != nullptr)) {
+        const QRect screen(QPoint(), window->size());
+        const quint64 clean = bit(Qt::WA_KoboEpdWfModeGC16) | bit(Qt::WA_KoboEpdUpdateModeFull);
+        keyboardPixels.clear();
+        nativeFlush(store, QRegion(screen), target, offset, { { screen, clean } });
         return;
     }
     verifyDisplayFormat(store);
@@ -455,6 +475,14 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
 void lookupReaderRefreshFlags(void *screen, quint64 &flags, const QRect &rect)
 {
     nativeRefreshFlags(screen, flags, rect);
+    if (!rect.isEmpty() && qApp && QThread::currentThread() == qApp->thread()
+        && (!readerWindow || !readerWindow->windowHandle()
+            || !readerWindow->windowHandle()->isVisible()
+            || (flushingWindow && readerWindow->property("reader_sleep_handoff").toBool()))
+        && SleepRefresh::take(flushingWindow, rect, readerWindow)) {
+        flags = bit(Qt::WA_KoboEpdWfModeGC16) | bit(Qt::WA_KoboEpdUpdateModeFull);
+        return;
+    }
     // MTK composes sleep during QWindow::hide(), before QWidget's visibility
     // changes. It can reuse the removed reader's dirty flags. Replace those
     // flags only after the native window has left the compositor's stack.

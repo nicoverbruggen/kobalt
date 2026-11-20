@@ -425,8 +425,12 @@ public:
     int progressPercent() const
     {
         const auto fraction = frame.state.value("book_fraction");
-        if (fraction.isDouble())
+        if (fraction.isDouble()) {
+            // When the estimate has page counts, keep exact percentages such as 29/50.
+            if (bookPages() > 0 && bookPage() >= 0)
+                return pageProgressPercent(bookPage(), bookPages());
             return qBound(0, int(fraction.toDouble() * 100), 100);
+        }
         return pageProgressPercent(page(), pages());
     }
 

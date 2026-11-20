@@ -1,5 +1,7 @@
 # Progress and statistics checks
 
+`session.reader-session` checks chapter progress at page 29 of 50, where converting the page fraction back to a percentage can lose one point. It also checks a bounded main-text range and the fraction used before a page estimate exists.
+
 Label `progress`. Build `mac-tests`, then run `ctest --preset mac -L progress` from `platforms/desktop/`. `ctest --preset mac -N -L progress` lists its tests.
 
 These checks cover progress percentages, chapter progress, native progress, progress choices, finish prompts, reading pace and speed, word counts and Stats. The `model` checks hold the calculations, and the `lifecycle` checks drive the production reader. `session.reading-book`, in [Storage and history](storage.md), checks the saved finish prompt, the reading-time counter and when the reader reads native progress.

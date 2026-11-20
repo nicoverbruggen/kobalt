@@ -45,6 +45,28 @@ struct ReaderLocationProbe
 
     static bool pending(const ReaderSession &reader) { return reader.fullDocumentPending_; }
 
+    static void checkChapterProgress()
+    {
+        ReaderSession reader(test::readerFonts(), test::readerPlaceholder());
+        auto &state = reader.frame.state;
+        state["rough_page"] = 29;
+        state["rough_pages"] = 50;
+        state["book_fraction"] = 29.0 / 50;
+        require(reader.progressPercent() == 58 && reader.mainPercent() == 58
+                        && reader.statsPercent(true) == 58 && reader.statsPercent(false) == 58,
+                "Chapter progress at page 29 of 50 must be 58 percent in every view");
+        state["main_text_first"] = 11;
+        state["main_text_last"] = 30;
+        require(reader.statsPercent(false) == 95 && reader.statsPercent(true) == 58,
+                "Main text and volume percentages must use their own page ranges");
+        state.remove("main_text_first");
+        state.remove("main_text_last");
+        state["rough_pages"] = 0;
+        state["book_fraction"] = 0.375;
+        require(reader.progressPercent() == 37 && reader.statsPercent(true) == 37,
+                "A chapter without a page estimate must use the available fraction");
+    }
+
     static void refusePreparedDocument(Engine &engine)
     {
         auto &model = dynamic_cast<EngineDocument &>(engine);
@@ -638,6 +660,7 @@ int run(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
     require(argc == 3, "Expected text and non-linear synthetic EPUBs");
+    ReaderLocationProbe::checkChapterProgress();
     const auto path = QFileInfo(QString::fromLocal8Bit(argv[1])).absoluteFilePath();
     const auto publisherPath = QFileInfo(QString::fromLocal8Bit(argv[2])).absoluteFilePath();
     QString servedPath = path;

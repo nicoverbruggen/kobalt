@@ -92,8 +92,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: build/dependency-cache
-          key: deps-v1-${{ runner.os }}-${{ runner.arch }}-linux-${{ hashFiles('platforms/sdk-image.sh', 'dependencies/**', 'platforms/**/*.cmake', 'platforms/**/CMakeLists.txt', 'platforms/**/CMakePresets.json') }}
-          restore-keys: deps-v1-${{ runner.os }}-${{ runner.arch }}-linux-
+          key: deps-v2-${{ runner.os }}-${{ runner.arch }}-linux-${{ hashFiles('platforms/sdk-image.sh', 'dependencies/**/*', 'platforms/shared-inputs.cmake', 'platforms/desktop/CMakeLists.txt', 'platforms/desktop/CMakePresets.json', 'platforms/ci/native-tests.sh') }}
       - name: Cache native compilation
         uses: actions/cache@v5
         with:
@@ -179,8 +178,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: build/dependency-cache
-          key: deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-${{ hashFiles('platforms/sdk-image.sh', 'dependencies/**', 'platforms/**/*.cmake', 'platforms/**/CMakeLists.txt', 'platforms/**/CMakePresets.json') }}
-          restore-keys: deps-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-
+          key: deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.target }}-${{ hashFiles('platforms/sdk-image.sh', 'dependencies/**/*', 'platforms/shared-inputs.cmake', 'platforms/kobo/CMakeLists.txt', 'platforms/kobo/CMakePresets.json', 'platforms/ci/build.sh', 'platforms/kobo/build.sh', 'platforms/kobo/toolchains/*.cmake') }}
       - name: Run the adapter tests, then build and verify package
         env:
           TARGET: ${{ matrix.target }}
@@ -205,8 +203,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: build/dependency-cache
-          key: deps-v1-${{ runner.os }}-${{ runner.arch }}-android-${{ hashFiles('platforms/sdk-image.sh', 'dependencies/**', 'platforms/**/*.cmake', 'platforms/**/CMakeLists.txt', 'platforms/**/CMakePresets.json') }}
-          restore-keys: deps-v1-${{ runner.os }}-${{ runner.arch }}-android-
+          key: deps-v2-${{ runner.os }}-${{ runner.arch }}-android-${{ hashFiles('platforms/sdk-image.sh', 'dependencies/**/*', 'platforms/shared-inputs.cmake', 'platforms/android/CMakeLists.txt', 'platforms/android/CMakePresets.json', 'platforms/ci/build.sh', 'platforms/android/build.sh') }}
       - name: Cache Gradle packages
         uses: actions/cache@v5
         with:

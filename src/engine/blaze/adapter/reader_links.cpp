@@ -954,15 +954,18 @@ LinkDetails EngineDocument::linkDetails(const QString &source, bool preview,
     }
     if (navigable) {
         result.target = position;
-        if (preview)
-            result.chapter = chapterTitle(result.target);
+        if (preview) {
+            if (targetDocument != this)
+                targetDocument->setChapters(contents_, graph_);
+            result.chapter = targetDocument->chapterTitle(result.target);
+        }
     }
     if (!result.target.isEmpty()) {
         result.kind = LinkKind::Passage;
         result.error.clear();
     }
-    const bool inferred =
-            match == NoteMatch::Unmarked && inferredNote(node, target, engine_->getToc());
+    const bool inferred = match == NoteMatch::Unmarked
+            && inferredNote(node, target, targetDocument->engine_->getToc());
     if (match != NoteMatch::Explicit && !inferred) {
         return result;
     }

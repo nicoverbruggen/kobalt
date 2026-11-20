@@ -4,7 +4,7 @@ Label `links`. Build `mac-tests`, then run `ctest --preset mac -L links` from `p
 
 These checks cover link classification, footnote panels, direct link taps, link reveal, links in the bookmark corner, engine search and search results in the reader. The `engine` checks run on CREngine directly, and the `desktop` and `lifecycle` checks drive the production reader. Word selection in the reader is in [Input](input.md).
 
-Website targets preserve encoded path and query separators when the reader prepares the address for the browser.
+Website targets preserve encoded path and query separators when the reader prepares the address for the browser. A link preview for another chapter uses the destination’s title from the book or the host’s table of contents. A numeric link to an EPUB contents entry opens as a passage in both layouts.
 
 `desktop.tappableLinks` checks every direct-tap mode in both themes with Highlight links shown and hidden. It also checks that actual Settings hides the discovery controls. `desktop.settingsFeatures` toggles the feature through the checklist and checks the action after saving and reopening.
 

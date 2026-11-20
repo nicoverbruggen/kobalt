@@ -170,6 +170,21 @@ void flexRows()
             redItem("flex", "", "width:400px;padding:0 122px;box-sizing:border-box", "width:400px");
     require(padded.x() > 244 && padded.right() == 399 && padded.y() == 0,
             "Keep the word and its padding inside the minimum border-box width");
+    require(redItem("flex", "width:300px", "flex:1 1 100px;min-width:160px",
+                    "flex:1 1 100px;max-width:110px")
+                    == QRect(190, 0, 110, 32),
+            "Redistribute growth after freezing only the limiting maximum");
+    require(redItem("flex", "width:300px", "flex:1 1 100px;min-width:190px",
+                    "flex:1 1 100px;max-width:140px")
+                    == QRect(190, 0, 110, 32),
+            "Redistribute growth after freezing only the limiting minimum");
+    require(redItem("flex", "", "flex:1 1 600px;max-width:100px;min-width:0",
+                    "flex:1 1 0%;min-width:0")
+                    == QRect(100, 0, 300, 32),
+            "Freeze an item already above its maximum before sharing growth");
+    require(redItem("inline-flex", "gap:8px", "flex:0 0 64px", "flex:0 0 80px", true)
+                    == redItem("inline-flex", "gap:8px", "width:64px", "width:80px", true),
+            "Include fixed flex bases in an inline row's natural width");
     const auto fixed = redItem("inline-flex", "width:152px;gap:8px;vertical-align:top",
                                "width:64px", "width:80px", true);
     const auto natural =

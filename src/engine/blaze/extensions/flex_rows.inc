@@ -17,6 +17,40 @@ static int flexWidthInsets(ldomNode *node, int width)
             + measureBorder(node, 3) + measureBorder(node, 1);
 }
 
+// A zero containing width means intrinsic measurement of a definite flex basis.
+static void measureFlexItem(BlazeFlexItem &item, int width, int direction, lUInt32 flags)
+{
+    css_style_ref_t css = item.node->getStyle();
+    int insets = flexWidthInsets(item.node, width);
+    getRenderedWidths(item.node, item.width, item.minimum, direction, false, flags,
+                      true);
+    if (css->width.type != css_val_unspecified && (width > 0 || css->width.type != css_val_percent)) {
+        item.width = lengthToPx(item.node, css->width, width) + insets;
+        item.minimum = std::min(item.minimum, item.width);
+    }
+    if (css->min_width.type != css_val_unspecified)
+        item.minimum = lengthToPx(item.node, css->min_width, width) + insets;
+    const int limit = width > 0 ? width : std::numeric_limits<int>::max();
+    item.minimum = std::min(limit, std::max(1, item.minimum));
+    item.maximum = limit;
+    if (css->max_width.type != css_val_unspecified)
+        item.maximum = std::max(item.minimum, std::min(limit, lengthToPx(item.node, css->max_width, width) + insets));
+    item.base = css->flex_basis.type == css_val_unspecified ? item.width :
+                lengthToPx(item.node, css->flex_basis, width) + insets;
+    item.width = std::max(item.minimum, std::min(item.maximum, item.base));
+}
+
+static bool hasFixedFlexBasis(ldomNode *node)
+{
+    if (node->getRendMethod() != erm_final) return false;
+    css_style_ref_t style = node->getStyle();
+    return !style->flex_grow && !style->flex_shrink &&
+            style->flex_basis.type != css_val_unspecified && style->flex_basis.type != css_val_percent &&
+            style->min_width.type != css_val_percent && style->max_width.type != css_val_percent &&
+            !style->margin[0].value && !style->margin[1].value &&
+            style->padding[0].type != css_val_percent && style->padding[1].type != css_val_percent;
+}
+
 static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int width,
                            int direction, lUInt32 flags, int content_height)
 {
@@ -138,22 +172,7 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
     for (auto &item : items) {
         koblazeCheckCancel();
         koblazePausePoint();
-        css_style_ref_t css = item.node->getStyle();
-        int insets = flexWidthInsets(item.node, width);
-        getRenderedWidths(item.node, item.width, item.minimum, direction, false, flags,
-                          true);
-        if (css->width.type != css_val_unspecified) {
-            item.width = lengthToPx(item.node, css->width, width) + insets;
-            item.minimum = std::min(item.minimum, item.width);
-        }
-        if (css->min_width.type != css_val_unspecified)
-            item.minimum = lengthToPx(item.node, css->min_width, width) + insets;
-        item.minimum = std::min(width, std::max(1, item.minimum));
-        if (css->max_width.type != css_val_unspecified)
-            item.maximum = std::max(item.minimum, std::min(width, lengthToPx(item.node, css->max_width, width) + insets));
-        item.base = css->flex_basis.type == css_val_unspecified ? item.width :
-                    lengthToPx(item.node, css->flex_basis, width) + insets;
-        item.width = std::max(item.minimum, std::min(item.maximum, item.base));
+        measureFlexItem(item, width, direction, flags);
     }
 
     int gap = lengthToPx(parent, style->column_gap, 0);
@@ -170,13 +189,14 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
 
         // Freeze items at their minimum and divide the remaining main size
         // among the unfrozen items. Shrink factors scale with the flex basis.
-        bool growing = used <= width;
+        bool growing = used < width;
         long long remaining = width - (long long)gap * (long long)(end - first - 1);
         long double factors = 0;
         long long unscaled = 0;
         for (size_t i = first; i < end; ++i) {
             auto &item = items[i];
-            if (growing ? item.grow == 0 : item.shrink == 0 || item.base == 0) {
+            if (growing ? item.grow == 0 || item.base > item.width
+                        : item.shrink == 0 || item.base < item.width || item.base == 0) {
                 remaining -= item.width;
                 continue;
             }
@@ -194,12 +214,26 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
                 if (std::abs(limit) < std::abs(free_space)) free_space = limit;
             }
             const long double scale = free_space / factors;
+            // Opposing min/max constraints can cancel. Freeze only the side
+            // that limits the line, then divide the remaining space again.
+            const auto weightOf = [growing](const BlazeFlexItem &item) -> long double {
+                return growing ? item.grow : (long double)item.shrink * item.base;
+            };
+            long double violation = 0;
+            for (size_t i = first; i < end; ++i) {
+                const auto &item = items[i];
+                if (item.width >= 0) continue;
+                const long double target = item.base + scale * weightOf(item);
+                if (target < item.minimum) violation += item.minimum - target;
+                if (target > item.maximum) violation += item.maximum - target;
+            }
             for (size_t i = first; i < end; ++i) {
                 auto &item = items[i];
                 if (item.width >= 0) continue;
-                const long double weight = growing ? item.grow : (long double)item.shrink * item.base;
+                const long double weight = weightOf(item);
                 const long double target = item.base + scale * weight;
-                if (target < item.minimum || target > item.maximum) {
+                if ((target < item.minimum && violation >= 0) ||
+                    (target > item.maximum && violation <= 0)) {
                     item.width = target < item.minimum ? item.minimum : item.maximum;
                     remaining -= item.width - item.base;
                     factors -= weight;
@@ -216,7 +250,7 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
             for (size_t i = first; i < end; ++i) {
                 auto &item = items[i];
                 if (item.width >= 0) continue;
-                long double next = assigned + scale * (growing ? item.grow : (long double)item.shrink * item.base);
+                long double next = assigned + scale * weightOf(item);
                 item.width = std::max(item.minimum, item.base + (int)(std::round(next) - std::round(assigned)));
                 assigned = next;
             }

@@ -14,6 +14,7 @@
 #include "koblaze.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include "crsetup.h"
 
 #include <stdlib.h>
@@ -12865,8 +12866,15 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
                     // (we shouldn't find any, but well)
                     continue;
                 }
-                getRenderedWidths(child, _maxw, _minw, direction, false, rendFlags,
-                    curMaxWidth, curWordWidth, collapseNextSpace, lastSpaceWidth, indent, nowrap_in, lang_cfg);
+                if (flex_row && hasFixedFlexBasis(child)) {
+                    BlazeFlexItem item = {child, 0, 0, 0, 0, 0, 0};
+                    measureFlexItem(item, 0, direction, rendFlags);
+                    _maxw = _minw = item.width;
+                }
+                else {
+                    getRenderedWidths(child, _maxw, _minw, direction, false, rendFlags,
+                        curMaxWidth, curWordWidth, collapseNextSpace, lastSpaceWidth, indent, nowrap_in, lang_cfg);
+                }
                 if (flex_row && child->getRendMethod() != erm_invisible) {
                     _maxWidth += _maxw + (first_item ? 0 : gap);
                     if (!style->flex_wrap)

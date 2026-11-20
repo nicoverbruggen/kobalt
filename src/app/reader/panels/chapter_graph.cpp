@@ -29,6 +29,7 @@ public:
     QVector<ChapterLink> chapters;
     ChapterSelection selection;
     int first = 0, count = 0, gap = chapters::gapWide;
+    qint64 maximum = 1;
     // The tallest bar; a shorter chart shortens it by the same amount.
     int barsHeight = chapters::barsHeight;
 
@@ -42,11 +43,6 @@ protected:
         const int visible = qMin(count, int(chapters.size()) - first);
         if (visible <= 0)
             return;
-        // Use the longest chapter in the whole book on every graph page.
-        // Long chapters must keep their proportions, even beside short ones.
-        qint64 maximum = 1;
-        for (const auto &chapter : chapters)
-            maximum = qMax(maximum, chapter.words);
         const int chart = barsHeight;
         // Reserve a full page's columns even on the last page. A short book
         // still centers its own columns; a paged book keeps their positions.
@@ -531,6 +527,21 @@ int ChapterGraph::graphPages() const
     return qMax(1, (int(chapters.size()) + capacity() - 1) / capacity());
 }
 
+void ChapterGraph::updateChartScale()
+{
+    QVector<qint64> lengths;
+    for (const auto &chapter : chapters)
+        if (chapter.words > 0)
+            lengths.append(chapter.words);
+    std::sort(lengths.begin(), lengths.end());
+    // All pages use the same book-wide distribution. Uneven books benefit
+    // most from the extra resolution, without taking all the exposed paper.
+    bars->maximum = lengths.isEmpty() ? 1 : lengths.last();
+    chapterSpread = lengths.isEmpty()
+            ? 1.0
+            : qBound(1.0, double(lengths.last()) / double(lengths[lengths.size() / 2]), 3.0);
+}
+
 void ChapterGraph::setData(QVector<ChapterLink> chapters, ChapterSelection selection, bool ready,
                            const QString &error)
 {
@@ -548,12 +559,13 @@ void ChapterGraph::setData(QVector<ChapterLink> chapters, ChapterSelection selec
     const bool moved = selection.current != this->selection.current
             || chapters.size() != this->chapters.size();
     this->chapters = std::move(chapters);
+    if (!sameChapters)
+        updateChartScale();
     this->selection = selection;
     this->ready = ready;
     this->error = error;
     // The chapter's word total comes with the counts.
     refreshCells();
-    arrange();
     if (moved)
         anchor = qMax(0, selection.current);
     redraw();
@@ -630,18 +642,8 @@ int ChapterGraph::chartHeight() const
             qMin(width(), parentWidget() ? parentWidget()->height() : availableHeight);
     const int growth = qBound(0, (shortEdge - int(chapters::growthShortEdge)) / 2,
                               int(chapters::maximumGrowth));
-    QVector<qint64> lengths;
-    for (const auto &chapter : chapters)
-        if (chapter.words > 0)
-            lengths.append(chapter.words);
-    std::sort(lengths.begin(), lengths.end());
-    // All pages use the same book-wide distribution. Uneven books benefit
-    // most from the extra resolution, without taking all the exposed paper.
-    const double spread = lengths.isEmpty()
-            ? 1.0
-            : qBound(1.0, double(lengths.last()) / double(lengths[lengths.size() / 2]), 3.0);
     const int extra =
-            qMin(int(growth * spread / 3), qMax(0, room - base - int(chapters::exposedPaper)));
+            qMin(int(growth * chapterSpread / 3), qMax(0, room - base - int(chapters::exposedPaper)));
     // Leave the text and cells intact when only a very short chart fits.
     const int least = base - chapters::barsHeight + 2;
     return qBound(least, room, base + extra);

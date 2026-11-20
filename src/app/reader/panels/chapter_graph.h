@@ -71,6 +71,8 @@ private:
     int anchor = 0;
     int topPadding = 0, availableHeight = 0;
     // The chart can grow on larger screens and shrink on short ones.
+    double chapterSpread = 1.0;
+    void updateChartScale();
     int chartHeight() const;
     bool inlinePager() const;
     // On a short screen the word totals move from their row into the cells.

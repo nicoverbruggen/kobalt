@@ -2340,46 +2340,61 @@ int run(int argc, char **argv)
                         opened.quit();
                     });
             opened.exec();
-            int nonLinearPage = -1;
+            SearchHit hit;
             QEventLoop found;
             absolute->search("Nonlinearspine", [&](SearchBatch batch) {
                 if (!batch.hits.isEmpty()) {
-                    nonLinearPage = batch.hits.first().page;
+                    hit = batch.hits.first();
                     found.quit();
                 } else if (batch.done)
                     found.quit();
             });
             found.exec();
-            require(nonLinearPage > 0 && nonLinearPage < absolute->pages(),
-                    "Non-linear fixture has no searchable page");
+            require(!hit.start.isEmpty(), "Non-linear fixture has no searchable passage");
             absolute->updated = [&] {
                 if (!absolute->busy())
                     opened.quit();
             };
-            require(absolute->go(nonLinearPage - 1), "Cannot go before the non-linear section");
+            const bool wholeBook = !absolute->continuesAfter();
+            if (wholeBook)
+                require(hit.page > 0 && hit.page < absolute->pages(),
+                        "Non-linear page is outside the book");
+            require(absolute->goTo(hit.start), "Cannot locate the non-linear passage");
             opened.exec();
-            require(absolute->nextPage() == nonLinearPage,
-                    "Default paging skipped a non-linear section");
+            const auto nonLinearImage = absolute->image();
+            const auto chapters = absolute->chapters();
+            require(!nonLinearImage.isNull() && chapters.size() == 3
+                            && !chapters.last().title.isEmpty(),
+                    "Cannot identify the non-linear page and its following chapter");
+            require(absolute->turn(-1), "Cannot reach the page before the non-linear section");
+            opened.exec();
+            const QString preceding = absolute->state()["position"].toString();
+            if (wholeBook)
+                require(absolute->nextPage() == hit.page,
+                        "Default paging skipped a non-linear section");
             require(absolute->turn(1), "Cannot turn into the non-linear section");
             opened.exec();
-            require(absolute->page() == nonLinearPage, "Default turn skipped a non-linear section");
+            require(absolute->image() == nonLinearImage,
+                    "Default turn skipped a non-linear section");
             absolute->editAppearance(kobalt::appearance::Patch(
                     kobalt::qt::object({ { "hide_nonlinear_fragments", true } })));
             opened.exec();
-            require(absolute->go(0), "Cannot go to the first physical page");
+            require(absolute->goTo(preceding),
+                    "Cannot return to the page before the non-linear section");
             opened.exec();
-            while (absolute->nextPage() <= nonLinearPage) {
-                require(absolute->turn(1), "Cannot reach the non-linear section");
-                opened.exec();
-            }
-            require(absolute->page() < nonLinearPage && absolute->nextPage() > nonLinearPage,
-                    "Page turns did not expose the non-linear skip");
+            if (wholeBook)
+                require(absolute->page() < hit.page && absolute->nextPage() > hit.page,
+                        "Page turns did not expose the non-linear skip");
             require(absolute->turn(1), "Cannot turn across the non-linear section");
             opened.exec();
-            require(absolute->page() > nonLinearPage, "Page turn did not skip the non-linear page");
-            require(absolute->go(nonLinearPage), "Cannot go to the non-linear page by number");
+            require(absolute->chapterTitle() == chapters.last().title,
+                    "Page turn did not skip to the next linear section");
+            // Numbered jumps address the current layout. An unloaded chapter
+            // has a source anchor even when its book page is still an estimate.
+            require(wholeBook ? absolute->go(hit.page) : absolute->goTo(hit.start),
+                    "Cannot navigate explicitly to the non-linear page");
             opened.exec();
-            require(absolute->page() == nonLinearPage,
+            require(absolute->image() == nonLinearImage && (!wholeBook || absolute->page() == hit.page),
                     "Absolute navigation skipped the non-linear page");
             absolute.reset();
             ReaderSession::drain([&] { drained.quit(); });

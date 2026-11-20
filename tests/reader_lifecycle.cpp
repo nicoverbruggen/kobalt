@@ -11282,8 +11282,7 @@ private slots:
         }
     }
 
-    // Nickel's progress is written on the GUI thread, so reading pauses save
-    // only the local position. Sleep writes Nickel's copy.
+    // A reading pause saves the local position. Sleep also writes Nickel's copy.
     void nativeProgressWaitsForSleep()
     {
         QFETCH(QString, outcome);
@@ -11321,8 +11320,10 @@ private slots:
         const auto expected = host.session()->savedNativePosition(&error);
         QVERIFY2(error.isEmpty(), qPrintable(error));
         QVERIFY(!expected.isEmpty());
-        // Kobo gets the same page progress that Kobalt shows.
-        const double percent = pageProgressPercent(host.session()->page(), host.session()->pages());
+        // The fixture has no main-text boundary. Nickel gets progress through the book,
+        // even when the renderer has page numbers for just the current chapter.
+        QVERIFY(!host.session()->hasMainTextBoundary());
+        const double percent = host.session()->progressPercent();
         if (outcome == "newer") {
             host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true });
         }

@@ -434,6 +434,7 @@ if(BUILD_TESTING)
         if(name MATCHES "^session[.]"
             OR name STREQUAL "lifecycle.lightReplacesDefaultMenu"
             OR name STREQUAL "lifecycle.annotationFramesKeepFirstPaintComplete"
+            OR name STREQUAL "lifecycle.nativeProgressWaitsForSleep"
             OR name STREQUAL "lifecycle.remoteKeyActivityRequiresActiveReading")
             list(APPEND names "${name}.hybrid")
         endif()

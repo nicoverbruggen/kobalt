@@ -746,10 +746,11 @@ void ReadingBook::pollProgress()
         progressRetries = 3;
     else
         changed = std::exchange(progressRetry, false);
-    if (!changed
-        && (bridge->signalsChanges() || (progressPoll.isValid() && progressPoll.elapsed() < 55000)))
+    const bool due = !bridge->signalsChanges()
+            && (!progressPoll.isValid() || progressPoll.elapsed() >= 55000);
+    ReadingProgress progress;
+    if (!bridge->poll(changed || due, progress))
         return;
-    const auto progress = bridge->read();
     reconciliation.observe(progress);
     // Nickel can still hold its database right after a sync. A failed read
     // tries again on the next checks, up to three times, so the synced

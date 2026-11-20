@@ -46,6 +46,17 @@ public:
     virtual NativeSyncPolicy nativeSyncPolicy() const { return {}; }
 
     virtual ReadingProgress read(QString *error = nullptr) const = 0;
+
+    // Collect a completed interactive read, or start one when requested. A
+    // platform that queues the read wakes the reader when its result is ready.
+    virtual bool poll(bool requested, ReadingProgress &result)
+    {
+        if (!requested)
+            return false;
+        result = read();
+        return true;
+    }
+
     virtual bool takeChange() = 0;
 
     // True when takeChange() reports every change, from the platform's own

@@ -160,12 +160,12 @@ bool NativeProgress::available()
     return api().ready();
 }
 
-QVariantMap NativeProgress::persisted(QString *error) const
+std::function<QVariantMap()> NativeProgress::rowQuery(bool polling, QString *error) const
 {
-    const auto fail = [error](const QString &message) {
+    const auto fail = [error](const QString &message) -> std::function<QVariantMap()> {
         if (error)
             *error = message;
-        return QVariantMap();
+        return {};
     };
     if (!available())
         return fail(strings::get("error.native_progress_api_is_unavailable"));
@@ -175,36 +175,36 @@ QVariantMap NativeProgress::persisted(QString *error) const
         return fail(strings::get("error.nickel_database_is_unavailable"));
     // A separate read-only connection must see committed data, not Nickel's
     // cache or an uncommitted transaction on its own connection.
-    const auto name = QString("kobalt-progress-%1").arg(connectionId);
-    QVariantMap result;
-    {
-        auto db = QSqlDatabase::addDatabase("QSQLITE", name);
-        db.setDatabaseName(existing.databaseName());
-        db.setConnectOptions("QSQLITE_OPEN_READONLY;QSQLITE_BUSY_TIMEOUT=100");
-        if (db.open()) {
-            QSqlQuery query(db);
-            query.prepare(
-                    "SELECT ContentID, ChapterIDBookmarked, DateLastRead, ReadStatus, ___PercentRead, ReadStateSynced, FirstTimeReading, RestOfBookEstimate, CurrentChapterEstimate, CurrentChapterProgress FROM content WHERE ContentID = ? AND ContentType = 6");
-            query.addBindValue(book);
-            if (query.exec() && query.next()) {
-                const auto record = query.record();
-                for (int i = 0; i < record.count(); ++i)
-                    result.insert(record.fieldName(i), query.value(i));
+    const auto name = QString(polling ? "kobalt-poll-%1" : "kobalt-progress-%1").arg(connectionId);
+    return [databasePath = existing.databaseName(), name, book = book] {
+        QVariantMap result;
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(databasePath);
+            db.setConnectOptions("QSQLITE_OPEN_READONLY;QSQLITE_BUSY_TIMEOUT=100");
+            if (db.open()) {
+                QSqlQuery query(db);
+                query.prepare(
+                        "SELECT ContentID, ChapterIDBookmarked, DateLastRead, ReadStatus, ___PercentRead, ReadStateSynced, FirstTimeReading, RestOfBookEstimate, CurrentChapterEstimate, CurrentChapterProgress FROM content WHERE ContentID = ? AND ContentType = 6");
+                query.addBindValue(book);
+                if (query.exec() && query.next()) {
+                    const auto record = query.record();
+                    for (int i = 0; i < record.count(); ++i)
+                        result.insert(record.fieldName(i), query.value(i));
+                }
+            } else {
+                reportDescriptorExhaustion("nickel-database-open");
             }
-        } else {
-            reportDescriptorExhaustion("nickel-database-open");
+            db.close();
         }
-        db.close();
-    }
-    QSqlDatabase::removeDatabase(name);
-    if (result.isEmpty())
-        return fail(strings::get("error.cannot_verify_persisted_nickel_progress"));
-    return result;
+        QSqlDatabase::removeDatabase(name);
+        return result;
+    };
 }
 
-ReadingProgress NativeProgress::read(QString *error) const
+ReadingProgress NativeProgress::decode(const QVariantMap &row, QString *error) const
 {
-    auto value = snapshot(persisted(error));
+    auto value = snapshot(row);
     if (value.book.isEmpty())
         value.book = book;
     if (!value.valid && error && error->isEmpty())
@@ -214,6 +214,7 @@ ReadingProgress NativeProgress::read(QString *error) const
 
 bool NativeProgress::markReading()
 {
+    invalidatePoll();
     mainthread::BlockingOperation operation("nickel-opening-status");
     if (!available() || !NativeLifecycle::nativeProgressSaveAllowed() || deviceTransition())
         return false;
@@ -258,6 +259,7 @@ NativeSaveResult NativeProgress::write(const ReadingProgress &expected, const QS
                                        const ReadingEstimates *estimates,
                                        const ReadingActivity *activity, NativeProgressExtra *extra)
 {
+    invalidatePoll();
     // Nickel's Volume API runs on the GUI thread at lifecycle boundaries.
     kobalt::mainthread::BlockingOperation blockingOperation("nickel-progress-write");
     if (!NativeLifecycle::nativeProgressSaveAllowed() || deviceTransition())

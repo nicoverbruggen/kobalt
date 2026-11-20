@@ -90,7 +90,7 @@ struct Calls
     NativeActivityResult openingResult = NativeActivityResult::NotRequired;
 };
 
-class Bridge final : public ReadingBridge
+class Bridge : public ReadingBridge
 {
 public:
     explicit Bridge(Calls &calls) : calls(calls) { }
@@ -1779,6 +1779,43 @@ int main(int argc, char **argv)
         require(storage::readBookState(paths, "save-order").object.value("position").toString()
                         == newest,
                 "An older activity snapshot replaced a newer explicit choice");
+    }
+    {
+        struct DeferredBridge final : Bridge
+        {
+            using Bridge::Bridge;
+            bool ready = false;
+            int requests = 0;
+
+            bool poll(bool requested, ReadingProgress &result) override
+            {
+                if (requested)
+                    ++requests;
+                if (!std::exchange(ready, false))
+                    return false;
+                result = read(nullptr);
+                return true;
+            }
+        };
+
+        Calls calls;
+        calls.signalled = true;
+        auto session = open();
+        const auto hash = session->sourceHash();
+        auto bridge = std::make_unique<DeferredBridge>(calls);
+        auto *poll = bridge.get();
+        ReadingBook book(std::move(session), paths.bookState("signalled-id"), paths, "signalled-id",
+                         hash, std::move(bridge), calls.current, calls.current);
+        ++calls.current.modified;
+        calls.current.location = "chapter.xhtml#remote";
+        book.pollProgress();
+        require(poll->requests == 1 && !book.pendingProgress(),
+                "A pending poll leaves the current reading position alone");
+        poll->ready = true;
+        book.pollProgress();
+        require(poll->requests == 1 && book.pendingProgress() && book.candidate() == calls.current,
+                "Collect a completed poll without waiting for another sync signal");
+        book.releaseNative(false);
     }
     {
         // With the platform's change signals, the reader reads saved progress

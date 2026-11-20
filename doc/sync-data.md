@@ -33,7 +33,7 @@ The page turn must never wait for storage. All writes to Nickel's database use N
 
 `NativeProgress` (`platforms/kobo/common/native_progress.h`, `nickel-qt5/native_progress.cpp`, `nickel-qt6/native_progress.cpp`) reads the book row on a separate read-only SQLite connection with a 100 ms busy timeout: `ContentID`, `ChapterIDBookmarked`, `DateLastRead`, `ReadStatus`, `___PercentRead`, `ReadStateSynced`, `FirstTimeReading`, `RestOfBookEstimate`, `CurrentChapterEstimate`, `CurrentChapterProgress` and, on Qt 6, `___NumPages`.
 
-It checks for a changed committed position after Nickel's signals: the sync manager's `finished()` and `userProfileUpdated()`, and USB `doneProcessing()` and unplug. A signal that arrives while the device sleeps is checked at wake. Only when these signals cannot be connected does a one-minute check repeat it, and Kobalt logs `native-progress-signals-unavailable`. If another device moved the position, the reader asks before it moves (see [Progress sync](reader/sync.md)).
+It checks for a changed committed position after Nickel's signals: the sync manager's `finished()` and `userProfileUpdated()`, and USB `doneProcessing()` and unplug. While the reader is open, the storage worker reads the committed row. The interface thread decodes the position when the result arrives. A newer sync notification or lifecycle read or write supersedes an outstanding poll. A signal that arrives while the device sleeps is checked at wake. Only when these signals cannot be connected does a one-minute check repeat it, and Kobalt logs `native-progress-signals-unavailable`. If another device moved the position, the reader asks before it moves (see [Progress sync](reader/sync.md)).
 
 ## What Kobalt writes to Nickel
 

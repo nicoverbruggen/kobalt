@@ -40,6 +40,11 @@ public:
 
     ReadingProgress read(QString *error) const override { return progress_->read(error); }
 
+    bool poll(bool requested, ReadingProgress &result) override
+    {
+        return progress_->poll(requested, result);
+    }
+
     bool takeChange() override { return progress_->takeChange(); }
 
     bool signalsChanges() const override { return progress_->signalsChanges(); }

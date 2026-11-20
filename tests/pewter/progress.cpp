@@ -2,7 +2,10 @@
 #include "platforms/kobo/common/native_progress.h"
 #include "reading/reading_bridge.h"
 #include "support/main_thread.h"
+#include "support/qt_compat.h"
 #include <QCoreApplication>
+#include <QEventLoop>
+#include <QTimer>
 #include <QRegularExpression>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -470,6 +473,44 @@ int main(int argc, char **argv)
     pewter::options().syncing = false;
     require(!syncing(), "the adapter observes the end of sync");
     NativeProgress progress(book);
+    {
+        QSqlQuery writer(pewter::database());
+        require(writer.exec("BEGIN EXCLUSIVE"), "hold the fake Nickel database");
+        ReadingProgress result;
+        QEventLoop loop;
+        QTimer timeout;
+        timeout.setSingleShot(true);
+        QObject::connect(&timeout, SIGNAL(timeout()), &loop, SLOT(quit()));
+        progress.changeAvailable = [&loop] { loop.quit(); };
+        auto awaitPoll = [&] {
+            require(!progress.poll(true, result), "interactive progress query returns pending");
+            timeout.start(5000);
+            loop.exec();
+            require(timeout.isActive(), "the worker delivered the progress query");
+            timeout.stop();
+            return progress.poll(false, result);
+        };
+        require(awaitPoll() && !result.valid, "a locked database reports an unavailable position");
+        // Only the application thread can release its transaction. A synchronous
+        // poll would hit the busy timeout before this event could run.
+        kobalt::qt::later(0, &loop, [&writer] {
+            require(writer.exec("ROLLBACK"), "release the fake Nickel database");
+        });
+        require(awaitPoll() && result.valid && result.book == book,
+                "the interface releases the lock while the progress poll is pending");
+        require(!progress.poll(false, result), "each completed poll is collected once");
+
+        progress.takeChange();
+        require(!progress.poll(true, result), "start a poll before the lifecycle read");
+        current(progress);
+        timeout.start(5000);
+        loop.exec();
+        require(timeout.isActive() && !progress.poll(false, result) && progress.takeChange(),
+                "a newer lifecycle read supersedes the in-flight poll and requests a fresh check");
+        timeout.stop();
+        progress.changeAvailable = {};
+        requireMainThread();
+    }
     markReading(progress);
     recoverStaleCache(progress);
     writePartway(progress);

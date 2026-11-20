@@ -30,6 +30,7 @@ public:
     static bool available();
     static std::function<bool()> syncQuery();
     ReadingProgress read(QString *error = nullptr) const;
+    bool poll(bool requested, ReadingProgress &result);
     NativeSaveResult write(const ReadingProgress &expected, const QString &location, double percent,
                            bool finished, const ReadingEstimates *estimates = nullptr,
                            const ReadingActivity *activity = nullptr,
@@ -59,8 +60,7 @@ public:
     // Nickel data of its own compares it to know when to read that data again.
     quint64 changes() const { return changeCount; }
 
-    // Called on the GUI thread, inside Nickel's sync or USB signal, once
-    // takeChange() has a change to report.
+    // Wakes the reader on the GUI thread after a native change or a completed poll.
     std::function<void()> changeAvailable;
 #ifndef KOBALT_READER_HARDWARE
     static void testCommand();
@@ -91,6 +91,7 @@ private:
     {
         changed = true;
         ++changeCount;
+        invalidatePoll();
         if (changeAvailable)
             changeAvailable();
     }
@@ -103,6 +104,20 @@ private:
     quint64 connectionId;
     quint64 changeCount = 0;
     bool transitioning = false, processing = false, changed = true, signalled = false;
+
+    void invalidatePoll() const
+    {
+        ++pollGeneration;
+        pollReady = false;
+    }
+
+    mutable quint64 pollGeneration = 0;
+    mutable bool pollReady = false;
+    bool pollPending = false;
+    quint64 pollStorage = 0;
+    ReadingProgress polled;
+    std::function<QVariantMap()> rowQuery(bool polling, QString *error) const;
+    ReadingProgress decode(const QVariantMap &row, QString *error) const;
     QVariantMap persisted(QString *error) const;
 };
 } // namespace kobalt

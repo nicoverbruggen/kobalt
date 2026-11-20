@@ -8738,6 +8738,7 @@ private slots:
             QPointer<QWidget> popup = host.window()->findChild<QWidget *>("rrKosyncOpening");
             QVERIFY(popup && popup->isVisible());
             QTRY_VERIFY(attempts.count() > 0);
+            QVERIFY(kosync::networkInUse(0));
             const auto capture = qEnvironmentVariable("KOBALT_KOSYNC_MANUAL_CAPTURE");
             if (!capture.isEmpty() && connection == "connected")
                 QVERIFY(host.window()->grab().save(capture));
@@ -8747,9 +8748,10 @@ private slots:
             auto *cancel = popup->findChild<QPushButton *>("rrKosyncCancel");
             QVERIFY(cancel && click(canvas, cancel));
             QTRY_VERIFY(!popup || !popup->isVisible());
-            const auto count = attempts.count();
-            QTest::qWait(600);
-            QCOMPARE(attempts.count(), count);
+            // Includes an outstanding reply, lookup, or scheduled HTTP retry.
+            QVERIFY(!kosync::networkInUse(0));
+            auto *deadline = host.window()->findChild<QTimer *>("rrKosyncDeadline");
+            QVERIFY(deadline && !deadline->isActive());
             QCOMPARE(host.window()->findChild<QLabel *>("rrKosyncStatus")->text(),
                      strings::get("kosync.skipped"));
         }

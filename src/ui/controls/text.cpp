@@ -28,6 +28,21 @@
 #include <limits>
 
 namespace kobalt::ui {
+QLabel *makeZenMark(QWidget *parent, const char *name)
+{
+    auto *mark = new QLabel(strings::get("navigation.zen"), parent);
+    mark->setObjectName(name);
+    mark->setAlignment(Qt::AlignCenter);
+    readerStyle(mark,
+                QString("QLabel{%1font-weight:bold;background:palette(window-text);"
+                        "color:palette(window);padding:%2px %3px;}")
+                        .arg(styles::caption(), QString::number(px(2)), QString::number(px(12))));
+    auto font = captionFont();
+    font.setBold(true);
+    mark->setFont(font);
+    return mark;
+}
+
 QString headerFooterText(const headerfooter::Content &content, const QFont &font, int width)
 {
     if (interfaceTextWidth(content.text, font) <= width)

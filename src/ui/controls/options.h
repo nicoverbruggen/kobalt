@@ -6,6 +6,8 @@
 #include <QVector>
 #include <functional>
 
+class QLabel;
+
 namespace kobalt::ui {
 enum class ControlIcon;
 
@@ -74,6 +76,8 @@ public:
 
     // An icon before the label, placed like the icons of list action rows.
     void setLeadingIcon(ControlIcon icon);
+    // The wordmark replaces the painted title and shares the checkbox's click target.
+    void setTitleLabel(QLabel *label);
 
 protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
@@ -86,6 +90,7 @@ private:
     FontPreviewSource fontPreview;
     QString description, value;
     ValueStyle valueStyle;
+    QLabel *titleLabel = nullptr;
     QWidget *preview = nullptr;
     QSize previewSize;
     int leadingIcon = -1;

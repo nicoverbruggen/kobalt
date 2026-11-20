@@ -68,6 +68,7 @@
 #define RN_GET_SPLIT_BEFORE(flags) ((flags >> RN_SPLIT_BEFORE) & 0x7)
 #define RN_GET_SPLIT_AFTER(flags)  ((flags >> RN_SPLIT_AFTER)  & 0x7)
 
+#define RN_PAGE_ENDS_AT_FORCED_BREAK  0x04
 #define RN_PAGE_TYPE_NORMAL           0x01
 #define RN_PAGE_TYPE_COVER            0x02
 #define RN_PAGE_MOSTLY_RTL            0x10

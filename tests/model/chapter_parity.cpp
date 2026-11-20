@@ -120,7 +120,7 @@ void verticalOrnamentTurns()
 // odd number of columns before the chapter puts the pairs one column apart.
 // A turn that switched to the whole book there showed a column again. The
 // switch waits for a turn where the pairs agree.
-void twoColumnSwapPairs()
+void twoColumnSwapPairs(bool alignChapters)
 {
     for (const auto &counts : { qMakePair(3, 8), qMakePair(4, 8), qMakePair(3, 3) }) {
         const int before = counts.first, after = counts.second;
@@ -128,6 +128,8 @@ void twoColumnSwapPairs()
         book.files = test::columnPairsBook(before, after);
         auto options = settings;
         options["two_columns_landscape"] = true;
+        options["chapter_starts_spread"] = alignChapters;
+        const bool pairsMatch = alignChapters || before % 2 == 0;
         auto window = options;
         window["koblaze_first_spine_item"] = 0;
         window["koblaze_last_spine_item"] = 0;
@@ -144,12 +146,12 @@ void twoColumnSwapPairs()
         require(chapter.prepareFullDocument({}) == Engine::FullDocument::Ready,
                 "Cannot prepare the whole book of column pairs");
         // The first screen of the chapter is a whole-book screen only when
-        // an even number of columns comes before it.
+        // an even number of columns comes before it or chapters are aligned.
         int same = -1;
         for (int page = 0; page < whole.pages() && same < 0; ++page)
             if (whole.image(page) == chapter.image(0))
                 same = page;
-        require((same >= 0) == (before % 2 == 0),
+        require((same >= 0) == pairsMatch,
                 qPrintable(QString("%1 columns before the chapter: whole-book screen %2")
                                    .arg(before)
                                    .arg(same)));
@@ -159,15 +161,14 @@ void twoColumnSwapPairs()
             for (const int direction : { 1, -1 }) {
                 bool continues;
                 chapter.preparedSpreadTurn(direction, &continues);
-                require((direction > 0 && page + 1 == chapter.pages())
-                                || continues == (before % 2 == 0),
+                require((direction > 0 && page + 1 == chapter.pages()) || continues == pairsMatch,
                         qPrintable(QString("%1 columns before the chapter: a turn %2 from "
                                            "screen %3 switches with shifted pairs")
                                            .arg(before)
                                            .arg(direction)
                                            .arg(page)));
             }
-            if (before % 2 == 0 && whole.go(same + page)) {
+            if (pairsMatch && whole.go(same + page)) {
                 const int target = whole.turnTarget(whole.page(), 1);
                 require(target == whole.page() || chapter.preparedSpreadTurn(1) == target,
                         "The switch did not continue on the next whole-book screen");
@@ -1880,13 +1881,14 @@ Book loadBook(const QString &name)
     if (name == QLatin1String("links"))
         return { name, {}, test::linkBook() };
     if (name == QLatin1String("bordered vertical text")
-        || name == QLatin1String("shaded paragraphs") || name == QLatin1String("padded paragraphs")) {
+        || name == QLatin1String("shaded paragraphs")
+        || name == QLatin1String("padded paragraphs")) {
         const bool vertical = name == QLatin1String("bordered vertical text");
         QByteArray body;
         for (int group = 0; group < 8; ++group) {
             body += vertical ? "<div style='border:1px solid #333;padding:12px 8px'>"
-                             : name == QLatin1String("padded paragraphs") ? "<div style='padding:12px 8px'>"
-                                                                          : "<div style='background:#eee'>";
+                    : name == QLatin1String("padded paragraphs") ? "<div style='padding:12px 8px'>"
+                                                                 : "<div style='background:#eee'>";
             for (int paragraph = 0; paragraph < 3; ++paragraph)
                 body += "<p>"
                         + QByteArray("吾輩は猫である。名前はまだ無い。")
@@ -1973,8 +1975,10 @@ int main(int argc, char **argv)
     }
     if (only.isEmpty() || only == QLatin1String("vertical ornaments"))
         verticalOrnamentTurns();
-    if (only.isEmpty() || only == QLatin1String("column pairs"))
-        twoColumnSwapPairs();
+    if (only.isEmpty() || only == QLatin1String("column pairs")) {
+        twoColumnSwapPairs(false);
+        twoColumnSwapPairs(true);
+    }
     if (only.isEmpty() || only == QLatin1String("column labels"))
         twoColumnLabels();
     if (only.isEmpty() || only == QLatin1String("unopened search"))

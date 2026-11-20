@@ -788,6 +788,8 @@
 "settings.animations_description" = "Animations are fully supported on this device in light and dark mode.";
 "settings.unsupported_caption" = "Disabled: unsupported on this device.";
 "settings.unsupported_description" = "Disabled because this option is not supported on this device.";
+"settings.dark_mode" = "Dark Mode";
+"settings.night_mode_description" = "Also known as Night Mode. Displays light text on a dark background, and inverts some colors.";
 "settings.dark_description" = "Light text on a dark background.";
 "settings.section_opening" = "Opening books";
 "settings.section_engine" = "Engine";
@@ -1162,8 +1164,6 @@
 "stats.book_words" = "Book · %1";
 "stats.last_chapter" = "Last chapter";
 "stats.counting" = "Counting words…";
-"reader.dense_graph" = "Compact chapter graphs";
-"settings.dense_graph_description" = "When turned on, the Stats panel shows more chapters at once. If you want wider bars, turn this off.";
 /* Arguments: %1 */
 "stats.time_left" = "≈ %1 left";
 /* Arguments: %1 */
@@ -1418,7 +1418,7 @@
 "reader.tap_revealed_link" = "Tap a highlighted link to follow it";
 "reader.tap_elsewhere_to_exit" = "Tap elsewhere to exit";
 
-"reader.bold_reading" = "Bold reading";
+"reader.bold_reading" = "Bold Mode";
 "reader.bionic_description" = "Emphasize word beginnings in bold. Thickness and variable weight are unavailable while enabled.";
 "reader.bionic_weight_locked" = "Bold reading";
 
@@ -1575,7 +1575,6 @@
 "settings.ui_mono_font" = "Monospaced UI typeface";
 
 "settings.header_footer_weight" = "Header & footer UI weight";
-"settings.section_graphs" = "Graphs";
 
 "settings.header_footer_weight_lighter" = "Lighter · 0";
 /* Arguments: %1 */
@@ -1583,7 +1582,7 @@
 
 "settings.hide_tab_labels" = "Hide labels in tabs";
 "settings.hide_tab_labels_description" = "Tabs at the bottom of the screen only display an icon when this is selected.";
-"settings.zen_mode" = "Zen mode";
+"settings.zen_mode" = "Zen Mode";
 "settings.zen_mode_description" = "A special mode for those who want to focus on reading. Simplifies the reading menu user interface.";
 "settings.zen_leave" = "Hold to leave Zen mode";
 "settings.zen_leave_holding" = "Keep holding";
@@ -1640,9 +1639,14 @@
 "reader.two_columns" = "Two columns";
 
 "settings.column_spacing_default" = "1.5× (default)";
-"settings.column_spacing_description" = "Gap between columns as a multiple of the current text size. Applies to all books.";
+"settings.columns_description" = "Column spacing is measured in multiples of the current text size.";
 "settings.landscape_columns" = "Use two columns in landscape";
 "settings.landscape_columns_description" = "Portrait uses one column. Applies to all books.";
+"settings.landscape_column_layout" = "Multiple columns in landscape mode";
+"settings.single_column" = "Single column";
+"settings.two_in_landscape" = "Two in landscape";
+"settings.chapter_spread" = "Start chapters on a new spread";
+"settings.chapter_spread_description" = "When a chapter starts on a new page, show it in the first column.";
 
 "annotations.mode" = "Annotation mode";
 "annotations.summary_one" = "1 annotation";

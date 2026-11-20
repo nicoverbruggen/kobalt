@@ -501,7 +501,8 @@ void Reader::openSettings()
             appearance::verticalSpacingMode(session->state().value("vertical_justification"));
     settingsVerticalSpacingScope =
             appearance::verticalSpacingScope(session->state().value("vertical_spacing_scope"));
-    landscapeColumnsOption.set(preferences.value("two_columns_landscape").toBool(false));
+    settingsLandscapeColumns = preferences.value("two_columns_landscape").toBool(false);
+    settingsChapterSpread = preferences.value("chapter_starts_spread").toBool(false);
     settingsColumnSpacing =
             preferences.value("column_spacing_percent").toInt(defaultColumnSpacingPercent);
     settingsWordSpacing = session->state().value("word_spacing").toInt(100);
@@ -519,7 +520,6 @@ void Reader::openSettings()
     bionicOption.set(session->state().value("bold_reading").toString("off") == "bold");
     edgeLightOption.set(preferences.value("edge_light_gestures").toBool(true));
     lightGestureFeedbackOption.set(preferences.value("show_light_gesture_feedback").toBool(true));
-    denseGraphOption.set(preferences.value("dense_stats_chart").toBool(false));
     minimalAnnotationOption.set(minimalAnnotationMode());
     if (services.automaticBookOpening)
         automaticOpeningOption.set(services.automaticBookOpening());
@@ -555,9 +555,10 @@ void Reader::showSettingsPage(SettingsPage section)
     auto *panel = static_cast<SettingsPanel *>(general);
     switch (section) {
     case SettingsPage::Display:
-        panel->columnSpacingButton->setEnabled(landscapeColumnsOption.checked());
-        panel->columnSpacingButton->setCaption(
-                SettingsPanel::columnSpacingLabel(settingsColumnSpacing));
+        panel->columnsButton->setCaption(strings::get(settingsLandscapeColumns
+                                                              ? "settings.two_in_landscape"
+                                                              : "settings.single_column")
+                                                 .toUpper());
         showScreenRefresh();
         break;
     case SettingsPage::Controls:
@@ -976,7 +977,8 @@ void Reader::applySettings()
     next["vertical_justification"] = settingsVerticalSpacing;
     next["vertical_spacing_scope"] = settingsVerticalSpacingScope;
     next.remove("columns");
-    next["two_columns_landscape"] = landscapeColumnsOption.checked();
+    next["two_columns_landscape"] = settingsLandscapeColumns;
+    next["chapter_starts_spread"] = settingsChapterSpread;
     next["column_spacing_percent"] = settingsColumnSpacing;
     next["word_spacing"] = settingsWordSpacing;
     next["paragraph_spacing"] = settingsParagraphSpacing;
@@ -996,7 +998,6 @@ void Reader::applySettings()
     next["edge_light_gestures"] = edgeLightOption.checked();
     next["show_light_gesture_feedback"] = lightGestureFeedbackOption.checked();
     next["show_opening_cover"] = !openingCoverOption.checked();
-    next["dense_stats_chart"] = denseGraphOption.checked();
     next.remove(pageNavigation::barVisibleKey);
     next["minimal_annotation_mode"] = minimalAnnotationOption.checked();
     next["screen_refresh"] = kobalt::screenRefreshValue(screenRefreshMode);
@@ -1083,6 +1084,7 @@ void Reader::applySettings()
     settings["vertical_spacing_scope"] = preferences.value("vertical_spacing_scope");
     settings["columns"] = 1;
     settings["two_columns_landscape"] = preferences.value("two_columns_landscape");
+    settings["chapter_starts_spread"] = preferences.value("chapter_starts_spread");
     settings["column_spacing_percent"] = settingsColumnSpacing;
     settings["word_spacing"] = settingsWordSpacing;
     settings["paragraph_spacing"] = settingsParagraphSpacing;
@@ -1144,7 +1146,6 @@ void Reader::setDenseGraph(bool dense)
                                            saves::settled();
                                            if (saved) {
                                                guard->preferences["dense_stats_chart"] = dense;
-                                               guard->denseGraphOption.set(dense);
                                            } else {
                                                guard->chapterGraph->setDense(
                                                        guard->preferences.value("dense_stats_chart")

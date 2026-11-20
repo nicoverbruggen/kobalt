@@ -13,6 +13,8 @@ struct Content;
 }
 
 namespace kobalt::ui {
+QLabel *makeZenMark(QWidget *parent, const char *name);
+
 // Elides only the title in a combined chapter field.
 QString headerFooterText(const headerfooter::Content &content, const QFont &font, int width);
 

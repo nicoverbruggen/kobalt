@@ -821,6 +821,7 @@ void EngineDocument::configure(QSize size, const QJsonObject &settings)
     const double savedOptical = saved.value("font_optical_size").toDouble();
     opticalSize_ = normalizedOpticalSize(optical, savedOptical);
     activateFontParameters();
+    chapterStartsSpread_ = saved.value("chapter_starts_spread").toBool(false);
     twoColumnsLandscape_ = saved.value("two_columns_landscape").toBool(false);
     columns_ = twoColumnsLandscape_ ? (size.width() > size.height() ? 2 : 1)
                                     : qBound(1, saved.value("columns").toInt(1), 2);
@@ -1235,14 +1236,19 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
             || paragraphIndent != paragraphIndent_ || face != face_ || defaultFace != defaultFace_
             || margin != margin_ || topMargin != topMargin_ || bottomMargin != bottomMargin_
             || alignment != alignment_ || hyphenation != hyphenation_;
-    const bool regroup = columns > 1 && hideNonlinear != hideNonlinearFragments_;
+    const bool chapterStartsSpread =
+            settings.value("chapter_starts_spread").toBool(chapterStartsSpread_);
+    const bool regroup = columns > 1
+            && (hideNonlinear != hideNonlinearFragments_
+                || chapterStartsSpread != chapterStartsSpread_);
+    chapterStartsSpread_ = chapterStartsSpread;
     const bool resized = size != size_ || columns != columns_ || columnSpacing != columnSpacing_;
     twoColumnsLandscape_ = landscapeColumns;
     columnSpacingPercent_ = gapPercent;
     if (!verticalChanged && !styled && !resized && weight == weight_ && dark == darkMode_
-        && hideNonlinear == hideNonlinearFragments_)
+        && !regroup && hideNonlinear == hideNonlinearFragments_)
         return true;
-    if (styled || resized || verticalChanged) {
+    if (styled || resized || verticalChanged || regroup) {
         searchText_.reset();
         sourceIndex_.reset();
     }
@@ -1355,7 +1361,7 @@ bool EngineDocument::applyAppearance(const appearance::Patch &patch, QSize size,
     }
     if (!styled && !resized && !(regroup && slices())) {
         if (regroup) {
-            engine_->groupColumns(hideNonlinearFragments_);
+            engine_->groupColumns(hideNonlinearFragments_, chapterStartsSpread_);
             forgetObservedPages();
             observeLayout();
             return goTo(anchor);
@@ -1411,7 +1417,7 @@ bool EngineDocument::renderLayout()
 #else
     engine_->Render();
 #endif
-    engine_->groupColumns(hideNonlinearFragments_);
+    engine_->groupColumns(hideNonlinearFragments_, chapterStartsSpread_);
     cutSlice();
     return true;
 }
@@ -1932,6 +1938,7 @@ quint64 EngineDocument::layoutSignature() const
     mix(engine_->getDocumentRenderingHash(true));
     mix(columns_);
     mix(columns_ > 1 && hideNonlinearFragments_);
+    mix(columns_ > 1 && chapterStartsSpread_);
     mix(verticalSpacing_ == "center" ? 2 : verticalSpacing_ == "expand" ? 1 : 0);
     mix(verticalSpacingScope_ == "protection");
     return hash ? hash : 1;
@@ -2294,6 +2301,7 @@ QJsonObject EngineDocument::settingsState() const
               { "vertical_spacing_scope", verticalSpacingScope_ },
               { "columns", columns_ },
               { "two_columns_landscape", twoColumnsLandscape_ },
+              { "chapter_starts_spread", chapterStartsSpread_ },
               { "column_spacing_percent", columnSpacingPercent_ },
               { "column_spacing", columnSpacing_ },
               { "word_spacing", wordSpacing_ },

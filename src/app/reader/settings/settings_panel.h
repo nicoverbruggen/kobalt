@@ -115,7 +115,8 @@ public:
     static QString percentageFormatLabel(const QString &format);
     void showRenderingModes(const QString &current, std::function<void(const QString &)> chosen);
     static QString renderingModeLabel(const QString &mode);
-    void showColumnSpacingChoices(int current, std::function<void(int)> chosen);
+    void showColumns(bool landscape, bool alignChapters, int spacing,
+                     std::function<void(bool, bool, int)> chosen);
     static QString columnSpacingLabel(int percent);
     enum class AdvancedText {
         WordSpacing,
@@ -196,8 +197,7 @@ public:
                         *openingCoverOption = nullptr;
     // Defaults: what new books start with. The reader opens the preset grid.
     ui::CaptionButton *textForNewBooksButton = nullptr;
-    ui::DescribedOption *edgeLightOption = nullptr, *lightGestureFeedbackOption = nullptr,
-                        *denseGraphOption = nullptr;
+    ui::DescribedOption *edgeLightOption = nullptr, *lightGestureFeedbackOption = nullptr;
     ui::DescribedOption *hideNonlinearOption = nullptr;
     ui::DescribedOption *inpageFootnotesOption = nullptr;
     ui::DescribedOption *zenModeOption = nullptr;
@@ -218,9 +218,8 @@ public:
     ui::CaptionButton *serifFontButton = nullptr, *sansFontButton = nullptr,
                       *monoFontButton = nullptr;
     ui::CaptionButton *dictionaryFontButton = nullptr, *dictionaryFontSizeButton = nullptr;
-    ui::DescribedOption *landscapeColumnsOption = nullptr;
-    ui::CaptionButton *columnSpacingButton = nullptr, *timeRemainingFormatButton = nullptr,
-                      *percentageFormatButton = nullptr;
+    ui::CaptionButton *columnsButton = nullptr;
+    ui::CaptionButton *timeRemainingFormatButton = nullptr, *percentageFormatButton = nullptr;
     ui::CaptionButton *renderingButton = nullptr;
     ui::CaptionButton *verticalSpacingButton = nullptr;
     ui::CaptionButton *wordSpacingButton = nullptr, *trackingButton = nullptr,

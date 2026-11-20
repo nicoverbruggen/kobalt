@@ -1624,26 +1624,26 @@ void Reader::connectSettingsPage(SettingsPage section)
     auto *settings = static_cast<SettingsPanel *>(general);
     switch (section) {
     case SettingsPage::Display: {
-        landscapeColumnsOption.bind(settings->landscapeColumnsOption);
         darkOption.bind(settings->darkOption);
         animationOption.bind(settings->animationOption);
-        denseGraphOption.bind(settings->denseGraphOption);
         zenModeOption.bind(settings->zenModeOption);
         bionicOption.bind(settings->bionicOption);
         refreshButton = settings->refreshButton;
-        connect(settings->columnSpacingButton, &QPushButton::clicked, this, [this, settings] {
-            settings->showColumnSpacingChoices(
-                    settingsColumnSpacing, [this, settings](int percent) {
-                        settingsColumnSpacing = percent;
-                        settings->columnSpacingButton->setCaption(
-                                SettingsPanel::columnSpacingLabel(percent));
-                    });
-        });
         connect(darkOption.widget, &QCheckBox::clicked, this,
                 [this](bool enabled) { applyDarkMode(enabled); });
         connect(bionicOption.widget, &QCheckBox::clicked, this,
                 [this](bool enabled) { applyBoldReading(enabled); });
         connect(refreshButton, &QPushButton::clicked, this, [this] { openScreenRefresh(); });
+        connect(settings->columnsButton, &QPushButton::clicked, this, [this, settings] {
+            settings->showColumns(settingsLandscapeColumns, settingsChapterSpread,
+                                  settingsColumnSpacing,
+                                  [this](bool landscape, bool chapters, int spacing) {
+                                      settingsLandscapeColumns = landscape;
+                                      settingsChapterSpread = chapters;
+                                      settingsColumnSpacing = spacing;
+                                      showSettingsPage(SettingsPage::Display);
+                                  });
+        });
         break;
     }
     case SettingsPage::Controls: {

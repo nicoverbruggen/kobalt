@@ -207,6 +207,7 @@ void mergeSavedState(OpeningJob &job, OpeningState &state)
     const auto hideNonlinear = saved.value("hide_nonlinear_fragments");
     const auto normalization = appearance::normalizationSettings(saved);
     const auto landscapeColumns = saved.value("two_columns_landscape");
+    const auto chapterStartsSpread = saved.value("chapter_starts_spread");
     const auto columnSpacing = saved.value("column_spacing_percent");
     const auto wordSpacing = saved.value("word_spacing");
     const auto paragraphSpacing = saved.value("paragraph_spacing");
@@ -223,6 +224,7 @@ void mergeSavedState(OpeningJob &job, OpeningState &state)
     for (const auto *key : appearance::normalizationKeys)
         saved[key] = normalization.value(key);
     saved["two_columns_landscape"] = landscapeColumns;
+    saved["chapter_starts_spread"] = chapterStartsSpread;
     saved["column_spacing_percent"] = columnSpacing;
     saved["word_spacing"] = wordSpacing;
     saved["paragraph_spacing"] = paragraphSpacing;

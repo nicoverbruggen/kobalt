@@ -54,7 +54,7 @@ Long lists wrap when paged. Next on the last page returns to the first page, and
 
 ## Zen mode
 
-Settings > Display > Zen mode gives the reading menu a smaller layout. It is a global setting and is off by default. Restore appearance defaults turns it off. The rest of Settings stays the same.
+Settings > Display > Zen mode gives the reading menu a smaller layout. A lotus icon identifies the row. Its title reads ZEN MODE in the same style as the reading menu’s ZEN mark. It is a global setting and is off by default. Restore appearance defaults turns it off. The rest of Settings stays the same.
 
 The menu shows two centered groups instead of the full-width bars. Each group has rounded outer corners and a heavier rule than the regular bars.
 

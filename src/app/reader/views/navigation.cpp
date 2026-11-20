@@ -828,19 +828,7 @@ Navigation::Navigation(QWidget *parent, const ToolbarComposition &controls)
     toolbarRows->setEnabled(false);
     rules = new ToolbarRules(toolbar);
     rules->lower();
-    zenMark = new QLabel(strings::get("navigation.zen"), toolbar);
-    zenMark->setObjectName("rrZenMark");
-    zenMark->setAlignment(Qt::AlignCenter);
-    // The section heading caption, inverted to paper capitals on an ink block.
-    // The reader's label style would otherwise replace the font.
-    ui::readerStyle(zenMark,
-                    QString("QLabel{%1font-weight:bold;background:palette(window-text);"
-                            "color:palette(window);padding:%2px %3px;}")
-                            .arg(ui::styles::caption(), QString::number(ui::px(2)),
-                                 QString::number(ui::px(12))));
-    auto markFont = ui::captionFont();
-    markFont.setBold(true);
-    zenMark->setFont(markFont);
+    zenMark = ui::makeZenMark(toolbar, "rrZenMark");
     zenMark->hide();
     zenStatsButton = new ZenStatsButton(toolbar);
     zenStatsButton->hide();

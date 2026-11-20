@@ -213,6 +213,14 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         dot.addEllipse(QPointF(49, 20), 3.5, 3.5);
         path = stroke.createStroke(path).united(dot);
         result.filled = true;
+    } else if (icon == ControlIcon::Lotus || icon == ControlIcon::TextB
+               || icon == ControlIcon::Refresh) {
+        result.canvas = 256;
+        result.filled = true;
+        phosphorGeometry(icon == ControlIcon::Lotus           ? QStringLiteral("flower-lotus")
+                                 : icon == ControlIcon::TextB ? QStringLiteral("text-b")
+                                                              : QStringLiteral("arrow-clockwise"),
+                         path);
     } else if (icon == ControlIcon::FitImage) {
         line(22, 9, 9, 9);
         line(9, 9, 9, 22);
@@ -882,7 +890,8 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons)
             && icon != ControlIcon::Bold && icon != ControlIcon::WordsAdd
             && icon != ControlIcon::WordsSaved && icon != ControlIcon::DeviceRotate
             && icon != ControlIcon::ZoomIn && icon != ControlIcon::ZoomOut
-            && icon != ControlIcon::LockOpen
+            && icon != ControlIcon::LockOpen && icon != ControlIcon::Lotus
+            && icon != ControlIcon::TextB && icon != ControlIcon::Refresh
             && (icon < ControlIcon::SearchChapter || icon > ControlIcon::SearchAfter)
             && (icon < ControlIcon::Rows || icon > ControlIcon::Export)
             && (icon < ControlIcon::KeyboardShift || icon > ControlIcon::KeyboardReturn)

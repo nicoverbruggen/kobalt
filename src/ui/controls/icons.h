@@ -147,7 +147,10 @@ enum class ControlIcon {
     DeviceRotate,
     ZoomIn,
     ZoomOut,
-    LockOpen
+    LockOpen,
+    Lotus,
+    TextB,
+    Refresh
 };
 enum class IconStyle { Monochrome, Color, Pastel, Rings };
 QString iconStyleId(IconStyle style);

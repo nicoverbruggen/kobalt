@@ -1373,7 +1373,11 @@ public:
             }
             if ( force_new_page || is_last_line ) {
                 flushCurrentPage();
-                if (page_list->length()) page_list->last()->flags |= RN_PAGE_KEEP_VERTICAL_SPACING;
+                if (page_list->length()) {
+                    page_list->last()->flags |= RN_PAGE_KEEP_VERTICAL_SPACING;
+                    if (force_new_page)
+                        page_list->last()->flags |= RN_PAGE_ENDS_AT_FORCED_BREAK;
+                }
             }
         }
     }

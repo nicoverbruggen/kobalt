@@ -112,6 +112,14 @@ void DescribedOption::setPreview(QWidget *widget, QSize size)
     update();
 }
 
+void DescribedOption::setTitleLabel(QLabel *label)
+{
+    titleLabel = label;
+    label->setAttribute(Qt::WA_TransparentForMouseEvents);
+    label->show();
+    update();
+}
+
 void DescribedOption::setLeadingIcon(ControlIcon icon)
 {
     leadingIcon = int(icon);
@@ -369,16 +377,27 @@ void DescribedOption::paintEvent(QPaintEvent *)
         }
         painter.restore();
     }
-    const auto label = interfaceTextWidth(text(), labelFont) > labelBounds.width()
-            ? elideInterfaceText(text(), labelFont, labelBounds.width())
-            : text();
-    if (drawFontPreview(painter, labelBounds, text(), fontPreview,
-                        metrics::choices::sampleInkHeight)) {
-        // The bitmap has already been aligned within the label bounds.
-    } else if (appearance.opticalLabel)
-        drawOpticalText(painter, labelBounds, text());
-    else
-        drawInterfaceText(painter, labelBounds, label, Qt::AlignLeft | Qt::AlignVCenter);
+    if (titleLabel) {
+        // Use the final title metrics, including after a font or theme change
+        // that repaints the checkbox without resizing it.
+        const auto size = titleLabel->sizeHint();
+        const QRect bounds(labelBounds.left(),
+                           labelBounds.top() + (labelBounds.height() - size.height()) / 2,
+                           size.width(), size.height());
+        if (titleLabel->geometry() != bounds)
+            titleLabel->setGeometry(bounds);
+    } else {
+        const auto label = interfaceTextWidth(text(), labelFont) > labelBounds.width()
+                ? elideInterfaceText(text(), labelFont, labelBounds.width())
+                : text();
+        if (drawFontPreview(painter, labelBounds, text(), fontPreview,
+                            metrics::choices::sampleInkHeight)) {
+            // The bitmap has already been aligned within the label bounds.
+        } else if (appearance.opticalLabel)
+            drawOpticalText(painter, labelBounds, text());
+        else
+            drawInterfaceText(painter, labelBounds, label, Qt::AlignLeft | Qt::AlignVCenter);
+    }
     labelFont.setPixelSize(appearance.descriptionPixels);
     labelFont.setItalic(false);
     painter.setFont(labelFont);

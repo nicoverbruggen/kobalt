@@ -1109,7 +1109,7 @@ bool EngineDocument::enterNextSlice(const std::function<bool()> &current)
         sliceHistory_ = history;
         windowLoadMs_ = loadMs;
         if (engine_->koblazeRestoreLayout()) {
-            engine_->groupColumns(hideNonlinearFragments_);
+            engine_->groupColumns(hideNonlinearFragments_, chapterStartsSpread_);
             visiblePages_ = visible;
             cache_ = images;
             damage_ = damage;
@@ -1423,9 +1423,9 @@ bool EngineDocument::goToFraction(double fraction)
         inItem = low;
     }
     if (item < windowFirst_ || item > windowLast_) {
-        const auto unit = slicePages_ > 0 ? unitFrom(item)
-                                          : qMakePair(qMax(0, item - 1),
-                                                      qMin(spineItemCount_ - 1, item + 1));
+        const auto unit = slicePages_ > 0
+                ? unitFrom(item)
+                : qMakePair(qMax(0, item - 1), qMin(spineItemCount_ - 1, item + 1));
         if (!showSpineItems(unit.first, unit.second))
             return false;
     }
@@ -1447,7 +1447,8 @@ bool EngineDocument::goToFraction(double fraction)
     Location start, next;
     start.href = spineItems().value(item);
     next.href = spineItems().value(item + 1);
-    const auto bounds = pagesOf({ positionOf(start), item < windowLast_ ? positionOf(next) : QString() });
+    const auto bounds =
+            pagesOf({ positionOf(start), item < windowLast_ ? positionOf(next) : QString() });
     const int first = qMax(0, bounds.value(0, 0));
     const int end = bounds.value(1, -1) > first ? bounds[1] : pages();
     return go(qBound(0, first + int(inItem * (end - first)), qMax(0, pages() - 1)));

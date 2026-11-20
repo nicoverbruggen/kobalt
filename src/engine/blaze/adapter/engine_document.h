@@ -213,6 +213,7 @@ public:
     double bookFraction() const override;
 
     bool partOfBook() const override { return windowFirst_ >= 0 && spineItemCount_ > 0; }
+
     RoughPages roughPages() const override;
     QVector<int> bookPages(const QStringList &positions, const std::function<bool()> &current = {},
                            bool rangeEndpoints = false) const override;
@@ -407,7 +408,7 @@ private:
     std::shared_ptr<SourceIndex> sourceRanges(const QVector<QPair<QString, QString>> &ranges) const;
     QPair<int, qint64> sourceIndexUsage() const;
     int columns_ = 1, columnSpacing_ = readingPixels(60), columnSpacingPercent_ = 0;
-    bool twoColumnsLandscape_ = false;
+    bool twoColumnsLandscape_ = false, chapterStartsSpread_ = false;
     QSize size_;
     QString anchor_;
     std::function<bool()> interrupt_;

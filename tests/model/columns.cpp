@@ -83,6 +83,68 @@ QMap<QString, QByteArray> chapterBook(int firstColumns, bool rtl)
     };
 }
 
+void alignedChapterSpreads()
+{
+    for (bool rtl : { false, true }) {
+        for (int firstColumns : { 1, 2, 3 }) {
+            kobalt::EngineDocument reader(kobalt::test::readerFonts());
+            openResources(reader, chapterBook(firstColumns, rtl),
+                          { { "columns", 2 }, { "chapter_starts_spread", true } }, { 1000, 800 });
+            const int next = (firstColumns + 1) / 2;
+            const auto chapters = reader.chapters();
+            require(chapters.size() == 2 && chapters[1].page == next,
+                    "Chapter did not begin on the next available spread");
+            require(reader.pages() == next + 7,
+                    "Chapter alignment added the wrong number of spreads");
+            require(reader.go(next - 1), "Cannot open the last spread of the first chapter");
+            if (firstColumns % 2) {
+                const auto image = reader.image(next - 1);
+                const int trailing = rtl ? 0 : 500;
+                for (int y = 0; y < image.height(); ++y)
+                    for (int x = trailing; x < trailing + 500; ++x)
+                        require(qRed(image.pixel(x, y)) == 255,
+                                "Blank chapter column contains ink");
+                require(reader.wordAt({ trailing + 40, 20 }).text.isEmpty(),
+                        "Blank chapter column selected a word");
+            }
+            require(reader.turnTarget(next - 1, 1) == next
+                            && reader.turnTarget(next, -1) == next - 1,
+                    "A blank column became a page-turn target");
+            require(reader.goTo(chapters[1].position) && reader.page() == next,
+                    "Chapter jump missed its new spread");
+            require(reader.applyAppearance(kobalt::appearance::Patch(
+                            QJsonObject{ { "chapter_starts_spread", false } })),
+                    "Cannot disable chapter alignment");
+            require(reader.chapters()[1].page == firstColumns / 2,
+                    "Disabling chapter alignment did not restore continuous spreads");
+        }
+    }
+}
+
+void chapterBreakInsideSpineItem()
+{
+    // Chapter B can follow A on the same page, start after a forced break,
+    // or follow other text placed on a fresh page by an unrelated break.
+    for (int layout = 0; layout < 4; ++layout) {
+        auto files = chapterBook(1, false);
+        files["toc.ncx"].replace("b.xhtml", "a.xhtml#part");
+        const QByteArray after = layout == 2 ? " style='page-break-after:always'" : "";
+        const QByteArray before = layout == 1 ? " style='page-break-before:always'" : "";
+        const QByteArray bridge =
+                layout == 3 ? "<p style='page-break-before:always'>Still A</p>" : "";
+        files["a.xhtml"] = "<html xmlns='http://www.w3.org/1999/xhtml'><body><p" + after
+                + ">First chapter.</p>" + bridge + "<h2 id='part'" + before
+                + ">Second chapter</h2><p>Its first words.</p></body></html>";
+        kobalt::EngineDocument reader(kobalt::test::readerFonts());
+        openResources(reader, files, { { "columns", 2 }, { "chapter_starts_spread", true } },
+                      { 1000, 800 });
+        const auto chapters = reader.chapters();
+        const int expected = layout == 1 || layout == 2 ? 1 : 0;
+        require(chapters.size() == 2 && chapters[1].page == expected,
+                qPrintable(QString("Incorrect grouping at in-file chapter break %1").arg(layout)));
+    }
+}
+
 void nonLinearColumns()
 {
     for (bool rtl : { false, true }) {
@@ -256,6 +318,8 @@ void cachedColumns()
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    alignedChapterSpreads();
+    chapterBreakInsideSpineItem();
     nonLinearColumns();
     chapterProgress();
     cachedColumns();

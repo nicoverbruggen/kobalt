@@ -958,14 +958,16 @@ private slots:
         window.resize(720, 1440);
         reader::SettingsPanel settings(&window, {});
         window.show();
-        QVector<int> chosen;
-        settings.showColumnSpacingChoices(100, [&](int value) { chosen.append(-value); });
-        QPointer<QWidget> spacing = window.findChild<QWidget *>("rrColumnSpacingPopup");
-        QPointer<QCheckBox> first = window.findChild<QCheckBox *>("rrColumnSpacing100");
-        QPointer<QCheckBox> second = window.findChild<QCheckBox *>("rrColumnSpacing150");
-        QVERIFY(spacing && spacing->isVisible() && first && second && first->isChecked());
-        QTest::keyClick(spacing, Qt::Key_Escape);
-        QVERIFY(spacing && !spacing->isVisible());
+        QStringList chosen;
+        settings.showTimeRemainingFormats(
+                "detailed", [&](const QString &value) { chosen.append("-" + value); });
+        QPointer<QWidget> overlay = window.findChild<QWidget *>("rrTimeRemainingFormatPopup");
+        QPointer<QCheckBox> first = window.findChild<QCheckBox *>("rrTimeRemainingFormat_detailed");
+        QPointer<QCheckBox> second =
+                window.findChild<QCheckBox *>("rrTimeRemainingFormat_approximate");
+        QVERIFY(overlay && overlay->isVisible() && first && second && first->isChecked());
+        QTest::keyClick(overlay, Qt::Key_Escape);
+        QVERIFY(overlay && !overlay->isVisible());
         QVERIFY(chosen.isEmpty());
 
         QString format;
@@ -976,17 +978,20 @@ private slots:
         QCOMPARE(format, QStringLiteral("decimal"));
 
         window.resize(1440, 720);
-        settings.showColumnSpacingChoices(150, [&](int value) { chosen.append(value); });
-        QVERIFY(spacing && spacing->isVisible());
-        QCOMPARE(spacing->geometry(), window.rect());
-        auto *card = spacing->findChild<QWidget *>("rrModalCard");
-        QVERIFY(card && spacing->rect().contains(card->geometry()));
-        QVERIFY(first && first == spacing->findChild<QCheckBox *>("rrColumnSpacing100"));
-        QVERIFY(second && second == spacing->findChild<QCheckBox *>("rrColumnSpacing150"));
+        settings.showTimeRemainingFormats("approximate",
+                                          [&](const QString &value) { chosen.append(value); });
+        QVERIFY(overlay && overlay->isVisible());
+        QCOMPARE(overlay->geometry(), window.rect());
+        auto *card = overlay->findChild<QWidget *>("rrModalCard");
+        QVERIFY(card && overlay->rect().contains(card->geometry()));
+        QVERIFY(first
+                && first == overlay->findChild<QCheckBox *>("rrTimeRemainingFormat_detailed"));
+        QVERIFY(second
+                && second == overlay->findChild<QCheckBox *>("rrTimeRemainingFormat_approximate"));
         QVERIFY(!first->isChecked() && second->isChecked());
         first->click();
-        QCOMPARE(chosen, QVector<int>{ 100 });
-        QVERIFY(!spacing->isVisible());
+        QCOMPARE(chosen, QStringList{ "detailed" });
+        QVERIFY(!overlay->isVisible());
     }
 
     void settingsFontSheetReusesRows()
@@ -1047,10 +1052,10 @@ private slots:
     {
         QTest::addColumn<QString>("tabName");
         QTest::addColumn<QString>("buttonName");
-        QTest::newRow("session-timeout") << QString("rrSettingsSystem")
-                                         << QString("rrSessionTimeout");
-        QTest::newRow("screen-refresh") << QString("rrSettingsDisplay")
-                                        << QString("rrScreenRefresh");
+        QTest::newRow("session-timeout")
+                << QString("rrSettingsSystem") << QString("rrSessionTimeout");
+        QTest::newRow("screen-refresh")
+                << QString("rrSettingsDisplay") << QString("rrScreenRefresh");
     }
 
     void settingsChoiceFitsAfterResize()
@@ -4331,7 +4336,9 @@ private slots:
         const int portraitLeft = portrait->mapTo(window, QPoint()).x();
         QVERIFY2(lockRight + 1 < portraitLeft,
                  qPrintable(QString("Lock ends at %1 and Portrait starts at %2, lock width %3")
-                                    .arg(lockRight).arg(portraitLeft).arg(lock->width())));
+                                    .arg(lockRight)
+                                    .arg(portraitLeft)
+                                    .arg(lock->width())));
         QVERIFY(!lock->icon().isNull());
         const auto unlockedIcon = lock->icon().pixmap(lock->iconSize()).toImage();
 
@@ -6599,9 +6606,13 @@ private slots:
         QWidget window;
         window.resize(nativeSize);
         reader::SleepGallery gallery(&window,
-                                    { { Design::Stock }, { Design::Custom }, { Design::Page },
-                                      { Design::Bookmark }, { Design::Seal }, { Design::Letter } },
-                                    Design::Stock, {}, window.size());
+                                     { { Design::Stock },
+                                       { Design::Custom },
+                                       { Design::Page },
+                                       { Design::Bookmark },
+                                       { Design::Seal },
+                                       { Design::Letter } },
+                                     Design::Stock, {}, window.size());
         gallery.setGeometry(window.rect());
         QList<Design> choices;
         gallery.chosen = [&](Design value) { choices.append(value); };

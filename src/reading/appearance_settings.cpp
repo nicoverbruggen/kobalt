@@ -144,6 +144,7 @@ QJsonObject cleanPreferences(QJsonObject preferences)
                              "disable_reader_standby",
                              "inherit_text_layout",
                              "two_columns_landscape",
+                             "chapter_starts_spread",
                              "page_animations",
                              "edge_light_gestures",
                              "show_light_gesture_feedback",
@@ -274,6 +275,7 @@ QJsonObject bookDefaults(const QJsonObject &preferences)
     defaults["vertical_spacing_scope"] =
             verticalSpacingScope(preferences.value("vertical_spacing_scope"));
     defaults["two_columns_landscape"] = preferences.value("two_columns_landscape").toBool(false);
+    defaults["chapter_starts_spread"] = preferences.value("chapter_starts_spread").toBool(false);
     defaults["column_spacing_percent"] = qBound(
             100, preferences.value("column_spacing_percent").toInt(defaultColumnSpacingPercent),
             300);
@@ -351,6 +353,7 @@ void applyBookDefaults(QJsonObject &saved, const QJsonObject &defaults)
     saved["vertical_spacing_scope"] =
             verticalSpacingScope(defaults.value("vertical_spacing_scope"));
     saved["two_columns_landscape"] = defaults.value("two_columns_landscape").toBool(false);
+    saved["chapter_starts_spread"] = defaults.value("chapter_starts_spread").toBool(false);
     saved["column_spacing_percent"] =
             defaults.value("column_spacing_percent").toInt(defaultColumnSpacingPercent);
     saved["inpage_footnotes"] = defaults.value("inpage_footnotes").toBool(false);

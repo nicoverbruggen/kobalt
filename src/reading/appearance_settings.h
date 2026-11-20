@@ -79,7 +79,7 @@ inline constexpr std::array<const char *, 6> normalizationKeys{
 QJsonObject normalizationSettings(const QJsonObject &settings);
 QString normalizationPreset(const QJsonObject &settings);
 QJsonObject normalizationPresetSettings(const QString &preset);
-inline constexpr std::array<const char *, 38> keys{ "line_spacing_version",
+inline constexpr std::array<const char *, 39> keys{ "line_spacing_version",
                                                     "font_pixels",
                                                     "line_spacing",
                                                     "paragraph_spacing",
@@ -112,6 +112,7 @@ inline constexpr std::array<const char *, 38> keys{ "line_spacing_version",
                                                     "column_spacing",
                                                     "columns",
                                                     "two_columns_landscape",
+                                                    "chapter_starts_spread",
                                                     "column_spacing_percent",
                                                     "word_spacing",
                                                     "justification_tracking",

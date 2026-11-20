@@ -602,10 +602,10 @@ private:
     };
 
     SettingsCheck darkOption, animationOption, edgeLightOption, lightGestureFeedbackOption,
-            denseGraphOption, automaticOpeningOption, minimalAnnotationOption, hideTabLabelsOption,
-            zenModeOption, saveWordsOption, wifiPowerSaverOption, disableStandbyOption,
-            hideNonlinearOption, inpageFootnotesOption, bionicOption, hideBookOnSleepOption,
-            openingCoverOption, landscapeColumnsOption, debugModeOption;
+            automaticOpeningOption, minimalAnnotationOption, hideTabLabelsOption, zenModeOption,
+            saveWordsOption, wifiPowerSaverOption, disableStandbyOption, hideNonlinearOption,
+            inpageFootnotesOption, bionicOption, hideBookOnSleepOption, openingCoverOption,
+            debugModeOption;
     QPushButton *autoRotateOption = nullptr, *lockRotationOption = nullptr;
     bool hideNativeStatus() const;
 
@@ -1092,6 +1092,7 @@ private:
             menuViewPopup, tappableLinksPopup, chapterGroupsPopup, annotationInteractionPopup;
     kobalt::ui::CaptionButton *menuViewButton = nullptr, *tappableLinksButton = nullptr,
                               *annotationInteractionButton = nullptr;
+    bool settingsLandscapeColumns = false, settingsChapterSpread = false;
     int settingsColumnSpacing = defaultColumnSpacingPercent;
     int settingsWordSpacing = 100;
     int settingsParagraphSpacing = -1;

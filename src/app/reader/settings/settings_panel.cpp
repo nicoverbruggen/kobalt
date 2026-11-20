@@ -750,8 +750,7 @@ void SettingsPanel::ensurePage(SettingsPage page)
         content->show();
     }
     content->installEventFilter(this);
-    if (page == SettingsPage::Display || page == SettingsPage::Controls
-        || page == SettingsPage::System)
+    if (page == SettingsPage::Controls || page == SettingsPage::System)
         updateFeatureOptions();
     if (pageBuilt)
         pageBuilt(page, content);
@@ -763,8 +762,9 @@ void SettingsPanel::buildDisplay(QWidget *displayPage)
     auto *generalOptions = new QVBoxLayout(displayPage);
     generalOptions->setContentsMargins(0, 0, 0, 0);
     generalOptions->setSpacing(0);
-    darkOption = settingsOption(displayPage, "rrDarkMode", strings::get("reader.dark_mode"),
-                                strings::get("settings.dark_description"));
+    darkOption = settingsOption(displayPage, "rrDarkMode", strings::get("settings.dark_mode"),
+                                strings::get("settings.night_mode_description"));
+    darkOption->setLeadingIcon(ui::ControlIcon::Moon);
     const bool animationsSupported = pageAnimationsAvailable(inputs.animationSupport);
     const auto animationDescription =
             strings::get(inputs.animationSupport == PageAnimationSupport::Uncertain
@@ -774,39 +774,37 @@ void SettingsPanel::buildDisplay(QWidget *displayPage)
     animationOption =
             settingsOption(displayPage, "rrPageAnimations",
                            strings::get("reader.enable_page_animations"), animationDescription);
+    animationOption->setLeadingIcon(ui::ControlIcon::Note);
     animationOption->setEnabled(animationsSupported);
     bionicOption =
             settingsOption(displayPage, "rrBionicReading", strings::get("reader.bold_reading"),
                            strings::get("reader.bionic_description"));
-    // The two modes come first, so they are the first options Settings shows.
+    bionicOption->setLeadingIcon(ui::ControlIcon::TextB);
     section(displayPage, generalOptions, "rrDisplayModesSection",
             strings::get("settings.section_modes"));
     zenModeOption = settingsOption(displayPage, "rrZenMode", strings::get("settings.zen_mode"),
                                    strings::get("settings.zen_mode_description"));
+    zenModeOption->setLeadingIcon(ui::ControlIcon::Lotus);
+    auto *displayMark = ui::makeZenMark(zenModeOption, "rrDisplayZenMark");
+    displayMark->setText(zenModeOption->text().toUpper());
+    zenModeOption->setTitleLabel(displayMark);
     generalOptions->addWidget(zenModeOption);
     generalOptions->addWidget(darkOption);
     generalOptions->addWidget(bionicOption);
+    section(displayPage, generalOptions, "rrDisplayLayoutSection",
+            strings::get("reader.page_layout"));
+    columnsButton = listAction(displayPage, generalOptions, "rrColumnsSettings",
+                               strings::get("settings.landscape_column_layout"), [] { });
+    columnsButton->setIconVisible(true);
+    ui::buttonIcon(columnsButton, ui::ControlIcon::TwoColumns);
     section(displayPage, generalOptions, "rrDisplayScreenSection",
             strings::get("settings.section_screen"));
     refreshButton = listAction(displayPage, nullptr, "rrScreenRefresh",
                                strings::get("reader.refresh_the_screen"), [] { });
+    refreshButton->setIconVisible(true);
+    ui::buttonIcon(refreshButton, ui::ControlIcon::Refresh);
     generalOptions->addWidget(refreshButton);
     generalOptions->addWidget(animationOption);
-    section(displayPage, generalOptions, "rrDisplayColumnsSection", strings::get("reader.columns"));
-    landscapeColumnsOption = settingsOption(displayPage, "rrLandscapeColumns",
-                                            strings::get("settings.landscape_columns"),
-                                            strings::get("settings.landscape_columns_description"));
-    generalOptions->addWidget(landscapeColumnsOption);
-    columnSpacingButton = listAction(displayPage, generalOptions, "rrColumnSpacingSetting",
-                                     strings::get("reader.column_spacing"), [] { });
-    columnSpacingButton->setEnabled(false);
-    connect(landscapeColumnsOption, &QCheckBox::toggled, columnSpacingButton, &QWidget::setEnabled);
-    section(displayPage, generalOptions, "rrDisplayGraphsSection",
-            strings::get("settings.section_graphs"));
-    denseGraphOption =
-            settingsOption(displayPage, "rrDenseGraph", strings::get("reader.dense_graph"),
-                           strings::get("settings.dense_graph_description"));
-    generalOptions->addWidget(denseGraphOption);
     generalOptions->addStretch(1);
 }
 
@@ -1242,17 +1240,7 @@ void SettingsPanel::buildZen()
     zenMarkBox = new QWidget(closeButton->parentWidget());
     auto *zenMarkRows = new QHBoxLayout(zenMarkBox);
     zenMarkRows->setContentsMargins(0, 0, chrome::inset, 0);
-    auto *zenMark = new QLabel(strings::get("navigation.zen"), zenMarkBox);
-    zenMark->setObjectName("rrSettingsZenMark");
-    zenMark->setAlignment(Qt::AlignCenter);
-    readerStyle(zenMark,
-                QString("QLabel{%1font-weight:bold;background:palette(window-text);"
-                        "color:palette(window);padding:%2px %3px;}")
-                        .arg(styles::caption(), QString::number(ui::px(2)),
-                             QString::number(ui::px(12))));
-    auto markFont = ui::captionFont();
-    markFont.setBold(true);
-    zenMark->setFont(markFont);
+    auto *zenMark = ui::makeZenMark(zenMarkBox, "rrSettingsZenMark");
     zenMarkRows->addWidget(zenMark, 0, Qt::AlignVCenter);
     zenMarkBox->hide();
     headingLayout->insertWidget(headingLayout->indexOf(closeButton), zenMarkBox);
@@ -2301,18 +2289,75 @@ void SettingsPanel::showRenderingModes(const QString &current,
     presentChoices(modes.indexOf(current), [chosen, modes](int index) { chosen(modes[index]); });
 }
 
-void SettingsPanel::showColumnSpacingChoices(int current, std::function<void(int)> chosen)
+void SettingsPanel::showColumns(bool landscape, bool alignChapters, int spacing,
+                                std::function<void(bool, bool, int)> chosen)
 {
     if (sheet)
         return;
-    auto *choices = openChoiceSheet("rrColumnSpacing", strings::get("reader.column_spacing"),
-                                    strings::get("settings.column_spacing_description"));
-    const QVector<int> spacings{ 100, 150, 200, 250, 300 };
-    if (choices->options().isEmpty())
-        for (int percent : spacings)
-            choices->add(QString("rrColumnSpacing%1").arg(percent), columnSpacingLabel(percent));
-    presentChoices(spacings.indexOf(current),
-                   [chosen, spacings](int index) { chosen(spacings[index]); });
+    sheet = new ui::ModalOverlay(parentWidget());
+    sheet->setObjectName("rrColumnsPopup");
+    sheet->setDimmed(true);
+    sheet->setGeometry(parentWidget()->rect());
+    sheet->dismissed = [this] { dismissSheet(); };
+    auto *card = sheet->card();
+    auto *rows = card->rows();
+    rows->setContentsMargins(metrics::control::border, metrics::notice::cardMargins.top(),
+                             metrics::control::border, metrics::control::border);
+    rows->setSpacing(0);
+    card->heading(strings::get("reader.columns"), strings::get("settings.columns_description"));
+
+    auto *columns =
+            checklistOption(card, "rrLandscapeColumns", strings::get("settings.landscape_columns"),
+                            strings::get("settings.landscape_columns_description"), true);
+    auto *chapters =
+            checklistOption(card, "rrChapterStartsSpread", strings::get("settings.chapter_spread"),
+                            strings::get("settings.chapter_spread_description"), false);
+    rows->addWidget(columns);
+    rows->addWidget(chapters);
+    columns->setChecked(landscape);
+    chapters->setChecked(alignChapters);
+    chapters->setEnabled(landscape);
+    connect(columns, &QCheckBox::toggled, chapters, &QWidget::setEnabled);
+
+    auto *area = new QWidget(card);
+    auto *controls = new QVBoxLayout(area);
+    controls->setContentsMargins(chrome::inset, ui::px(32), chrome::inset, ui::px(32));
+    rows->addWidget(area);
+    auto *gap = ui::sliderRow(area, controls, "rrColumnSpacingSetting", "rrColumnSpacingValue",
+                              strings::get("reader.column_spacing"), "rrColumnSpacingLess",
+                              "rrColumnSpacingMore", 100, 300, 50, {});
+    gap->setMarkers({ 100, 150, 200, 250, 300 }, ui::SettingSlider::MarkerMode::Stops);
+    const auto showValue = [gap](int value) {
+        const auto label = columnSpacingLabel(value);
+        gap->valueLabel()->setText(label);
+        gap->setAccessibleDescription(label);
+    };
+    connect(gap, &QSlider::valueChanged, gap, showValue);
+    gap->setValue(spacing);
+    showValue(gap->value());
+    area->setEnabled(landscape);
+    connect(columns, &QCheckBox::toggled, area, &QWidget::setEnabled);
+
+    auto *cancel =
+            ui::makeModalButton(card, { strings::get("common.cancel"), "rrColumnsCancel" }, false);
+    auto *done = ui::makeModalButton(card, { strings::get("common.done"), "rrColumnsDone" }, true);
+    card->adaptiveActions({ cancel, done });
+    connect(cancel, &QPushButton::clicked, this, [this] { dismissSheet(); });
+    connect(done, &QPushButton::clicked, this, [this, columns, chapters, gap, chosen] {
+        const bool enabled = columns->isChecked();
+        const bool aligned = chapters->isChecked();
+        const int percent = gap->value();
+        dismissSheet();
+        chosen(enabled, aligned, percent);
+    });
+
+    const int width =
+            qMin<int>(ui::px(1064), parentWidget()->width() - 2 * metrics::notice::sideClearance);
+    for (auto *option : { columns, chapters })
+        option->setFixedHeight(option->heightForWidth(width - 2 * metrics::control::border));
+    card->fitToWidth(width);
+    sheet->centerCard();
+    presentSheet();
 }
 
 namespace {
@@ -3034,10 +3079,6 @@ void SettingsPanel::updateFeatureOptions()
         annotationInteractionButton->setVisible(annotations);
         findChild<QWidget *>("rrControlsAnnotationsSection")->setVisible(annotations);
         menuViewButton->setVisible(navigate || stats);
-    }
-    if (denseGraphOption) {
-        denseGraphOption->setVisible(stats);
-        findChild<QWidget *>("rrDisplayGraphsSection")->setVisible(stats);
     }
     auto *syncTab = settingsTabButtons[int(SettingsPage::Kosync)];
     syncTab->setVisible(features::enabled(featurePreferences, features::Kosync));

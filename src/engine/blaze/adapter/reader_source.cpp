@@ -833,7 +833,7 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     activateFastShaping();
     applySlice();
     engine_->Render();
-    engine_->groupColumns(hideNonlinearFragments_);
+    engine_->groupColumns(hideNonlinearFragments_, chapterStartsSpread_);
     openingTimes_["model_paginate_ms"] = double(phase.restart());
     cutSlice();
 #if __has_include(<koblaze.h>)
@@ -1759,9 +1759,10 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
                 koblazeSetPausePoint(&FullBuild::pausePoint, state);
                 try {
                     const StopCheck check(wanted);
-                    const OpeningProgress progress = [bookProgress](OpeningStage stage, int percent) {
-                        bookProgress->setBuildProgress(
-                                openingProgressPercent(stage, percent) * 99 / openingBarEngine);
+                    const OpeningProgress progress = [bookProgress](OpeningStage stage,
+                                                                    int percent) {
+                        bookProgress->setBuildProgress(openingProgressPercent(stage, percent) * 99
+                                                       / openingBarEngine);
                     };
                     opened = source->resources
                             ? document->openResources(source->resources->fresh(), source->sizes,

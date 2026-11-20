@@ -11,6 +11,10 @@
       "sha256": "5d96f589ed0b0e293511d3e301cadb664c9bb57bcbec3e1414679e078029c5e5"
     },
     {
+      "file": "arrow-clockwise.svg",
+      "sha256": "4a78a777b692cb74826e3071ae7049cc0d3927e68a7b8272e7251b1760cd771f"
+    },
+    {
       "file": "arrow-down-right.svg",
       "sha256": "2d974b8c8a4e546b160f11954bfdd5a103ce7f5fab3619c61f48e923efe197e5"
     },
@@ -179,6 +183,10 @@
       "sha256": "067b385ee62469be500d2d5bcd10e2aedd7529cd615ed180fa8414aaef0e40ab"
     },
     {
+      "file": "flower-lotus.svg",
+      "sha256": "72c25597f9950e6a61d79332842e0fde2b17f3aaeceba130a831eda219274706"
+    },
+    {
       "file": "flower.svg",
       "sha256": "f97e3901a7afce79bf6e083eb59d4675a265ae683df630be897fbbf7f5c779c1"
     },
@@ -345,6 +353,10 @@
     {
       "file": "text-align-left.svg",
       "sha256": "4d166977720d3beb386288a8607fbb36134fef06fdd99496ab09cf2d2da211b5"
+    },
+    {
+      "file": "text-b.svg",
+      "sha256": "39dc3c7bafeb11d9d6dc982201d60b52e84ffdbf35833d4b1dfaa298c68518b6"
     },
     {
       "file": "text-columns.svg",

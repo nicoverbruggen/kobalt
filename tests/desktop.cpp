@@ -2424,11 +2424,14 @@ void verticalJustificationTour(Fixture &fixture, const QString &name, bool scree
         QTRY_VERIFY(!fixture.visible("rrVerticalSpacingPopup"));
         if (columns) {
             QVERIFY(fixture.press("rrSettingsDisplay"));
+            QVERIFY(reveal("rrColumnsSettings"));
+            QVERIFY(fixture.press("rrColumnsSettings"));
             QVERIFY(reveal("rrLandscapeColumns"));
             auto *choice = qobject_cast<QCheckBox *>(fixture.widget("rrLandscapeColumns"));
             QVERIFY(choice);
             if (!choice->isChecked())
                 QVERIFY(fixture.press("rrLandscapeColumns"));
+            QVERIFY(fixture.press("rrColumnsDone"));
         }
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
@@ -2818,8 +2821,8 @@ void textPresetsTour(Fixture &fixture, const Scene &scene, bool screenshots)
         QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrTextPresetSaveAs") && settled(), 30000);
         QVERIFY(fixture.press("rrTextPresetSaveAs"));
         QTRY_VERIFY(fixture.visible("rrTextPresetNameInput"));
-        auto *hyphenatedName = fixture.window.readerWindow()->findChild<QLineEdit *>(
-                "rrTextPresetNameInput");
+        auto *hyphenatedName =
+                fixture.window.readerWindow()->findChild<QLineEdit *>("rrTextPresetNameInput");
         QVERIFY(hyphenatedName);
         hyphenatedName->setText("Hyphenation on");
         QVERIFY(fixture.press("rrTextPresetNameSave"));
@@ -3162,6 +3165,14 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
             QVERIFY(fixture.press(qPrintable(QString("rrSettings") + tab)));
             capturePages(fixture, name + "-settings-" + QString(tab).toLower(),
                          "rrSettingsOptions");
+            if (QString(tab) == "Display") {
+                QVERIFY(revealSettingsOption(fixture, "rrColumnsSettings"));
+                QVERIFY(fixture.press("rrColumnsSettings"));
+                QTRY_VERIFY(fixture.visible("rrColumnsPopup"));
+                QVERIFY(fixture.press("rrLandscapeColumns"));
+                capturePages(fixture, name + "-settings-columns", "rrColumnsPopup");
+                QVERIFY(fixture.press("rrColumnsCancel"));
+            }
         }
         QVERIFY(fixture.press("rrSettingsDefaults"));
         QVERIFY(revealSettingsOption(fixture, "rrTextForNewBooks"));
@@ -13334,7 +13345,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
 
     void graphMode_data() { screenshotVariants(); }
 
-    // Graph toggles share Settings, survive reopening and never wait for storage.
+    // The graph mode survives closing Settings and reopening a book.
     void graphMode()
     {
         QFETCH(int, preset);
@@ -13413,16 +13424,17 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                      strings::get("stats.page_turns").arg(2));
             QVERIFY(fixture.press("rrSettings"));
             QVERIFY(fixture.press("rrSettingsDisplay"));
-            QVERIFY(revealSettingsOption(fixture, "rrDenseGraph"));
-            auto *option = qobject_cast<QCheckBox *>(fixture.widget("rrDenseGraph"));
-            QVERIFY(option && option->isChecked());
-            QVERIFY(fixture.press("rrDenseGraph"));
+            QVERIFY(!fixture.widget("rrDenseGraph"));
+            QVERIFY(!fixture.widget("rrDisplayGraphsSection"));
             QVERIFY(fixture.press("rrSettingsClose"));
             QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
             QTRY_VERIFY(!fixture.state().value("busy").toBool());
             QVERIFY(fixture.press("rrPage"));
             QVERIFY(fixture.press("rrNavStats"));
             QTRY_VERIFY(mode->isVisible());
+            QCOMPARE(mode->accessibleName(), strings::get("chapter_graph.show_wider_bars"));
+            QVERIFY(fixture.press("rrGraphMode"));
+            QTRY_VERIFY(mode->isEnabled());
             QVERIFY(!(mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
             QCOMPARE(graph->graphPages(), (count + 19) / 20);
             {
@@ -13716,7 +13728,14 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         for (auto *option : fixture.widget("rrDisplayOptions")->findChildren<QCheckBox *>())
             if (option != zen && option->isVisible())
                 QVERIFY2(option->y() > zen->y(), qPrintable(option->objectName()));
-        QVERIFY(fixture.press("rrZenMode"));
+        auto *mark = qobject_cast<QLabel *>(fixture.widget("rrDisplayZenMark"));
+        QVERIFY(mark && mark->isVisible());
+        QCOMPARE(mark->text(), strings::get("settings.zen_mode").toUpper());
+        QCOMPARE(zen->text(), strings::get("settings.zen_mode"));
+        const auto displayMarkSize = mark->size();
+        const auto displayMarkFont = mark->font();
+        QVERIFY(fixture.click(zen, mark->mapTo(zen, mark->rect().center())));
+        QVERIFY(zen->isChecked());
         // Switching modes replaces the whole menu, so the first frame after
         // Settings closes clears the panel.
         auto *reader = fixture.window.readerWindow();
@@ -13763,7 +13782,12 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!fixture.visible("rrZenStatsPanel"));
         QCOMPARE(fixture.visible("rrZenMark"), fixture.visible("rrMenuClock"));
         // The mark keeps the same space to its left as above and below it.
-        if (const auto *mark = fixture.widget("rrZenMark"); mark && mark->isVisible()) {
+        if (auto *mark = qobject_cast<QLabel *>(fixture.widget("rrZenMark"));
+            mark && mark->isVisible()) {
+            QCOMPARE(mark->text(), strings::get("navigation.zen"));
+            QCOMPARE(mark->font(), displayMarkFont);
+            QCOMPARE(mark->height(), displayMarkSize.height());
+            QVERIFY(mark->width() < displayMarkSize.width());
             const auto *divider = fixture.widget("rrZenStats");
             const int above = mark->y(), below = divider->y() - (mark->y() + mark->height());
             QVERIFY(qAbs(above - below) <= int(ui::metrics::control::border) + 1);
@@ -15615,22 +15639,33 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.visible("rrNavLayout"));
         QVERIFY(fixture.press("rrPage"));
         QVERIFY(fixture.press("rrSettings"));
-        QVERIFY(reveal("rrLandscapeColumns"));
-        QVERIFY(reveal("rrColumnSpacingSetting"));
+        QVERIFY(reveal("rrColumnsSettings"));
+        QCOMPARE(static_cast<ui::CaptionButton *>(fixture.widget("rrColumnsSettings"))->caption(),
+                 strings::get("settings.single_column").toUpper());
+        QVERIFY(capture("columns-display-entry"));
+        QVERIFY(fixture.press("rrColumnsSettings"));
+        QTRY_VERIFY(fixture.visible("rrColumnsPopup"));
         QVERIFY(!fixture.widget("rrColumnSpacingSetting")->isEnabled());
+        QVERIFY(!fixture.widget("rrChapterStartsSpread")->isEnabled());
         QVERIFY(capture("columns-disabled"));
-        QVERIFY(fixture.widget("rrDisplayColumnsSection"));
+        QVERIFY(fixture.press("rrLandscapeColumns"));
+        QVERIFY(fixture.press("rrColumnsCancel"));
+        QTRY_VERIFY(!fixture.visible("rrColumnsPopup"));
+        QVERIFY(fixture.press("rrColumnsSettings"));
+        QTRY_VERIFY(fixture.visible("rrColumnsPopup"));
+        QVERIFY(!fixture.widget("rrColumnSpacingSetting")->isEnabled());
         QVERIFY(fixture.press("rrLandscapeColumns"));
         QVERIFY(fixture.widget("rrColumnSpacingSetting")->isEnabled());
-        QVERIFY(reveal("rrColumnSpacingSetting"));
-        QVERIFY(fixture.press("rrColumnSpacingSetting"));
-        QTRY_VERIFY(fixture.visible("rrColumnSpacing200"));
-        QVERIFY(qobject_cast<QAbstractButton *>(fixture.widget("rrColumnSpacing150"))->isChecked());
-        QCOMPARE(qobject_cast<QAbstractButton *>(fixture.widget("rrColumnSpacing150"))->text(),
+        QVERIFY(fixture.press("rrChapterStartsSpread"));
+        QCOMPARE(qobject_cast<QLabel *>(fixture.widget("rrColumnSpacingValue"))->text(),
                  strings::get("settings.column_spacing_default"));
-        QVERIFY(capture("column-spacing-choices"));
-        QVERIFY(fixture.press("rrColumnSpacing200"));
+        QVERIFY(fixture.press("rrColumnSpacingMore"));
         QVERIFY(capture("landscape-column-settings"));
+        QVERIFY(fixture.press("rrColumnsDone"));
+        QTRY_VERIFY(!fixture.visible("rrColumnsPopup"));
+        QVERIFY(reveal("rrColumnsSettings"));
+        QCOMPARE(static_cast<ui::CaptionButton *>(fixture.widget("rrColumnsSettings"))->caption(),
+                 strings::get("settings.two_in_landscape").toUpper());
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_COMPARE(fixture.state().value("columns").toInt(), 1);
@@ -15649,6 +15684,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(fixture.window.readerWindow()->size(), portrait.transposed());
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_COMPARE(fixture.state().value("columns").toInt(), 2);
+        QVERIFY(storage::readJson(fixture.paths.preferences())
+                        .value("chapter_starts_spread")
+                        .toBool());
+        QVERIFY(fixture.state().value("chapter_starts_spread").toBool());
         QCOMPARE(fixture.state().value("column_spacing").toInt(),
                  fixture.state().value("font_pixels").toInt() * 2);
         QTRY_VERIFY(!fixture.visible("rrNavLayout"));
@@ -15712,10 +15751,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_COMPARE(fixture.state().value("columns").toInt(), 2);
         QVERIFY(fixture.press("rrPage"));
         QVERIFY(fixture.press("rrSettings"));
-        QVERIFY(reveal("rrLandscapeColumns"));
+        QVERIFY(reveal("rrColumnsSettings"));
+        QVERIFY(fixture.press("rrColumnsSettings"));
+        QTRY_VERIFY(fixture.visible("rrColumnsPopup"));
+        QVERIFY(qobject_cast<QCheckBox *>(fixture.widget("rrChapterStartsSpread"))->isChecked());
         QVERIFY(fixture.press("rrLandscapeColumns"));
-        QVERIFY(reveal("rrColumnSpacingSetting"));
         QVERIFY(!fixture.widget("rrColumnSpacingSetting")->isEnabled());
+        QVERIFY(fixture.press("rrColumnsDone"));
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_COMPARE(fixture.state().value("columns").toInt(), 1);
@@ -19836,22 +19878,12 @@ private slots:
         QVERIFY(capture(fixture, name + "-reading"));
         if (publication == "moby-dick") {
             QVERIFY(fixture.press("rrPage"));
-            QVERIFY(fixture.press("rrSettings"));
-            QVERIFY(fixture.press("rrSettingsDisplay"));
-            QVERIFY(revealSettingsOption(fixture, "rrDenseGraph"));
-            auto *dense = qobject_cast<QCheckBox *>(fixture.widget("rrDenseGraph"));
-            QVERIFY(dense);
-            if (!dense->isChecked())
-                QVERIFY(fixture.press("rrDenseGraph"));
-            QVERIFY(dense->isChecked());
-            QVERIFY(capture(fixture, name + "-setting"));
-            QVERIFY(fixture.press("rrSettingsClose"));
-            QTRY_VERIFY(!fixture.visible("rrControlsTop"));
-            QVERIFY(fixture.press("rrPage"));
             QVERIFY(fixture.press("rrNavStats"));
             QTRY_VERIFY(fixture.visible("rrChapterGraph"));
             auto *graph = dynamic_cast<ChapterGraph *>(fixture.widget("rrChapterGraph"));
             QVERIFY(graph);
+            QVERIFY(fixture.press("rrGraphMode"));
+            QTRY_VERIFY(fixture.widget("rrGraphMode")->isEnabled());
             // Current Dense mode preserves a minimum bar width. This pinned
             // 145-chapter edition needs more pages at narrower viewports.
             QTRY_VERIFY(graph->graphPages() >= 2);

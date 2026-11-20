@@ -508,7 +508,7 @@ int main()
             "Dictionary UI preferences invalidated the book layout");
     // Appearance settings decide the layout. The list must stay complete, because a
     // missing key would let a retained layout survive a changed setting.
-    require(appearance::keys.size() == 38, "The appearance keys changed without this check");
+    require(appearance::keys.size() == 39, "The appearance keys changed without this check");
     require(appearance::bookDefaults({}).value("paragraph_indent").toInt() == -1,
             "Paragraph indentation no longer defaults to Publisher");
     for (int percent : { -1, 0, 100, 300 }) {
@@ -944,8 +944,8 @@ int main()
     locked["locked_orientation"] = 8;
     require(appearance::cleanPreferences(locked) == locked,
             "Cleaning settings must preserve the exact lock independently of the mode");
-    for (const auto &invalid : { QJsonValue(true), QJsonValue(-1), QJsonValue(3),
-                                 QJsonValue(1.5), QJsonValue("8") }) {
+    for (const auto &invalid :
+         { QJsonValue(true), QJsonValue(-1), QJsonValue(3), QJsonValue(1.5), QJsonValue("8") }) {
         locked["locked_orientation"] = invalid;
         require(appearance::cleanPreferences(locked) == sharedOrientation,
                 "An invalid lock must keep the chosen rotation mode");
@@ -1003,6 +1003,7 @@ int main()
             "Shared margins replaced a book's text style or did not apply");
     auto globalColumns =
             appearance::bookDefaults(qt::object({ { "two_columns_landscape", true },
+                                                  { "chapter_starts_spread", true },
                                                   { "column_spacing_percent", 200 },
                                                   { appearance::inheritTextLayoutKey, false } }));
     auto savedColumns = qt::object(
@@ -1010,10 +1011,12 @@ int main()
     appearance::applyBookDefaults(savedColumns, globalColumns);
     require(savedColumns.value("columns").toInt() == 1
                     && savedColumns.value("two_columns_landscape").toBool()
+                    && savedColumns.value("chapter_starts_spread").toBool()
                     && savedColumns.value("column_spacing_percent").toInt() == 200,
             "Saved book columns overrode the global landscape policy");
     appearance::applyBookDefaults(savedColumns, appearance::bookDefaults({}));
-    require(!savedColumns.value("two_columns_landscape").toBool()
+    require(!savedColumns.value("chapter_starts_spread").toBool()
+                    && !savedColumns.value("two_columns_landscape").toBool()
                     && savedColumns.value("columns").toInt() == 1
                     && savedColumns.value("column_spacing_percent").toInt() == 150,
             "Disabling global columns retained a book override");

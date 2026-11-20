@@ -10,8 +10,8 @@ void prepareSessionVolume(Volume &volume, const ReadingActivity &activity, Bookm
 {
     if (!activity.nativePosition.isEmpty())
         bookmark(volume, activity.nativePosition);
-    // updateBookmark can change the percentage too. Apply the reader's native
-    // percentage last, with the same unfinished-book cap as progress writeback.
+    // updateBookmark can change the percentage too. Apply the session event's
+    // percentage last to keep it below 100.
     percent(volume, qBound(0.0, activity.percent, 99.0));
 }
 } // namespace kobalt::nickel

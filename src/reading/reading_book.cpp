@@ -280,8 +280,7 @@ ReadingActivity ReadingBook::readingActivity() const
     QString error;
     const auto nativePosition = session_->savedNativePosition(&error);
     return { session_->state().value("position").toString(),
-             // Kobalt's page progress, kept below 100 like every native write of
-             // an unfinished book, so the last page never reports a finished read.
+             // Session events use whole-volume progress capped at 99%.
              qMin(99.0, double(session_->progressPercent())), session_->bookPage(),
              session_->bookPages(), session_->turnDirection(), session_->totalWords(),
              session_->chapterGraph(), session_->graphSelection(),

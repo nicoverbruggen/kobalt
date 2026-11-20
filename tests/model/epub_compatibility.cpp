@@ -36,6 +36,28 @@ void openPublication(EngineDocument &model, const test::BookFiles &files)
     require(model.openResources(source, sizes, { 600, 800 }, {}, &error), qPrintable(error));
 }
 
+void checkChapterImageWrappers()
+{
+    auto files = test::engineBook(true, 4, 1);
+    const auto plate = test::publisherHtml("<img src='colors.png'/>");
+    files["OEBPS/c1.xhtml"] = "<!DOCTYPE html [<!ENTITY ink 'blue'>]>" + plate;
+    files["OEBPS/c2.xhtml"] =
+            test::publisherHtml("<div xml:base='maps/'><img src='colors.png'/></div>");
+    files["OEBPS/c3.xhtml"] =
+            test::publisherHtml("<img src='https://example.invalid/colors.png'/>");
+    files["OEBPS/c4.xhtml"] =
+            "<!DOCTYPE html [<!ENTITY ink 'a long descriptive color name'>]>" + plate;
+    EngineDocument model(test::readerFonts());
+    openPublication(model, files);
+    const auto chapters = model.chapters();
+    require(chapters.size() == 4, "Missing image-wrapper chapters");
+    require(chapters[0].labelImage == "OEBPS/colors.png",
+            "A short entity declaration hid the chapter image");
+    require(chapters[1].labelImage.isEmpty(), "Chapter preview ignored xml:base");
+    require(chapters[2].labelImage.isEmpty(), "Chapter preview accepted an external image");
+    require(chapters[3].labelImage.isEmpty(), "Chapter preview accepted a long entity declaration");
+}
+
 void checkNavigation(bool epub3)
 {
     auto files = test::engineBook(true, 3, 12);
@@ -428,6 +450,7 @@ int main(int argc, char **argv)
             "Optional chapter probe blocked another member");
     checkDtbookChapterWindow();
     checkCodecs();
+    checkChapterImageWrappers();
     checkNavigation(false);
     checkNavigation(true);
     return 0;

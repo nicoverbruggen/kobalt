@@ -1,21 +1,58 @@
 #include "annotation_exporter.h"
 #include "support/save_wait.h"
-#include "storage/record_writer.h"
 #include "support/main_thread.h"
-#include "support/qt_compat.h"
 #include "support/strings.h"
 #include "ui/dialogs/modals.h"
-#include <QCoreApplication>
+#include <QThread>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QLabel>
+#include <QMutex>
 #include <QPointer>
 #include <QPushButton>
 #include <utility>
 
 namespace kobalt::reader {
 namespace {
+bool destinationExists(const QString &path)
+{
+    const QFileInfo file(path);
+    return file.exists() || file.isSymLink();
+}
+
+class DestinationWrite final : public QThread
+{
+public:
+    using QThread::QThread;
+    ExportWriter write;
+    QUrl destination;
+    QByteArray bytes;
+    bool createDirectory = false, replace = false;
+    bool saved = false, needsConsent = false;
+
+    void run() override
+    {
+        mainthread::blocking("annotation-export");
+        // Two readers can confirm the same new path before either write starts.
+        // Keep the destination check and write together across exports.
+        static QMutex destinations;
+        QMutexLocker lock(&destinations);
+        const auto path = destination.toLocalFile();
+        if (createDirectory && !QDir().mkpath(QFileInfo(path).absolutePath()))
+            return;
+        if (!replace && destinationExists(path)) {
+            needsConsent = true;
+            return;
+        }
+        try {
+            saved = write && write(destination, bytes);
+        } catch (...) {
+            saved = false;
+        }
+    }
+};
+
 class QtAnnotationExporter final : public QObject, public AnnotationExporter
 {
 public:
@@ -33,8 +70,11 @@ public:
 
     ~QtAnnotationExporter() override
     {
-        alive.reset();
         cancel();
+        if (writer) {
+            mainthread::blocking("annotation-export-close");
+            writer->wait();
+        }
     }
 
     void start(AnnotationExportRequest next, Done completed) override
@@ -49,7 +89,7 @@ public:
             return;
         }
         const auto path = usePicker ? QString() : QDir(directory).filePath(request.fileName);
-        confirm(path, !usePicker && exists(path));
+        confirm(path, !usePicker && destinationExists(path));
     }
 
     void cancel() override
@@ -60,19 +100,13 @@ public:
         closeDialog();
     }
 
-    bool active() const override { return currentDialog || writePending; }
+    bool active() const override { return currentDialog || writer; }
 
-    bool writing() const override { return writePending; }
+    bool writing() const override { return writer != nullptr; }
 
     QWidget *dialog() const override { return currentDialog; }
 
 private:
-    static bool exists(const QString &path)
-    {
-        const QFileInfo file(path);
-        return file.exists() || file.isSymLink();
-    }
-
     void closeDialog()
     {
         const auto dialog = currentDialog;
@@ -173,43 +207,26 @@ private:
 
     void save(const QUrl &destination, const QByteArray &bytes, bool replace)
     {
-        writePending = true;
-        auto needsConsent = std::make_shared<bool>(false);
-        const auto path = destination.isLocalFile() ? destination.toLocalFile() : QString();
-        const auto createDirectory = !usePicker;
-        const std::weak_ptr<QtAnnotationExporter *> guard = alive;
-        writer.post(
-                [destination, path, bytes, replace, needsConsent, createDirectory, write = write] {
-                    mainthread::blocking("annotation-export");
-                    if (createDirectory && !QDir().mkpath(QFileInfo(path).absolutePath()))
-                        return false;
-                    if (!replace && exists(path)) {
-                        *needsConsent = true;
-                        return false;
-                    }
-                    return write && write(destination, bytes);
+        auto *job = new DestinationWrite(this);
+        job->write = write;
+        job->destination = destination;
+        job->bytes = bytes;
+        job->replace = replace;
+        job->createDirectory = !usePicker;
+        writer = job;
+        connect(
+                job, &QThread::finished, this,
+                [this, job] {
+                    writer = nullptr;
+                    job->deleteLater();
+                    written(job->saved, job->needsConsent, job->destination.toLocalFile());
                 },
-                [guard, needsConsent, path](bool saved) {
-                    qt::invoke(
-                            QCoreApplication::instance(),
-                            [guard, needsConsent, path, saved] {
-                                if (const auto exporter = guard.lock())
-                                    (*exporter)->written(saved, *needsConsent, path);
-                            },
-                            Qt::QueuedConnection);
-                });
+                Qt::QueuedConnection);
+        job->start();
     }
 
     void written(bool saved, bool needsConsent, const QString &path)
     {
-        // The callback can reach the GUI before RecordWriter clears running.
-        // Never destroy the writer or release storage until that barrier passes.
-        if (!writer.idle()) {
-            saveWait.after(
-                    [this, saved, needsConsent, path] { written(saved, needsConsent, path); });
-            return;
-        }
-        writePending = false;
         saves::settled();
         if (cancelled)
             return;
@@ -225,14 +242,11 @@ private:
 
     QPointer<QWidget> reader, nativeParent, currentDialog;
     QString directory;
-    bool usePicker, cancelled = false, writePending = false;
-    // The writer thread reports when its write no longer runs.
-    SaveWait saveWait{ this };
+    bool usePicker, cancelled = false;
     ExportWriter write;
     AnnotationExportRequest request;
     Done done;
-    storage::RecordWriter writer;
-    std::shared_ptr<QtAnnotationExporter *> alive = std::make_shared<QtAnnotationExporter *>(this);
+    DestinationWrite *writer = nullptr;
 };
 } // namespace
 

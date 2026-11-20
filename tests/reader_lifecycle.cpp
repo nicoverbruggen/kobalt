@@ -11696,6 +11696,8 @@ private slots:
                     return platform::writeLocalExport(url, bytes);
                 });
 
+        QSemaphore profileSaved;
+        storage::RecordWriter profileWriter;
         struct Release
         {
             std::shared_ptr<Gate> gate;
@@ -11711,6 +11713,12 @@ private slots:
         QVERIFY(confirm);
         confirm->click();
         QTRY_VERIFY(gate->entered.load());
+        QVERIFY(profileWriter.tryPost([&] {
+            profileSaved.release();
+            return true;
+        }));
+        QVERIFY2(profileSaved.tryAcquire(1, 2000),
+                 "A slow export destination held the profile writer");
         if (destroyObserver) {
             reader.reset();
             QVERIFY(exporter->writing());

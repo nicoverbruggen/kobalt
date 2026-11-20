@@ -4,7 +4,7 @@
 #include <QUrl>
 
 namespace kobalt::reader {
-// Writers run on the storage worker. Android supplies its document-provider
+// Each export writes its destination on a separate thread. Android supplies its document-provider
 // writer; desktop and Kobo use atomic local-file replacement.
 using ExportWriter = std::function<bool(const QUrl &, const QByteArray &)>;
 std::unique_ptr<AnnotationExporter>

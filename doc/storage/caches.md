@@ -33,7 +33,7 @@ The rendering policy is `rendering_version` in `platforms/cache-policy.cmake`, p
 - The optional `kobalt.shaping.text.250000` property stores the bounded text count used to choose fast shaping. A cache without it computes the count once.
 - The render context also includes the side allowance each paragraph can use for hanging punctuation and glyph overflow. Two columns with hanging punctuation have a larger allowance. A layout with a different allowance is laid out again.
 
-Parser formats that settings depend on:
+Parser format changes:
 
 | Format | Added |
 | --- | --- |
@@ -43,6 +43,7 @@ Parser formats that settings depend on:
 | 11 | Embedded font size limit |
 | 12 | Writing-mode state in computed styles |
 | 15 | Flex declarations and computed styles |
+| 16 | Chapter fragments and navigation records for DTBook chapters, manifest fallbacks, illustrated labels and landmarks |
 
 Older parsed caches add the optional page-note markers for labeled Gutenberg note paragraphs on opening. Source text, IDs and positions do not change.
 

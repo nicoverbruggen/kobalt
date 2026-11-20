@@ -392,6 +392,16 @@ int main(int argc, char **argv)
     qputenv("KOBALT_ANNOTATIONS_SQLITE", sqlite ? "1" : "0");
     QGuiApplication app(argc, argv);
     require(argc == 2 || sqlite, "Expected a synthetic EPUB and optional SQLite variant");
+    BookmarkChapterTitles titles({ { "Forward reference", {}, 8 },
+                                   { "First", {}, 2 },
+                                   { "Section", {}, 5 },
+                                   { "Subsection", {}, 5 },
+                                   { "Unresolved", {}, -1 },
+                                   { "Last", {}, 10 } });
+    require(titles.title(-1, "Stored") == "Stored" && titles.title(12, {}) == "Last"
+                    && titles.title(9, {}) == "Subsection" && titles.title(5, {}) == "Subsection"
+                    && titles.title(4, {}) == "First" && titles.title(1, "Stored") == "Stored",
+            "Bookmark titles must follow contents order and retain the stored title without a match");
     const auto path = QString::fromLocal8Bit(argv[1]);
     native::ResourceServer server;
     require(server.open(path, [path] { return native::openPlainArchive(path); }),

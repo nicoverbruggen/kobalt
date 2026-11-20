@@ -2,7 +2,7 @@
 
 The bookmark-session checks also prepare neighboring slices in Fast and Hybrid modes, add and remove a bookmark on the displayed passage, and reopen the saved store to verify that a later bookmark survives. They run against the existing JSON and SQLite storage variants.
 
-The bookmark-session checks compare cached layout keys with the serialized frame after text reflow, viewport changes, a change of slice and revised page counts. With two columns, bookmarks and highlights also update their page labels when Hybrid finishes the whole-book layout, even if the page total stays the same. The bookmark-session check dismisses a search that prepared the whole book and checks the Contents and saved labels before another turn. Chapter parity checks that a turn within the same slice reuses the key shared by bookmarks and highlights.
+The bookmark-session checks cover title lookup with unresolved, out-of-order and shared-page chapter entries. They compare cached layout keys with the serialized frame after text reflow, viewport changes, a change of slice and revised page counts. With two columns, bookmarks and highlights also update their page labels when Hybrid finishes the whole-book layout, even if the page total stays the same. The bookmark-session check dismisses a search that prepared the whole book and checks the Contents and saved labels before another turn. Chapter parity checks that a turn within the same slice reuses the key shared by bookmarks and highlights.
 
 Label `annotations`. Build `mac-tests`, then run `ctest --preset mac -L annotations` from `platforms/desktop/`. `ctest --preset mac -N -L annotations` lists its tests.
 

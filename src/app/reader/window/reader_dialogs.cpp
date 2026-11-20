@@ -552,13 +552,10 @@ void Reader::askRemoveBookmark(const QString &position)
     const int number = bookmarks->bookPage(index);
     // One line of the page's first words, cut at a word. The row's excerpt
     // leaves out the chapter title, as in the list.
-    QString excerpt = list[index].excerpt;
-    for (const auto &row : bookmarkRows())
-        if (row.position == position) {
-            excerpt = row.excerpt;
-            break;
-        }
-    excerpt = elideBookmarkExcerpt(excerpt, 40, 80);
+    BookmarkChapterTitles titles(session->chapters());
+    const auto chapter = titles.title(number, list[index].chapter);
+    const auto excerpt =
+            elideBookmarkExcerpt(excerptAfterChapter(list[index].excerpt, chapter), 40, 80);
     const auto detail = number >= 0
             ? strings::get("bookmarks.remove_detail").arg(number + 1).arg(excerpt)
             : excerpt;
@@ -748,19 +745,15 @@ QVector<kobalt::BookmarkRow> Reader::bookmarkRows() const
     QVector<kobalt::BookmarkRow> rows;
     const auto &list = bookmarks->bookmarks();
     const auto pages = bookmarks->resolvedPages();
-    const auto contents = session->chapters();
+    const auto state = session->state();
+    const bool pagePending =
+            state.contains("book_fraction") && state.value("rough_pages").toInt() <= 0;
     rows.reserve(list.size());
     for (int i = 0; i < list.size(); ++i) {
         kobalt::BookmarkRow row{ list[i].position, list[i].chapter,        list[i].excerpt,
                                  list[i].created,  bookmarks->bookPage(i), false };
         row.current = pages.value(i, -1) >= 0 && pages.value(i, -1) == session->page();
-        // Name the chapter the page is in now; the stored title covers a missing contents list.
-        for (const auto &link : contents)
-            if (link.page >= 0 && row.page >= 0 && link.page <= row.page)
-                row.chapter = link.title;
-        row.excerpt = kobalt::excerptAfterChapter(row.excerpt, row.chapter);
-        row.pagePending = session->state().contains("book_fraction")
-                && session->state().value("rough_pages").toInt() <= 0;
+        row.pagePending = pagePending;
         row.pinName = list[i].name;
         row.pinIcon = list[i].icon;
         rows.append(row);
@@ -769,6 +762,12 @@ QVector<kobalt::BookmarkRow> Reader::bookmarkRows() const
                      [](const kobalt::BookmarkRow &a, const kobalt::BookmarkRow &b) {
                          return (a.page < 0 ? INT_MAX : a.page) < (b.page < 0 ? INT_MAX : b.page);
                      });
+    BookmarkChapterTitles titles(session->chapters());
+    for (int i = rows.size() - 1; i >= 0; --i) {
+        auto &row = rows[i];
+        row.chapter = titles.title(row.page, row.chapter);
+        row.excerpt = excerptAfterChapter(row.excerpt, row.chapter);
+    }
     return rows;
 }
 

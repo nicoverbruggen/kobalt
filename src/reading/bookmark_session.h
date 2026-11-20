@@ -1,4 +1,5 @@
 #pragma once
+#include "reading/chapter.h"
 #include "storage/bookmark_store.h"
 #include "storage/record_writer.h"
 #include <QHash>
@@ -12,6 +13,35 @@
 
 namespace kobalt {
 class ReaderSession;
+
+// Look up titles for bookmarks from the last page towards the first. Contents
+// order decides which title wins, even when several entries share a page or
+// an entry points back to an earlier page.
+class BookmarkChapterTitles
+{
+public:
+    explicit BookmarkChapterTitles(const QVector<ChapterLink> &chapters)
+        : contents(chapters), remaining(chapters.size())
+    {
+    }
+
+    QString title(int page, const QString &stored)
+    {
+        if (page >= 0) {
+            while (remaining > 0) {
+                const auto &entry = contents[remaining - 1];
+                if (entry.page >= 0 && entry.page <= page)
+                    return entry.title;
+                --remaining;
+            }
+        }
+        return stored;
+    }
+
+private:
+    const QVector<ChapterLink> contents;
+    int remaining;
+};
 
 QString bookmarkLayoutKey(int pages, const QJsonObject &state, const QSize &pageArea);
 

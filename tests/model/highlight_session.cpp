@@ -185,7 +185,7 @@ int main(int argc, char **argv)
         for (const auto failure :
              { Failure::JumpKeepingLayout, Failure::Jump, Failure::Appearance }) {
             const auto revision = model.layoutRevision();
-            const auto position = model.state()["position"];
+            const auto position = model.state().value("position");
             const auto image = model.image();
             const auto page = model.page();
             const bool chapter = model.continuesAfter();

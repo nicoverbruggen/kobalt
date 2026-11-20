@@ -406,10 +406,22 @@ int main(int argc, char **argv)
     const auto crossStart = first.start;
     require(model.wordAt({ 0, 0 }).text.isEmpty(), "Margin selected a word");
     require(model.wordAt({ -1, 100 }).text.isEmpty(), "Outside viewport selected a word");
-    require(model.go(model.pages() - 1), "Cannot navigate to the chapter boundary");
+    require(model.goToFraction(1), "Cannot navigate to the final spine section");
     const auto pageEnd = model.annotationPageEdges();
     require(!pageEnd.continuesBefore && !pageEnd.continuesAfter,
             "A separate short spine section must block selection turns at both ends");
+    // The preceding section and the book's middle pages use whole-book page numbers.
+    // Hybrid must keep the same final passage when it adopts that layout.
+    if (model.partOfBook()) {
+        require(model.prepareFullDocument({}) == kobalt::Engine::FullDocument::Ready
+                        && model.setChapterMode(false, {}, {}),
+                "Cannot adopt the whole book for the cross-section checks");
+        const auto fullEdges = model.annotationPageEdges();
+        require(!fullEdges.continuesBefore && !fullEdges.continuesAfter
+                        && fullEdges.first.start == pageEnd.first.start
+                        && fullEdges.last.end == pageEnd.last.end,
+                "The final section's selection boundaries changed at handoff");
+    }
     const int sectionPage = model.page();
     require(model.go(sectionPage - 1) && !model.annotationPageEdges().continuesAfter,
             "Selection must stop before the next spine section");
@@ -466,8 +478,9 @@ int main(int argc, char **argv)
             const auto place = sliced.position();
             const auto image = sliced.image(sliced.page());
             kobalt::EngineDocument whole(kobalt::test::readerFonts());
-            require(whole.openResources(resources->fresh(), sizes, { 600, 800 },
-                                        { { "font_pixels", 28 } }, &error),
+            require(whole.openResources(
+                            resources->fresh(), sizes, { 600, 800 },
+                            { { "font_pixels", 28 }, { "koblaze_first_spine_item", -1 } }, &error),
                     qPrintable(error));
             const auto selected =
                     sliced.annotationRange(origin.first.start, origin.first.end, next.first.start,

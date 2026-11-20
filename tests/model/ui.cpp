@@ -6052,6 +6052,28 @@ int main(int argc, char **argv)
         }
     }
     {
+        // A chapter beyond the page range previews the last page only once.
+        kobalt::ui::PageScrubber scrubber(nullptr);
+        scrubber.setChapterJumps(true);
+        scrubber.setBook(0, 8, { { 0, "First" }, { 8, "Last" } }, {});
+        scrubber.show();
+        int requests = 0;
+        scrubber.previewRequested = [&](int page, QSize) {
+            ++requests;
+            scrubber.setPreview(page, QImage(1, 1, QImage::Format_RGB32));
+        };
+        auto *next = scrubber.findChild<QPushButton *>("rrNavigationNext");
+        require(next && next->isEnabled(), "Missing next chapter action");
+        next->click();
+        require(scrubber.previewReady() && scrubber.selectedPage() == 7,
+                "Last page preview missing");
+        require(scrubber.property("preview_page").toInt() == 7,
+                "Chapter jump published a page outside the book");
+        const int initialRequests = requests;
+        next->click();
+        require(requests == initialRequests, "Repeated chapter jump discarded prepared previews");
+    }
+    {
         kobalt::ui::PageScrubber scrubber(nullptr);
         scrubber.setChapterBar(true);
         scrubber.setBook(2, 8, {}, {});

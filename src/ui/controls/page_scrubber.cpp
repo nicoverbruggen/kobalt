@@ -472,10 +472,10 @@ void PageScrubber::pan(int first)
 
 void PageScrubber::choose(int page)
 {
-    if (candidate == page) {
+    const int target = qBound(0, page, totalPages - 1);
+    if (candidate == target) {
         return;
     }
-    const int target = qBound(0, page, totalPages - 1);
     QImage retained[3];
     if (selecting() && qAbs(target - candidate) == 1) {
         for (int index = 0; index < 3; ++index) {
@@ -502,7 +502,7 @@ void PageScrubber::choose(int page)
     syncRange();
     barRule->setSoftEdges(true);
     position->setValue(candidate);
-    setProperty("preview_page", page);
+    setProperty("preview_page", target);
     setProperty("preview_ready", false);
     updateButtons();
     updateMask();

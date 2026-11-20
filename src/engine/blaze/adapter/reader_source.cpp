@@ -986,7 +986,7 @@ void EngineDocument::carryTextKnowledge(EngineDocument &next) const
     merge(to.textFractions, from.textFractions);
     merge(to.textWordPrefixes, from.textWordPrefixes);
     merge(to.linkTargets, from.linkTargets);
-    if (to.searchTexts.isEmpty())
+    if (!to.searchTexts)
         to.searchTexts = from.searchTexts;
 }
 

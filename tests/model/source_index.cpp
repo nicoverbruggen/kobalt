@@ -89,6 +89,14 @@ int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
     EngineDocument model(test::readerFonts());
+    auto largeBook = test::engineBook(false, 3, 5);
+    largeBook["OEBPS/c3.xhtml"].replace(
+            "</body>", "<p style='display:none'>" + QByteArray(300000, 'x') + "needle</p></body>");
+    open(model, largeBook);
+    require(Probe::mayContain(model, 2, "needle") && !Probe::mayContain(model, 2, "absentword"),
+            "Chapter prefilter lost a match or failed to exclude an absent word");
+    require(Probe::retainedSearchBytes(model) <= 512 * 1024,
+            "Chapter search retained an oversized folded text key");
     auto book = test::engineBook(false, 3, 5);
     book["OEBPS/c1.xhtml"].replace("</body>",
                                    "<p style=\"display:none\">Invisible marker.</p></body>");

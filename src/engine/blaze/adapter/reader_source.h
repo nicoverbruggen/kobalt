@@ -1,6 +1,7 @@
 #pragma once
 #include "publication/page_estimate.h"
 #include "publication/resource_cache.h"
+#include <QCache>
 #include <QHash>
 #include <QJsonObject>
 #include <atomic>
@@ -55,9 +56,9 @@ struct ReaderSource
     QPair<QString, QString> mainTextHints;
     // EPUB spine flags, including fragments whose text the chapter window omitted.
     QVector<bool> nonLinearItems;
-    // The plain text of each spine item, folded for a quick check whether a
-    // search can match there. Filled when first needed.
-    QVector<QString> searchTexts;
+    // Folded chapter text used to skip items during search. Recent keys share
+    // one byte budget across the documents of an open book.
+    std::shared_ptr<QCache<int, QString>> searchTexts;
     // The part of the text of its spine item before each position that was
     // looked up in the XHTML. It does not depend on the layout.
     QHash<QString, double> textFractions;

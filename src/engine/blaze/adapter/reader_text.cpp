@@ -1996,30 +1996,30 @@ int positionItem(const QString &position)
 
 bool EngineDocument::mayContain(int item, const QString &pattern) const
 {
-    auto &texts = source_->searchTexts;
-    if (texts.size() != spineItemCount_)
-        texts = QVector<QString>(spineItemCount_);
-    if (item < 0 || item >= texts.size())
+    if (item < 0 || item >= spineItemCount_)
         return false;
-    if (texts[item].isNull()) {
-        const auto href = spineItems().value(item);
-        auto stream = source_->container->OpenStream(
-                Utf8ToUnicode(href.toUtf8().constData()).c_str(), LVOM_READ);
-        QByteArray bytes;
-        if (!stream.isNull() && stream->GetSize() < 64 * 1024 * 1024) {
-            bytes.resize(int(stream->GetSize()));
-            lvsize_t read = 0;
-            if (stream->Read(bytes.data(), bytes.size(), &read) != LVERR_OK
-                || read != stream->GetSize())
-                bytes.clear();
-        }
-        texts[item] = bytes.isEmpty() ? QStringLiteral("") : chapterSearchKey(bytes);
-    }
-    const auto &text = texts[item];
-    if (text.isEmpty())
-        return true;
+    auto &texts = source_->searchTexts;
+    if (!texts)
+        texts = std::make_shared<QCache<int, QString>>(512 * 1024);
     // CSS can hide intervening text nodes, joining visible parts of a word.
-    return searchKeyMayHold(text, pattern);
+    if (const auto *text = texts->object(item))
+        return text->isEmpty() || searchKeyMayHold(*text, pattern);
+    const auto href = spineItems().value(item);
+    auto stream = source_->container->OpenStream(Utf8ToUnicode(href.toUtf8().constData()).c_str(),
+                                                 LVOM_READ);
+    QByteArray bytes;
+    if (!stream.isNull() && stream->GetSize() < 64 * 1024 * 1024) {
+        bytes.resize(int(stream->GetSize()));
+        lvsize_t read = 0;
+        if (stream->Read(bytes.data(), bytes.size(), &read) != LVERR_OK
+            || read != stream->GetSize())
+            bytes.clear();
+    }
+    const auto text = bytes.isEmpty() ? QString() : chapterSearchKey(bytes);
+    const qint64 cost = sizeof(QString) + qint64(text.capacity()) * sizeof(QChar);
+    if (cost <= texts->maxCost())
+        texts->insert(item, new QString(text), int(cost));
+    return text.isEmpty() || searchKeyMayHold(text, pattern);
 }
 
 EngineDocument *EngineDocument::documentFor(int item, const std::function<bool()> &current)

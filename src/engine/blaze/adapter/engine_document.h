@@ -524,6 +524,11 @@ private:
     };
 
     std::vector<KeptUnit> kept_;
+    // Search can change slices while the next page turn keeps its prepared layout.
+    KeptUnit searchUnit_;
+    EngineDocument *openSearchUnit(int item, const std::function<bool()> &current, int last = -1);
+    std::unique_ptr<EngineDocument> loadUnit(int first, const QJsonObject &settings,
+                                             const std::function<bool()> &current, QString *error);
     void keepUnit(std::unique_ptr<EngineDocument> document, const QJsonObject &settings,
                   QSize size);
     // The kept document of the unit that starts at `first`, when it was

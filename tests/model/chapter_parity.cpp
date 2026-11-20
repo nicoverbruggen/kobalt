@@ -3,6 +3,7 @@
 #include "column_pairs_book.h"
 #include "engine_fixtures.h"
 #include "reader_inputs.h"
+#include "reader_source_index_probe.h"
 #include "engine/blaze/adapter/engine_document.h"
 #include "reading/opening_job.h"
 #include "reading/reader_session.h"
@@ -821,6 +822,7 @@ void searchUnopenedChapter()
 {
     Book book;
     book.files = test::engineBook();
+    book.files["OEBPS/c1.xhtml"] = test::publisherHtml("<p>Opening page.</p>");
     book.files["OEBPS/c3.xhtml"] = test::publisherHtml(
             QStringLiteral("<p>Caf&#233;teria a−minus سـلام</p><p>One<!-- note > here -->Two</p>"
                            "<p>Pub<![CDATA[lication]]>Needle</p>"
@@ -835,6 +837,10 @@ void searchUnopenedChapter()
             qPrintable(error));
     chapters.setChapterSlices(2);
     require(chapters.showSpineItems(0, 0), "Cannot open the first chapter");
+    chapters.go(chapters.pages() - 1);
+    chapters.prepareAhead();
+    const auto *prepared = ReaderSourceIndexProbe::preparedView(chapters);
+    require(prepared, "Fixture must prepare the next chapter before search");
     const auto hits = [](EngineDocument &model, const QString &query) {
         QStringList positions;
         SearchBatch batch;
@@ -853,6 +859,17 @@ void searchUnopenedChapter()
         require(expected.size() == 1 && hits(chapters, query) == expected,
                 qPrintable("Missing search result in an unopened chapter: " + query));
     }
+    require(ReaderSourceIndexProbe::preparedView(chapters) == prepared,
+            "Search discarded the chapter prepared for the next page turn");
+    require(chapters.turnInWindow(1) && ReaderSourceIndexProbe::currentView(chapters) == prepared,
+            "The page turn after search did not adopt the prepared chapter");
+#if __has_include(<koblaze.h>)
+    std::vector<std::unique_ptr<ldomDocument>> occupied;
+    while (ldomDocument::koblazeFreeDocumentSlots() > 2)
+        occupied.push_back(std::make_unique<ldomDocument>());
+    require(hits(chapters, "rosebud") == hits(whole, "rosebud"),
+            "Search missed a chapter when the prepared neighbour held the last spare slot");
+#endif
 }
 
 // A negative index counts from the end.

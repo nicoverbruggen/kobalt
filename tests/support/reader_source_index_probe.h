@@ -22,6 +22,13 @@ struct ReaderSourceIndexProbe
 
     static bool cached(const EngineDocument &model) { return bool(model.sourceIndex_); }
 
+    static const void *currentView(const EngineDocument &model) { return model.engine_.get(); }
+
+    static const void *preparedView(const EngineDocument &model)
+    {
+        return model.ahead_ ? currentView(*model.ahead_) : nullptr;
+    }
+
     static bool mayContain(const EngineDocument &model, int item, const QString &pattern)
     {
         return model.mayContain(item, pattern);

@@ -1314,21 +1314,8 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
         return ahead_.get();
     // The document that was here stays in memory while there is room.
     keepUnit(std::move(ahead_), aheadSettings_, aheadSize_);
-    auto ahead = takeKept(unit.first, settings);
-    if (!ahead) {
-        DiagnosticOperation load("chapter-load", [&current] {
-            return (current && !current()) || engineCancellationRequested();
-        });
-        ahead = openSide(settings, current, error);
-        if (!ahead && !kept_.empty() && (!current || current())) {
-            // The kept documents must never cost the reader a chapter:
-            // without them the engine has room for this one.
-            kept_.clear();
-            if (error)
-                error->clear();
-            ahead = openSide(settings, current, error);
-        }
-    }
+    searchUnit_ = {};
+    auto ahead = loadUnit(unit.first, settings, current, error);
     if (!ahead)
         return nullptr;
     ahead_ = std::move(ahead);
@@ -1343,6 +1330,28 @@ EngineDocument *EngineDocument::openAhead(int item, const std::function<bool()> 
     Q_UNUSED(error);
     return nullptr;
 #endif
+}
+
+std::unique_ptr<EngineDocument> EngineDocument::loadUnit(int first, const QJsonObject &settings,
+                                                         const std::function<bool()> &current,
+                                                         QString *error)
+{
+    auto document = takeKept(first, settings);
+    if (!document) {
+        DiagnosticOperation load("chapter-load", [&current] {
+            return (current && !current()) || engineCancellationRequested();
+        });
+        document = openSide(settings, current, error);
+        if (!document && !kept_.empty() && (!current || current())) {
+            // The kept documents must never cost the reader a chapter:
+            // without them the engine has room for this one.
+            kept_.clear();
+            if (error)
+                error->clear();
+            document = openSide(settings, current, error);
+        }
+    }
+    return document;
 }
 
 std::unique_ptr<EngineDocument> EngineDocument::openSide(const QJsonObject &settings,
@@ -1719,6 +1728,7 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
     if (!building_) {
         // The whole book needs the room of the documents that only chapter
         // mode uses.
+        searchUnit_ = {};
         kept_.clear();
         auto saved = state();
         // The page to show is resolved at adoption. The reader can turn
@@ -1811,8 +1821,10 @@ Engine::FullDocument EngineDocument::prepareFullDocument(const std::function<boo
     // after a park. The engine has room for 16 documents, and a document
     // made without room shares the nodes of another one. The kept units
     // make room. Without room the build waits for a later idle moment.
-    if (ldomDocument::koblazeFreeDocumentSlots() < 3)
+    if (ldomDocument::koblazeFreeDocumentSlots() < 3) {
+        searchUnit_ = {};
         kept_.clear();
+    }
     if (ldomDocument::koblazeFreeDocumentSlots() < 3)
         return FullDocument::None;
     if (building_->run(current) != FullBuild::State::Done)
@@ -1925,6 +1937,7 @@ std::unique_ptr<EngineDocument> EngineDocument::takeKept(int first, const QJsonO
 
 void EngineDocument::dropSideDocuments()
 {
+    searchUnit_ = {};
     building_.reset();
     full_.reset();
     ahead_.reset();
@@ -1941,6 +1954,7 @@ bool EngineDocument::adoptAhead(int first, int last)
     if (settings != aheadSettings_ || size_ != aheadSize_
         || ahead_->userStyleSheet_ != userStyleSheet_ || ahead_->slicePages_ != slicePages_)
         return false;
+    searchUnit_ = {};
     auto next = std::move(ahead_);
     next->setChapters(contents_, graph_);
     next->externalChapters_ = externalChapters_;

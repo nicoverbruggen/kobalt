@@ -164,11 +164,11 @@ private:
     void poll();
     void checkProgressSoon();
     void watch();
-    void prepareOpening(kobalt::ReaderBookRoute candidate);
+    void prepareOpening(kobalt::ReaderBookRoute candidate, QJsonObject preferences);
     void prepareOpeningControls();
     bool openingDark = false;
     void missingAssets(bool assetsReady);
-    void load();
+    void load(const QJsonObject &globalPreferences);
 
     void showReader();
     kobalt::ReaderWindow *createReader(bool koboCloud);

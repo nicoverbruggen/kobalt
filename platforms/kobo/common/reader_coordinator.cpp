@@ -669,7 +669,7 @@ void ReaderCoordinator::prepareOpeningControls()
     updateOpening(OpeningStage::Content, 0);
     const auto epoch = generation;
     step("controls");
-    const auto continueOpening = [this, epoch, route, discardRetained] {
+    const auto continueOpening = [this, epoch, route, discardRetained, preferences] {
         if (epoch != generation || !busy || !run.opening || !run.loading)
             return;
         run.openingTimings["loading_frame_ms"] = double(run.openingTimer.elapsed());
@@ -682,7 +682,7 @@ void ReaderCoordinator::prepareOpeningControls()
             run.session.reset();
             run.sourceLease.reset();
         }
-        prepareOpening(route);
+        prepareOpening(route, preferences);
     };
     // The wait lets the loading controls paint before the work starts. A
     // prepared book shows only the logo, which has painted already, and on a
@@ -727,7 +727,7 @@ void ReaderCoordinator::missingAssets(bool assetsReady)
     status("assets-unavailable");
 }
 
-void ReaderCoordinator::prepareOpening(kobalt::ReaderBookRoute candidate)
+void ReaderCoordinator::prepareOpening(kobalt::ReaderBookRoute candidate, QJsonObject preferences)
 {
     // Nickel initializes its own database and imports books during startup.
     // Wait until a reading request, with the loading view already painted,
@@ -739,6 +739,8 @@ void ReaderCoordinator::prepareOpening(kobalt::ReaderBookRoute candidate)
             fail(strings::get("opening.storage_failed_detail"), kobalt::OpeningFallback::Storage);
             return;
         }
+        // Profile preparation can replace damaged settings with defaults.
+        preferences = kobalt::storage::readPreferences(environment_.paths.preferences()).object;
         if (recovery.recovered())
             pendingNotice = kobalt::profileRecoveryNotice(
                     recovery, usbPath(environment_.paths.directory + "/backups"));
@@ -787,10 +789,9 @@ void ReaderCoordinator::prepareOpening(kobalt::ReaderBookRoute candidate)
         run.orientation = std::make_unique<kobalt::ReaderOrientation>(
                 kobalt::nativeOrientationSensor(), kobalt::turnReaderScreen,
                 kobalt::ownReaderRotation, kobalt::NativeLifecycle::pinScreenActive);
-        run.orientation->configure(
-                kobalt::storage::readPreferences(environment_.paths.preferences()).object);
+        run.orientation->configure(preferences);
         run.statePath = environment_.paths.bookState(run.identity);
-        load();
+        load(preferences);
     }
 }
 
@@ -1092,7 +1093,7 @@ void ReaderCoordinator::watch()
         timer.start();
 }
 
-void ReaderCoordinator::load()
+void ReaderCoordinator::load(const QJsonObject &globalPreferences)
 {
     if (kobalt::NativeLifecycle::suspended()) {
         cancelOpening();
@@ -1154,8 +1155,7 @@ void ReaderCoordinator::load()
     if (benchmarkTypographyEnabled && benchmarkPublication(run.identity))
         temporaryAppearance = kobalt::appearance::benchmarkTypography();
 #endif
-    const auto preferences = kobalt::appearance::readerPreferences(
-            kobalt::storage::readPreferences(environment_.paths.preferences()).object, saved);
+    const auto preferences = kobalt::appearance::readerPreferences(globalPreferences, saved);
     kobalt::renderingMode::apply(preferences);
     run.orientation->configure(preferences);
     saved["dark_mode"] = preferences.value("dark_mode").toBool(false);

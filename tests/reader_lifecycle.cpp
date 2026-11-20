@@ -12861,6 +12861,7 @@ private slots:
         QTest::newRow("last") << 2;
         QTest::newRow("finished") << 3;
         QTest::newRow("scoped-native-sleep") << 4;
+        QTest::newRow("back-matter-native-sleep") << 5;
     }
 
     void progressPercentagesAgree()
@@ -12874,7 +12875,7 @@ private slots:
         ReaderFixture host(paths, testFonts, testPlaceholder);
         const auto identity =
                 QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
-        if (position == 4) {
+        if (position >= 4) {
             host.progress = std::make_shared<test::HostProgress>();
             host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
             host.positions = nickel::positionCodec();
@@ -12894,20 +12895,25 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         QVERIFY(host.session()->pages() > 7);
         const int pages = host.session()->pages();
-        if (position == 4) {
+        if (position >= 4) {
+            const bool backMatter = position == 5;
             bool applied = false;
-            host.session()->chapterBoundaryActions(1, [&](const auto &actions) {
+            host.session()->chapterBoundaryActions(backMatter ? 0 : 1, [&](const auto &actions) {
                 for (const auto &action : actions)
-                    if (action.start && !action.reset)
+                    if (action.start == !backMatter && !action.reset)
                         applied = action.apply();
             });
             QTRY_VERIFY(applied && !host.session()->busy());
-            const int inside = host.session()->firstMainPage() + 1;
-            QVERIFY(inside > 1 && inside < pages);
-            QVERIFY(host.session()->go(inside));
+            const int page = backMatter ? host.session()->lastMainPage() + 1
+                                        : host.session()->firstMainPage() + 1;
+            QVERIFY(page > 0 && page < pages - 1);
+            QVERIFY(host.session()->go(page));
             QTRY_VERIFY(!host.session()->busy());
-            const int main = pageProgressPercent(1, pages - host.session()->firstMainPage());
-            const int volume = pageProgressPercent(inside, pages);
+            QCOMPARE(host.session()->bookPage(), page);
+            const int main = backMatter
+                    ? 100
+                    : pageProgressPercent(1, pages - host.session()->firstMainPage());
+            const int volume = pageProgressPercent(page, pages);
             QVERIFY(main != volume);
             for (bool whole : { false, true }) {
                 if (whole) {
@@ -12932,7 +12938,10 @@ private slots:
                 QString mappingError;
                 const auto anchor = host.session()->savedNativePosition(&mappingError);
                 QVERIFY2(mappingError.isEmpty(), qPrintable(mappingError));
+                const int writes = host.progress->writes;
                 host.window()->sleepReader();
+                QCOMPARE(host.progress->writes, writes + 1);
+                QCOMPARE(host.progress->current.status, 1);
                 QCOMPARE(host.progress->percent, double(expected));
                 QCOMPARE(host.progress->current.location, anchor);
                 host.window()->wakeReader();

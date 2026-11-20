@@ -28,7 +28,7 @@ The `component.ui` assertions cover linear chapter lengths above the visible min
 
 `desktop.activityAuthorCaption` compares the rendered Books row and book heading with equivalent comma-separated and multiline authors. It checks the phone and e-reader widths with normal and enlarged text and verifies the original author is still in the Activity records.
 
-The chapter-boundary checks reject an end at or before the detected or manual start in an unopened spine item. The scoped sleep case in `lifecycle.progressPercentagesAgree` switches Stats between Main text and Whole volume. It locks twice at the same position and checks the snapshot, the percentage sent to Nickel and the native bookmark.
+The chapter-boundary checks reject an end at or before the detected or manual start in an unopened spine item. `lifecycle.progressPercentagesAgree` switches Stats between Main text and Whole volume, both inside the main text and in the back matter. It locks twice at the same position and checks the snapshot, the percentage sent to Nickel and the native bookmark.
 
 These checks do not establish physical Kobo or Android behavior.
 

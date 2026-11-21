@@ -84,6 +84,7 @@
 #include "ui/controls/paged_text.h"
 #include <lvtinydom.h>
 
+#include <algorithm>
 #include <QApplication>
 #include <QAccessible>
 #include <csignal>
@@ -1136,35 +1137,53 @@ struct Fixture
         return coordinateQuery(
                 book, QPoint(-1, -1), [ordinal, top, size](EngineDocument &coordinates) mutable {
                     QSet<QString> seen;
+                    QVector<QRect> sampledWords;
                     for (int y = size.height() / 3; y < size.height() * 2 / 3; y += 12)
                         for (int x = size.width() / 3; x < size.width() * 2 / 3; x += 12) {
-                            const auto word = coordinates.wordAt({ x, y });
+                            const QPoint sample(x, y);
+                            // Adjacent samples often land in the same already counted word.
+                            if (std::any_of(sampledWords.cbegin(), sampledWords.cend(),
+                                            [sample](QRect rect) { return rect.contains(sample); }))
+                                continue;
+                            const auto word = coordinates.wordAt(sample);
                             if (!word.rectangles.isEmpty() && !seen.contains(word.start)) {
                                 seen.insert(word.start);
                                 if (ordinal-- == 0)
                                     return word.rectangles.first().center() + QPoint(0, top);
+                                sampledWords += word.rectangles;
                             }
                         }
                     return QPoint(-1, -1);
                 });
     }
 
-    QRect wordRect(const QString &text)
+    QVector<QRect> wordRects(const QStringList &words)
     {
         auto *page = static_cast<ReadingPage *>(widget("rrPage"));
         if (!page)
-            return {};
+            return QVector<QRect>(words.size());
         const int top = page->topHeight();
-        const auto size = page->image.size();
-        return coordinateQuery(book, QRect{}, [text, top, size](EngineDocument &coordinates) {
-            for (int y = 0; y < size.height(); y += 12)
-                for (int x = 0; x < size.width(); x += 16) {
-                    const auto word = coordinates.wordAt({ x, y });
-                    if (word.text == text && !word.rectangles.isEmpty())
-                        return word.rectangles.first().translated(0, top);
-                }
-            return QRect{};
-        });
+        return coordinateQuery(
+                book, QVector<QRect>(words.size()), [words, top](EngineDocument &coordinates) {
+                    QVector<QRect> result;
+                    for (const auto &text : words) {
+                        QRect found;
+                        const auto matches = coordinates.searchPage(text, coordinates.page());
+                        for (const auto &hit : matches.hits) {
+                            for (const auto &rect : coordinates.rangeRects(hit.start, hit.end)) {
+                                const auto word = coordinates.wordAt(rect.center());
+                                if (word.text == text && !word.rectangles.isEmpty()) {
+                                    found = word.rectangles.first().translated(0, top);
+                                    break;
+                                }
+                            }
+                            if (!found.isEmpty())
+                                break;
+                        }
+                        result.append(found);
+                    }
+                    return result;
+                });
     }
 
     QPoint linkPoint(const QString &path, const QString &label)
@@ -10058,8 +10077,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.turnPage(-1));
         QTRY_VERIFY(fixture.state().value("page").toInt() < bodyPage
                     && !fixture.state().value("busy").toBool());
-        const auto division = fixture.wordRect("division"),
-                   published = fixture.wordRect("published"), through = fixture.wordRect("through");
+        const auto words = fixture.wordRects({ "division", "published", "through" });
+        const auto division = words[0], published = words[1], through = words[2];
         QVERIFY(!division.isEmpty() && !published.isEmpty() && !through.isEmpty());
         QVERIFY(fixture.selectWord(page, division.center()));
         QTRY_VERIFY(!page->annotationHandleRect(false).isEmpty());

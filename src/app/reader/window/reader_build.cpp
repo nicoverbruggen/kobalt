@@ -1867,21 +1867,22 @@ void Reader::connectSettingsPage(SettingsPage section)
         break;
     }
     case SettingsPage::Theming: {
-        connect(settings->presetButton, &QPushButton::clicked, this, [this, settings] {
-            for (const auto *id : { "classic", "playful", "notebook" }) {
-                const auto face = themePreset(id).mainFace;
-                registerPickerFonts(face.isEmpty() ? QStringLiteral("IBM Plex Sans") : face);
-            }
-            registerPickerFonts(customTheme.mainFace.isEmpty() ? QStringLiteral("IBM Plex Sans")
-                                                               : customTheme.mainFace);
-            settings->showThemeChoices(SettingsPanel::ThemeChoice::Preset, customTheme,
-                                       [this, settings](const QString &id) {
-                                           themeDraft = themeStyle(id);
-                                           applyInterfaceFonts();
-                                           settings->selectTheme(id, themeDraft);
-                                           showSettingsFonts();
-                                       });
-        });
+        if (settings->presetButton)
+            connect(settings->presetButton, &QPushButton::clicked, this, [this, settings] {
+                for (const auto *id : { "classic", "playful", "notebook" }) {
+                    const auto face = themePreset(id).mainFace;
+                    registerPickerFonts(face.isEmpty() ? QStringLiteral("IBM Plex Sans") : face);
+                }
+                registerPickerFonts(customTheme.mainFace.isEmpty() ? QStringLiteral("IBM Plex Sans")
+                                                                   : customTheme.mainFace);
+                settings->showThemeChoices(SettingsPanel::ThemeChoice::Preset, customTheme,
+                                           [this, settings](const QString &id) {
+                                               themeDraft = themeStyle(id);
+                                               applyInterfaceFonts();
+                                               settings->selectTheme(id, themeDraft);
+                                               showSettingsFonts();
+                                           });
+            });
         if (settings->paletteButton)
             connect(settings->paletteButton, &QPushButton::clicked, this, [this, settings] {
                 settings->showThemeChoices(SettingsPanel::ThemeChoice::Palette, themeDraft,

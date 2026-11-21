@@ -1214,10 +1214,13 @@ void SettingsPanel::buildTheming()
     auto *themeRows = new QVBoxLayout(themingPage);
     themeRows->setContentsMargins(0, 0, 0, 0);
     themeRows->setSpacing(0);
-    section(themingPage, themeRows, "rrThemeSelectionSection",
-            strings::get("settings.theme_selection"));
-    presetButton = listAction(themingPage, themeRows, "rrThemePreset",
-                              strings::get("settings.theme_preset"), [] { });
+    // The presets differ mostly in color, so they pause with color themes.
+    if (ui::colorThemes) {
+        section(themingPage, themeRows, "rrThemeSelectionSection",
+                strings::get("settings.theme_selection"));
+        presetButton = listAction(themingPage, themeRows, "rrThemePreset",
+                                  strings::get("settings.theme_preset"), [] { });
+    }
     section(themingPage, themeRows, "rrThemeDetailsSection",
             strings::get("settings.theme_details"));
     iconThemeButton = listAction(themingPage, themeRows, "rrIconTheme",
@@ -1485,7 +1488,7 @@ void SettingsPanel::selectTheme(const QString &theme, const InterfaceStyle &styl
     const auto caption = themeName(theme).toUpper();
     if (themingButton)
         themingButton->setCaption(caption);
-    if (!presetButton)
+    if (!iconThemeButton)
         return;
     const auto setSample = [&style](ui::CaptionButton *button, ThemeChoice kind) {
         if (auto *sample = static_cast<ThemeSample *>(button->sample()))
@@ -1493,8 +1496,10 @@ void SettingsPanel::selectTheme(const QString &theme, const InterfaceStyle &styl
         else
             button->setSample(new ThemeSample(button, style, kind));
     };
-    presetButton->setCaption(caption);
-    setSample(presetButton, ThemeChoice::Preset);
+    if (presetButton) {
+        presetButton->setCaption(caption);
+        setSample(presetButton, ThemeChoice::Preset);
+    }
     if (paletteButton) {
         paletteButton->setCaption(paletteName(style.palette).toUpper());
         setSample(paletteButton, ThemeChoice::Palette);

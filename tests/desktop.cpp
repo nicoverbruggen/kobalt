@@ -8833,8 +8833,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             if (view == "settings-fonts") {
                 QVERIFY(revealSettingsOption(fixture, "rrTheming"));
                 QVERIFY(fixture.press("rrTheming"));
-                QVERIFY(fixture.press("rrThemePreset"));
-                QVERIFY(fixture.press("rrTheme_custom"));
+                if (ui::colorThemes) {
+                    QVERIFY(fixture.press("rrThemePreset"));
+                    QVERIFY(fixture.press("rrTheme_custom"));
+                }
                 QVERIFY(revealSettingsOption(fixture, "rrUiFont"));
                 QVERIFY(fixture.press("rrUiFont"));
                 counterName = "rrSettingsFontPage";
@@ -12954,8 +12956,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrSettingsSystem"));
         QVERIFY(revealSettingsOption(fixture, "rrTheming"));
         QVERIFY(fixture.press("rrTheming"));
-        QVERIFY(fixture.press("rrThemePreset"));
-        QVERIFY(fixture.press("rrTheme_custom"));
+        if (ui::colorThemes) {
+            QVERIFY(fixture.press("rrThemePreset"));
+            QVERIFY(fixture.press("rrTheme_custom"));
+        }
         QVERIFY(revealSettingsOption(fixture, "rrUiFont"));
         QVERIFY(fixture.press("rrUiFont"));
         QTRY_VERIFY(fixture.visible("rrSettingsFontPopup"));
@@ -15963,8 +15967,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("margin_pixels").toInt(), margin);
     }
 
-    // A theme with other fonts restyles every widget. The busy notice and its
-    // bar show while that runs and are gone when it ends.
+    // A new interface font restyles every widget. The busy notice and its bar
+    // show while that runs and are gone when it ends.
     void themeApplyProgress()
     {
         Fixture fixture;
@@ -15999,9 +16003,22 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             }
         } shows;
 
+        QVERIFY(revealSettingsOption(fixture, "rrUiFont"));
+        QVERIFY(fixture.press("rrUiFont"));
+        QTRY_VERIFY(fixture.visible("rrSettingsFontPopup"));
+        ui::DescribedOption *kalam = nullptr;
+        for (int page = 0; page < 10 && !kalam; ++page) {
+            for (auto *option :
+                 static_cast<ui::RadioList *>(fixture.widget("rrSettingsFontChoices"))->options())
+                if (option->isVisible() && option->text() == "Kalam")
+                    kalam = option;
+            if (!kalam
+                && (!fixture.visible("rrSettingsFontNext") || !fixture.press("rrSettingsFontNext")))
+                break;
+        }
+        QVERIFY(kalam);
         bar->installEventFilter(&shows);
-        QVERIFY(fixture.press("rrThemePreset"));
-        QVERIFY(fixture.press("rrTheme_playful"));
+        QVERIFY(fixture.click(kalam));
         QTRY_COMPARE(ui::interfaceFont().family(), QStringLiteral("Kalam"));
         bar->removeEventFilter(&shows);
         QVERIFY(shows.count > 0);
@@ -19051,6 +19068,17 @@ private slots:
         };
         QVERIFY(fixture.press("rrPage"));
         QVERIFY(showTheme());
+        if (!ui::colorThemes) {
+            // The presets pause with color themes. The icon style picker and
+            // the typeface rows stay, so capture those.
+            QVERIFY(!fixture.widget("rrThemePreset"));
+            QVERIFY(fixture.press("rrIconTheme"));
+            QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-theme-icons"));
+            QVERIFY(fixture.press("rrIconTheme_monochrome"));
+            QVERIFY(revealSettingsOption(fixture, "rrUiFont"));
+            QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-custom-theme"));
+            return;
+        }
         auto *panel = static_cast<reader::SettingsPanel *>(fixture.widget("rrGeneralSettings"));
         auto *presetButton = static_cast<ui::CaptionButton *>(fixture.widget("rrThemePreset"));
         // Without color themes there is no Color theme row.
@@ -19409,8 +19437,10 @@ private slots:
         QVERIFY(fixture.press("rrSettingsSystem"));
         QVERIFY(revealSettingsOption(fixture, "rrTheming"));
         QVERIFY(fixture.press("rrTheming"));
-        QVERIFY(fixture.press("rrThemePreset"));
-        QVERIFY(fixture.press("rrTheme_custom"));
+        if (ui::colorThemes) {
+            QVERIFY(fixture.press("rrThemePreset"));
+            QVERIFY(fixture.press("rrTheme_custom"));
+        }
         QVERIFY(revealSettingsOption(fixture, "rrUiFont"));
         QVERIFY(fixture.press("rrUiFont"));
         QTRY_VERIFY(fixture.visible("rrSettingsFontPopup"));

@@ -1548,8 +1548,9 @@ public:
                 int len = src->t.len - src->t.offset;
                 lStr_ncpy( m_text+pos, src->t.text + src->t.offset, len );
                 #if USE_LIBUNIBREAK == 1
-                // One fragment starts at pos 0 with the initial joiner. The loop
-                // below marks controls and collapsed spaces in m_flags but does
+                // Blaze: reuse the line break decisions of this paragraph, see paragraphBreaks().
+                // Only a paragraph with one text fragment can use them. That fragment starts at
+                // pos 0 with the initial joiner. The loop below marks controls and collapsed spaces in m_flags but does
                 // not change m_text. Contextual substitutions therefore see the
                 // same preceding and following characters in both paths. A later
                 // fragment would also need the final libunibreak state.

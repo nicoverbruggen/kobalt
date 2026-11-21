@@ -2623,8 +2623,9 @@ public:
         lChar32 res = getReplacementChar(code, &can_be_ignored);
         if (can_be_ignored || res == ' ') {
             // Blaze: HarfBuzz hides format controls and supplies missing space widths.
-            // Keep their codepoints even in the last fallback font. Upstream returned the
-            // replacement or the default character, which drew a visible glyph.
+            // Keep their codepoints even in the last fallback font. Upstream returns the
+            // replacement character here, for example U+200B for U+2060 and a plain space
+            // for U+00A0.
             return code;
         }
         if (res != 0)
@@ -2708,7 +2709,7 @@ public:
     FT_UInt getCharIndex( lChar32 code, lChar32 def_char ) {
         // Blaze: These layout controls must stay invisible. Some fonts supply visible
         // control-picture glyphs, which the direct FreeType path would draw.
-        // Upstream only handled U+200B here.
+        // Upstream returns the font's glyph for all three when the font has one.
         if (code == UNICODE_ZERO_WIDTH_SPACE || code == UNICODE_WORD_JOINER
                 || code == UNICODE_ZERO_WIDTH_NO_BREAK_SPACE) {
             return 0;
@@ -6085,6 +6086,8 @@ class LVFontSmallCapsTransform : public LVFontProxy
               widths(new lUInt16[len]), flags(new lUInt8[len]) {}
         ~MappedRun() { delete[] font; delete[] mapped; delete[] widths; delete[] flags; }
     };
+    // Blaze: returns false when no character uses the small font. The callers then
+    // measure or draw the whole run with the normal font.
     bool fillMappedRun(const lChar32 * text, int len, MappedRun & run, TextLangCfg *lang) const {
         bool synthetic = false;
         for (int i = 0; i < len; i++) {
@@ -8601,7 +8604,8 @@ public:
             if (hb_ot_math_has_data(hb_face))
                 def.has_ot_math = true;
             // Blaze: Small caps can be declared under any script, regardless of script order.
-            // Upstream looked at the first script and default language, for smcp only.
+            // The base revision looked at the first script and default language, for smcp only.
+            // Master 8d29401c checks all GSUB feature tags for smcp and c2sc.
             const hb_tag_t tags[] = { HB_TAG('s','m','c','p'), HB_TAG('c','2','s','c'), HB_TAG_NONE };
             auto *matches = hb_set_create();
             hb_ot_layout_collect_features(hb_face, HB_OT_TAG_GSUB, nullptr, nullptr, tags, matches);
@@ -8783,6 +8787,8 @@ public:
         return ref;
     }
 
+    // Blaze: the instance lookup of GetFont(), split out so small caps can ask for the
+    // face that is already selected.
     LVFontRef fontForFace(const LVFontFace& face, int size, int weight, bool italic,
                           int features, const LVFontVariations& computed_variations)
     {

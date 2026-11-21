@@ -22,7 +22,7 @@ Compare the upstream change with the recorded KOReader base. In `crengine/`, kee
 
 In inherited files, `Blaze:` marks a difference from the recorded KOReader revision. This includes changes carried over from earlier forks. Place the comment beside the code and explain what an upstream update must preserve. Find these comments with `rg -n 'Blaze:' src/engine/blaze/crengine`. Compare against the recorded revision for the full diff.
 
-[UPSTREAM.md](../../src/engine/blaze/UPSTREAM.md) explains every change to inherited code for CREngine maintainers: bug fixes, hardening, speedups, features and changes for Kobalt's reader. Update it in the same change as the Blaze edit. When an upstream update brings in a change that the file has, remove its entry.
+[UPSTREAM.md](../../src/engine/blaze/UPSTREAM.md) explains every change to inherited code for CREngine maintainers, in this order: speedups, features, bug fixes, hardening and changes for Kobalt's reader. Update it in the same change as the Blaze edit. When an upstream update brings in a change that the file has, remove its entry.
 
 Blaze keeps its cancellation and pause callbacks and its chapter-window selection in `src/engine/blaze/extensions/`. They compile into the engine library and use the declarations in `crengine/include/koblaze.h`. The EPUB import loop still decides when parsing can stop and inserts an empty fragment for each skipped spine item so saved positions keep their fragment indices.
 

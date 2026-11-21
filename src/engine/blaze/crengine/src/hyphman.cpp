@@ -71,6 +71,7 @@ class TexHyph : public HyphMethod
     lUInt32 _hash;
     lUInt32 _pattern_count;
     lString32 _supported_modifiers;
+    // Blaze: packed patterns from the host. When they are loaded, match() uses them, not the table.
     std::vector<lUInt8> packedPatterns;
     bool matchPacked(unsigned bucket, const lChar32 *text, char *mask) const;
 public:
@@ -286,6 +287,7 @@ HyphMethod * HyphMan::getHyphMethodForDictionary( lString32 id, int leftHyphenMi
         return &NO_HYPH;
     }
     TexHyph * newmethod = new TexHyph(id, leftHyphenMin, rightHyphenMin);
+    // Blaze: use the packed patterns from the host when it has them, else load the XML.
     const bool packed = p->getType() == HDT_DICT_TEX
             && newmethod->loadPacked(stream, _dataLoader->compiledPatterns(id));
     if ( !packed && !newmethod->load( stream ) ) {
@@ -907,6 +909,7 @@ bool TexHyph::load( lString32 fileName )
 bool TexHyph::match( const lChar32 * str, char * mask )
 {
     bool found = false;
+    // Blaze: match the packed patterns when they are loaded, see packed_hyphenation.inc.
     if (!packedPatterns.empty()) {
         for (auto hash : { TexPattern::hash(str), TexPattern::hash3(str),
                            TexPattern::hash2(str), TexPattern::hash1(str) })

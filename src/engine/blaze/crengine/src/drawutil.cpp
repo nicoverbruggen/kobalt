@@ -1896,6 +1896,7 @@ static void drawBackgroundImage(ldomNode *enode, LVDrawBuf &drawbuf, int x0, int
             // When the border box has a border-radius, clip to its rounded padding-box
             // shape instead of the plain rectangle.
             int rx[4]={0,0,0,0}, ry[4]={0,0,0,0};
+            // Blaze: a vertical box is not clipped to its border radius.
             bool rounded = clip_to_target && !vertical && computeBorderRadiiPx(enode, style.get(), borderBoxX1 - borderBoxX0, borderBoxY1 - borderBoxY0, rx, ry);
             lvRect orig_clip;
             if (clip_to_target)
@@ -1904,7 +1905,9 @@ static void drawBackgroundImage(ldomNode *enode, LVDrawBuf &drawbuf, int x0, int
                 if (clip_to_target) {
                     // Set a new one to the target area
                     lvRect target_clip = lvRect(x0+doc_x, y0+doc_y, x0+doc_x+width, y0+doc_y+height);
-                    if (vertical) { // Adjacent pages can share the same draw buffer.
+                    // Blaze: a vertical page also clips left and right, because adjacent pages can
+                    // share the same draw buffer.
+                    if (vertical) {
                         if (target_clip.left < orig_clip.left) target_clip.left = orig_clip.left;
                         if (target_clip.right > orig_clip.right) target_clip.right = orig_clip.right;
                     }
@@ -1969,6 +1972,8 @@ static void drawBackgroundImage(ldomNode *enode, LVDrawBuf &drawbuf, int x0, int
     }
 }
 
+// Blaze: the upstream function is now drawBackgroundImage() with a `vertical` flag.
+// This wrapper keeps the upstream signature.
 void DrawBackgroundImage(ldomNode *enode,LVDrawBuf & drawbuf,int x0,int y0,int doc_x,int doc_y, int width, int height, bool clip_to_target)
 {
     drawBackgroundImage(enode, drawbuf, x0, y0, doc_x, doc_y, width, height, clip_to_target, false);

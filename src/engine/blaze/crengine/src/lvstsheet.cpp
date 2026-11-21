@@ -4203,6 +4203,7 @@ bool LVCssDeclaration::parse( const char * &decl, bool higher_importance, lxmlDo
                         else if ( substr_icompare("footnote", decl) )               hints |= CSS_CR_HINT_FOOTNOTE;
                         else if ( substr_icompare("footnote-ignore", decl) )        hints |= CSS_CR_HINT_FOOTNOTE_IGNORE;
                         else if ( substr_icompare("no-cap-image-size", decl) )      hints |= CSS_CR_HINT_NO_CAP_IMAGE_SIZE;
+                        // Blaze: -cr-hint: default-text-indent marks a reader default indent.
                         else if ( substr_icompare("default-text-indent", decl) )    hints |= CSS_CR_HINT_DEFAULT_TEXT_INDENT;
                         else if ( substr_icompare("no-presentational", decl) ) {
                             // "-cr-hint: no-presentational" can be explicitely set on a node so any presentational-hint
@@ -4423,7 +4424,8 @@ bool LVCssDeclaration::parse( const char * &decl, bool higher_importance, lxmlDo
                 prop_code = cssd_page_break_inside;
                 IF_g_SET_n_AND_break(false, css_pb_inherit, css_pb_auto);
                 n = parse_name( decl, css_pb_names, -1 );
-                // The internal default waits for inline layout styles too.
+                // Blaze: accept the internal value -cr-avoid-normal-block, a reader default that
+                // waits for inline layout styles too.
                 if (n == -1 && substr_icompare("-cr-avoid-normal-block", decl))
                     n = css_pb_avoid_normal_block;
                 else if (n > css_pb_avoid)
@@ -6488,7 +6490,7 @@ void LVCssDeclaration::apply( css_style_rec_t * style, const ldomNode * node ) c
             {
                 css_length_t text_indent = read_length(p);
                 style->Apply( text_indent, &style->text_indent, imp_bit_text_indent, is_important );
-                // epub.css places DEFAULT_TEXT_INDENT after its own declaration.
+                // Blaze: epub.css places DEFAULT_TEXT_INDENT after its own declaration.
                 // Any later authored declaration targeting this node turns the
                 // value back into ordinary authored CSS, even when numerically
                 // equal to the reading default.
@@ -8012,7 +8014,9 @@ bool LVCssSelector::check( const ldomNode * node, bool allow_cache ) const
 }
 
 // Blaze: the class to look for comes from requiredClassHash(), which the class
-// index also uses. Upstream asks the first rule, LVCssSelectorRule::quickClassCheck().
+// index also uses. Upstream asks the first rule, LVCssSelectorRule::quickClassCheck(),
+// which Blaze removed. The result is the same: true without a class on the first
+// rule or with a pseudo-element, else true only when the node has that class.
 bool LVCssSelector::quickClassCheck(const lUInt32 *classHashes, size_t size) const {
     lUInt32 hash;
     if ( !requiredClassHash(hash) )

@@ -294,7 +294,9 @@ int StrToIntPercent( const lChar32 * s, int digitwidth )
 }
 
 // Blaze: collapse_border() is rewritten. Each edge keeps one winner (hidden, then width, then owner rank) and the cell styles are written after the loop.
-// Upstream overwrites the cell style in place, so a later cell sees changed neighbours and a hidden edge is lost.
+// Upstream compares a cell only with its row, row group and table, then removes the right and bottom edges of
+// inner cells, so a border set only on those edges is lost. It also ignores hidden. Blaze also compares
+// adjacent cells, columns and column groups, which is why the styles are written after the loop.
 // Utility function used in CCRTable::PlaceCells() when border-collapse.
 // CSS 2.1 resolves a shared edge by first honouring hidden, then its width,
 // then the table-structure owner (cell > row > rowgroup > column > colgroup
@@ -1041,7 +1043,7 @@ public:
                 // collapse_border() currently calls measureBorder() many
                 // times for the same elements: TR, TBODY, TABLE...)
             }
-            // All comparisons above must see original cell styles: write the
+            // Blaze: all comparisons above must see original cell styles: write the
             // resolved copies only after every edge has selected its winner.
             for (i=0; i<rows.length(); i++) {
                 for (j=0; j<rows[i]->cells.length(); j++) {
@@ -3258,6 +3260,8 @@ bool getStyledImageSize( ldomNode * enode, int & img_width, int & img_height, in
     // Select the tighter cap before rounding, using the original dimensions.
     // Positive caps must leave at least one pixel on each axis. Minimum
     // constraints below still take precedence when they conflict with the ratio.
+    // Upstream follows CSS 2.1 here: when both width and height are set, a maximum
+    // clamps only its own axis, so the image is distorted.
     if ( nodeElementId == el_img && width > 0 && height > 0 ) {
         if ( max_width > 0 && width > max_width &&
                 (max_height < 0 || (lInt64)max_width * height <= (lInt64)max_height * width) ) {
@@ -3979,7 +3983,8 @@ void renderFinalBlock( ldomNode * enode, LFormattedText * txform, RenderRectAcce
                     indent = -indent; // (restore it)
                 }
             }
-            // Blaze: lvstsheet stores the `hanging` keyword in the low bit.  It changes
+            // Blaze: lvstsheet stores the `hanging` keyword in the low bit, but a pixel
+            // value uses the type css_val_screen_px_hanging instead.  The keyword changes
             // which lines the indent applies to; it does not change the sign of
             // the CSS length.  Keep these two facts separate in LFormattedText,
             // otherwise an ordinary negative text-indent is indistinguishable
@@ -6706,6 +6711,7 @@ public:
         if ( !(flags & RN_SPLIT_BEFORE_AVOID) && (hasFloatRunningAtY(c_y) || hasCarriedInitialLetterAtY(c_y)) )
             flags |= RN_SPLIT_BEFORE_AVOID;
         flags |= line_dir_flag;
+        // Blaze: page spacing treats padding and margin lines as whitespace.
         if (is_padding) flags |= RN_LINE_WHITESPACE;
         context.AddLine( flowPos(), flowPos() + height, flags );
         advanceFlowPos( height );
@@ -10604,7 +10610,7 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * enode, int x0, int y0, int dx
         // flag and won't be drawn.
         bool isHidden = style->visibility >= css_v_hidden && !drawbuf.WantsHiddenContent();
 
-        // Blaze: tell the draw buffer that a table is on the page, even when no cell has text.
+        // Blaze: tell the draw buffer that a visible table is drawn, even when no cell has text.
         if (rm == erm_table && draw_content && !isHidden)
             drawbuf.OnTableDrawn();
 

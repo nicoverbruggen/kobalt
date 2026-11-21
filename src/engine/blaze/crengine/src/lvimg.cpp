@@ -788,7 +788,9 @@ public:
                 int targetWidth, targetHeight;
                 const unsigned mcuWidth = DCTSIZE * cinfo.max_h_samp_factor;
                 const unsigned mcuHeight = DCTSIZE * cinfo.max_v_samp_factor;
-                // Blaze: partial MCUs can bleed padding into the last reduced row or column.
+                // Blaze: when the target is small enough, let libjpeg decode at 1/8, 1/4 or 1/2 size.
+                // Only when the image size is a multiple of the MCU size, because partial MCUs can
+                // bleed padding into the last reduced row or column.
                 if (callback->GetRasterTargetSize(targetWidth, targetHeight) && targetWidth > 0 && targetHeight > 0
                         && mcuWidth && mcuHeight && _width % mcuWidth == 0 && _height % mcuHeight == 0) {
                     for (int divisor : {8, 4, 2}) {
@@ -816,8 +818,10 @@ public:
                  * with the stdio data source.
                  */
                 // NOTE: We know that cinfo.output_components is 4, given the out_color_space we chose.
-                // Blaze: take the row buffer from libjpeg's pool. A plain local changed after setjmp is
-                // indeterminate after longjmp, so upstream can leak its new[] buffer or free a stale pointer on error.
+                // Blaze: take the row buffer from libjpeg's pool, which jpeg_destroy_decompress() frees on
+                // every path. Upstream keeps a new[] buffer in a plain local that changes after setjmp. The C
+                // standard makes its value indeterminate after longjmp. Apple clang -O2 kept it correct, because
+                // its address goes to jpeg_read_scanlines(); keep the pool buffer so no compiler can get it wrong.
                 JSAMPARRAY rows = (*cinfo.mem->alloc_sarray)(reinterpret_cast<j_common_ptr>(&cinfo),
                                                             JPOOL_IMAGE, cinfo.output_width * 4, 1);
                 /* Step 6: while (scan lines remain to be read) */

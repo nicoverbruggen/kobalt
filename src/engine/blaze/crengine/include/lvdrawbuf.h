@@ -42,7 +42,8 @@ class GLDrawBuf; // workaround for no-rtti builds
 class LVDrawBuf : public CacheableObject
 {
 public:
-    // Blaze: a table can occupy the page even when none of its cells contain text.
+    // Blaze: DrawDocument() calls this for each visible table that it draws. The host
+    // then knows that the page is not empty, also when no cell has text. Upstream has no such call.
     virtual void OnTableDrawn() {}
     // Blaze: the host records unsupported formatting when the affected ink reaches the page.
     virtual void SetUnsupportedFormatting(bool unsupported) { (void)unsupported; }
@@ -670,7 +671,9 @@ public:
         if ( ignore_decorations )
             return;
         // printf("  ink FillRect %d %d %d %d\n", x0, y0, x1, y1);
-        // Blaze: a fill of any color counts. Upstream compared with the background color, which was uninitialized.
+        // Don't do this check, as backgroundcolor may not be initialized
+        // (initializing it to white would be a random choice):
+        // if ( color != GetBackgroundColor() )
         updateInkBounds(x0, y0, x1, y1);
     }
 #if 0

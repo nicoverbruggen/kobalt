@@ -1025,8 +1025,8 @@ public:
             if ( lines_max_bottom - cur_page_bottom <= page_height ) {
                 // If we end current page at the current cur_page_bottom,
                 // these lines will fit in a new empty page
-                // Blaze: when widow or orphan protection ends a page early and the next lines would have fit,
-                // flag the page RN_PAGE_PARAGRAPH_PROTECTION_GAP so the spacing code can see the gap.
+                // Blaze: when widow or orphan protection ends a page early and some of these text lines
+                // would have fit, flag the page RN_PAGE_PARAGRAPH_PROTECTION_GAP so page spacing can fill the gap.
                 bool protected_boundary = false, text_would_fit = false;
                 for (int j=start; j<=end; ++j) {
                     protected_boundary |= (lines[j]->flags & RN_LINE_PARAGRAPH_PROTECTION) != 0;
@@ -1377,7 +1377,9 @@ public:
             }
             if ( force_new_page || is_last_line ) {
                 flushCurrentPage();
-                // Blaze: mark the flushed page for page spacing. RN_PAGE_ENDS_AT_FORCED_BREAK says a forced break ended it.
+                // Blaze: a page that ends at a forced break or at the end of the flow is short on
+                // purpose. RN_PAGE_KEEP_VERTICAL_SPACING tells page spacing not to spread its lines.
+                // RN_PAGE_ENDS_AT_FORCED_BREAK, also a Blaze flag, lets the host find chapter starts.
                 if (page_list->length()) {
                     page_list->last()->flags |= RN_PAGE_KEEP_VERTICAL_SPACING;
                     if (force_new_page)

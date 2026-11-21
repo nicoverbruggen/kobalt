@@ -50,6 +50,8 @@ lUInt32 calcHash(css_style_rec_t & rec)
     if ( rec.hash )
         return rec.hash;
     lUInt32 v = 31;
+    // Blaze: NB_IMP_SLOTS slots, and the flex and vertical writing fields below, are part of
+    // the hash, the equality test and the serialized style. Keep the three in step.
     for (auto bits : rec.important) v = v * 31 + bits;
     for (auto bits : rec.importance) v = v * 31 + bits;
     v = v * 31 + (lUInt32)rec.display;
@@ -391,6 +393,7 @@ bool css_style_rec_t::serialize( SerialBuf & buf )
     ST_PUT_ENUM(display);           //    css_display_t        display;
     ST_PUT_ENUM(white_space);       //    css_white_space_t    white_space;
     ST_PUT_ENUM(text_align);        //    css_text_align_t     text_align;
+    // Blaze: flex fields. deserialize() reads them in the same order.
     ST_PUT_ENUM(justify_content);
     ST_PUT_ENUM(flex_direction);
     ST_PUT_ENUM(align_items);

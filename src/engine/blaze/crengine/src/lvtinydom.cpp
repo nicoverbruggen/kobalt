@@ -284,7 +284,7 @@ enum CacheFileBlockType {
 #endif
 #include <xxhash.h>
 
-// Legacy selection geometry is kept in crengine's logical document axes:
+// Blaze: legacy selection geometry is kept in crengine's logical document axes:
 // fmt.width is inline and fmt.height is block even when the final painting is
 // vertical.  Resolve inherited writing-mode before selecting the physical CSS
 // inset that contributes to each logical axis.
@@ -479,6 +479,7 @@ lUInt32 calcGlobalSettingsHash(int documentId, bool already_rendered)
     // when hinting mode is changed to reformat paragraphs.
     // hash = hash * 31 + (int)fontMan->GetHintingMode();
     hash = hash * 31 + LVRendGetBaseFontWeight();
+    // Blaze: the optical size setting changes glyphs and layout.
     hash = hash * 31 + (lUInt32)(LVRendGetFontOpticalSize() * 65536);
     hash = hash * 31 + gRenderDPI;
     // If not yet rendered (initial loading with XML parsing), we can
@@ -3090,6 +3091,9 @@ void tinyNodeCollection::recycleTinyNode( lUInt32 index )
     _nodeStyleHash = 0;
 }
 
+// Blaze: free the nodes that are not in the cache file while the document is still
+// registered. Upstream frees them after unregistering, so onCollectionDestroy() finds
+// no document and frees nothing.
 void tinyNodeCollection::destroyNodes()
 {
     for ( int partindex = 0; partindex<=(_elemCount>>TNC_PART_SHIFT); partindex++ ) {
@@ -3292,6 +3296,7 @@ ldomTextStorageChunk * ldomDataStorageManager::getChunk( lUInt32 address )
             _recentChunk->_prevRecent = chunk;
         _recentChunk = chunk;
     }
+    // Blaze: skip the call when the chunk is already in memory.
     if ( !chunk->_buf )
         chunk->ensureUnpacked();
     return chunk;
@@ -3485,7 +3490,7 @@ void ldomDataStorageManager::compact( lUInt32 reservedSpace, const ldomTextStora
 {
 #if BUILD_LITE!=1
     if ( _uncompressedSize + reservedSpace > _maxUncompressedSize + _maxUncompressedSize/10 ) { // allow +10% overflow
-        // tinyNodeCollection::compact() reserves 0xFFFFFF to force a flush.
+        // Blaze: tinyNodeCollection::compact() reserves 0xFFFFFF to force a flush.
         // That request does not mean the document exceeded its memory limit.
         if (reservedSpace < 0xFFFFFF && !_maxSizeReachedWarned) {
             // Log once to stdout that we reached maxUncompressedSize, so we can know
@@ -5196,8 +5201,8 @@ ldomDocument::~ldomDocument()
 #endif
     // Blaze: free the nodes that are not packed away while the document
     // is still registered. After that a node no longer finds its document,
-    // and its cleanup does nothing. A document that is destroyed before
-    // its first layout has such nodes.
+    // and its cleanup does nothing. The parser persists each element when
+    // it closes it, so only nodes that are still mutable here need this.
     destroyNodes();
     _def_font.Clear();
     _fonts.clear();
@@ -5759,7 +5764,7 @@ bool ldomDocument::render( LVRendPageList * pages, LVDocViewCallback * callback,
 //        styleHash = styleHash * 31 + calcGlobalSettingsHash();
 //        CRLog::debug("Style hash before setRenderProps: %x", styleHash);
 //    } //bool propsChanged =
-    // The render context must include these allowances, so a cached or retained
+    // Blaze: the render context must include these allowances, so a cached or retained
     // layout made with other allowances is laid out again.
     _render_usable_left_overflow = usable_left_overflow;
     _render_usable_right_overflow = usable_right_overflow;
@@ -7857,15 +7862,15 @@ void ldomNode::initNodeRendMethod()
         //recurseElements( resetRendMethodToInvisible );
         setRendMethod(erm_invisible);
     } else if ( d==css_d_inline ) {
-        // Blaze: ruby boxing nodes (rubyBox, el_rbc, el_rtc) have css_d_inline as their
-        // default display, but they need specific render methods based on their role
-        // in the ruby table structure. Detect them by structural position so that
-        // initNodeRendMethod() (called deepest-first) sets the correct method without
-        // relying on the <ruby> element's post-boxing loop.
-        // Ruby boxing nodes (el_rubyBox, el_rbc, el_rtc, el_rb, el_rt) inside the ruby
-        // boxing structure need specific render methods. Detect by structural position:
-        // the ruby boxing always creates: el_ruby > el_inlineBox > rbox1(el_rubyBox) >
+        // Blaze: ruby boxing nodes (el_rubyBox, el_rbc, el_rtc, el_rb, el_rt) have
+        // css_d_inline as their default display, but they need the render method of
+        // their role in the ruby table. Upstream sets these methods only in the loop at
+        // the end of the <ruby> element's own branch, on every render. Blaze runs that
+        // loop only when it creates the boxing (needs_wrapping), so on a later render
+        // this code sets the method from the position of the node. The ruby boxing
+        // always creates: el_ruby > el_inlineBox > rbox1(el_rubyBox) >
         // rbox2(el_rubyBox/el_rbc/el_rtc) > rbox3(el_rubyBox/el_rb/el_rt).
+        // An update must keep this code and that loop in step.
         if ( BLOCK_RENDERING(rend_flags, ENHANCED) ) {
             lUInt16 _nid = getNodeId();
             ldomNode * _par = getParentNode();
@@ -8145,6 +8150,7 @@ void ldomNode::initNodeRendMethod()
             // only blocks (or floating blocks) inside
             setRendMethod( erm_block );
         } else if ( css_is_flex(d) && !hasBlockItems && hasInline && !hasFloating ) {
+            // Blaze: a flex container with only inline content wraps it in anonymous boxes.
             autoboxChildren(0, getChildCount() - 1, false);
             setRendMethod(erm_block);
         } else if ( !hasBlockItems && hasInline ) {
@@ -8949,10 +8955,10 @@ void ldomNode::initNodeRendMethod()
         // All wrapping done, or assumed to have already been done correctly.
         // We can set the rendering methods to make all this a table.
         // All unexpected elements will be erm_invisible.
-        // Blaze: on re-renders (needs_wrapping=false), render methods are kept correct by the
-        // el_rubyBox special-case in the css_d_inline branch of initNodeRendMethod above:
-        // each rubyBox sets its own render method based on its structural position.
-        // We only call persist() here for newly created nodes (needs_wrapping=true).
+        // Blaze: this loop, with its setRendMethod() and persist() calls, runs only when
+        // the boxing was created above (needs_wrapping). Upstream runs it on every render.
+        // On a later render, the ruby case in the css_d_inline branch above sets the
+        // render method of each boxing node from its position.
         if ( needs_wrapping ) {
             len = getChildCount();
             for ( int i=0; i<len; i++ ) {
@@ -15330,6 +15336,7 @@ bool ldomXPointerEx::isVisible()
     else
         p = node;
     while ( p ) {
+        // Blaze: textRenderMethod(), see KoblazeSourceText.
         if ( textRenderMethod(p) == erm_invisible )
             return false;
         /* This would feel needed now that we added support for visibility:hidden.
@@ -16050,6 +16057,7 @@ ldomNode * ldomXPointerEx::getThisBlockNode()
     for (;;) {
         if ( !node )
             return NULL;
+        // Blaze: textRenderMethod(), see KoblazeSourceText.
         lvdom_element_render_method rm = textRenderMethod(node);
         switch ( rm ) {
         case erm_block:
@@ -16747,6 +16755,7 @@ public:
         ldomNode * elem = (ldomNode *)ptr->getNode();
         // Allow tweaking that with hints
         css_style_ref_t style = elem->getStyle();
+        // Blaze: textRenderMethod(), see KoblazeSourceText.
         lvdom_element_render_method rm = textRenderMethod(elem);
         if ( rm == erm_invisible ) {
             return false;
@@ -17011,6 +17020,8 @@ lString32 ldomDocumentFragmentWriter::convertHref( lString32 href )
 
     if (href[0] == '#') {
         // Link to anchor in the same docFragment
+        // Blaze: use the fragment name from setCodeBase(). Upstream looks up the file path,
+        // which is wrong when two spine slots share one fallback file.
         const lString32 &replacement = codeBasePrefix;
         if (replacement.empty())
             return href;
@@ -18724,6 +18735,7 @@ bool ldomDocument::loadCacheFileContent(CacheLoadingCallback * formatCallback, L
         pagebuf.swap( _pagesData );
         _pagesData.setPos( 0 );
         LVRendPageList pages;
+        // Blaze: use the result of deserialize(), which now fails on a damaged page list.
         if ( !pages.deserialize(_pagesData) ) {
             CRLog::error("Page data deserialization is failed");
             return false;
@@ -18868,11 +18880,14 @@ ContinuousOperationResult ldomDocument::saveChanges( CRTimerUtil & maxTime, LVDo
     }
 
     CRLog::trace("ldomDocument::saveChanges(timeout=%d stage=%d)", maxTime.interval(), _mapSavingStage);
+    // Blaze: set the flag directly. setCacheFileStale(true) would reset _mapSavingStage,
+    // and a save that resumes after a timeout must keep its stage.
     _cacheFileStale = true;
 
     switch (_mapSavingStage) {
     default:
     case 0:
+        // Blaze: a new save starts the node data at its first block, see saveNodeData().
         _nextNodeDataBlock = 0;
 
         if (!maxTime.infinite())
@@ -19619,7 +19634,7 @@ public:
                 return false;
 
             // Blaze: seed the old CRC from the data that was read, without its CRC32, to
-            // match writeIndex(). Upstream reads the old file again in writeIndex().
+            // match writeIndex(). Upstream reads the old file again in the first writeIndex().
             _oldStreamCRC = lStr_crc32(0, sb->getReadOnly(), buf.pos() - sizeof(lUInt32));
             _oldStreamSize = buf.pos();
             CRLog::info( "Document cache index file read ok, %d files in cache, %d bytes", _files.length(), totalSize );
@@ -19702,6 +19717,7 @@ public:
         return -1;
     }
 
+    // Blaze: `forceIndex` writes the index even when it looks unchanged, see writeIndex().
     bool moveFileToTop( lString32 filename, lUInt32 size, bool forceIndex = false )
     {
         int index = findFileIndex( filename );
@@ -20392,6 +20408,7 @@ int ldomNode::getChildIndex( lUInt32 dataIndex ) const
     case NT_ELEMENT:
         {
             tinyElement * me = NPELEM;
+            // Blaze: findChildIndex() first tries the entries beside the last result.
             parentIndex = findChildIndex( this, me->_children.ptr(), me->_children.length(), dataIndex );
         }
         break;
@@ -20399,6 +20416,7 @@ int ldomNode::getChildIndex( lUInt32 dataIndex ) const
     case NT_PELEMENT:
         {
             ElementDataStorageItem * me = getDocument()->_elemStorage.getElem( _data._pelem_addr );
+            // Blaze: findChildIndex(), as above.
             parentIndex = findChildIndex( this, me->children, me->childCount, dataIndex );
         }
         break;
@@ -21579,7 +21597,7 @@ ldomNode * ldomNode::elementFromPoint( lvPoint pt, int direction, bool strict_bo
                 // looking at inlines' children. We handle this case above (at the
                 // start of this function) by looking at erm_inline's children for
                 // non-erm_inline nodes before checking any x/y or bottom overflow.
-                // A logical line scan has no screen x. Include a float on
+                // Blaze: a logical line scan has no screen x. Include a float on
                 // either side if its final block covers this row. A point
                 // lookup still needs to be inside the float horizontally.
                 const bool logical = direction >= PT_DIR_SCAN_FORWARD_LOGICAL_FIRST;
@@ -22090,6 +22108,7 @@ ldomNode * ldomNode::getUnboxedPrevSibling( bool skip_text_nodes, lUInt16 except
     return NULL;
 }
 
+// Blaze: list items are numbered once per list, see getListItemCounters().
 // The number of the list item `item` among the children of the list
 // `parent`, with the start, reversed and value attributes. Without an item,
 // walks the whole list. When `counters` is given, also records the number of

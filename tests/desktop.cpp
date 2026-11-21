@@ -15972,6 +15972,29 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("margin_pixels").toInt(), margin);
     }
 
+    // While presets are paused, the Theming row names a saved preset Custom.
+    void settingsPausedPresetCaption()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences["ui_theme"] = "playful";
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrTheming"));
+        auto *theming = dynamic_cast<ui::CaptionButton *>(fixture.widget("rrTheming"));
+        QVERIFY(theming);
+        QCOMPARE(theming->caption(),
+                 strings::get(ui::colorThemes ? "settings.theme_playful" : "settings.theme_custom")
+                         .toUpper());
+    }
+
     // A new interface font restyles every widget. The busy notice and its bar
     // show while that runs and are gone when it ends.
     void themeApplyProgress()

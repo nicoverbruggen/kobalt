@@ -472,6 +472,13 @@ QString themeName(const QString &id)
     return strings::get(("settings.theme_" + id).toUtf8().constData());
 }
 
+// While the presets pause with color themes, a saved preset shows as Custom:
+// Theming offers its parts, not the preset.
+QString shownThemeName(const QString &id)
+{
+    return themeName(ui::colorThemes ? id : QStringLiteral("custom"));
+}
+
 ui::ListHeader *section(QWidget *parent, QBoxLayout *rows, const char *name, const QString &caption)
 {
     auto *header = new ui::ListHeader(parent);
@@ -1149,7 +1156,7 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
             listAction(systemPage, systemRows, "rrTheming", strings::get("settings.theming"),
                        [this] { settingsPages->setCurrentIndex(int(SettingsPage::Theming)); });
     if (!selectedTheme.isEmpty())
-        themingButton->setCaption(themeName(selectedTheme).toUpper());
+        themingButton->setCaption(shownThemeName(selectedTheme).toUpper());
     section(systemPage, systemRows, "rrSystemDictionarySection",
             strings::get("settings.section_dictionary_ui"));
     saveWordsOption = settingsOption(systemPage, "rrSaveWords", strings::get("settings.save_words"),
@@ -1485,7 +1492,7 @@ QString paletteName(const QString &id)
 void SettingsPanel::selectTheme(const QString &theme, const InterfaceStyle &style)
 {
     selectedTheme = theme;
-    const auto caption = themeName(theme).toUpper();
+    const auto caption = shownThemeName(theme).toUpper();
     if (themingButton)
         themingButton->setCaption(caption);
     if (!iconThemeButton)

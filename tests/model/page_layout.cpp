@@ -163,6 +163,24 @@ void flexRows()
                     "width:80px;margin-right:4px")
                     == QRect(240, 0, 80, 32),
             "A reversed row preserves physical left and right margins");
+    require(redItem("flex", "justify-content:center", "width:64px",
+                    "width:80px;margin-left:auto")
+                    == QRect(320, 0, 80, 32),
+            "An auto margin absorbs free space before justification");
+    require(redItem("flex", "", "width:64px", "width:80px;margin:0 auto")
+                    == QRect(192, 0, 80, 32),
+            "Two auto margins share the same line's free space equally");
+    require(redItem("flex", "flex-direction:row-reverse", "width:64px",
+                    "width:80px;margin-right:auto")
+                    == QRect(0, 0, 80, 32),
+            "A reversed row preserves the physical side of an auto margin");
+    require(redItem("flex", "", "flex:1;min-width:0", "width:80px;margin-left:auto")
+                    == QRect(320, 0, 80, 32),
+            "Flex growth takes its share before resolving auto margins");
+    require(redItem("flex", "width:140px;flex-wrap:wrap", "width:64px",
+                    "width:80px;margin-left:auto")
+                    == QRect(60, 32, 80, 32),
+            "Resolve auto margins separately on a wrapped line");
     const auto limited =
             redItem("flex", "width:320px", "width:40px;min-width:25%", "flex:1;max-width:50%");
     require(limited == QRect(80, 0, 160, 32),
@@ -214,6 +232,10 @@ void flexRows()
     require(redItem("inline-flex", "gap:8px", "flex:0 0 64px", "flex:0 0 80px", true)
                     == redItem("inline-flex", "gap:8px", "width:64px", "width:80px", true),
             "Include fixed flex bases in an inline row's natural width");
+    require(redItem("inline-flex", "gap:8px", "flex:0 0 64px",
+                    "flex:0 0 80px;margin-left:auto", true)
+                    == redItem("inline-flex", "gap:8px", "width:64px", "width:80px", true),
+            "Auto margins contribute zero to an inline row's natural width");
     const auto fixed = redItem("inline-flex", "width:152px;gap:8px;vertical-align:top",
                                "width:64px", "width:80px", true);
     const auto natural =

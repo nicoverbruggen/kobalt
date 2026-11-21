@@ -7,8 +7,14 @@ struct BlazeFlexItem {
     int minimum, maximum;
     int base, grow, shrink;
     long long margins = 0;
+    bool auto_margin[2] = {};
     long long outerWidth() const { return (long long)width + margins; }
 };
+
+static bool isAutoFlexMargin(css_length_t margin)
+{
+    return margin.type == css_val_unspecified && margin.value == css_generic_auto;
+}
 
 // Flex sizes are border boxes. CSS lengths on content boxes exclude these insets.
 static int flexWidthInsets(ldomNode *node, int width)
@@ -46,10 +52,13 @@ static bool hasFixedFlexBasis(ldomNode *node)
 {
     if (node->getRendMethod() != erm_final) return false;
     css_style_ref_t style = node->getStyle();
+    const auto zeroMargin = [](css_length_t margin) {
+        return !margin.value || isAutoFlexMargin(margin);
+    };
     return !style->flex_grow && !style->flex_shrink &&
             style->flex_basis.type != css_val_unspecified && style->flex_basis.type != css_val_percent &&
             style->min_width.type != css_val_percent && style->max_width.type != css_val_percent &&
-            !style->margin[0].value && !style->margin[1].value &&
+            zeroMargin(style->margin[0]) && zeroMargin(style->margin[1]) &&
             style->padding[0].type != css_val_percent && style->padding[1].type != css_val_percent;
 }
 
@@ -79,12 +88,13 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
             css_wm_is_vertical(item->writing_mode))
             return false;
         // The independent item flow cannot resolve percentage insets against
-        // the full row. Keep these and auto margins on the normal block path.
+        // the full row. Only horizontal margins on rows are handled here.
         for (int side = 0; side < 4; ++side) {
             const auto margin = item->margin[side];
             if (item->padding[side].type == css_val_percent || margin.type == css_val_percent)
                 return false;
-            if (margin.value && (column || side >= 2 || margin.type == css_val_unspecified || margin.value < 0))
+            if (margin.value && (column || side >= 2 ||
+                    (!isAutoFlexMargin(margin) && (margin.type == css_val_unspecified || margin.value < 0))))
                 return false;
         }
         // A block row measures both limits against its content width.
@@ -181,6 +191,8 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
         auto css = item.node->getStyle();
         item.margins = (long long)lengthToPx(item.node, css->margin[0], width)
                      + lengthToPx(item.node, css->margin[1], width);
+        item.auto_margin[0] = isAutoFlexMargin(css->margin[0]);
+        item.auto_margin[1] = isAutoFlexMargin(css->margin[1]);
         measureFlexItem(item, width, direction, flags);
     }
 
@@ -267,8 +279,19 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
             break;
         }
         used = (long long)gap * (end - first - 1);
-        for (size_t i = first; i < end; ++i) used += items[i].outerWidth();
-        const int free = (int)std::max<long long>(0, width - used);
+        int auto_margins = 0;
+        for (size_t i = first; i < end; ++i) {
+            used += items[i].outerWidth();
+            auto_margins += items[i].auto_margin[0] + items[i].auto_margin[1];
+        }
+        int free = (int)std::max<long long>(0, width - used);
+        // Main-axis auto margins take positive free space before justification.
+        const int auto_margin_size = auto_margins ? free / auto_margins : 0;
+        int auto_margin_remainder = auto_margins ? free % auto_margins : 0;
+        const auto takeAutoMargin = [&] {
+            return auto_margin_size + (auto_margin_remainder-- > 0);
+        };
+        if (auto_margins) free = 0;
         int offset = style->justify_content == 1 ? free / 2 : style->justify_content == 2 ? free : 0;
         bool stack = used > width;
         const bool definite_line = !style->flex_wrap && content_height > 0 && content_height <= flow->getPageHeight();
@@ -278,8 +301,10 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
             for (size_t i = first; i < end; ++i) {
                 auto &item = items[i];
                 LVRendPageContext context(NULL, flow->getPageHeight(), 0, false);
-                // The block formatter applies the item's margins inside its allocated box.
+                // The block formatter applies fixed margins inside the allocated box.
+                // Leave the auto margin outside so it does not change the item width.
                 int outer = (int)item.outerWidth();
+                if (item.auto_margin[reversed ? 1 : 0]) offset += takeAutoMargin();
                 int x = reversed ? width - offset - outer : offset;
                 int h = renderBlockElement(context, item.node, left + x, 0, outer,
                                            0, 0, direction, NULL, flags, item.width);
@@ -292,6 +317,7 @@ static bool renderFlexRows(FlowState *flow, ldomNode *parent, int left, int widt
                 }
                 links.addAll(*context.getLinkIds());
                 if (i + 1 < end) offset += outer + gap;
+                if (item.auto_margin[reversed ? 0 : 1]) offset += takeAutoMargin();
                 if (style->justify_content == 3 && i + 1 < end)
                     offset += free / (end-first-1) + (i-first < free % (end-first-1));
             }

@@ -3215,6 +3215,19 @@ private slots:
         const auto position = host.session()->state().value("position");
         const auto image = page->image.cacheKey();
         const auto layout = host.session()->layoutRevision();
+        const auto previousFrame = host.session()->image().cacheKey();
+        const auto publish = host.session()->updated;
+        const auto restore = qScopeGuard([&] { host.session()->updated = publish; });
+        bool pressed = false;
+        host.session()->updated = [&] {
+            // Deliver the press just before the replacement frame reaches the reader.
+            // Rendering can take longer than the hold timer under instrumentation.
+            if (!pressed && host.session()->image().cacheKey() != previousFrame) {
+                pressed = true;
+                send(QEvent::MouseButtonPress, 1000);
+            }
+            publish();
+        };
         if (reflow) {
             auto appearance = host.session()->state();
             appearance["font_pixels"] = appearance.value("font_pixels").toInt() + 4;
@@ -3222,9 +3235,7 @@ private slots:
         } else {
             QVERIFY(host.session()->go(samePosition ? (backward ? 1 : 2) : 3));
         }
-        // The worker's new frame cannot be delivered until after this press.
-        send(QEvent::MouseButtonPress, 1000);
-        QTRY_VERIFY(!host.session()->busy() && page->image.cacheKey() != image);
+        QTRY_VERIFY(pressed && !host.session()->busy() && page->image.cacheKey() != image);
         QCOMPARE(host.session()->layoutRevision() != layout, reflow);
         const auto destination = host.session()->page();
         if (!reflow)

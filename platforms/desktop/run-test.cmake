@@ -26,10 +26,8 @@ set(strict "$ENV{KOBALT_STRICT_MAIN_THREAD}")
 if(strict STREQUAL "")
     set(strict 1)
 endif()
-# Tests, captures and timings were written for a layout of the whole book,
-# so they open books as Accurate, whatever the Rendering preference says.
-# Set the variable to 1 in the environment to run them as Fast. A test that
-# needs Fast sets renderingMode::setOverride(1).
+# Whole-book checks default to Accurate. CTest registers separate .hybrid
+# cases with mode 2 and .fast cases with mode 1. Both run in the native CI suite.
 set(chapter_mode "$ENV{KOBALT_CHAPTER_MODE}")
 if(chapter_mode STREQUAL "")
     set(chapter_mode 0)

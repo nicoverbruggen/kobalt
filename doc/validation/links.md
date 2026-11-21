@@ -30,7 +30,7 @@ The scoped search check compares all four search scopes in a chapter window with
 
 Worker budgets are checked between logical text blocks. A single unusually large paragraph can exceed the preparation budget; physical Kobo typing latency and memory use still need device validation.
 
-The reader checks verify zero, one and grouped match counts in every scope, localized number grouping, exact result-page totals at completion and partial totals after cancellation. They also check that the single-page counter stays visible and the zero-match counter stays hidden.
+The reader checks verify zero, one and four-digit match counts in every scope, plain digits in English and German locales, exact result-page totals at completion and partial totals after cancellation. They also check that the single-page counter stays visible and the zero-match counter stays hidden.
 
 Search uses the existing Settings status strip. The reader checks cover its clock and battery, and the Zen menu check verifies that Search uses the full-width strip.
 

@@ -12,7 +12,6 @@
 #include "ui/style/fonts.h"
 #include "ui/style/private_text.h"
 #include "ui/style/styles.h"
-#include <QLocale>
 #include <QPainter>
 #include <QResizeEvent>
 #include <algorithm>
@@ -408,14 +407,10 @@ void ChapterGraph::refreshCells()
                                                    : strings::get("common.pages"))
             : p.chapterPages > 0 ? strings::get("stats.last_chapter")
                                  : QString();
-    // The catalog is English, so group digits the English way on every device.
     const auto wordTotal = [](qint64 count) {
         if (count == 1)
             return strings::get("words.count_one");
-        return count >= 0
-                ? strings::get("stats.words")
-                          .arg(QLocale(QLocale::English, QLocale::UnitedStates).toString(count))
-                : QString();
+        return count >= 0 ? strings::get("stats.words").arg(count) : QString();
     };
     // A chapter's total waits for the counts, and a failed count never shows
     // the page lengths that the chart falls back to.

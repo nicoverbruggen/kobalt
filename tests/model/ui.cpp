@@ -31,7 +31,6 @@
 #include <QJsonArray>
 #include <QCryptographicHash>
 #include <QLabel>
-#include <QLocale>
 #include <QLineEdit>
 #include <QDir>
 #include <QTemporaryDir>
@@ -2619,12 +2618,10 @@ int main(int argc, char **argv)
                         && text("rrGraphBookDetail").isEmpty(),
                 "Chapter number or session is missing, or the book cell kept the word count");
         // The word totals label the chart, between the bars and the cells.
-        const auto chapterWords = get("stats.words")
-                                          .arg(QLocale(QLocale::English, QLocale::UnitedStates)
-                                                       .toString(chapters[20].words));
+        const auto chapterWords = get("stats.words").arg(chapters[20].words);
         require(text("rrGraphChapterWords") == get("stats.chapter_words").arg(13).arg(chapterWords)
                         && text("rrGraphBookWords")
-                                == get("stats.main_words").arg(get("stats.words").arg("35,706")),
+                                == get("stats.main_words").arg(get("stats.words").arg(35706)),
                 "The word totals below the chart are missing");
         auto singleWord = chapters;
         singleWord[20].words = 1;

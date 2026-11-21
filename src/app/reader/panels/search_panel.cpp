@@ -17,7 +17,6 @@
 #include "ui/controls/options.h"
 #include <QGridLayout>
 #include <QIntValidator>
-#include <QLocale>
 #include <algorithm>
 
 namespace kobalt {
@@ -545,7 +544,7 @@ void SearchPanel::redraw()
     const int scopeBottom = chrome::actionHeight + chrome::statusHeight;
     const auto matches =
             strings::get(shownCount == 1 ? "search_panel.match" : "search_panel.matches")
-                    .arg(QLocale().toString(shownCount));
+                    .arg(shownCount);
     scopeStatus->setText(searched ? strings::get(complete ? "search_panel.matches_in_scope"
                                                           : "search_panel.matches_so_far_in_scope")
                                             .arg(matches, scopeLabel())
@@ -566,10 +565,10 @@ void SearchPanel::redraw()
     pager->setGeometry(0, height() - chrome::actionHeight, width(), chrome::actionHeight);
     const int used =
             listTop + qMin(pageSize, qMax(0, shownCount - resultPage * pageSize)) * rowHeight;
-    const auto pageCaption =
-            strings::get(complete ? "search_panel.result_pages"
-                                  : "search_panel.result_pages_so_far")
-                    .arg(QLocale().toString(resultPage + 1), QLocale().toString(count));
+    const auto pageCaption = strings::get(complete ? "search_panel.result_pages"
+                                                   : "search_panel.result_pages_so_far")
+                                     .arg(resultPage + 1)
+                                     .arg(count);
     pager->setPage(resultPage, count, pageCaption, true,
                    { chrome::inset, used, width() - 2 * chrome::inset, pager->y() - used },
                    shownCount > 0);

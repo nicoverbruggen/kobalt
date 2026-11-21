@@ -30,7 +30,7 @@ QFont valueFont(bool bold = false)
 
 QString counted(int count, const QString &many, const QString &one)
 {
-    return count == 1 ? one : many.arg(QLocale().toString(count));
+    return count == 1 ? one : many.arg(count);
 }
 
 QString pagesText(int direction, int distance)
@@ -294,9 +294,7 @@ int SyncChoiceView::pagesGraph(int width, QPainter *painter) const
     painter->setRenderHint(QPainter::Antialiasing, false);
     paintJumpLabel(*painter, (xh + xs) / 2, 0, width);
     // Page numbers count from one. Neighbouring pages push their numbers apart.
-    const auto number = [](int page) {
-        return strings::get("kosync.page_number").arg(QLocale().toString(page + 1));
-    };
+    const auto number = [](int page) { return strings::get("kosync.page_number").arg(page + 1); };
     const auto hereText = number(value.here), syncedText = number(value.synced);
     auto hereArea = centeredText(hereText, labelFont(), xh, numbers, width);
     auto syncedArea = centeredText(syncedText, labelFont(true), xs, numbers, width);

@@ -12,7 +12,6 @@
 #include <QPaintEvent>
 #include <QPainter>
 #include <QFontMetrics>
-#include <QLocale>
 #include <QPainterPath>
 #include <QStackedWidget>
 #include <QtMath>
@@ -1014,7 +1013,7 @@ void Navigation::placeZenToolbar(QSize size, const QVector<QWidget *> &actions,
         using Figure = ZenStatsPanel::Figure;
         QVector<Figure> figures{
             { unit(state.sessionMinutes), strings::get("zen.this_session"), false },
-            { { qMakePair(QLocale().toString(state.pageTurns), QString()) },
+            { { qMakePair(QString::number(state.pageTurns), QString()) },
               strings::get("zen.pages_turned"),
               false },
             { state.chapterMinutes < 0 ? QVector<QPair<QString, QString>>{ qMakePair(

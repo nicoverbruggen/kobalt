@@ -3806,8 +3806,7 @@ private slots:
                                   15000);
         QCOMPARE(scopeStatus->text(),
                  strings::get("search_panel.matches_in_scope")
-                         .arg(strings::get("search_panel.matches")
-                                      .arg(QLocale().toString(referenceCount)),
+                         .arg(strings::get("search_panel.matches").arg(referenceCount),
                               strings::get("search_panel.whole_book")));
         auto *jump = host.window()->findChild<QPushButton *>("rrSearchPageJump");
         QVERIFY(jump && click(canvas, jump));
@@ -3836,8 +3835,7 @@ private slots:
         QTRY_VERIFY(last->isEnabled());
         QVERIFY(!last->accessibleName().isEmpty());
         QCOMPARE(host.window()->findChild<QLabel *>("rrSearchPage")->text(),
-                 strings::get("search_panel.result_pages")
-                         .arg(QLocale().toString(lastPage), QLocale().toString(lastPage)));
+                 strings::get("search_panel.result_pages").arg(lastPage).arg(lastPage));
         // A delayed reply for the previous results page cannot replace the current rows.
         auto *panel = dynamic_cast<SearchPanel *>(host.window()->findChild<QWidget *>("rrSearch"));
         QVERIFY(panel);
@@ -3869,7 +3867,7 @@ private slots:
         QVERIFY(click(canvas, host.window()->findChild<QAbstractButton *>("rrSearchScope1")));
         QCOMPARE(scopeStatus->text(),
                  strings::get("search_panel.matches_so_far_in_scope")
-                         .arg(strings::get("search_panel.matches").arg(QLocale().toString(0)),
+                         .arg(strings::get("search_panel.matches").arg(0),
                               strings::get("search_panel.up_to_here")));
         QTRY_VERIFY_WITH_TIMEOUT(status->text() != strings::get("search_panel.searching"), 10000);
         query->clear();
@@ -3923,7 +3921,7 @@ private slots:
         const auto exactPages = counter->text();
         QVERIFY(exactPages.startsWith("Page 1 of "));
         QVERIFY(!exactPages.contains("at least"));
-        // Count grammar and locale grouping apply to every existing scope.
+        // Every scope uses plain digits, including on devices with different grouping rules.
         const auto previousLocale = QLocale();
 
         struct RestoreLocale
@@ -3952,17 +3950,17 @@ private slots:
                          strings::get("search_panel.matches_in_scope")
                                  .arg(strings::get(count == 1 ? "search_panel.match"
                                                               : "search_panel.matches")
-                                              .arg(QLocale().toString(count)),
+                                              .arg(count),
                                       strings::get(scopeKeys[id])));
                 QCOMPARE(counter->isVisible(), count > 0);
                 if (count == 1)
                     QCOMPARE(counter->text(), QString("Page 1 of 1"));
             }
         }
-        QCOMPARE(scopeStatus->text(), QString("1,288 matches in Whole book"));
+        QCOMPARE(scopeStatus->text(), QString("1288 matches in Whole book"));
         QLocale::setDefault(QLocale(QLocale::German, QLocale::Germany));
         panel->resize(panel->width() - 1, panel->height());
-        QCOMPARE(scopeStatus->text(), QString("1.288 matches in Whole book"));
+        QCOMPARE(scopeStatus->text(), QString("1288 matches in Whole book"));
         SearchBatch partial;
         partial.reset = true;
         partial.hits.append({ "first", "end", "Before", "match", "after", 0 });
@@ -4167,7 +4165,7 @@ private slots:
                  strings::get("search_panel.matches_in_scope")
                          .arg(strings::get(expectedCount == 1 ? "search_panel.match"
                                                               : "search_panel.matches")
-                                      .arg(QLocale().toString(expectedCount)),
+                                      .arg(expectedCount),
                               strings::get("search_panel.whole_book")));
     }
 

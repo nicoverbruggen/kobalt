@@ -62,6 +62,39 @@ void checkZip64MemberSize()
         qFatal("Read a ZIP64 size past its declared field boundary");
 }
 
+void checkZip64EndMetadata()
+{
+    if (!zip::matchesClassicEndField<quint16>(0, 0) || zip::matchesClassicEndField<quint16>(1, 0)
+        || !zip::matchesClassicEndField<quint16>(7, 7) || zip::matchesClassicEndField<quint16>(6, 7)
+        || !zip::matchesClassicEndField<quint16>(0xffff, 7)
+        || !zip::matchesClassicEndField<quint32>(88, 88)
+        || zip::matchesClassicEndField<quint32>(89, 88)
+        || !zip::matchesClassicEndField<quint32>(0xffffffff, 88))
+        qFatal("Incorrect agreement between classic and ZIP64 end fields");
+
+    if (zip::zip64BodyLength(176, 100) != 44 || zip::zip64BodyLength(180, 100) != 48
+        || zip::zip64BodyLength(176, 101) || zip::zip64BodyLength(176, 177)
+        || zip::zip64BodyLength(75, 0))
+        qFatal("Incorrect ZIP64 record extent relative to its locator");
+}
+
+void checkZip64MemberDisk()
+{
+    // A standalone central member header and its optional disk field. No archive is built.
+    QByteArray header(46, '\0');
+    replace16(header, 34, 0xffff);
+    for (int diskBytes = 0; diskBytes <= 4; ++diskBytes) {
+        QByteArray extra;
+        u16(extra, 1);
+        u16(extra, diskBytes);
+        extra.append(QByteArray(diskBytes, '\0'));
+        replace16(header, 30, extra.size());
+        zip::Member member{};
+        if (zip::member(header + extra, 0, member) != (diskBytes == 4))
+            qFatal("ZIP64 member checked an incorrect number of bytes for its disk field");
+    }
+}
+
 QByteArray makeZip(const QByteArray &source, bool deflated, bool badCrc = false,
                    bool truncated = false)
 {
@@ -232,13 +265,15 @@ void save(const QString &path, const QByteArray &bytes)
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
+    checkZip64MemberSize();
+    checkZip64EndMetadata();
+    checkZip64MemberDisk();
     QTemporaryDir dir;
     if (!dir.isValid())
         qFatal("temporary directory");
     const auto path = dir.path() + "/book.zip";
     ZipResourceIndex index;
     checkDirectoryReuse();
-    checkZip64MemberSize();
     // The low byte is the version; the high byte names the writer's system.
     for (const quint16 version : { 46, 0x032e }) {
         auto unsupported = makeZip("chapter", false);

@@ -2,6 +2,7 @@
 
 #include <QIODevice>
 #include <QtEndian>
+#include <limits>
 
 namespace kobalt::zip {
 template <typename T>
@@ -17,6 +18,22 @@ struct Directory
     int count = 0;
     bool zip64 = false;
 };
+
+// The record ends at the locator, immediately before the classic end record.
+inline quint64 zip64BodyLength(quint64 classicEnd, quint64 record)
+{
+    constexpr quint64 locatorSize = 20, recordPrefixSize = 12, minBodySize = 44;
+    constexpr auto overhead = locatorSize + recordPrefixSize;
+    if (classicEnd < overhead + minBodySize || record > classicEnd - overhead - minBodySize)
+        return 0;
+    return classicEnd - overhead - record;
+}
+
+template <typename T>
+bool matchesClassicEndField(T classic, quint64 extended)
+{
+    return classic == std::numeric_limits<T>::max() || classic == extended;
+}
 
 // EPUB archives use one disk. ZIP64 may be present even when all values fit in ZIP32.
 inline bool readDirectory(QIODevice &source, Directory &result)
@@ -41,21 +58,23 @@ inline bool readDirectory(QIODevice &source, Directory &result)
     const auto diskCount = field<quint16>(tail, end + 8);
     if (end >= 20 && field<quint32>(tail, end - 20) == 0x07064b50 && offset + size != boundary) {
         const auto record = field<quint64>(tail, end - 12);
-        if (field<quint32>(tail, end - 16) || field<quint32>(tail, end - 4) != 1 || boundary < 76
-            || record > boundary - 76 || !source.seek(record))
+        const auto bodyLength = zip64BodyLength(boundary, record);
+        if (field<quint32>(tail, end - 16) || field<quint32>(tail, end - 4) != 1 || !bodyLength
+            || !source.seek(record))
             return false;
         const auto header = source.read(56);
         if (header.size() != 56 || field<quint32>(header, 0) != 0x06064b50
-            || field<quint64>(header, 4) != boundary - 32 - record || field<quint32>(header, 16)
+            || field<quint64>(header, 4) != bodyLength || field<quint32>(header, 16)
             || field<quint32>(header, 20))
             return false;
         const auto entries = field<quint64>(header, 32);
         const auto bytes = field<quint64>(header, 40), location = field<quint64>(header, 48);
-        if ((disk && disk != 0xffff) || (centralDisk && centralDisk != 0xffff)
+        if (!matchesClassicEndField(disk, 0) || !matchesClassicEndField(centralDisk, 0)
             || field<quint64>(header, 24) != entries
-            || (diskCount != 0xffff && diskCount != entries)
-            || (count != 0xffff && count != entries) || (offset != 0xffffffff && offset != location)
-            || (size != 0xffffffff && size != bytes))
+            || !matchesClassicEndField(diskCount, entries)
+            || !matchesClassicEndField(quint16(count), entries)
+            || !matchesClassicEndField(quint32(offset), location)
+            || !matchesClassicEndField(quint32(size), bytes))
             return false;
         result.zip64 = true;
         boundary = record;

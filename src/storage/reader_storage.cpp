@@ -22,6 +22,9 @@
 #include <QSaveFile>
 #include <QCryptographicHash>
 #include <cmath>
+#include <cerrno>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -80,7 +83,90 @@ QString Paths::previews() const
 
 QString Paths::documentCache() const
 {
-    return child(directory, ".cache-blaze");
+    return child(directory, ".cache");
+}
+
+namespace {
+// Do not follow links in the retired trees. Keep enumeration and removal
+// relative to an open directory, even if a name is replaced mid-cleanup.
+bool removeCacheEntry(int parent, const char *name, bool cacheRoot,
+                      const std::function<bool()> &cancelled)
+{
+    if (cancelled())
+        return false;
+    struct stat info;
+    if (::fstatat(parent, name, &info, AT_SYMLINK_NOFOLLOW) < 0)
+        return errno == ENOENT;
+    if (!S_ISDIR(info.st_mode))
+        return (!cacheRoot || S_ISLNK(info.st_mode)) && ::unlinkat(parent, name, 0) == 0;
+    const int fd = ::openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0)
+        return false;
+    auto *directory = ::fdopendir(fd);
+    if (!directory) {
+        ::close(fd);
+        return false;
+    }
+    bool ok = true;
+    while (ok) {
+        errno = 0;
+        const auto *entry = ::readdir(directory);
+        if (!entry) {
+            ok = errno == 0;
+            break;
+        }
+        if (qstrcmp(entry->d_name, ".") != 0 && qstrcmp(entry->d_name, "..") != 0)
+            ok = removeCacheEntry(fd, entry->d_name, false, cancelled);
+    }
+    ::closedir(directory);
+    return ok && !cancelled() && ::unlinkat(parent, name, AT_REMOVEDIR) == 0;
+}
+} // namespace
+
+bool prepareDocumentCache(const Paths &paths, const std::function<bool()> &cancelled)
+{
+    mainthread::BlockingOperation blockingOperation("document-cache-migration");
+    if (paths.directory.isEmpty() || cancelled())
+        return false;
+    const int profile = ::open(QFile::encodeName(paths.directory).constData(),
+                               O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    if (profile < 0)
+        return false;
+    struct Close
+    {
+        int fd;
+        ~Close() { ::close(fd); }
+    } close{ profile };
+
+    // Keep the marker outside the parsed cache so eviction cannot reset the
+    // migration. The engine has not been given the new path until this returns.
+    constexpr auto marker = ".blaze-cache-v1";
+    struct stat info;
+    const bool initialized = ::fstatat(profile, marker, &info, AT_SYMLINK_NOFOLLOW) == 0;
+    if (initialized ? !S_ISREG(info.st_mode) || info.st_size != 0 : errno != ENOENT)
+        return false;
+    if (!removeCacheEntry(profile, ".cache-blaze", true, cancelled))
+        return false;
+    if (initialized) {
+        const bool exists = ::fstatat(profile, ".cache", &info, AT_SYMLINK_NOFOLLOW) == 0;
+        const bool usable = exists ? S_ISDIR(info.st_mode) : errno == ENOENT;
+        return usable && !cancelled();
+    }
+    if (!removeCacheEntry(profile, ".cache", true, cancelled) || cancelled()
+        || ::fsync(profile) != 0 || cancelled())
+        return false;
+
+    const int initializedFile = ::openat(profile, marker,
+                                         O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+                                         0600);
+    if (initializedFile < 0)
+        return false;
+    const bool committed = ::fsync(initializedFile) == 0;
+    ::close(initializedFile);
+    if (committed && ::fsync(profile) == 0)
+        return !cancelled();
+    ::unlinkat(profile, marker, 0);
+    return false;
 }
 
 QString Paths::bookState(const QString &identity) const

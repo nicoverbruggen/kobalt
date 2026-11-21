@@ -23,6 +23,7 @@ struct OpeningJob
     QString customPinsPath, dictionariesPath;
     QJsonObject pinnedAppearance, appearanceDefaults;
     bool restartAtStart = false;
+    bool migrateKoboDocumentCache = false;
     ReaderMarkupRequest markup;
     quint64 markupGeneration = 0;
 

@@ -2,6 +2,7 @@
 #include "dictionaries/stardict.h"
 #include "appearance_settings.h"
 #include "engine/engine_activity.h"
+#include "storage/reader_storage.h"
 #include "support/diagnostics.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
@@ -280,7 +281,11 @@ void openCold(OpeningJob &job, OpeningState &state)
     // A cached book reads no text from Nickel either. A parsed book
     // reads the probed resource from memory afterwards.
     const bool cached =
-            !job.documentCachePath.isEmpty() && !state.probe.isEmpty() && readable(state);
+            !job.documentCachePath.isEmpty() && !state.probe.isEmpty() && readable(state)
+            && (!job.migrateKoboDocumentCache
+                || storage::prepareDocumentCache(
+                        { QFileInfo(job.documentCachePath).absolutePath() },
+                        [&job] { return job.cancelled(); }));
     engine->setDocumentCache(cached ? job.documentCachePath : QString(),
                              cached ? state.digest : QByteArray(), KOBALT_LAYOUT_POLICY,
                              state.file.size());

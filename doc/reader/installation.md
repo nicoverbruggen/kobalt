@@ -65,8 +65,7 @@ Support files are in `.adds/kobalt/`. Annotation exports are in `Kobalt/Annotati
 | `<hash>.json` | One file per book: saved position, typography, header and footer preset, orientation, dictionary choice and the Nickel progress baseline |
 | `annotations/<key>/` | One folder per book with `bookmarks.json`, `highlights.json` and `book.json`, see Bookmarks and annotations |
 | `annotations/.index/paths.json` | Disposable bookmark lookup index, at most 4 MiB; rebuilt from book folders when missing or invalid |
-| `.cache-blaze/` | Parsed Blaze books and their pages, so a book that was opened before opens without parsing. At most 128 MiB; the oldest books are removed first. Kobalt deletes any other file in this folder |
-| `.cache/` | Parsed books from beta 8. Blaze leaves this folder untouched so beta 8 can reuse it after rollback |
+| `.cache/` | Parsed Blaze books and their pages. Kobalt keeps up to 128 MiB and removes the oldest books first. On upgrade to beta 10, Kobalt discards parsed books from beta 8 and beta 9. It rebuilds each book when you open it. |
 | `crash-reporting/` | One report for each of the last 20 crashes of Nickel, see below |
 | `diagnostics/events.jsonl`, `diagnostics/events.jsonl.previous` | Event log, two files of at most 128 KiB each. With verbose diagnostics, the current file and five older files of at most 16 MiB each, and `session-context.json`. See [Page-turn diagnostics](../validation/diagnostics.md#page-turn-diagnostics) |
 | `scenarios/scenarios.json`, `scenarios.jsonl` | Evaluation packages only: the performance scenarios that Kobalt runs after the first book opens, and their results. See [Release evaluation](../release-evaluation.md#device-scenarios) |

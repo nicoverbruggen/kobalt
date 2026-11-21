@@ -4,8 +4,8 @@ Caches hold no reading data. Kobalt can always rebuild them, and rebuilding neve
 
 ## Blaze parsed books
 
-- On Kobo, Blaze keeps parsed books in `.cache-blaze/`, in Hybrid and Accurate modes.
-- Beta 8 uses the sibling `.cache/`. Blaze never reads, migrates or deletes it, so going back to beta 8 keeps its parsed books. Each engine has its own budget.
+- On Kobo, Blaze keeps parsed books in `.cache/` in Hybrid and Accurate modes.
+- Beta 8 used `.cache/` and beta 9 used `.cache-blaze/`. Before Blaze first uses the cache after an upgrade to beta 10, Kobalt removes both old caches. It records completion in `.blaze-cache-v1` in the profile root. Later book opens keep the new `.cache/`. If a downgrade recreates `.cache-blaze/`, Kobalt removes it the next time it prepares the cache.
 - On Android, the cache is `blaze-documents/` in the app's cache folder. Android can clear it and leaves it out of backups. A book then parses again.
 - Desktop builds keep no parsed books.
 - The budget is 128 MiB. The format is engine-specific binary. It is not an interchange or backup format.

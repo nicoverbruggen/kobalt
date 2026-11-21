@@ -93,6 +93,9 @@ struct ProfileRecovery
     bool recovered() const { return settings || syncAccount || database; }
 };
 
+// Kobo opening worker only. A failed migration leaves cache use disabled.
+bool prepareDocumentCache(const Paths &, const std::function<bool()> &cancelled);
+
 // Moves damaged saved data, and saved data from a newer version, into
 // backups/ and starts again from defaults. Then imports recognized durable
 // files and tidies known transient files. Unknown files and failed imports

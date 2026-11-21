@@ -37,5 +37,7 @@ struct OpenRequest
     QString customPinsPath{};
     // Optional StarDict folder. Prepare its indexes on the opening worker.
     QString dictionariesPath{};
+    // The Kobo host reuses its original parsed-book cache path.
+    bool migrateKoboDocumentCache = false;
 };
 } // namespace kobalt

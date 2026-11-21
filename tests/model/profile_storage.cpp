@@ -44,6 +44,47 @@ void write(const QString &path, const QByteArray &value)
     require(file.open(QIODevice::WriteOnly) && file.write(value) == value.size(), "Write fixture");
 }
 
+void documentCacheMigration()
+{
+    QTemporaryDir root;
+    require(root.isValid(), "Create the cache migration fixture");
+    const storage::Paths paths{ root.path() };
+    const auto active = paths.documentCache();
+    const auto retired = root.filePath(".cache-blaze");
+    const auto saved = root.filePath("reader-settings.json");
+    write(saved, "saved-data");
+    require(QDir().mkpath(retired + "/nested") && QDir().mkpath(active),
+            "Create both legacy cache directories");
+    write(active + "/old.cr3", "beta8");
+    write(retired + "/nested/old.cr3", "beta9");
+    require(QFile::link(saved, retired + "/outside"), "Create a cache symlink");
+    const auto prepare = [&](const std::function<bool()> &cancelled = [] { return false; }) {
+        bool ready = false;
+        storage::runOnWriterThread([&] { ready = storage::prepareDocumentCache(paths, cancelled); });
+        return ready;
+    };
+    int checks = 0;
+    require(!prepare([&] { return ++checks > 3; }),
+            "An interrupted cleanup must not enable the cache");
+    require(prepare(), "Resume document cache migration");
+    require(QFile::link(saved, retired) && prepare() && !QFileInfo(retired).isSymLink(),
+            "Retire a legacy cache symlink without following it");
+    require(!QFileInfo::exists(active) && !QFileInfo::exists(retired) && bytes(saved) == "saved-data",
+            "Both cache trees must retire without touching the linked file");
+    require(QDir().mkpath(active), "Recreate the active cache directory");
+    write(active + "/new.cr3", "current-cache");
+    require(prepare() && bytes(active + "/new.cr3") == "current-cache",
+            "Restart must preserve initialized cache");
+    require(QDir().mkpath(retired), "Recreate the beta 9 cache after a downgrade");
+    write(retired + "/old.cr3", "beta9-downgrade");
+    require(prepare() && !QFileInfo::exists(retired) && bytes(active + "/new.cr3") == "current-cache",
+            "Upgrade after a downgrade must only retire its obsolete cache");
+    require(QDir(active).removeRecursively() && QFile::link(root.path(), active),
+            "Replace the initialized cache with a symlink");
+    require(!prepare() && bytes(saved) == "saved-data",
+            "Do not use a symlink as an initialized cache directory");
+}
+
 // Stands in for a change made while Kobalt was closed: the profile closes
 // afterwards, so the next operation opens and checks the file again.
 void execute(const QString &directory, const QString &sql)
@@ -172,13 +213,10 @@ int main(int argc, char **argv)
         storage::closeProfile();
     }
     const storage::Paths paths{ root.path() };
-    require(paths.documentCache() == root.path() + "/.cache-blaze"
+    documentCacheMigration();
+    require(paths.documentCache() == root.path() + "/.cache"
                     && storage::Paths{}.documentCache().isEmpty(),
-            "Blaze cache has its own profile namespace");
-    const auto beta8Cache = root.path() + "/.cache";
-    require(QDir().mkpath(beta8Cache), "Beta 8 cache directory");
-    const auto beta8Entry = beta8Cache + "/book.cr3";
-    write(beta8Entry, "beta8-cache-sentinel");
+            "Blaze uses the original Kobo cache directory");
     const QString identity = "file:///books/invented.epub";
     QJsonObject state;
     state["schema"] = 1;
@@ -206,11 +244,6 @@ int main(int argc, char **argv)
     require(storage::prepareProfile(paths), "Import complete profile");
     require(QFileInfo::exists(retiredInspection) && bytes(retiredInspection) == oldVerdict,
             "Profile preparation moved or removed the retired inspection cache");
-    require(QDir().mkpath(paths.documentCache()), "Blaze cache directory");
-    write(paths.documentCache() + "/book.cr3", "blaze-cache-sentinel");
-    require(QDir(paths.documentCache()).removeRecursively()
-                    && bytes(beta8Entry) == "beta8-cache-sentinel",
-            "Profile preparation and Blaze cache clearing preserve beta 8 cache");
     require(!QFile::exists(legacyPreview), "Profile preparation left a legacy preview");
     require(storage::readBookState(paths, identity).object == state, "Imported state changed");
     const auto backup =

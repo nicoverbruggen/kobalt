@@ -368,6 +368,10 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         interfaceFontsLoaded = false;
     };
     lifecycle->storageRestored = [this] {
+#ifdef KOBALT_READER_HARDWARE
+        if (startupReady)
+            environment_.recordSuccessfulLaunch(NativeLifecycle::stockStorageGeneration);
+#endif
         environment_.verifyAssets(this, "usb", {}, NativeLifecycle::stockStorageGeneration);
         prefetchHomePowerOff();
     };
@@ -497,8 +501,12 @@ bool ReaderCoordinator::idleForBenchmark() const
     return !busy && !run.reader && !run.fallbackAlert && !lifecycle->draining;
 }
 
-void ReaderCoordinator::finishPreviewMigration()
+void ReaderCoordinator::finishStartup()
 {
+#ifdef KOBALT_READER_HARDWARE
+    startupReady = true;
+    environment_.recordSuccessfulLaunch(NativeLifecycle::stockStorageGeneration);
+#endif
     const auto directory = environment_.paths.previews();
     if (storage::previewMigrationNeedsScan(directory))
         lifecycle->scanLibrary([directory] { storage::completePreviewMigration(directory); });
@@ -1180,7 +1188,8 @@ void ReaderCoordinator::load(const QJsonObject &globalPreferences)
               restart,
               run.nativePublication->coverPath(),
               environment_.paths.customPins(),
-              QStringLiteral(KOBALT_CONFIG_DIR "/dictionaries") },
+              QStringLiteral(KOBALT_CONFIG_DIR "/dictionaries"),
+              true },
             [this](const kobalt::OpeningResult &outcome) {
                 run.openingTimings["load_and_layout_ms"] =
                         run.openingTimer.elapsed() - run.layoutStarted;
@@ -1490,7 +1499,8 @@ void ReaderCoordinator::startPreload(const QString &identity, const QString &pat
                     false,
                     QString(),
                     environment_.paths.customPins(),
-                    QStringLiteral(KOBALT_CONFIG_DIR "/dictionaries") },
+                    QStringLiteral(KOBALT_CONFIG_DIR "/dictionaries"),
+                    true },
                   [guard, session, identity, path](const OpeningResult &outcome) {
                       if (!guard || guard->preload.session.get() != session)
                           return;

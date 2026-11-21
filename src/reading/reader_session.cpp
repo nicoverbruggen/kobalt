@@ -760,8 +760,11 @@ void ReaderSession::evictDocumentCache(bool allBooks, const QString &documentCac
                 mainthread::blocking("document-cache-evict");
                 bool removed = engine->removeDocumentCache(allBooks);
                 // A book that opened without the cache has no folder of its own.
-                if (allBooks && !removed && !documentCache.isEmpty())
-                    removed = QDir(documentCache).removeRecursively();
+                if (allBooks && !removed && !documentCache.isEmpty()) {
+                    const QFileInfo folder(documentCache);
+                    removed = folder.isSymLink() ? QFile::remove(documentCache)
+                                                 : QDir(documentCache).removeRecursively();
+                }
                 const bool tiles =
                         !allBooks || previews.isEmpty() || storage::removePreviewFiles(previews);
                 diagnostic("document-cache-evicted",
@@ -911,6 +914,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     opening.positions = positions;
     opening.systemFont = systemFont;
     opening.documentCachePath = documentCachePath;
+    opening.migrateKoboDocumentCache = request.migrateKoboDocumentCache;
     opening.userStyleSheetPath = userStyleSheetPath;
     opening.customPinsPath = request.customPinsPath;
     opening.dictionariesPath = request.dictionariesPath;

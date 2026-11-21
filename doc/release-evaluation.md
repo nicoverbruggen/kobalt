@@ -310,9 +310,11 @@ ctest --preset mac -R '^platform.(sleep-persistence|scenario-sleep)$'
 
 ## Evaluate a candidate
 
+CI does not run the sanitizer checks, so run them for every candidate that you compare against the previous beta: `KOBALT_NATIVE_SANITIZE=1 bash platforms/ci/native-tests.sh` from the repository root, or the Mac `mac-sanitize` preset from [Desktop memory checks](validation.md#desktop-memory-checks). On the development Mac, the `mac-sanitize` test run takes about 6 minutes after the build. Record the result with the report.
+
 Read `report.md` from the top and decide:
 
-1. A failed part at the top of the report, or a newly failing test, blocks the release until it is explained. A removed test needs a reason in the commits. So does a failed resource gate.
+1. A failed part at the top of the report, a newly failing test or a failed sanitizer run blocks the release until it is explained. A removed test needs a reason in the commits. So does a failed resource gate.
 2. Each changed screenshot is explained by a commit, or it is listed as unexplained. Inspect the crops in `screens/`.
 3. Each `slower` or `faster` metric is checked against `touched_by` and the commit messages. An intended speed-up or an accepted cost is expected. A change that no commit explains is unexpected.
 4. A comparability warning, or a `noisy` verdict on a metric that matters, means measure again with more `RUNS`.

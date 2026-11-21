@@ -60,7 +60,7 @@ KOBALT_NATIVE_SANITIZE=1 bash platforms/ci/native-tests.sh
 
 The Linux preset also enables LeakSanitizer. GCC uses `-O1` in the sanitizer Debug build to inline small helpers during rendering. Debug symbols, assertions and stack-use-after-return checks stay enabled. The command builds in `build/desktop-linux-sanitize/` and runs the cases with the `sanitize` label. Use the runner's `build` or `test` argument to run only that step. For an individual reader UI or lifecycle case in an instrumented Linux build, run `ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ctest --test-dir build/desktop-linux-sanitize -R '<test name>' --output-on-failure` from the repository root inside the SDK.
 
-Every **Build and release** workflow run includes the sanitizer job. It runs alongside the regular native tests and reports its own result. The release package jobs still require the regular native suite.
+CI does not run the sanitizer checks. Run them when you evaluate a release candidate against the previous beta; see [Evaluate a candidate](release-evaluation.md#evaluate-a-candidate). The sanitizer builds also stop on an integer division by zero. x86 traps that division and arm64 returns 0, so a Mac run catches what only a Linux x86 run would show.
 
 Use `ctest --preset mac -N` to list registered tests. Use `-R` to select a test name. Use `-L` with a group label to select a group: `model`, `engine`, `session`, `desktop`, `resource`, `component`, `ui`, `platform` or `corpus`. Use `-L` with an area label from [Area checks](#area-checks) to select a feature area. CTest does not build tests automatically. A failed test prints its assertion and captured output. CTest keeps the latest run in `build/desktop-mac/Testing/Temporary/LastTest.log`.
 

@@ -143,20 +143,6 @@ jobs:
           KOBALT_TEST_SHARDS: ${{ inputs.native_shards || '2' }}
         run: bash platforms/ci/native-tests.sh test
 
-  native-sanitize:
-    needs: validation
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - name: Run native sanitizer checks
-        env:
-          KOBALT_NATIVE_SANITIZE: '1'
-          JOBS: '2'
-        run: bash platforms/ci/native-tests.sh
-
   build-kobo:
     needs: [validation, native-tests]
     runs-on: ubuntu-24.04

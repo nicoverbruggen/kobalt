@@ -3220,14 +3220,16 @@ private slots:
         QVERIFY(host.session()->go(origin));
         QTRY_VERIFY(!host.session()->busy());
         const QPoint point(page->width() * 9 / 10, page->height() / 2);
-        auto *device = QTest::createTouchDevice();
+        QPointingDevice device("Held page touch", 1, QInputDevice::DeviceType::TouchScreen,
+                               QPointingDevice::PointerType::Finger,
+                               QInputDevice::Capability::Position, 2, 0);
         const auto send = [&](QEvent::Type type, ulong timestamp) {
             if (touch) {
                 const bool down = type == QEvent::MouseButtonPress;
                 QEventPoint contact(0, down ? QEventPoint::Pressed : QEventPoint::Released, point,
                                     page->mapToGlobal(point));
                 QMutableEventPoint::setPosition(contact, point);
-                QTouchEvent event(down ? QEvent::TouchBegin : QEvent::TouchEnd, device,
+                QTouchEvent event(down ? QEvent::TouchBegin : QEvent::TouchEnd, &device,
                                   Qt::NoModifier, { contact });
                 event.setTimestamp(timestamp);
                 QApplication::sendEvent(page, &event);
@@ -6954,7 +6956,10 @@ private slots:
             QVERIFY(next && next->isEnabled());
             next->click();
         } else {
-            QTouchEvent event(QEvent::TouchCancel, QTest::createTouchDevice());
+            QPointingDevice device("Sleep gallery touch", 1, QInputDevice::DeviceType::TouchScreen,
+                                   QPointingDevice::PointerType::Finger,
+                                   QInputDevice::Capability::Position, 2, 0);
+            QTouchEvent event(QEvent::TouchCancel, &device);
             QCoreApplication::sendEvent(grid, &event);
         }
         QTest::mouseRelease(grid, Qt::LeftButton, Qt::NoModifier, left);

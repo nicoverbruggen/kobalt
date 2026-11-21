@@ -2637,7 +2637,8 @@ void verticalJustificationTour(Fixture &fixture, const QString &name, bool scree
             QVERIFY(fixture.press("rrSettingsDisplay"));
             QVERIFY(reveal("rrColumnsSettings"));
             QVERIFY(fixture.press("rrColumnsSettings"));
-            QVERIFY(reveal("rrLandscapeColumns"));
+            // The choice is in the Columns sheet, not on a Settings page.
+            QTRY_VERIFY(fixture.visible("rrLandscapeColumns"));
             auto *choice = qobject_cast<QCheckBox *>(fixture.widget("rrLandscapeColumns"));
             QVERIFY(choice);
             if (!choice->isChecked())

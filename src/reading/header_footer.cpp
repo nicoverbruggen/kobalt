@@ -4,6 +4,7 @@
 #include "support/strings.h"
 
 #include <QJsonArray>
+#include <QLocale>
 
 namespace kobalt::headerfooter {
 QString pageTotal(int pages, bool estimated)
@@ -80,9 +81,9 @@ QString percent(qint64 tenths, bool decimal)
 {
     if (tenths < 0)
         return {};
-    const auto whole = tenths / 10;
+    const QLocale locale;
     return strings::get("common.percent")
-            .arg(decimal ? QString("%1.%2").arg(whole).arg(tenths % 10) : QString::number(whole));
+            .arg(decimal ? locale.toString(tenths / 10.0, 'f', 1) : locale.toString(tenths / 10));
 }
 
 QString percentDone(int page, int pages, bool decimal)

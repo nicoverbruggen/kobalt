@@ -6,6 +6,7 @@
 #include "support/strings.h"
 #include "check.h"
 
+#include <QLocale>
 #include <algorithm>
 #include <iterator>
 
@@ -15,6 +16,7 @@ using namespace kobalt::headerfooter;
 // Checks header and footer layouts: defaults, legacy flags and sizes, the battery field, time-remaining text and round trips.
 int main()
 {
+    QLocale::setDefault(QLocale::c());
     // Default keeps the chapter prominent and the footer free of a bar.
     const auto standard = presetLayout(Preset::Default);
     require(isPhoneScreen({ 720, 1600 }, 300) && isPhoneScreen({ 1600, 720 }, 300),
@@ -240,14 +242,19 @@ int main()
         require(content(field, noPages, false).text == calculating,
                 "A page field without page numbers must show that they are being calculated");
     require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42%")
-                    && content(Field::ChapterPercent, noPages, false).text
-                            == QStringLiteral("30%"),
+                    && content(Field::ChapterPercent, noPages, false).text == QStringLiteral("30%"),
             "The percentage fields keep their percentage");
     noPages.decimalPercentages = true;
     require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42.7%")
                     && content(Field::ChapterPercent, noPages, false).text
                             == QStringLiteral("30.9%"),
             "Chapter mode lost decimal precision before estimates arrived");
+    QLocale::setDefault(QLocale(QStringLiteral("it_IT")));
+    require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42,7%")
+                    && content(Field::ChapterPercent, noPages, false).text
+                            == QStringLiteral("30,9%"),
+            "Book and chapter progress must use the device's decimal separator");
+    QLocale::setDefault(QLocale::c());
     require(content(Field::ChapterAndPage, estimated, false).text == QStringLiteral("6 of ~20"),
             "An estimated total beside a name needs its mark");
     auto missingTotal = values;

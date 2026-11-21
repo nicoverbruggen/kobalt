@@ -72,10 +72,11 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
         bookPages(result.chapterGraph);
     }
     auto hints = engine.mainTextHints();
-    if (!engine.validMainTextRange(hints.first, hints.second))
+    bool deferred = false;
+    if (!engine.validMainTextRange(hints.first, hints.second, &deferred))
         hints.second.clear();
     QString first = hints.first, after = hints.second;
-    const auto &marks = engine.mainTextMarks;
+    auto marks = engine.mainTextMarks;
     for (bool start : { true, false }) {
         const auto key = start ? "start" : "end";
         auto mark = marks.value(key).toObject();
@@ -90,33 +91,39 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
                 continue;
             // An unloaded spine item can have one placeholder for several TOC entries.
             // Resolve the selected entry against the source before retaining its anchor.
-            const auto anchor = start ? engine.chapterBoundaryPosition(result.chapters, i)
-                                      : engine.afterChapter(result.chapters, i);
+            const auto anchor = start ? engine.chapterBoundaryPosition(result.chapters, i, &deferred)
+                                      : engine.afterChapter(result.chapters, i, &deferred);
             if (anchor.isNull() || (start && anchor.isEmpty())) {
-                engine.mainTextMarks.remove(key);
+                marks.remove(key);
                 continue;
             }
             mark["anchor"] = anchor;
-            engine.mainTextMarks[key] = mark;
+            marks[key] = mark;
         }
         // An empty exclusive end explicitly includes the last spine item.
         (start ? first : after) = mark.value("anchor").toString();
     }
     // Older versions allowed crossed marks. Restore the offending side to its
     // publication default before computing words or pages, including on reopen.
-    if (!engine.validMainTextRange(first, after)) {
+    if (!engine.validMainTextRange(first, after, &deferred)) {
         if (marks.contains("end")) {
-            engine.mainTextMarks.remove("end");
+            marks.remove("end");
             after = hints.second;
         }
-        if (!engine.validMainTextRange(first, after) && marks.contains("start")) {
-            engine.mainTextMarks.remove("start");
+        if (!engine.validMainTextRange(first, after, &deferred) && marks.contains("start")) {
+            marks.remove("start");
             first = hints.first;
         }
-        if (!engine.validMainTextRange(first, after))
+        if (!engine.validMainTextRange(first, after, &deferred))
             after.clear();
     }
-    result.state["main_text_marks"] = marks;
+    if (deferred) {
+        // Keep the original marks until the necessary source fragments can be read.
+        first = hints.first;
+        after = hints.second;
+    } else
+        engine.mainTextMarks = marks;
+    result.state["main_text_marks"] = engine.mainTextMarks;
     QVector<int> bounds;
     if (!first.isEmpty() || !after.isEmpty())
         bounds = engine.bookPages({ first, after }, current, true);
@@ -125,7 +132,7 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
     // A short interval can round to a single estimated page. Keep its source anchors.
     if (lastPage > 0)
         lastPage = qMax(firstPage, lastPage);
-    result.state["main_text_bounded"] = !first.isEmpty() || !after.isEmpty() || !marks.isEmpty();
+    result.state["main_text_bounded"] = !first.isEmpty() || !after.isEmpty() || !engine.mainTextMarks.isEmpty();
     result.mainWords = engine.wordsInMainText(first, after, current);
     result.state["main_text_first"] = firstPage;
     result.state["main_text_last"] = lastPage;
@@ -2779,12 +2786,16 @@ void ReaderSession::chapterBoundaryActions(
                 EngineJob activity;
                 const auto original = engine->mainTextMarks;
                 auto hints = engine->mainTextHints();
-                if (!engine->validMainTextRange(hints.first, hints.second))
+                bool hintsDeferred = false;
+                if (!engine->validMainTextRange(hints.first, hints.second, &hintsDeferred))
                     hints.second.clear();
                 QVector<ChapterBoundaryAction> actions;
                 for (bool start : { true, false }) {
+                    if (hintsDeferred)
+                        break;
                     const auto key = start ? "start" : "end";
                     for (bool reset : { false, true }) {
+                        bool deferred = false;
                         auto marks = original;
                         if (reset) {
                             if (!marks.contains(key))
@@ -2792,11 +2803,15 @@ void ReaderSession::chapterBoundaryActions(
                             marks.remove(key);
                         } else {
                             const auto &link = links[index];
-                            const auto entryStart = engine->chapterBoundaryPosition(links, index);
-                            const auto anchor =
-                                    start ? entryStart : engine->afterChapter(links, index);
-                            if (entryStart.isEmpty() || anchor.isNull()
-                                || (!start && !engine->validMainTextRange(entryStart, anchor)))
+                            const auto entryStart =
+                                    engine->chapterBoundaryPosition(links, index, &deferred);
+                            if (entryStart.isEmpty() || deferred)
+                                continue;
+                            const auto anchor = start ? entryStart
+                                                      : engine->afterChapter(links, index, &deferred);
+                            if (anchor.isNull() || deferred
+                                || (!start && !engine->validMainTextRange(entryStart, anchor,
+                                                                          &deferred)))
                                 continue;
                             marks[key] = qt::object({ { "index", index },
                                                       { "title", link.title },
@@ -2813,11 +2828,18 @@ void ReaderSession::chapterBoundaryActions(
                             const auto oldStart =
                                     original.value("start").toObject().value("anchor").toString();
                             // A later start begins a new range, even inside the previous range.
-                            if ((!oldStart.isEmpty() && engine->validMainTextRange(oldStart, first))
-                                || !engine->validMainTextRange(first, anchor("end", hints.second)))
+                            const bool startsLater = !oldStart.isEmpty()
+                                    && engine->validMainTextRange(oldStart, first, &deferred);
+                            const bool fits = startsLater || deferred
+                                    || engine->validMainTextRange(first, anchor("end", hints.second),
+                                                                  &deferred);
+                            if (deferred)
+                                continue;
+                            if (startsLater || !fits)
                                 marks.remove("end");
                         }
-                        if (!engine->validMainTextRange(first, anchor("end", hints.second)))
+                        if (!engine->validMainTextRange(first, anchor("end", hints.second),
+                                                       &deferred))
                             continue;
                         actions.append({ start, reset, [guard, job, original, marks] {
                                             if (!guard || !guard->currentSourceFrame(job)

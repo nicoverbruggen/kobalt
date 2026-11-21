@@ -8,16 +8,19 @@
 #include "engine/blaze/adapter/reader_render_callback.h"
 #include "engine/blaze/adapter/reader_source.h"
 #include "publication/page_estimate.h"
+#include "reading/opening_job.h"
 #include "render/page_content.h"
 #include "support/qt_compat.h"
 #include "support/diagnostics.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSet>
@@ -105,6 +108,23 @@ struct ReaderLocationProbe
     static PageMap &editMap(EngineDocument &model) { return model.source_->pageEstimate.map; }
 
     static QVector<qint64> spineBytes(const EngineDocument &model) { return model.spineBytes(); }
+
+    static bool fragmentsPending(const EngineDocument &model, const QString &path)
+    {
+        return model.source_->pendingTocFragments.contains(path);
+    }
+
+    static std::unique_ptr<ReaderSession> chapterActionSession(
+            EngineDocument &engine, const QJsonObject &marks)
+    {
+        auto session = std::unique_ptr<ReaderSession>(
+                new ReaderSession(std::shared_ptr<Engine>(&engine, [](Engine *) {}), {}));
+        session->lease_ = std::make_shared<SourceLease>();
+        session->frame.chapters = engine.chapters();
+        session->frame.state["main_text_marks"] = marks;
+        engine.mainTextMarks = marks;
+        return session;
+    }
 
     static int windowFirst(const EngineDocument &model) { return model.windowFirst_; }
 
@@ -3525,6 +3545,120 @@ void layoutProgressForward()
             "A new layout kept the old progress");
 }
 
+static void lazyChapterFragments()
+{
+    auto files = test::publisherPackage(
+            "en", "TOC fragments",
+            { { "first.xhtml",
+                test::publisherHtml("<p id='start'>First target.</p><p id='start'>Last duplicate.</p>"
+                                    "<p id='end'>Exclusive end.</p>")
+                        + "<broken" },
+              { "second.xhtml", test::publisherHtml("<p id='other'>Another chapter.</p>") },
+              { "third.xhtml",
+                test::publisherHtml("<section xmlns:b='http://www.idpf.org/2007/op&#115;' "
+                                    "b:type='bodymatter' id='body'><p>Body text.</p></section>") },
+              { "nav.xhtml",
+                test::publisherHtml("<nav epub:type='toc'><ol>"
+                                    "<li><a href='first.xhtml#start'>Start</a></li>"
+                                    "<li><a href='first.xhtml#end'>End</a></li>"
+                                    "<li><a href='second.xhtml#other'>Other</a></li>"
+                                    "<li><a href='third.xhtml#body'>Body</a></li>"
+                                    "<li><a href='first.xhtml'>Beginning</a></li>"
+                                    "</ol></nav>") } },
+            "<itemref idref='first.xhtml'/><itemref idref='second.xhtml'/>"
+            "<itemref idref='third.xhtml'/>");
+    files["book.opf"].replace("id=\"nav.xhtml\"", "id=\"nav.xhtml\" properties=\"nav\"");
+    files["third.xhtml"].replace(" xmlns:epub=\"http://www.idpf.org/2007/ops\"", "");
+    QMap<QString, qint64> sizes;
+    for (auto it = files.cbegin(); it != files.cend(); ++it)
+        sizes[it.key()] = it.value().size();
+    std::atomic_bool unavailable{ false };
+    auto resources = std::make_shared<ResourceCache>(
+            files.keys(),
+            [&](const QString &name, const ResourceCache::Sink &sink, QString *error) {
+                if (unavailable.load() && name == "first.xhtml") {
+                    *error = "Temporary chapter read failure";
+                    return false;
+                }
+                const auto bytes = files.value(name);
+                return sink(bytes.constData(), bytes.size());
+            },
+            std::make_shared<std::atomic_bool>(false));
+    EngineDocument model(test::readerFonts());
+    QString error;
+    require(model.openResources(resources, sizes, { 600, 800 },
+                                { { "koblaze_first_spine_item", -1 } }, &error),
+            qPrintable(error));
+    const QString body = "/body/DocFragment[3]/body[1]/section[1]";
+    require(model.mainTextHints().first == body && !Probe::fragmentsPending(model, "third.xhtml"),
+            "A prefixed type with an escaped namespace was deferred");
+    require(Probe::fragmentsPending(model, "first.xhtml")
+                    && Probe::fragmentsPending(model, "second.xhtml"),
+            "Opening scanned TOC fragments without semantic boundaries");
+    const QString first = "/body/DocFragment[1]/body[1]/p[2]";
+    const QString after = "/body/DocFragment[1]/body[1]/p[3]";
+    const QJsonObject marks{ { "start", QJsonObject{ { "index", 0 }, { "title", "Start" } } },
+                             { "end", QJsonObject{ { "anchor", after } } } };
+    model.mainTextMarks = marks;
+    resources->releaseBytes();
+    unavailable = true;
+    ReaderFrame frame;
+    captureChapters(frame, model);
+    require(model.mainTextMarks == marks && frame.state.value("main_text_marks").toObject() == marks
+                    && Probe::fragmentsPending(model, "first.xhtml"),
+            "A temporary read failure removed saved marks or consumed the pending fragments");
+    const auto chapterActionMarks = QJsonObject{
+        { "start", QJsonObject{ { "anchor", first } } },
+        { "end", QJsonObject{ { "anchor", after } } }
+    };
+    {
+        const auto session = Probe::chapterActionSession(model, chapterActionMarks);
+        const auto startOffered = [&] {
+            QEventLoop completed;
+            QTimer deadline;
+            deadline.setSingleShot(true);
+            QObject::connect(&deadline, &QTimer::timeout, &completed, &QEventLoop::quit);
+            bool returned = false, offered = false;
+            session->chapterBoundaryActions(4, [&](const auto &actions) {
+                returned = true;
+                offered = std::any_of(actions.cbegin(), actions.cend(), [](const auto &action) {
+                    return action.start && !action.reset;
+                });
+                completed.quit();
+            });
+            deadline.start(5000);
+            completed.exec();
+            require(returned, "Chapter actions did not return");
+            return offered;
+        };
+        require(!startOffered() && session->mainTextMarks() == chapterActionMarks,
+                "A start action could discard an unreadable end bound");
+        unavailable = false;
+        require(startOffered() && session->mainTextMarks() == chapterActionMarks,
+                "A start action was not offered again after the fragment became readable");
+    }
+    model.mainTextMarks = marks;
+    unavailable = false;
+    require(model.validMainTextRange(first, after) && !model.validMainTextRange(after, first),
+            "A deferred same-spine range lost source order");
+    require(!Probe::fragmentsPending(model, "first.xhtml")
+                    && Probe::fragmentsPending(model, "second.xhtml"),
+            "Checking one range resolved an unrelated chapter");
+    const auto links = model.chapters();
+    require(links.size() == 5 && model.chapterBoundaryPosition(links, 0) == first
+                    && model.chapterBoundaryPosition(links, 1) == after
+                    && model.chapterBoundaryPosition(links, 3) == body,
+            "Deferring TOC fragments changed duplicate IDs or anchors before malformed XML");
+    require(model.chapterBoundaryPosition(links, 2) == "/body/DocFragment[2]/body[1]/p[1]"
+                    && !Probe::fragmentsPending(model, "second.xhtml"),
+            "Requesting a chapter did not resolve its exact source fragment");
+    captureChapters(frame, model);
+    require(model.mainTextMarks.value("start").toObject().value("anchor").toString() == first
+                    && model.mainTextMarks.value("end").toObject().value("anchor").toString()
+                            == after,
+            "Retrying a temporary read failure did not restore the saved range");
+}
+
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
@@ -3708,6 +3842,11 @@ int main(int argc, char **argv)
     searchSplitWords();
     keptObservations();
 #endif
-    std::printf("PASS: page estimate measurement, map, saved record and chapter mode pages\n");
-    return 0;
+    // The chapter action uses the engine worker, which stops when the app quits.
+    qt::later(0, &app, [&] {
+        lazyChapterFragments();
+        std::printf("PASS: page estimate measurement, map, saved record and chapter mode pages\n");
+        app.quit();
+    });
+    return app.exec();
 }

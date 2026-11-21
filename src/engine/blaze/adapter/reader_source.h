@@ -51,6 +51,12 @@ struct ReaderSource
     };
 
     QVector<TocAnchor> tocAnchors;
+    struct TocFragments
+    {
+        QMultiHash<QString, int> ids;
+        QVector<int> items;
+    };
+    QHash<QString, TocFragments> pendingTocFragments;
     QHash<QString, int> boundaryElementOrder;
     bool mainTextChecked = false;
     QPair<QString, QString> mainTextHints;

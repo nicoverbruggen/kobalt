@@ -203,10 +203,13 @@ public:
     // spine item of a position, or -1.
     QStringList spineItems() const;
     QStringList spineLocationNames() const;
-    bool validMainTextRange(const QString &first, const QString &after) const override;
+    bool validMainTextRange(const QString &first, const QString &after,
+                            bool *deferred = nullptr) const override;
     QPair<QString, QString> mainTextHints() const override;
-    QString chapterBoundaryPosition(const QVector<ChapterLink> &links, int index) const override;
-    QString afterChapter(const QVector<ChapterLink> &links, int index) const override;
+    QString chapterBoundaryPosition(const QVector<ChapterLink> &links, int index,
+                                    bool *deferred = nullptr) const override;
+    QString afterChapter(const QVector<ChapterLink> &links, int index,
+                         bool *deferred = nullptr) const override;
     int spineItemOf(const QString &position) const;
     // Turns `delta` pages. At an edge of the window it loads the next or the
     // previous spine item with its neighbors and continues there. False at
@@ -358,6 +361,7 @@ public:
     QJsonObject settingsState() const override;
 
 private:
+    bool resolveTocFragments(int item) const;
     enum class AppearanceAction { Validate, Apply };
     bool updateAppearance(const appearance::Patch &patch, QSize size, OpeningProgress progress,
                           AppearanceAction action);

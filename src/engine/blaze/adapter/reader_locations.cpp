@@ -204,10 +204,11 @@ QStringList EngineDocument::spineLocationNames() const
     return spineLocations_.isEmpty() ? files : spineLocations_;
 }
 
-QString EngineDocument::afterChapter(const QVector<ChapterLink> &links, int index) const
+QString EngineDocument::afterChapter(const QVector<ChapterLink> &links, int index,
+                                     bool *deferred) const
 {
     const int depth = links[index].depth;
-    const auto first = chapterBoundaryPosition(links, index);
+    const auto first = chapterBoundaryPosition(links, index, deferred);
     int lastItem = spineItemIndex(first);
     if (lastItem < 0)
         return {};
@@ -217,7 +218,7 @@ QString EngineDocument::afterChapter(const QVector<ChapterLink> &links, int inde
         const int item = spineItemIndex(links[i].position);
         if (links[i].depth <= depth) {
             if (item == lastItem) {
-                const auto next = chapterBoundaryPosition(links, i);
+                const auto next = chapterBoundaryPosition(links, i, deferred);
                 if (next.isEmpty())
                     return {};
                 if (next != first)
@@ -236,7 +237,8 @@ QString EngineDocument::afterChapter(const QVector<ChapterLink> &links, int inde
     return QStringLiteral("");
 }
 
-bool EngineDocument::validMainTextRange(const QString &first, const QString &after) const
+bool EngineDocument::validMainTextRange(const QString &first, const QString &after,
+                                        bool *deferred) const
 {
     if (first.isEmpty() && after.isEmpty())
         return true;
@@ -251,6 +253,11 @@ bool EngineDocument::validMainTextRange(const QString &first, const QString &aft
 
     // The chapter window may contain only placeholders for this spine item.
     // The source scan recorded the order of its TOC and structural anchors.
+    if (!resolveTocFragments(start)) {
+        if (deferred)
+            *deferred = true;
+        return false;
+    }
     const auto order = [this](QString position) {
         if (position.endsWith(".0"))
             position.chop(2);

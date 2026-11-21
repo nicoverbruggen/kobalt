@@ -51,10 +51,8 @@ void nextToken(QXmlStreamReader &xml)
 
 // Only an OPS-namespaced type attribute can mark a boundary, and an attribute
 // in a namespace always has a prefix, as in epub:type.
-bool mayHaveOpsType(const QByteArray &bytes)
+bool mayHaveNamespacedType(const QByteArray &bytes)
 {
-    if (!bytes.contains("http://www.idpf.org/2007/ops"))
-        return false;
     for (int at = bytes.indexOf(":type"); at >= 0; at = bytes.indexOf(":type", at + 5)) {
         int next = at + 5;
         while (next < bytes.size() && QChar::isSpace(uchar(bytes[next])))
@@ -88,6 +86,93 @@ Reference reference(const QString &base, const QString &href, int boundary)
             ? base
             : QDir::cleanPath(QFileInfo(base).path() + "/" + url.path());
     return { path, url.fragment(QUrl::FullyDecoded), boundary };
+}
+
+void record(QPair<QString, QString> &result, int flags, const QString &path)
+{
+    if ((flags & Start) && result.first.isEmpty()) {
+        result.first = path;
+        // A guide index before the body is front matter.
+        result.second.clear();
+    }
+    if ((flags & After) && result.second.isEmpty())
+        result.second = path;
+}
+
+struct FragmentAnchors
+{
+    QHash<int, QString> positions;
+    QHash<QString, int> order;
+
+    void publish(ReaderSource &source) const
+    {
+        for (auto it = positions.constBegin(); it != positions.constEnd(); ++it)
+            source.tocAnchors[it.key()].position = it.value();
+        for (auto it = order.constBegin(); it != order.constEnd(); ++it)
+            source.boundaryElementOrder.insert(it.key(), it.value());
+    }
+};
+
+void scanSpineItem(FragmentAnchors &anchors, int item, const QByteArray &bytes,
+                   const QHash<QString, int> &targets, const QMultiHash<QString, int> &ids,
+                   bool epub3, QPair<QString, QString> &result)
+{
+    QXmlStreamReader xml(bytes);
+    QVector<Element> elements;
+    const auto before = result;
+    int elementOrder = 0;
+    bool chapterBody = false;
+    while (!xml.atEnd()) {
+        stopPoint();
+        nextToken(xml);
+        if (xml.isStartElement()) {
+            if (elements.isEmpty() && xml.name() != QLatin1String("body"))
+                continue;
+            ++elementOrder;
+            const auto name = xml.name().toString();
+            const int ordinal = elements.isEmpty() ? 1 : ++elements.last().children[name];
+            elements.append(Element{ name, ordinal, {} });
+            const auto attrs = xml.attributes();
+            const auto id = targets.isEmpty() && ids.isEmpty()
+                    ? QString()
+                    : attrs.value("id").toString();
+            int flags = id.isEmpty() ? 0 : targets.value(id);
+            if (epub3
+                && (name == "body" || name == "section" || name == "div"
+                    || name == "article")) {
+                const auto type = attrs.value(ops, QStringLiteral("type"));
+                if (elements.size() == 1)
+                    chapterBody = false;
+                if (!type.isEmpty()) {
+                    const auto types = type.toString().simplified().split(' ');
+                    if (elements.size() == 1)
+                        chapterBody = types.contains("chapter");
+                    // A glossary inside a chapter is local to that chapter. Only a
+                    // partition of the publication or a landmark can end the main text.
+                    if (types.contains("backmatter") || types.contains("bodymatter")
+                        || elements.size() == 1 || (elements.size() == 2 && !chapterBody))
+                        flags |= semantics(types);
+                    if (types.contains("chapter") || types.contains("part"))
+                        result.second.clear();
+                }
+            }
+            const auto rows = id.isEmpty() ? QList<int>() : ids.values(id);
+            if (flags || !rows.isEmpty()) {
+                // Only anchors need paths, but their ordinals include every sibling.
+                auto position = QString("/body/DocFragment[%1]").arg(item + 1);
+                for (const auto &element : elements)
+                    position += QString("/%1[%2]").arg(element.name).arg(element.ordinal);
+                for (const int row : rows)
+                    anchors.positions.insert(row, position);
+                anchors.order.insert(position, elementOrder);
+                if (flags)
+                    record(result, flags, position);
+            }
+        } else if (xml.isEndElement() && !elements.isEmpty())
+            elements.removeLast();
+    }
+    if (xml.hasError())
+        result = before;
 }
 
 QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
@@ -215,89 +300,73 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
     for (const auto &ref : refs)
         references[ref.path][ref.id] |= ref.boundary;
     QPair<QString, QString> result;
-    auto record = [&](int flags, const QString &path) {
-        if ((flags & Start) && result.first.isEmpty()) {
-            result.first = path;
-            // A guide index before the body is front matter.
-            result.second.clear();
-        }
-        if ((flags & After) && result.second.isEmpty())
-            result.second = path;
-    };
     for (int i = 0; i < spine.size(); ++i) {
         stopPoint();
-        const auto root = QString("/body/DocFragment[%1]").arg(i + 1);
-        auto targets = references.value(spine[i]);
-        record(targets.take(QString()), root);
-        const auto ids = anchors.value(spine[i]);
-        if (!epub3 && targets.isEmpty() && ids.isEmpty())
-            continue;
-        const auto bytes = resource(source, spine[i]);
-        if (targets.isEmpty() && ids.isEmpty() && !mayHaveOpsType(bytes)
-            && !bytes.contains(char(0)))
-            continue;
-        QXmlStreamReader xml(bytes);
-        QVector<Element> elements;
-        const auto before = result;
-        int elementOrder = 0;
-        bool chapterBody = false;
-        while (!xml.atEnd()) {
-            stopPoint();
-            nextToken(xml);
-            if (xml.isStartElement()) {
-                if (elements.isEmpty() && xml.name() != QLatin1String("body"))
-                    continue;
-                ++elementOrder;
-                const auto name = xml.name().toString();
-                const int ordinal = elements.isEmpty() ? 1 : ++elements.last().children[name];
-                elements.append(Element{ name, ordinal, {} });
-                const auto attrs = xml.attributes();
-                const auto id = targets.isEmpty() && ids.isEmpty()
-                        ? QString()
-                        : attrs.value("id").toString();
-                int flags = id.isEmpty() ? 0 : targets.value(id);
-                if (epub3
-                    && (name == "body" || name == "section" || name == "div"
-                        || name == "article")) {
-                    const auto type = attrs.value(ops, QStringLiteral("type"));
-                    if (elements.size() == 1)
-                        chapterBody = false;
-                    if (!type.isEmpty()) {
-                        const auto types = type.toString().simplified().split(' ');
-                        if (elements.size() == 1)
-                            chapterBody = types.contains("chapter");
-                        // A glossary inside a chapter is local to that chapter. Only a
-                        // partition of the publication or a landmark can end the main text.
-                        if (types.contains("backmatter") || types.contains("bodymatter")
-                            || elements.size() == 1 || (elements.size() == 2 && !chapterBody))
-                            flags |= semantics(types);
-                        if (types.contains("chapter") || types.contains("part"))
-                            result.second.clear();
-                    }
-                }
-                const auto rows = id.isEmpty() ? QList<int>() : ids.values(id);
-                if (flags || !rows.isEmpty()) {
-                    // Only anchors need paths, but their ordinals include every sibling.
-                    auto position = root;
-                    for (const auto &element : elements)
-                        position += QString("/%1[%2]").arg(element.name).arg(element.ordinal);
-                    for (const int row : rows)
-                        source.tocAnchors[row].position = position;
-                    source.boundaryElementOrder.insert(position, elementOrder);
-                    if (flags)
-                        record(flags, position);
-                }
-            } else if (xml.isEndElement() && !elements.isEmpty())
-                elements.removeLast();
+        const auto &path = spine[i];
+        auto targets = references.value(path);
+        if (const int flags = targets.take(QString()))
+            record(result, flags, QString("/body/DocFragment[%1]").arg(i + 1));
+        const auto ids = anchors.value(path);
+        if (epub3 || !targets.isEmpty()) {
+            const auto bytes = resource(source, path);
+            // A namespace URI can contain character references. Include any
+            // candidate prefixed type when TOC links used to force this parse.
+            const bool mayHaveSemantics = bytes.contains(char(0))
+                    || ((!ids.isEmpty() || bytes.contains("http://www.idpf.org/2007/ops"))
+                        && mayHaveNamespacedType(bytes))
+                    || (!ids.isEmpty() && bytes.contains("<!ENTITY"));
+            if (!targets.isEmpty() || mayHaveSemantics) {
+                FragmentAnchors found;
+                scanSpineItem(found, i, bytes, targets, ids, epub3, result);
+                found.publish(source);
+                continue;
+            }
         }
-        if (xml.hasError())
-            result = before;
+        if (!ids.isEmpty()) {
+            auto &pending = source.pendingTocFragments[path];
+            pending.ids = ids;
+            pending.items.append(i);
+        }
     }
     return result;
 }
 } // namespace
 
-QString EngineDocument::chapterBoundaryPosition(const QVector<ChapterLink> &links, int index) const
+bool EngineDocument::resolveTocFragments(int item) const
+{
+    if (!source_ || source_->pendingTocFragments.isEmpty())
+        return true;
+    const auto path = spineItems().value(item);
+    const auto pending = source_->pendingTocFragments.value(path);
+    if (pending.items.isEmpty())
+        return true;
+    const auto scan = [&] {
+        const auto bytes = resource(*source_, path);
+        if (bytes.isEmpty() || engineCancellationRequested())
+            return false;
+        FragmentAnchors found;
+        QPair<QString, QString> unused;
+        for (const int index : pending.items)
+            scanSpineItem(found, index, bytes, {}, pending.ids, false, unused);
+        if (engineCancellationRequested())
+            return false;
+        found.publish(*source_);
+        source_->pendingTocFragments.remove(path);
+        return true;
+    };
+#ifdef KOBLAZE_CANCEL_CHECK
+    try {
+        return scan();
+    } catch (const KoblazeRenderCancelled &) {
+        return false;
+    }
+#else
+    return scan();
+#endif
+}
+
+QString EngineDocument::chapterBoundaryPosition(const QVector<ChapterLink> &links, int index,
+                                                bool *deferred) const
 {
     const auto &link = links[index];
     if (!source_ || source_->tocAnchors.isEmpty() || externalChapters_)
@@ -312,10 +381,15 @@ QString EngineDocument::chapterBoundaryPosition(const QVector<ChapterLink> &link
             ++target;
         const auto &anchor = source_->tocAnchors[target];
         if (!anchor.path.isEmpty() && spineItems().value(item) == anchor.path) {
-            if (!anchor.position.isEmpty())
-                return anchor.position;
             if (anchor.id.isEmpty())
                 return link.position;
+            if (!resolveTocFragments(item)) {
+                if (deferred)
+                    *deferred = true;
+                return {};
+            }
+            if (!anchor.position.isEmpty())
+                return anchor.position;
         }
     }
     // A window placeholder cannot establish which fragment the publisher targeted.

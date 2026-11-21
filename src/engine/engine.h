@@ -296,13 +296,16 @@ public:
 
     QJsonObject mainTextMarks;
 
-    virtual QString chapterBoundaryPosition(const QVector<ChapterLink> &links, int index) const
+    // Set deferred when a source fragment is temporarily unavailable.
+    virtual QString chapterBoundaryPosition(const QVector<ChapterLink> &links, int index,
+                                            bool * = nullptr) const
     {
         return links[index].position;
     }
 
     // Null means unresolved. An empty, non-null end includes the last spine item.
-    virtual QString afterChapter(const QVector<ChapterLink> &links, int index) const
+    virtual QString afterChapter(const QVector<ChapterLink> &links, int index,
+                                 bool * = nullptr) const
     {
         const int depth = links[index].depth;
         while (++index < links.size())
@@ -311,7 +314,8 @@ public:
         return QStringLiteral("");
     }
 
-    virtual bool validMainTextRange(const QString &first, const QString &after) const = 0;
+    virtual bool validMainTextRange(const QString &first, const QString &after,
+                                    bool *deferred = nullptr) const = 0;
 
     virtual QPair<QString, QString> mainTextHints() const { return {}; }
 

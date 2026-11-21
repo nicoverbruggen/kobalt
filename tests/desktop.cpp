@@ -6249,10 +6249,13 @@ private slots:
         qt::invoke(engineWorker(), [release] { release->acquire(); }, Qt::QueuedConnection);
         const auto unblock = qScopeGuard([release] { release->release(); });
         const auto old = page->image.cacheKey();
+        auto *resize = reader->findChild<QTimer *>("rrViewportResizeTimer");
+        QVERIFY(resize);
+        QSignalSpy dispatched(resize, &QTimer::timeout);
         fixture.window.resize(900, 700);
-        QTest::qWait(150);
+        QTRY_COMPARE(dispatched.count(), 1);
         fixture.window.resize(850, 750);
-        QTest::qWait(300);
+        QTRY_COMPARE(dispatched.count(), 2);
         QVERIFY(page->viewportTransition());
         QCOMPARE(page->image.cacheKey(), old);
         reader->pageButton(1);
@@ -10364,11 +10367,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         // Preserve the handle-to-word offset used by the production pointer path.
         const QPoint offset = handle - fixture.selectionHandleTarget(first, startHandle);
         const QPoint exit = target + QPoint(0, page->topHeight()) + offset;
+        auto *hold = page->findChild<QTimer *>("rrHoldTimer");
+        QVERIFY(hold);
         QTest::mousePress(canvas->viewport(), Qt::LeftButton, Qt::NoModifier, map(handle));
         QTest::mouseMove(canvas->viewport(), map(exit));
         if (sectionBoundary) {
             QTRY_VERIFY(!fixture.state().value("annotation_dragging").toBool());
-            QTest::qWait(800);
+            QVERIFY(!hold->isActive());
             QCOMPARE(fixture.state().value("page").toInt(), origin);
             const auto boundary = direction > 0 ? edges.last : edges.first;
             QVERIFY(page->annotationContains(boundary.rectangles.first().center()));
@@ -10397,16 +10402,19 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(!fixture.state().value("annotation_dragging").toBool());
         const auto stoppedStart = page->annotationHandleRect(true),
                    stoppedEnd = page->annotationHandleRect(false);
-        // Keep the same press held past the long-press delay, then move back
-        // into the text and out again. None of this may restart the stopped drag.
-        QTest::qWait(800);
+        // The held pointer must not arm another long press or restart the drag.
+        QVERIFY(!hold->isActive());
         const auto inside = fixture.wordPoint(2);
         QTest::mouseMove(canvas->viewport(), map(inside + offset));
         const auto destinationEdge = direction > 0 ? destination.end : destination.start;
         const auto beyond = (destinationEdge.first + destinationEdge.last) / 2
                 + destinationEdge.outward * ui::px(20) + QPoint(0, page->topHeight()) + offset;
         QTest::mouseMove(canvas->viewport(), map(beyond));
-        QTest::qWait(200);
+        // Let the engine finish any request the moves queued and deliver its reply.
+        const auto drained = std::make_shared<std::atomic_bool>(false);
+        qt::invoke(engineWorker(), [drained] { drained->store(true); }, Qt::QueuedConnection);
+        QTRY_VERIFY(drained->load());
+        QCoreApplication::processEvents();
         QCOMPARE(fixture.state().value("page").toInt(), origin + direction);
         QVERIFY(!fixture.state().value("annotation_dragging").toBool());
         QCOMPARE(page->annotationHandleRect(true), stoppedStart);
@@ -19099,8 +19107,13 @@ private slots:
         rotate->trigger();
         qt::invoke(engineWorker(), [release] { release->acquire(); }, Qt::QueuedConnection);
         QTRY_VERIFY(!page->reflowWordLengths().isEmpty());
-        QTest::qWait(1100);
         QVERIFY(page->viewportTransition());
+        auto *notice = page->findChild<QTimer *>("rrViewportNoticeTimer");
+        QVERIFY(notice);
+        if (notice->isActive()) {
+            notice->stop();
+            QVERIFY(QMetaObject::invokeMethod(notice, "timeout", Qt::DirectConnection));
+        }
         QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-viewport-transition"));
     }
 

@@ -2067,6 +2067,7 @@ void Reader::buildNotices()
                                 "rrUpdatingText");
     // Create the bar before the initial refresh attributes are assigned.
     busyNotice->setDelayedProgress(false, 0, 0);
+    resizeTimer.setObjectName("rrViewportResizeTimer");
     resizeTimer.setSingleShot(true);
     resizeTimer.setInterval(100);
     connect(&resizeTimer, &QTimer::timeout, this, [this] {

@@ -419,6 +419,19 @@ void checkCodecs()
     require(inspectImageHeader(oversized).action == ImageHeader::Replace,
             "Oversized WebP was admitted");
 
+    // Two valid solid WebP images encoded with cwebp. Probe only the dimensions,
+    // as layout does before asking the decoder to allocate a raster.
+    const auto webpSource = [](const char *encoded) {
+        auto bytes = QByteArray::fromBase64(encoded);
+        return LVCreateStreamImageSource(
+                LVCreateMemoryStream(bytes.data(), bytes.size(), true));
+    };
+    auto atLimit = webpSource("UklGRhwAAABXRUJQVlA4TA8AAAAv/8//AwdQxIj+ByKi/wEA");
+    require(!atLimit.isNull() && atLimit->GetWidth() == 4096 && atLimit->GetHeight() == 4096,
+            "The WebP decoder rejected a valid image at its pixel limit");
+    require(webpSource("UklGRhwAAABXRUJQVlA4TA8AAAAvAND/AwdQxIj+ByKi/wEA").isNull(),
+            "The WebP decoder admitted a 4097 by 4096 image above its pixel limit");
+
     auto font = QByteArray::fromBase64(
             "d09GMgABAAAAAAFQAAoAAAAAAtQAAAEIAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAABmAANAoYNQE2AiQDBgsGAAQgBY"
             "FGByYbNALIBIJa0z0IgopiUAiSS45YAQoZVed5fKfGtsJU/9Q5/SB+EIhVciUNsC3qfETDgY6GMGtXxkqeSvJA0qYl"

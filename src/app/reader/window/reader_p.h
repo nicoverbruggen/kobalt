@@ -948,9 +948,9 @@ private:
     // page is dimmed and where the cover sits. Leaves the image null when the
     // backdrop has nothing to show, such as a coverless book without a page.
     void sleepBackdrop(const sleep::Look &look, QSize size, sleep::Snapshot &shot,
-                       bool poweredOff, bool pageReady = true);
+                       bool poweredOff = false);
     sleep::Snapshot privateSleepSnapshot(bool poweredOff = false);
-    sleep::Details sleepDetails(bool poweredOff = false);
+    sleep::Details sleepDetails();
     void loadTodayReading();
     void updateSleepBattery(const BatteryStatus &battery);
     void showSleepScreen();
@@ -1011,7 +1011,7 @@ private:
     void closeTextPresetGallery();
     void showTextPresetSettings();
     void openNewBookText();
-    sleep::Snapshot sleepPreviewSample(bool poweredOff = false);
+    sleep::Snapshot sleepPreviewSample();
     void openSessionTimeout();
 
     struct SleepOption

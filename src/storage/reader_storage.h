@@ -54,7 +54,6 @@ JsonRead readRecord(const QString &directory, const QString &name, const QString
 bool writeRecord(const QString &directory, const QString &name, const QString &legacy,
                  const QJsonObject &value, qint64 maxBytes = maxJsonBytes);
 JsonRead readBookState(const Paths &, const QString &identity, const QString &legacy = {});
-JsonRead inspectBookState(const Paths &, const QString &identity);
 bool writeBookState(const Paths &, const QString &identity, const QJsonObject &,
                     const QString &legacy = {});
 // Reading checkpoints preserve the stored dictionary choice, even when a
@@ -72,7 +71,6 @@ bool writeReadingActivity(const Paths &, const QString &identity, const QJsonObj
                           const std::function<bool(QSqlDatabase &)> &history,
                           const QString &legacy = {});
 JsonRead readPreferences(const QString &path);
-JsonRead inspectPreferences(const QString &path);
 bool writePreferences(const QString &path, const QJsonObject &);
 // Apply only the fields changed between these two snapshots, including removals.
 // The profile writer reads the latest file and commits the edit as one operation.

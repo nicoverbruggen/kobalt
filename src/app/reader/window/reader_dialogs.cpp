@@ -1077,7 +1077,7 @@ void Reader::saveSleepPreferences(const QJsonObject &next, storage::RecordWriter
     });
 }
 
-sleep::Snapshot Reader::sleepPreviewSample(bool poweredOff)
+sleep::Snapshot Reader::sleepPreviewSample()
 {
     sleep::Snapshot sample;
     const int percent = book && session
@@ -1096,7 +1096,7 @@ sleep::Snapshot Reader::sleepPreviewSample(bool poweredOff)
     sample.dimPage = false;
     sample.tile = sleep::savedTile(preferences);
     if (session && book)
-        sample.details = sleepDetails(poweredOff);
+        sample.details = sleepDetails();
     sample.privateBook = book && book->hideBookOnSleepScreen();
     return sample;
 }

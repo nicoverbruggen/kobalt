@@ -29,9 +29,6 @@ void closeProfileLater(std::function<void()> closed);
 // Reject new transactions immediately. In-flight transactions may finish on the writer.
 void blockProfile();
 void reopenProfile();
-// Read on the profile writer without creating, migrating or retaining a
-// connection. Use the writer's own handle when it already has this profile.
-bool inspectProfile(const QString &directory, const std::function<bool(QSqlDatabase &)> &operation);
 // Whether the profile database in `directory` opens. Incompatible is a Kobalt
 // database of a version this build does not know. Corrupt is a damaged, empty
 // or foreign file. Unavailable means the storage failed. InUse means another

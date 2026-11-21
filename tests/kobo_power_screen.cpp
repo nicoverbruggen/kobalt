@@ -8,7 +8,6 @@
 #include "ui/style/fonts.h"
 #include "assets/assets.h"
 #include "storage/sleep_snapshot.h"
-#include "storage/profile_database.h"
 #include "support/percentage_text.h"
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -1266,94 +1265,6 @@ private slots:
         auto *frame = poweredOff.findChild<QWidget *>("rrSleepFrame");
         QVERIFY(frame);
         QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32), visible.image);
-    }
-
-    void cachedHomePowerOffKeepsWallpaperAndPrivacy()
-    {
-        using namespace kobalt;
-        QTemporaryDir directory;
-        QVERIFY(directory.isValid());
-        const storage::Paths paths{ directory.path() };
-        const QString book = QStringLiteral("current-book");
-        const auto connection = Device::getCurrentDevice()->getDbName();
-        auto database = QSqlDatabase::addDatabase("QSQLITE", connection);
-        database.setDatabaseName(directory.filePath("native.sqlite"));
-        QVERIFY(database.open());
-        QSqlQuery query(database);
-        QVERIFY(query.exec("CREATE TABLE content (ContentID TEXT, ContentType INTEGER, "
-                           "DateLastRead TEXT, Title TEXT, Attribution TEXT, ImageId TEXT, "
-                           "___PercentRead INTEGER, ReadStatus INTEGER)"));
-        QVERIFY(query.exec("INSERT INTO content VALUES ('current-book', 6, "
-                           "'2026-11-14T08:00:00Z', 'Current Book', 'Author', '', 42, 1)"));
-        QVERIFY(storage::writeBookState(paths, book, { { "book", book } }));
-        QVERIFY(QDir().mkpath(directory.filePath("wallpapers")));
-        QImage wallpaper(64, 96, QImage::Format_RGB32);
-        const QColor chosen(190, 30, 80);
-        wallpaper.fill(chosen);
-        QVERIFY(wallpaper.save(directory.filePath("wallpapers/off.png")));
-        QJsonObject preferences;
-        sleep::Custom custom;
-        custom.same = false;
-        custom.off = { sleep::Mode::Wallpaper, sleep::Design::Cover, "off.png" };
-        sleep::setCustom(preferences, custom);
-        sleep::setDesign(preferences, sleep::Design::Custom);
-        QVERIFY(storage::writePreferences(paths.preferences(), preferences));
-        MainWindowView window;
-        window.resize(QGuiApplication::primaryScreen()->size());
-        AbstractPowerView power(&window);
-        power.setGeometry(window.rect());
-        window.show();
-        power.show();
-        nickel::HomeSleepScreen owner(paths, nullptr);
-        const auto frame = [&](const QString &identity) {
-            owner.prepareCachedPowerOff(identity);
-            owner.present();
-            auto *widget = power.findChild<QWidget *>("rrSleepFrame");
-            return widget ? widget->grab().toImage() : QImage{};
-        };
-        const auto prepare = [&] {
-            owner.prefetchPowerOff();
-            QVERIFY(storage::drainWriterThread());
-            QCoreApplication::processEvents();
-        };
-        const auto center = [](const QImage &image) {
-            return image.isNull() ? QColor{} : image.pixelColor(image.rect().center());
-        };
-        prepare();
-        const auto expected = center(frame({}));
-        QVERIFY(expected.isValid() && expected.red() > 100
-                && expected.red() > 2 * expected.blue());
-
-        QSemaphore entered, release;
-        std::atomic_bool timedOut{ false };
-        storage::RecordWriter blocker;
-        const auto unblock = qScopeGuard([&] { release.release(); });
-        QVERIFY(blocker.tryPost([&] {
-            entered.release();
-            timedOut = !release.tryAcquire(1, 5000);
-            return true;
-        }));
-        QVERIFY(entered.tryAcquire(1, 5000));
-        const auto duringWrite = frame({});
-        owner.prefetchPowerOff();
-        owner.invalidatePowerOff(); // USB retires both the inputs and the queued read.
-        release.release();
-        QVERIFY(storage::drainWriterThread());
-        QCoreApplication::processEvents();
-        QVERIFY(!timedOut);
-        QCOMPARE(center(duringWrite), expected);
-        const auto invalidated = frame({});
-        QVERIFY(!invalidated.isNull() && center(invalidated) != expected);
-
-        QVERIFY(storage::writeBookState(
-                paths, book, { { "book", book }, { "hide_book_on_sleep_screen", true } }));
-        prepare();
-        const auto privateFrame = frame({});
-        QVERIFY(!privateFrame.isNull() && center(privateFrame) != expected);
-        storage::closeProfile();
-        query = QSqlQuery();
-        database = QSqlDatabase();
-        QSqlDatabase::removeDatabase(connection);
     }
 
     void powerOffKeepsSelectedDesign_data()

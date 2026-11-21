@@ -309,8 +309,6 @@ public:
         return db;
     }
 
-    bool owns(const QString &path) const { return db.isOpen() && path == path_; }
-
     void beginWrite()
     {
         if (!wal)
@@ -660,34 +658,6 @@ void blockProfile()
 void reopenProfile()
 {
     profileBlocked = false;
-}
-
-bool inspectProfile(const QString &directory,
-                    const std::function<bool(QSqlDatabase &)> &operation)
-{
-    return profile::guarded(nullptr, [&] {
-        profile::check(!profileBlocked, "storage-unavailable");
-        const auto path = Paths{ directory }.database();
-        auto &profile = Profile::instance();
-        if (profile.owns(path)) {
-            profile::check(operation(profile.database(directory, path)), "profile-data");
-        } else {
-            struct RemoveConnection
-            {
-                QString name;
-                ~RemoveConnection() { QSqlDatabase::removeDatabase(name); }
-            } cleanup{ QStringLiteral("kobalt-profile-inspection") };
-            auto database = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), cleanup.name);
-            database.setDatabaseName(path);
-            database.setConnectOptions("QSQLITE_OPEN_READONLY;QSQLITE_BUSY_TIMEOUT=100");
-            profile::check(database.open(), "database-open");
-            profile::check(scalar(database, "PRAGMA application_id").toInt() == applicationId,
-                           "foreign-database");
-            profile::check(scalar(database, "PRAGMA user_version").toInt() == schemaVersion,
-                           "database-version");
-            profile::check(operation(database), "profile-data");
-        }
-    });
 }
 
 ProfileDatabaseState inspectProfileDatabase(const QString &directory, QString *error)

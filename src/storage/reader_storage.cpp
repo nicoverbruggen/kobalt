@@ -314,7 +314,7 @@ enum class BookStateEdit { Replace, KeepDictionary, DictionaryChoice };
 bool recordTransaction(const QString &directory, const QString &name, const QString &legacy,
                        qint64 maxBytes, JsonRead *read, const QJsonObject *replacement,
                        QSqlDatabase *database = nullptr,
-                       BookStateEdit edit = BookStateEdit::Replace, bool importLegacy = true)
+                       BookStateEdit edit = BookStateEdit::Replace)
 {
     if (directory.isEmpty() || name.isEmpty() || maxBytes < 0) {
         read->status = ReadStatus::Invalid;
@@ -364,10 +364,6 @@ bool recordTransaction(const QString &directory, const QString &name, const QStr
                 read->status = ReadStatus::Invalid;
                 return false;
             }
-            if (!importLegacy) {
-                *read = { object, ReadStatus::Ok };
-                return true;
-            }
             query.finish();
             if (!query.prepare(
                         "SELECT CAST(digest AS BLOB) FROM imports WHERE source=? AND record=?"))
@@ -392,8 +388,6 @@ bool recordTransaction(const QString &directory, const QString &name, const QStr
                 read->status = ReadStatus::Unsupported;
                 return false;
             }
-            if (!importLegacy)
-                return true;
             if (read->status == ReadStatus::Ok) {
                 QFile source(legacy);
                 if (!source.open(QIODevice::ReadOnly))
@@ -505,31 +499,6 @@ JsonRead readBookState(const Paths &paths, const QString &identity, const QStrin
     return result;
 }
 
-JsonRead inspectBookState(const Paths &paths, const QString &identity)
-{
-    const auto legacy = paths.bookState(identity);
-    JsonRead result;
-    if (QFileInfo::exists(paths.database())) {
-        if (!storage::inspectProfile(paths.directory, [&](QSqlDatabase &database) {
-                return recordTransaction(paths.directory, "book:" + identity, legacy,
-                                         maxJsonBytes, &result, nullptr, &database,
-                                         BookStateEdit::Replace, false);
-            }) && result.status == ReadStatus::Missing) {
-            result = { {}, ReadStatus::DatabaseError };
-        }
-    } else {
-        result = readJsonFile(legacy, maxJsonBytes);
-        if (result.status == ReadStatus::Ok) {
-            if (result.object.value("book").toString() != identity)
-                result = { {}, ReadStatus::Invalid };
-            else if (result.object.contains("schema")
-                     && result.object.value("schema").toDouble(-1) != 1)
-                result = { {}, ReadStatus::Unsupported };
-        }
-    }
-    return result;
-}
-
 bool writeBookState(const Paths &paths, const QString &identity, const QJsonObject &value,
                     const QString &legacy)
 {
@@ -635,11 +604,6 @@ JsonRead readPreferences(const QString &path)
             diagnostic("settings-cleanup-unsaved", {}, DiagnosticSeverity::Error);
     }
     return clean;
-}
-
-JsonRead inspectPreferences(const QString &path)
-{
-    return normalizePreferences(readJsonFile(path));
 }
 
 bool writePreferences(const QString &path, const QJsonObject &object)

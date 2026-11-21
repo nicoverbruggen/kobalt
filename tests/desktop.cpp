@@ -11818,7 +11818,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(label->text().endsWith('%'));
         auto *timer = fixture.window.readerWindow()->findChild<QTimer *>("rrBookStatusTimer");
         QVERIFY(timer && timer->isActive());
-        QCOMPARE(timer->interval(), 5000);
+        // The count moves while the whole book is built: the menu reads it
+        // every second.
+        QCOMPARE(timer->interval(), 1000);
         QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(!timer->isActive());
         QVERIFY(fixture.press("rrPage"));

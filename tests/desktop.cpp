@@ -728,15 +728,17 @@ struct Fixture
         auto *reader = window.readerWindow();
         if (!reader)
             return false;
-        const int previous = state().value("page").toInt();
+        const auto previous = state();
         // Separate deliberate setup turns from duplicate input rejected by the reader.
         test::skipPageTurnWindow();
         reader->pageButton(direction);
         return QTest::qWaitFor(
                 [&] {
                     const auto current = state();
-                    return !current.value("busy").toBool()
-                            && current.value("page").toInt() != previous;
+                    const auto position = current.value("position");
+                    return !current.value("busy").toBool() && !position.toString().isEmpty()
+                            && (position != previous.value("position")
+                                || current.value("page") != previous.value("page"));
                 },
                 5000);
     }
@@ -1539,12 +1541,7 @@ void captureReturnPressed(Fixture &fixture, const QString &name)
 void advanceIntoBody(Fixture &fixture)
 {
     // Capture narrative text as well as the chapter-opening typography.
-    auto *reader = fixture.window.readerWindow();
-    QVERIFY(reader);
-    const int chapterStart = fixture.state().value("page").toInt();
     QVERIFY(fixture.turnPage(1));
-    QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("page").toInt() > chapterStart, 30000);
-    QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
     auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
     QVERIFY(page && hasText(page->image));
 }
@@ -3223,9 +3220,11 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
     QVERIFY(fixture.widget("rrChapter2"));
     if (screenshots)
         capturePages(fixture, name + "-chapters", "rrContents");
+    const auto beforeChapter = fixture.state().value("position");
     QVERIFY(fixture.press("rrChapter1"));
-    QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
-    QVERIFY(fixture.state().value("page").toInt() > 0);
+    QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool()
+                                     && fixture.state().value("position") != beforeChapter,
+                             30000);
     advanceIntoBody(fixture);
     QVERIFY(fixture.press("rrPage"));
     QTRY_VERIFY(fixture.visible("rrNavText"));
@@ -3985,7 +3984,7 @@ void checkStatsPins(Fixture &fixture, int pins)
     for (const auto *name :
          { "rrGraphChapterCell", "rrGraphBookCell", "rrGraphSessionCell", "rrChapterBars" }) {
         auto *widget = fixture.widget(name);
-        QVERIFY(widget->isVisible());
+        QTRY_VERIFY2_WITH_TIMEOUT(widget && widget->isVisible(), name, 10000);
         QVERIFY(stats->rect().contains(QRect(widget->mapTo(stats, QPoint()), widget->size())));
     }
 }
@@ -4297,6 +4296,14 @@ void checkPinnedBookmarks(int preset, bool dark)
     QVERIFY(fixture.press("rrPage"));
 
     QString firstPosition;
+    const auto firstBookmark = [&] {
+        for (const auto &value : fixture.stored("bookmarks.json", "bookmarks")) {
+            const auto bookmark = value.toObject();
+            if (bookmark.value("position").toString() == firstPosition)
+                return bookmark;
+        }
+        return QJsonObject{};
+    };
     for (int i = 0; i < 9; ++i) {
         auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
         QVERIFY(fixture.click(page, page->bookmarkCorner().center()));
@@ -4603,8 +4610,7 @@ void checkPinnedBookmarks(int preset, bool dark)
     QVERIFY(fixture.press("rrPinIcon_compass"));
     QVERIFY(fixture.press("rrPinSave"));
     QTRY_VERIFY(!fixture.visible("rrPinEditor"));
-    QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").last().toObject()["name"].toString(),
-                 QString::fromUtf8("Carte 日本語"));
+    QTRY_COMPARE(firstBookmark().value("name").toString(), QString::fromUtf8("Carte 日本語"));
     QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
     QTRY_VERIFY(fixture.visible("rrPinIconsNext"));
     auto *pinKeyboard = fixture.widget("rrPinEditor")->findChild<QWidget *>("widgetKeyboard");
@@ -4639,16 +4645,14 @@ void checkPinnedBookmarks(int preset, bool dark)
     QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_diamond"))->isChecked());
     QVERIFY(fixture.press("rrPinSave"));
     QTRY_VERIFY(!fixture.visible("rrPinEditor"));
-    QTRY_COMPARE(fixture.stored("bookmarks.json", "bookmarks").last().toObject()["icon"].toString(),
-                 QString("diamond"));
+    QTRY_COMPARE(firstBookmark().value("icon").toString(), QString("diamond"));
     QVERIFY(fixture.bookmarkAction("rrBookmarkPin"));
     QTRY_VERIFY(fixture.visible("rrPinIcon_diamond"));
     QVERIFY(qobject_cast<QPushButton *>(fixture.widget("rrPinIcon_diamond"))->isChecked());
     QVERIFY(fixture.press("rrPinIconsPrevious"));
     QVERIFY(fixture.press("rrPinCancel"));
     QTRY_VERIFY(!fixture.visible("rrPinEditor"));
-    QCOMPARE(fixture.stored("bookmarks.json", "bookmarks").last().toObject()["icon"].toString(),
-             QString("diamond"));
+    QCOMPARE(firstBookmark().value("icon").toString(), QString("diamond"));
 
     const auto beforeUnpin = fixture.stored("bookmarks.json", "bookmarks");
     auto afterUnpin = beforeUnpin;
@@ -4677,6 +4681,8 @@ void checkPinnedBookmarks(int preset, bool dark)
     QTRY_VERIFY(fixture.widget("rrPinnedBookmark6")->isEnabled());
     QVERIFY(!fixture.visible("rrPinnedBookmark7"));
     QVERIFY(fixture.press("rrBookmarks"));
+    // The first bookmark has a fixed older date even before page estimates settle.
+    static_cast<BookmarkList *>(fixture.widget("rrBookmarkList"))->setSortOrder("oldest");
     QVERIFY(fixture.press("rrBookmarkMore0"));
     QTRY_VERIFY(fixture.visible("rrBookmarkPin"));
     QCOMPARE(qobject_cast<QPushButton *>(fixture.widget("rrBookmarkPin"))->text(),
@@ -4687,15 +4693,23 @@ void checkPinnedBookmarks(int preset, bool dark)
     qobject_cast<QLineEdit *>(fixture.widget("rrPinName"))->setText("Map");
     QVERIFY(fixture.press("rrPinSave"));
     QTRY_VERIFY(!fixture.visible("rrPinEditor"));
-    QTRY_VERIFY(!fixture.stored("bookmarks.json", "bookmarks")
-                         .last()
-                         .toObject()["icon"]
-                         .toString()
-                         .isEmpty());
+    QTRY_COMPARE(firstBookmark().value("name").toString(), QString("Map"));
+    QVERIFY(!firstBookmark().value("icon").toString().isEmpty());
 
     QVERIFY(fixture.press("rrBookmarkListClose"));
-    QTRY_VERIFY(fixture.visible("rrPinnedBookmark0"));
-    QVERIFY(fixture.press("rrPinnedBookmark0"));
+    QTRY_VERIFY(fixture.visible("rrPinnedBookmarks"));
+    const auto repinnedShortcut = [&]() -> QWidget * {
+        for (int i = 0; i < BookmarkStore::maxPins; ++i) {
+            auto *button =
+                    fixture.widget(QString("rrPinnedBookmark%1").arg(i).toLatin1().constData());
+            if (button && button->isVisible()
+                && button->property("bookmark_position").toString() == firstPosition)
+                return button;
+        }
+        return nullptr;
+    };
+    QTRY_VERIFY(repinnedShortcut());
+    QVERIFY(fixture.click(repinnedShortcut()));
     QTRY_VERIFY(!fixture.state().value("busy").toBool());
     QTRY_COMPARE(fixture.state().value("position").toString(), firstPosition);
     auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
@@ -4744,10 +4758,13 @@ void checkPinnedBookmarks(int preset, bool dark)
     QTRY_VERIFY(fixture.visible("rrChapterGraph"));
     checkStatsPins(fixture, 7);
     QVERIFY(capture(fixture, name + "-pinned-bookmark-stats-default"));
+    QTRY_VERIFY_WITH_TIMEOUT(fixture.widget("rrPinnedBookmark0")->isEnabled(), 10000);
     const auto destination = fixture.widget("rrPinnedBookmark0")->property("bookmark_position");
     QVERIFY(fixture.press("rrPinnedBookmark0"));
-    QTRY_VERIFY(!fixture.state().value("busy").toBool());
-    QTRY_COMPARE(fixture.state().value("position").toString(), destination.toString());
+    QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool()
+                                     && fixture.state().value("position").toString()
+                                             == destination.toString(),
+                             30000);
     QVERIFY(!fixture.visible("rrPinnedBookmarks"));
     QVERIFY(fixture.press("rrPage"));
     checkStatsPins(fixture, 7);
@@ -7284,15 +7301,14 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(!reader->benchmarkCommand(1, 0));
         QVERIFY(!reader->benchmarkCommand(3, 0));
         QCOMPARE(reader->property("reader_dark").toBool(), dark);
-        QVERIFY(fixture.state().value("pages").toInt() > 2);
+        const auto bookPages = [&] {
+            const auto state = fixture.state();
+            return state.value(state.contains("book_fraction") ? "rough_pages" : "pages").toInt();
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(bookPages() > 2, 30000);
         openPrologueBody(fixture);
         QVERIFY(hasText(reader->findChild<QWidget *>("rrPage")->grab().toImage()));
-        const int page = fixture.state().value("page").toInt();
-        // The preceding navigation used the same 200 ms input guard.
-        test::skipPageTurnWindow();
-        reader->pageButton(1);
-        QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("page").toInt() > page, 30000);
-        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        QVERIFY(fixture.turnPage(1));
         const auto position = fixture.state().value("position").toString();
         QVERIFY(!position.isEmpty());
         QVERIFY(fixture.click(reader->findChild<QWidget *>("rrPage")));

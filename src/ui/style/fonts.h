@@ -74,8 +74,10 @@ inline constexpr int heavierTextSteps = 3;
 // whether the weight changed.
 bool setInterfaceWeight(int steps);
 int interfaceWeight();
-// Draws the widgets under `root` again with the current faces.
-void refreshInterfaceText(QWidget *root);
+// Draws the widgets under `root` again with the current faces. Pass
+// `restyled` when `root` has just been given a changed style sheet, which
+// already repolished every widget under it.
+void refreshInterfaceText(QWidget *root, bool restyled = false);
 // A copy of `font` that loads its faces again. Documents that keep a font
 // renew it when they receive QEvent::FontChange.
 QFont renewedFont(const QFont &font);

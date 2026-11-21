@@ -480,20 +480,22 @@ QFont renewedFont(const QFont &font)
     return renewed;
 }
 
-void refreshInterfaceText(QWidget *root)
+void refreshInterfaceText(QWidget *root, bool restyled)
 {
     // Qt keeps the faces that a font object has loaded. After a font database
     // change it drops them only for fonts in its cache, and only once, so
-    // widgets need new font objects. Setting a style sheet again parses new
-    // rule fonts and resolves the fonts of the widget and its children anew.
+    // widgets need new font objects. Setting the root's style sheet again
+    // repolishes the root and every widget under it once. That parses new rule
+    // fonts, resolves each widget's font anew and gives back the sheet colors
+    // of widgets whose palette was set since their last polish. Setting each
+    // widget's sheet again would repolish a widget once for every styled
+    // ancestor, and took two thirds of a theme change.
+    if (!restyled && !root->styleSheet().isEmpty())
+        root->setStyleSheet(root->styleSheet());
     auto widgets = root->findChildren<QWidget *>();
     widgets.prepend(root);
     QEvent change(QEvent::FontChange);
     for (auto *widget : widgets) {
-        if (const auto sheet = widget->styleSheet(); !sheet.isEmpty()) {
-            widget->setStyleSheet(QString());
-            widget->setStyleSheet(sheet);
-        }
         // Labels lay out rich text again, and paged text renews its document font.
         QCoreApplication::sendEvent(widget, &change);
         widget->update();

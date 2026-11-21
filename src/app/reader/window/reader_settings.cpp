@@ -1780,16 +1780,21 @@ void Reader::applyInterfaceFonts()
     const auto previousUi = ui::interfaceFont().family(),
                previousStrip = ui::headerFooterFont().family(),
                previousMono = ui::chromeFont().family();
-    applyThemeFonts();
+    // Apply the palette before the fonts. A new palette replaces the colors
+    // that style sheets gave each widget. A new interface font then changes
+    // the reader's sheet, and its one repolish gives those colors back.
+    setProperty("kobalt_icon_style", int(themeDraft.icons));
     if (themeReady)
         applyTheme(darkTheme);
+    applyThemeFonts();
     if (previousUi == ui::interfaceFont().family()
         && previousStrip == ui::headerFooterFont().family()
         && previousMono == ui::chromeFont().family())
         return;
-    // Restyling every widget takes a while, so a notice with a bar shows
-    // first. The work runs on this thread, so each step paints the bar itself.
-    // The notice restyles last, so its own text keeps one font until the end.
+    // Restyling takes a while on a Kobo, so a notice with a bar shows first.
+    // The work runs on this thread, so the bar is painted by hand: empty before
+    // the widgets restyle, half full before the reader's sheet repolishes the
+    // whole window, which is most of the work.
     const bool notice = isVisible();
     const auto text = strings::get("reader.applying_theme");
     const auto showProgress = [this, &text](int percent) {
@@ -1803,25 +1808,17 @@ void Reader::applyInterfaceFonts()
         busyNotice->repaint();
     }
     setFont(ui::interfaceFont());
-    QList<QWidget *> widgets, noticeWidgets;
     for (auto *widget : findChildren<QWidget *>()) {
-        if (widget->property("reader_style").toString().isEmpty())
-            continue;
-        (widget == busyNotice || busyNotice->isAncestorOf(widget) ? noticeWidgets : widgets)
-                .append(widget);
+        const auto style = widget->property("reader_style").toString();
+        if (!style.isEmpty())
+            readerStyle(widget, style);
     }
-    constexpr int steps = 4;
-    for (int index = 0; index < widgets.size(); ++index) {
-        readerStyle(widgets[index], widgets[index]->property("reader_style").toString());
-        const int step = (index + 1) * steps / widgets.size();
-        if (notice && step != index * steps / widgets.size() && step < steps)
-            showProgress(step * 100 / steps);
-    }
-    for (auto *widget : noticeWidgets)
-        readerStyle(widget, widget->property("reader_style").toString());
+    if (notice)
+        showProgress(50);
+    const auto previousSheet = styleSheet();
     readerStyle(this, ui::styles::reader());
     page->setFont(ui::headerFooterFont());
-    ui::refreshInterfaceText(this);
+    ui::refreshInterfaceText(this, styleSheet() != previousSheet);
     fitSettings();
     if (notice)
         busyNotice->setDelayedProgress(false, 0, 0);

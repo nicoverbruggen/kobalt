@@ -102,7 +102,7 @@ add_library(kobalt-core OBJECT ${shared} display.cpp ../standalone/native_image.
     "${source}/support/diagnostics.cpp" "${source}/support/main_thread.cpp"
     "${source}/publication/publication.cpp" "${source}/publication/zip_resource.cpp"
     "${source}/publication/resource_cache.cpp" "${source}/publication/local_resources.cpp"
-    "${source}/publication/image_policy.cpp" "${source}/publication/layout_compatibility.cpp"
+    "${source}/publication/image_policy.cpp"
     "${source}/publication/native_resources.cpp" "${source}/publication/resource_server.cpp"
     "${source}/publication/page_estimate.cpp")
 add_dependencies(kobalt-core kobalt-build-info)
@@ -781,7 +781,7 @@ if(BUILD_TESTING)
         endforeach()
     endfunction()
     kobalt_regressions(model storage_assets android_assets android_light profile_storage record_writer main_thread reading_history bookmark_store custom_pins highlight_store annotation_database appearance_settings text_presets header_footer
-        layout_cache resource_cache layout_compatibility reading_pace reading_speed engine_activity
+        resource_cache reading_pace reading_speed engine_activity
         local_resources zip_resource diagnostics crash_reports dictionary_store image_damage page_pixels
         logical_word_counter brightness_gesture qt_compat page_refresh_regions screen_refresh plain_archive reading_progress
         library kosync sync_coordinator annotation_draft chapter_progress style_sample_cache preview_store save_wait saved_words reading_activity)

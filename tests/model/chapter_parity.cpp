@@ -1109,7 +1109,6 @@ Action sessionLists()
                                      viewport,
                                      {},
                                      {},
-                                     {},
                                      lease,
                                      nativeResourceFactory(path, server.port(), lease) };
                 request.appearanceDefaults = settings;

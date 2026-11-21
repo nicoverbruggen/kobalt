@@ -1,6 +1,4 @@
 #include "plain_archive.h"
-#include "publication/layout_compatibility.h"
-#include "publication/resource_cache.h"
 #include "publication/publication.h"
 #include "platforms/kobo/common/local_book_path.h"
 #include "check.h"
@@ -148,40 +146,20 @@ int main(int argc, char **argv)
         archive = native::openPlainArchive(path);
         require(bool(archive), "open plain archive");
     };
-    auto inspect = [&] {
-        QMap<QString, qint64> sizes;
-        for (auto it = files.cbegin(); it != files.cend(); ++it)
-            sizes[it.key()] = it.value().size();
-        ResourceCache cache(
-                files.keys(),
-                [&](const QString &name, const ResourceCache::Sink &sink, QString *) {
-                    std::unique_ptr<QNetworkReply> reply(archive->request(name));
-                    if (!reply || reply->error() != QNetworkReply::NoError)
-                        return false;
-                    const auto bytes = reply->readAll();
-                    return sink(bytes.constData(), bytes.size());
-                },
-                std::make_shared<std::atomic_bool>(false));
-        return inspectLayout(cache, sizes).verdict;
-    };
     save();
-    require(inspect() == LayoutCompatibility::Supported,
-            "extensionless store book must pass without Nickel");
+    std::unique_ptr<QNetworkReply> chapter(archive->request("later.xhtml"));
+    require(chapter && chapter->error() == QNetworkReply::NoError
+                    && chapter->readAll() == files["later.xhtml"],
+            "Extensionless store book must return the original chapter bytes without Nickel");
+    chapter.reset();
     require(!archive->request("../first.xhtml") && !archive->request("missing.xhtml"),
             "unlisted paths rejected");
-    files["later.xhtml"] = QByteArray(256, char(0x93));
-    save();
-    require(inspect() == LayoutCompatibility::Incomplete,
-            "unreadable later chapter must cause fallback");
-    files["later.xhtml"] = "<html><body>Plain again.</body></html>";
     save(true);
     std::unique_ptr<QNetworkReply> corrupt(archive->request("later.xhtml"));
     require(corrupt && corrupt->error() != QNetworkReply::NoError && corrupt->readAll().isEmpty(),
             "CRC failure exposes no partial bytes");
-    require(inspect() == LayoutCompatibility::Incomplete,
-            "corrupt later chapter must cause fallback");
     corrupt.reset();
     archive.reset();
     require(!native::openPlainArchive(dir.path() + "/missing.epub"), "missing archive rejected");
-    qInfo("PASS: direct ZIP reading, later unreadable chapter, CRC failure, paths and provider lifetime");
+    qInfo("PASS: direct ZIP reading, CRC failure, paths and provider lifetime");
 }

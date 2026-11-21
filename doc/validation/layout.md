@@ -115,7 +115,7 @@ The vertical-writing buffer regression covers a run measured at 57 pixels that d
 
 The horizontal-rule check in `engine.beautifier` renders the reported top-border CSS at several reading densities. It checks both border heights and the gray colors.
 
-Current-page formatting warnings use parsed-book format 12 for the added style diagnostic field. `engine.page-estimate` checks that unsupported CSS does not change fallback pixels and that cached styles retain the warning. The previous whole-book inspector remains covered as a standalone utility; it no longer determines reader warnings.
+Current-page formatting warnings use parsed-book format 12 for the added style diagnostic field. `engine.page-estimate` checks that unsupported CSS does not change fallback pixels and that cached styles retain the warning.
 
 The session check turns forward from Trevelyan’s cover and backward from its title while the whole book is ready. In two columns the whole book shows the cover with the title, and the chapter shows the cover alone. Both turns stay in the chapter and keep its layout revision, so bookmark and page lookups of the chapter stay valid. The adjacent Navigate thumbnail must show the page of that turn. A numbered jump to the cover must keep it alone. A jump to the cover’s passage then adopts the whole book with the cover and title together and starts a new layout revision. A bookmark lookup queued before that jump keeps its answer, and one queued behind it is dropped. The check continues with a turn beyond that screen and a return to portrait. The chapter-parity check reads a vertical Japanese chapter with ornamental columns in both directions. It compares the slice pixels and the screen selected for handoff with Accurate pagination.
 

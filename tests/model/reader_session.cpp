@@ -111,7 +111,6 @@ static void hybridFontEdits(const QString &path, quint16 port)
                       QSize(758, 900),
                       qt::object({ { "column_spacing_percent", 150 } }),
                       {},
-                      {},
                       lease,
                       nativeResourceFactory(path, port, lease),
                       codec },
@@ -274,9 +273,9 @@ static void mixedSpreadHandoff(const QDir &fixtures)
                 openedEngine = const_cast<Engine *>(&engine);
                 return engine.position();
             };
-        OpenRequest request{ book,     book, landscape, {},
-                             {},       {},   lease,     localResourceFactory(book, lease),
-                             positions };
+        OpenRequest request{
+            book, book, landscape, {}, {}, lease, localResourceFactory(book, lease), positions
+        };
         request.appearanceDefaults = settings;
         reader.open(std::move(request), [&](OpeningResult result) {
             require(result.ready(), qPrintable(openingMessage(result)));
@@ -452,12 +451,11 @@ static void chapterNavigation(const QString &path)
     QEventLoop loop;
     ReaderSession hybrid(test::readerFonts(), test::readerPlaceholder());
     auto lease = std::make_shared<SourceLease>();
-    hybrid.open(
-            { path, path, QSize(758, 900), {}, {}, {}, lease, localResourceFactory(path, lease) },
-            [&](OpeningResult result) {
-                require(result.ready(), qPrintable(openingMessage(result)));
-                loop.quit();
-            });
+    hybrid.open({ path, path, QSize(758, 900), {}, {}, lease, localResourceFactory(path, lease) },
+                [&](OpeningResult result) {
+                    require(result.ready(), qPrintable(openingMessage(result)));
+                    loop.quit();
+                });
     loop.exec();
     hybrid.updated = [&] {
         if (!hybrid.busy())
@@ -499,7 +497,6 @@ static void chapterNavigation(const QString &path)
                        QSize(758, 900),
                        finishedState,
                        {},
-                       {},
                        access,
                        localResourceFactory(path, access) },
                      [&](OpeningResult result) {
@@ -525,8 +522,9 @@ static void chapterNavigation(const QString &path)
     appearance["fingerprint"] = QString::fromLatin1(resumed->sourceHash());
     auto fallback = resumed->retained();
     auto access = std::make_shared<SourceLease>();
-    OpenRequest request{ path, path, QSize(758, 900), appearance,
-                         {},   {},   access,          localResourceFactory(path, access) };
+    OpenRequest request{
+        path, path, QSize(758, 900), appearance, {}, access, localResourceFactory(path, access)
+    };
     request.positions = { [](const Engine &, const QString &position, QString *) {
                              return position;
                          },
@@ -568,7 +566,6 @@ static void positionImportTransitions(const QString &path, const QString &replac
         reader.open({ file,
                       file,
                       QSize(758, 900),
-                      {},
                       {},
                       {},
                       lease,
@@ -749,8 +746,9 @@ int run(int argc, char **argv)
         };
         const auto request = [&](const QString &file, std::shared_ptr<SourceLease> access,
                                  ResourceFactory factory) {
-            return OpenRequest{ file, file, QSize(758, 900),   {},
-                                {},   {},   std::move(access), std::move(factory) };
+            return OpenRequest{
+                file, file, QSize(758, 900), {}, {}, std::move(access), std::move(factory)
+            };
         };
         for (bool keyMode : { false, true }) {
             strings::showKeys(keyMode);
@@ -959,7 +957,6 @@ int run(int argc, char **argv)
             fast->open({ path,
                          path,
                          QSize(758, 900),
-                         {},
                          {},
                          {},
                          access,
@@ -1181,7 +1178,6 @@ int run(int argc, char **argv)
         session->open({ path,
                         path,
                         QSize(758, 900),
-                        {},
                         {},
                         {},
                         lease,
@@ -1796,7 +1792,6 @@ int run(int argc, char **argv)
                              session->image().size(),
                              settings,
                              {},
-                             {},
                              access,
                              localResourceFactory(path, access) },
                            [&](OpeningResult result) {
@@ -1904,7 +1899,6 @@ int run(int argc, char **argv)
                                     QSize(758, 900),
                                     saved,
                                     {},
-                                    {},
                                     lease,
                                     nativeResourceFactory(path, server.serverPort(), lease),
                                     secondPositions };
@@ -1975,7 +1969,6 @@ int run(int argc, char **argv)
                                     QSize(758, 900),
                                     previewSaved,
                                     {},
-                                    {},
                                     lease,
                                     nativeResourceFactory(path, server.serverPort(), lease),
                                     secondPositions };
@@ -2036,18 +2029,12 @@ int run(int argc, char **argv)
             {
                 ReaderSession reference(test::readerFonts(), test::readerPlaceholder());
                 auto access = std::make_shared<SourceLease>();
-                reference.open({ colorPath,
-                                 colorPath,
-                                 QSize(758, 900),
-                                 {},
-                                 {},
-                                 {},
-                                 access,
-                                 source(access) },
-                               [&](OpeningResult result) {
-                                   require(result.ready(), qPrintable(openingMessage(result)));
-                                   opened.quit();
-                               });
+                reference.open(
+                        { colorPath, colorPath, QSize(758, 900), {}, {}, access, source(access) },
+                        [&](OpeningResult result) {
+                            require(result.ready(), qPrintable(openingMessage(result)));
+                            opened.quit();
+                        });
                 opened.exec();
                 reference.updated = [&] {
                     if (!reference.busy())
@@ -2067,14 +2054,7 @@ int run(int argc, char **argv)
             for (const bool image : { false, true }) {
                 ReaderSession idle(test::readerFonts(), test::readerPlaceholder());
                 auto access = std::make_shared<SourceLease>();
-                idle.open({ colorPath,
-                            colorPath,
-                            QSize(758, 900),
-                            {},
-                            {},
-                            {},
-                            access,
-                            source(access) },
+                idle.open({ colorPath, colorPath, QSize(758, 900), {}, {}, access, source(access) },
                           [&](OpeningResult result) {
                               require(result.ready(), qPrintable(openingMessage(result)));
                               opened.quit();
@@ -2108,12 +2088,11 @@ int run(int argc, char **argv)
             ResourceFactory images = source(imageLease);
             auto illustrated =
                     std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
-            illustrated->open(
-                    { colorPath, colorPath, QSize(758, 900), {}, {}, {}, imageLease, images },
-                    [&](OpeningResult result) {
-                        require(result.ready(), qPrintable(openingMessage(result)));
-                        opened.quit();
-                    });
+            illustrated->open({ colorPath, colorPath, QSize(758, 900), {}, {}, imageLease, images },
+                              [&](OpeningResult result) {
+                                  require(result.ready(), qPrintable(openingMessage(result)));
+                                  opened.quit();
+                              });
             opened.exec();
             require(illustrated->resourceStats().value("ready_images").toInt() == 0,
                     "Neighbour image regression loaded the future image during opening");
@@ -2188,7 +2167,7 @@ int run(int argc, char **argv)
                                            {} });
         };
         bool deniedFinished = false;
-        session->open({ path, path, QSize(758, 900), saved, {}, {}, lease, denied },
+        session->open({ path, path, QSize(758, 900), saved, {}, lease, denied },
                       [&](OpeningResult result) {
                           require(!result.ready(), "Denied fresh access reused retained text");
                           deniedFinished = true;
@@ -2208,7 +2187,6 @@ int run(int argc, char **argv)
                   QSize(758, 900),
                   {},
                   {},
-                  {},
                   lease,
                   nativeResourceFactory(path, server.serverPort(), lease) },
                 [&](OpeningResult) { staleFinished = true; },
@@ -2220,7 +2198,6 @@ int run(int argc, char **argv)
                     session->open({ path,
                                     path,
                                     QSize(758, 900),
-                                    {},
                                     {},
                                     {},
                                     lease,
@@ -2238,8 +2215,14 @@ int run(int argc, char **argv)
         for (const bool hostRevokes : { false, true }) {
             ReaderSession metadata(test::readerFonts(), test::readerPlaceholder());
             auto access = std::make_shared<SourceLease>();
-            metadata.open({ path, path, QSize(758, 900), {}, {}, {}, access,
-                            localResourceFactory(path, access), firstPositions },
+            metadata.open({ path,
+                            path,
+                            QSize(758, 900),
+                            {},
+                            {},
+                            access,
+                            localResourceFactory(path, access),
+                            firstPositions },
                           [&](OpeningResult result) {
                               require(result.ready(), qPrintable(openingMessage(result)));
                               opened.quit();
@@ -2294,11 +2277,17 @@ int run(int argc, char **argv)
             for (const auto request : { Pending::Font, Pending::Rotation, Pending::Turn }) {
                 ReaderSession cancelled(test::readerFonts(), test::readerPlaceholder());
                 auto access = std::make_shared<SourceLease>();
-                cancelled.open({ path, path, QSize(758, 900), {}, {}, {}, access,
-                                 localResourceFactory(path, access) }, [&](OpeningResult result) {
-                    require(result.ready(), qPrintable(openingMessage(result)));
-                    opened.quit();
-                });
+                cancelled.open({ path,
+                                 path,
+                                 QSize(758, 900),
+                                 {},
+                                 {},
+                                 access,
+                                 localResourceFactory(path, access) },
+                               [&](OpeningResult result) {
+                                   require(result.ready(), qPrintable(openingMessage(result)));
+                                   opened.quit();
+                               });
                 opened.exec();
                 const auto shown = cancelled.image().cacheKey();
                 bool published = false;
@@ -2374,7 +2363,6 @@ int run(int argc, char **argv)
                     { publisherPath,
                       publisherPath,
                       QSize(758, 900),
-                      {},
                       {},
                       {},
                       absoluteLease,

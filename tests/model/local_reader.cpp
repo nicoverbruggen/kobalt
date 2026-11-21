@@ -74,8 +74,9 @@ int scanEpubFolder(const QString &path)
         auto lease = std::make_shared<SourceLease>();
         // The local backend and ReaderSession use the same archive checks as
         // desktop opening. ReaderSession also returns the typed failure.
-        OpenRequest request{ book, book, QSize(758, 900), {},
-                             {},   {},   lease,           localResourceFactory(book, lease) };
+        OpenRequest request{
+            book, book, QSize(758, 900), {}, {}, lease, localResourceFactory(book, lease)
+        };
         OpeningResult outcome;
         QEventLoop opened;
         QTimer timeout;
@@ -219,14 +220,8 @@ int main(int argc, char **argv)
             if (!session) {
                 session = std::make_unique<ReaderSession>(test::readerFonts(), "Libron");
             }
-            OpenRequest request{ path,
-                                 path,
-                                 QSize(758, 900),
-                                 retainedSettings,
-                                 {},
-                                 directory.path() + "/layout.json",
-                                 lease,
-                                 source->resources(lease) };
+            OpenRequest request{ path, path,  QSize(758, 900),         retainedSettings,
+                                 {},   lease, source->resources(lease) };
             request.documentCachePath = cache;
             request.userStyleSheetPath = stylePath;
             QEventLoop opened;

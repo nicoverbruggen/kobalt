@@ -65,7 +65,6 @@ Support files are in `.adds/kobalt/`. Annotation exports are in `Kobalt/Annotati
 | `<hash>.json` | One file per book: saved position, typography, header and footer preset, orientation, dictionary choice and the Nickel progress baseline |
 | `annotations/<key>/` | One folder per book with `bookmarks.json`, `highlights.json` and `book.json`, see Bookmarks and annotations |
 | `annotations/.index/paths.json` | Disposable bookmark lookup index, at most 4 MiB; rebuilt from book folders when missing or invalid |
-| `reopen-layout.json` | Up to 20 layout-check results, keyed by archive digest, at most 8 KiB |
 | `.cache-blaze/` | Parsed Blaze books and their pages, so a book that was opened before opens without parsing. At most 128 MiB; the oldest books are removed first. Kobalt deletes any other file in this folder |
 | `.cache/` | Parsed books from beta 8. Blaze leaves this folder untouched so beta 8 can reuse it after rollback |
 | `crash-reporting/` | One report for each of the last 20 crashes of Nickel, see below |

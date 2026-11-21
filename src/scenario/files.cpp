@@ -53,15 +53,10 @@ bool clearCaches(storage::RecordWriter &writer, const storage::Paths &paths)
             [paths] {
                 mainthread::blocking("scenario-cache-removal");
                 const QFileInfo document(paths.documentCache());
-                if (document.isSymLink()) {
-                    if (!QFile::remove(document.filePath()))
-                        return false;
-                } else if (!QDir(document.filePath()).removeRecursively()) {
-                    return false;
-                }
-                const QFileInfo layout(paths.layoutCache());
-                return (!layout.exists() && !layout.isSymLink())
-                        || QFile::remove(layout.filePath());
+                if (document.isSymLink())
+                    return QFile::remove(document.filePath());
+                return !document.exists()
+                        || (document.isDir() && QDir(document.filePath()).removeRecursively());
             },
             [guard](bool ok) {
                 if (guard)

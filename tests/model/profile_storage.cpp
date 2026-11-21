@@ -200,7 +200,12 @@ int main(int argc, char **argv)
     QImage preview(16, 16, QImage::Format_RGB32);
     preview.fill(Qt::white);
     require(preview.save(legacyPreview, "PNG"), "Legacy preview fixture");
+    const auto retiredInspection = root.filePath("reopen-layout.json");
+    const QByteArray oldVerdict = R"({"version":1})";
+    write(retiredInspection, oldVerdict);
     require(storage::prepareProfile(paths), "Import complete profile");
+    require(QFileInfo::exists(retiredInspection) && bytes(retiredInspection) == oldVerdict,
+            "Profile preparation moved or removed the retired inspection cache");
     require(QDir().mkpath(paths.documentCache()), "Blaze cache directory");
     write(paths.documentCache() + "/book.cr3", "blaze-cache-sentinel");
     require(QDir(paths.documentCache()).removeRecursively()

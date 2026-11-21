@@ -119,8 +119,9 @@ void twoColumnAnnotationPages()
     const QSize landscape(1072, 758);
     const auto open = [&](ReaderSession &reader, QJsonObject saved) {
         auto lease = std::make_shared<SourceLease>();
-        OpenRequest request{ identity, path, landscape, saved,
-                             {},       {},   lease,     localResourceFactory(path, lease) };
+        OpenRequest request{
+            identity, path, landscape, saved, {}, lease, localResourceFactory(path, lease)
+        };
         request.appearanceDefaults = { { "two_columns_landscape", true }, { "font_pixels", 28 } };
         bool ready = false;
         reader.open(std::move(request), [&](OpeningResult result) {
@@ -296,18 +297,12 @@ void bookmarkAfterPreparation()
     const auto open = [&](ReaderSession &reader) {
         auto lease = std::make_shared<SourceLease>();
         bool ready = false;
-        reader.open({ identity,
-                      path,
-                      { 600, 800 },
-                      {},
-                      {},
-                      {},
-                      lease,
-                      localResourceFactory(path, lease) },
-                    [&](OpeningResult result) {
-                        require(result.ready(), "Cannot open prepared bookmark fixture");
-                        ready = true;
-                    });
+        reader.open(
+                { identity, path, { 600, 800 }, {}, {}, lease, localResourceFactory(path, lease) },
+                [&](OpeningResult result) {
+                    require(result.ready(), "Cannot open prepared bookmark fixture");
+                    ready = true;
+                });
         waitUntil([&] { return ready && !reader.busy() && !reader.preparingNeighbours(); });
     };
     QString shown, later;
@@ -422,7 +417,6 @@ int main(int argc, char **argv)
         model.open({ "file:///bookmark-session.epub",
                      path,
                      QSize(758, 900),
-                     {},
                      {},
                      {},
                      lease,

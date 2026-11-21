@@ -67,11 +67,6 @@ QString Paths::database() const
     return child(directory, "kobalt.sqlite");
 }
 
-QString Paths::layoutCache() const
-{
-    return child(directory, "cache/reopen-layout.json");
-}
-
 QString Paths::sleepScreen() const
 {
     return child(directory, "cache/sleep-screen.png");
@@ -777,17 +772,6 @@ bool prepareProfile(const Paths &paths, ProfileRecovery *recovery)
         const auto settings = readPreferences(paths.preferences());
         if (settings.status != ReadStatus::Ok)
             ok = false;
-    }
-    const auto oldCache = directory.filePath("reopen-layout.json");
-    if (QFileInfo::exists(oldCache) && !QFileInfo(oldCache).isSymLink()) {
-        const auto read = readJsonFile(oldCache);
-        if (read.status == ReadStatus::Ok && read.object.value("version").toInt() == 1) {
-            QDir().mkpath(QFileInfo(paths.layoutCache()).absolutePath());
-            if (!QFileInfo::exists(paths.layoutCache()))
-                QFile::rename(oldCache, paths.layoutCache());
-            else
-                QFile::remove(oldCache); // Both are disposable inspection results.
-        }
     }
     // Startup can already have created the new diagnostic log. Keep the old
     // reports with the import snapshots so neither copy replaces the other.

@@ -20,7 +20,6 @@ struct Paths
     QString annotations() const;
     QString customPins() const;
     QString database() const;
-    QString layoutCache() const;
     QString sleepScreen() const;
     // Finished preview tiles, such as the All presets grid's. Disposable.
     QString previews() const;

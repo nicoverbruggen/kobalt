@@ -6704,8 +6704,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         kobalt::storage::Paths paths;
         paths.directory = directory.path();
         QVERIFY(QDir().mkpath(paths.documentCache()));
-        QVERIFY(QDir().mkpath(QFileInfo(paths.layoutCache()).absolutePath()));
-        QFile layout(paths.layoutCache());
+        const auto retiredInspection = directory.filePath("cache/reopen-layout.json");
+        QVERIFY(QDir().mkpath(QFileInfo(retiredInspection).absolutePath()));
+        QFile layout(retiredInspection);
         QVERIFY(layout.open(QIODevice::WriteOnly));
         layout.close();
 
@@ -6716,19 +6717,21 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         bool processed = false;
         QTimer::singleShot(0, &context, [&] {
             processed = QFileInfo::exists(paths.documentCache())
-                    && QFileInfo::exists(paths.layoutCache());
+                    && QFileInfo::exists(retiredInspection);
             release.release();
         });
         const bool cleared = kobalt::scenario::clearCaches(writer, paths);
         release.release();
         QVERIFY2(processed, "The application thread could not process events before cache removal");
         QVERIFY(cleared);
-        QVERIFY(!QFileInfo::exists(paths.documentCache())
-                && !QFileInfo::exists(paths.layoutCache()));
+        QVERIFY(!QFileInfo::exists(paths.documentCache()));
+        QVERIFY(QFileInfo::exists(retiredInspection));
         QVERIFY(kobalt::scenario::clearCaches(writer, paths));
-        QVERIFY(QDir().mkpath(paths.layoutCache() + "/unexpected"));
+        QFile unexpected(paths.documentCache());
+        QVERIFY(unexpected.open(QIODevice::WriteOnly));
+        unexpected.close();
         QVERIFY(!kobalt::scenario::clearCaches(writer, paths));
-        QVERIFY(QFileInfo::exists(paths.layoutCache() + "/unexpected"));
+        QVERIFY(QFileInfo::exists(unexpected.fileName()));
     }
 
     void scenarioResultFile()

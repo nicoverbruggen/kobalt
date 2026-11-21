@@ -215,7 +215,7 @@ cmake -DPACKAGE=build/kobo-qt5-eval/Kobalt-qt5-eval.zip -DDEVICE=/Volumes/KOBOeR
 
 The run then needs no further input. It ends with the usual notice.
 
-- `reading.open` closes the book and opens it again cold. The player removes the book's document and layout caches and the closed book that Kobalt keeps in memory, so the opening parses and lays out the book again.
+- `reading.open` closes the book and opens it again cold. The player removes the parsed-book cache and the closed book that Kobalt keeps in memory, so the opening parses and lays out the book again.
 - `reading.turn.paced` turns pages and waits after each turn until the engine is idle, as a reader who reads the page does.
 - `reading.turn.fast` turns pages without that wait.
 - `reading.memory` reports the memory after those turns.

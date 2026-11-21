@@ -426,7 +426,6 @@ public:
                              readerInterface().readingViewport(size, preferences),
                              saved,
                              {},
-                             paths.layoutCache(),
                              lease,
                              source->resources(lease) };
         request.appearanceDefaults = appearance::bookDefaults(preferences);
@@ -1388,7 +1387,6 @@ private slots:
                              readerInterface().readingViewport(nativeSize, preferences),
                              saved.object,
                              {},
-                             paths.layoutCache(),
                              lease,
                              source->resources(lease) };
         request.appearanceDefaults = appearance::bookDefaults(preferences);

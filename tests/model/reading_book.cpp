@@ -248,10 +248,13 @@ int main(int argc, char **argv)
                     std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
         bool ready = false;
         auto lease = std::make_shared<SourceLease>();
-        OpenRequest request{ identity, path,
-                             size,     state,
-                             {},       {},
-                             lease,    nativeResourceFactory(path, server.port(), lease) };
+        OpenRequest request{ identity,
+                             path,
+                             size,
+                             state,
+                             {},
+                             lease,
+                             nativeResourceFactory(path, server.port(), lease) };
         request.positions = positions;
         request.restartAtStart = restart;
         if (restart)
@@ -587,7 +590,6 @@ int main(int argc, char **argv)
                                 QSize(758, 900),
                                 {},
                                 {},
-                                {},
                                 access,
                                 localResourceFactory(typeTester, access) },
                               [&](OpeningResult result) {
@@ -883,10 +885,13 @@ int main(int argc, char **argv)
                 std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
         bool ready = false;
         auto lease = std::make_shared<SourceLease>();
-        OpenRequest request{
-            identity, path, QSize(758, 900), original,
-            {},       {},   lease,           nativeResourceFactory(path, server.port(), lease)
-        };
+        OpenRequest request{ identity,
+                             path,
+                             QSize(758, 900),
+                             original,
+                             {},
+                             lease,
+                             nativeResourceFactory(path, server.port(), lease) };
         request.temporaryAppearance = appearance::benchmarkTypography();
         request.originalAppearance = original;
         session->open(std::move(request), [&](const OpeningResult &result) {
@@ -939,7 +944,6 @@ int main(int argc, char **argv)
                          path,
                          QSize(758, 900),
                          storage::readBookState(paths, identity, statePath).object,
-                         {},
                          {},
                          lease,
                          nativeResourceFactory(path, server.port(), lease) },

@@ -59,8 +59,6 @@ int main(int argc, char **argv)
            "annotations directory compatibility");
     expect(paths.database() == paths.directory + "/kobalt.sqlite",
            "database filename and profile location");
-    expect(paths.layoutCache() == paths.directory + "/cache/reopen-layout.json",
-           "layout filename compatibility");
     expect(paths.bookState("store-book-123")
                    == paths.directory
                            + "/b2810aac23895640e06ad1f67e8f46d5fa93a57e9fdc2b2f72e8ffaff93699fd.json",

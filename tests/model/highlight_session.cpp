@@ -105,7 +105,6 @@ int main(int argc, char **argv)
                      QSize(758, 900),
                      {},
                      {},
-                     {},
                      lease,
                      nativeResourceFactory(path, server.port(), lease) },
                    [&](const OpeningResult &result) {

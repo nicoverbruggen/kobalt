@@ -11,7 +11,7 @@ Flag suboptimal approaches before extending them: duplicated build logic, applic
 | `src/app/` | Application shell, reader window, library shell, about and messages |
 | `src/reading/` | Reading session, appearance settings, progress, bookmarks, highlights, activity, presets, sleep screen |
 | `src/engine/` | Engine interface, worker thread, and Blaze (Kobalt's CREngine fork) |
-| `src/publication/` | EPUB opening, resources, layout compatibility, page estimates, image policy |
+| `src/publication/` | EPUB opening, resources, page estimates, image policy |
 | `src/render/` | Page painting, refresh regions, highlights, bookmarks, tap zones |
 | `src/storage/` | Profile SQLite database, JSON stores, record writer, caches, annotation export |
 | `src/ui/` | Shared controls, dialogs, input handling, theme styling |
@@ -90,7 +90,7 @@ Run desktop CMake/CTest commands from `platforms/desktop/` and root-level CMake 
 ## Storage, caches and documentation
 
 - Read [Storage compatibility](doc/storage.md) before changing settings, book state, bookmarks, annotations, caches, backup tools or test database inspection. Never open the live exclusive profile through an external SQLite connection. Keep saved reading data separate from disposable caches. Never tie format versions to release names. Compatible optional fields keep the current version with explicit defaults, and edits preserve supported optional fields. Incompatible saved-data changes require a version bump, a migration that keeps user data, and regression tests. Never overwrite or delete unsupported or damaged saved data; profile preparation moves it into `backups/`. Do not assume older builds keep unknown fields.
-- Review cache compatibility on every engine dependency or patch change. Bump `rendering_version` in `platforms/cache-policy.cmake` for repagination-only changes, `documentCacheChecksum` for parser or preprocessing changes, and the inspection-cache format separately when verdict rules change. Cache invalidation must never clear user data.
+- Review cache compatibility on every engine dependency or patch change. Bump `rendering_version` in `platforms/cache-policy.cmake` for repagination-only changes, `documentCacheChecksum` for parser or preprocessing changes. Cache invalidation must never clear user data.
 - Keep Markdown in `doc/`, except the root `README.md` (owned by the user) and `AGENTS.md`. Follow [Documentation guide](doc/documentation.md): edit in place rather than appending, do not add no-op entries to `doc/storage/`, and do not add per-assertion test recaps to `doc/validation/*.md`.
 
 ## Git and worktrees

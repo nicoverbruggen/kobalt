@@ -13,7 +13,7 @@ struct OpenRequest
     QString identity, path;
     QSize size;
     QJsonObject saved;
-    QString platformLocation, layoutCachePath;
+    QString platformLocation;
     std::shared_ptr<SourceLease> lease;
     ResourceFactory resources;
     PositionCodec positions{};

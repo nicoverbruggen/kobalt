@@ -177,7 +177,7 @@ While the reader sits idle, Kobalt writes nothing to its database or settings fi
 
 | Moment | Writes |
 | --- | --- |
-| Opening | `active-session.json`; Nickel's reading status; a book-state checkpoint; on a cache miss, `cache/reopen-layout.json` |
+| Opening | `active-session.json`; Nickel's reading status; a book-state checkpoint |
 | Sleep | A durable checkpoint of book state, speed, history and layout (`synchronous=FULL`), the reading history, Nickel's progress (skipped when the position is unchanged; on firmware 4 it includes the current KEPUB chapter's row) and reading time, the diagnostic log with a sync, and a passive WAL checkpoint |
 | Close, USB and power-off | The same as sleep, plus the sleep-screen image (`cache/sleep-screen.png`), the CREngine document cache (`.cache/*.cr3`) when it is missing or stale, and closing `kobalt.sqlite` with `wal_checkpoint(TRUNCATE)` and `journal_mode=DELETE`. Close also writes the book's recent-book row in Nickel's `Activity` table; see [Sync data](sync-data.md) |
 | At 5% battery or less, before standby | A durable batch and a passive checkpoint |

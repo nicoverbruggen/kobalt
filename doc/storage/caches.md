@@ -122,4 +122,4 @@ Kobo cleanup of older `.png` previews:
 - An unreadable or malformed marker stops the migration without deleting files.
 - Profiles without old PNGs finish without a scan. Other hosts finish after the file cleanup.
 
-`cache/reopen-layout.json` is retired. It was a version-1 cache of whole-book inspection results. Kobalt no longer reads or writes it. Existing files hold no reading data.
+The old `reopen-layout.json` file in the profile root or under `cache/` is retired. It was a version-1 cache of whole-book inspection results. Kobalt no longer reads or writes it. Existing files hold no reading data.

@@ -364,7 +364,7 @@ void KosyncPage::edit(int field)
     const auto titleText = strings::get(field == 0           ? "kosync.server"
                                                 : field == 1 ? "kosync.username"
                                                 : field == 2 ? "kosync.password"
-                                                             : "kosync.device_name");
+                                                             : "kosync.device_name_title");
     auto *dialog = new ui::ChoiceModal(overlayParent_, { {}, titleText, {} },
                                        { strings::get("common.cancel"), "rrKosyncEditCancel" },
                                        { strings::get("common.ok"), "rrKosyncEditSave" });
@@ -518,8 +518,9 @@ void KosyncPage::showMatchingChoices()
 {
     if (matchingDialog_)
         return;
-    auto *dialog = new ui::NoticeModal(overlayParent_, { {}, strings::get("kosync.matching"), {} },
-                                       { strings::get("common.cancel"), "rrKosyncMatchingCancel" });
+    auto *dialog =
+            new ui::NoticeModal(overlayParent_, { {}, strings::get("kosync.matching_title"), {} },
+                                { strings::get("common.cancel"), "rrKosyncMatchingCancel" });
     matchingDialog_ = dialog;
     dialog->setObjectName("rrKosyncMatchingDialog");
     dialog->setDimmed(true);

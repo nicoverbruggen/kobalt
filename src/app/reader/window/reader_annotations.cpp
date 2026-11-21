@@ -1635,10 +1635,10 @@ void Reader::openNoteEditor(const QString &id)
                                colorAnnotations() ? highlightDisplayColor(detail.color)
                                                   : QStringLiteral("gray"),
                                bookmarkList->excerptFont() };
-    noteEditor = new NoteEditor(
-            this, services.keyboard,
-            strings::get(detail.note.isEmpty() ? "annotations.add_note" : "annotations.edit_note"),
-            passage, detail.note);
+    noteEditor = new NoteEditor(this, services.keyboard,
+                                strings::get(detail.note.isEmpty() ? "annotations.add_note_title"
+                                                                   : "annotations.edit_note_title"),
+                                passage, detail.note);
     noteEditor->saveRequested = [this, id](const QString &text) {
         if (text.size() > HighlightStore::maxNoteUnits)
             noteEditor->setError(strings::get("annotations.note_too_long"));

@@ -404,7 +404,7 @@ void WordList::openSort()
     card->rows()->setContentsMargins(2, 2, 2, 2);
     card->rows()->setSpacing(0);
     card->rows()->addSpacing(ui::metrics::notice::cardMargins.top());
-    auto *heading = card->title(strings::get("marks.sort_title"));
+    auto *heading = card->title(strings::get("marks.sort_dialog_title"));
     heading->setContentsMargins(chrome::inset, 0, chrome::inset, 0);
     card->rows()->addSpacing(ui::metrics::notice::cardMargins.bottom());
     auto *options = new ui::RadioList(card);

@@ -4038,6 +4038,9 @@ void checkResourceFolders(int preset, bool dark)
     const auto openFolders = [&] {
         view->findChild<QPushButton *>("libraryMore")->click();
         view->findChild<QPushButton *>("libraryMoreResourceFolders")->click();
+        auto *title = qobject_cast<QLabel *>(visible("rrModalTitle"));
+        QVERIFY(title);
+        QCOMPARE(title->text(), QString("Resource Folders"));
     };
     const auto reveal = [&](const QString &objectName) {
         for (int i = 0; i < 4; ++i) {
@@ -4351,6 +4354,7 @@ void checkPinnedBookmarks(int preset, bool dark)
             break;
         }
         QTRY_VERIFY(fixture.visible("rrPinEditor"));
+        QCOMPARE(labelText(fixture, "rrModalTitle"), QString("Pin Bookmark"));
         QVERIFY(fixture.visible("rrPinHelp"));
         QVERIFY(!fixture.widget("rrPinErrors"));
         auto *input = qobject_cast<QLineEdit *>(fixture.widget("rrPinName"));
@@ -5756,6 +5760,7 @@ private slots:
                     - initial.value("main_first_page").toInt() + 1;
             QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), mainPagesLeft);
             QVERIFY(fixture.press("rrGraphWordScope"));
+            QCOMPARE(labelText(fixture, "rrStatsWordScopeTitle"), QString("Book Stats For"));
             QVERIFY(fixture.press("rrStatsWordVolume"));
             QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), initial.value("pages").toInt());
             QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Volume · 8106 words"));
@@ -9701,6 +9706,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTRY_VERIFY(fixture.visible("rrAnnotationAddNote"));
         QVERIFY(fixture.press("rrAnnotationAddNote"));
         QTRY_VERIFY(fixture.visible("rrNoteEditor") && editorText());
+        QCOMPARE(labelText(fixture, "rrModalTitle"), QString("Add Note"));
         QCOMPARE(fixture.stored("highlights.json", "highlights").size(), 1);
         QVERIFY(keyboardShown());
         QVERIFY(editorText()->toPlainText().isEmpty());

@@ -391,7 +391,7 @@ void BookmarkList::openPin(const BookmarkRow &row)
     if (row.pinIcon.isEmpty() && count >= BookmarkStore::maxPins) {
         auto *notice = new ui::NoticeModal(
                 parentWidget(),
-                { strings::get("bookmarks.pin_limit"), strings::get("bookmarks.pin"), {} },
+                { strings::get("bookmarks.pin_limit"), strings::get("bookmarks.pin_title"), {} },
                 { strings::get("common.ok"), "rrPinLimitClose" });
         pinPopup = notice;
         connect(notice->primaryButton(), &QPushButton::clicked, this, [this] { closePin(); });
@@ -403,11 +403,14 @@ void BookmarkList::openPin(const BookmarkRow &row)
         notice->raise();
         return;
     }
-    auto *dialog = new ui::ChoiceModal(
-            parentWidget(),
-            { {}, strings::get(row.pinIcon.isEmpty() ? "bookmarks.pin" : "bookmarks.modify"), {} },
-            { strings::get("common.cancel"), "rrPinCancel" },
-            { strings::get("common.save"), "rrPinSave" });
+    auto *dialog =
+            new ui::ChoiceModal(parentWidget(),
+                                { {},
+                                  strings::get(row.pinIcon.isEmpty() ? "bookmarks.pin_title"
+                                                                     : "bookmarks.modify_title"),
+                                  {} },
+                                { strings::get("common.cancel"), "rrPinCancel" },
+                                { strings::get("common.save"), "rrPinSave" });
     pinPopup = dialog;
     dialog->setObjectName("rrPinEditor");
     dialog->setDimmed(true);
@@ -619,7 +622,7 @@ void BookmarkList::openSort()
     sortPopup->setDimmed(true);
     sortPopup->dismissed = [this] { closeSort(); };
     auto *card = sortPopup->card();
-    card->heading(strings::get("marks.sort_title"));
+    card->heading(strings::get("marks.sort_dialog_title"));
     auto *options = new ui::RadioList(card);
     options->setMinimumRowHeight(chrome::listActionHeight);
     const QStringList values{ "position", "newest", "oldest" };

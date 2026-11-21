@@ -971,14 +971,13 @@ void Reader::openChoicePopup(QPointer<ui::ModalOverlay> &slot, const QString &na
 
 void Reader::openStatsWordScope()
 {
-    openChoicePopup(wordScopePopup, "rrStatsWordScope", strings::get("stats.count_words_in"),
+    openChoicePopup(wordScopePopup, "rrStatsWordScope", strings::get("stats.count_words_in_title"),
                     strings::get("stats.scope_hint"),
                     { { "rrStatsWordMain", strings::get("stats.scope_main"),
                         strings::get("stats.scope_main_hint") },
                       { "rrStatsWordVolume", strings::get("stats.scope_volume"),
                         strings::get("stats.scope_volume_hint") } },
-                    statsUseWholeVolume() ? 1 : 0,
-                    [this](int index) {
+                    statsUseWholeVolume() ? 1 : 0, [this](int index) {
                         auto next = preferences;
                         next["stats_word_scope"] = index ? QStringLiteral("volume") : QStringLiteral("main");
                         if (savePreferences(next)) {

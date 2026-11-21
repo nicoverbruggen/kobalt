@@ -5,6 +5,8 @@
 "common.save" = "Save";
 "bookmarks.pin" = "Pin bookmark";
 "bookmarks.modify" = "Modify pinned bookmark";
+"bookmarks.pin_title" = "Pin Bookmark";
+"bookmarks.modify_title" = "Modify Pinned Bookmark";
 "bookmarks.unpin" = "Unpin bookmark";
 "bookmarks.actions" = "Bookmark actions";
 "bookmarks.remove_this" = "Remove this bookmark";
@@ -12,13 +14,13 @@
 "bookmarks.pin_name" = "Bookmark name";
 "bookmarks.custom_missing" = "Missing icon: %1";
 "bookmarks.custom_help_action" = "Help";
-"bookmarks.custom_help_title" = "Custom bookmark icons";
+"bookmarks.custom_help_title" = "Custom Bookmark Icons";
 "bookmarks.custom_help_kobo" = "Copy your SVG files to .adds/kobalt/custom-pins/ over USB.";
-"bookmarks.custom_help_android" = "In Library, open More > Resource folders and choose your custom icon folder.";
+"bookmarks.custom_help_android" = "In Library, open More > Resource Folders and choose your custom icon folder.";
 "bookmarks.custom_help_desktop" = "Copy your SVG files to:\n%1";
 "bookmarks.custom_help_reload" = "Close and reopen your book to load them. Your icons appear first.";
 "bookmarks.custom_help_limits" = "You can add 120 icons. Depending on how they are formatted, icons may not load correctly.";
-"bookmarks.custom_errors_title" = "Icons not loaded";
+"bookmarks.custom_errors_title" = "Icons Not Loaded";
 "bookmarks.custom_errors_count" = "Files that could not be loaded: %1";
 "bookmarks.custom_errors_more" = "And %1 more.";
 "bookmarks.custom_errors_limit" = "Some files were not checked. Kobalt loads up to 120 icons and checks up to 256 folder entries.";
@@ -242,7 +244,7 @@
 "library.mark_finished" = "Mark as finished";
 "library.mark_unread" = "Mark as unread";
 "library.remove_book" = "Remove from library";
-"library.remove_book_title" = "Remove from library?";
+"library.remove_book_title" = "Remove from Library?";
 "library.remove_book_description" = "The book file and reading progress stay on your device. A book in a library folder comes back when the folder is scanned again.";
 "library.remove_copy_description" = "Kobalt's copy of this book is deleted. Reading progress stays on your device.";
 "library.remove" = "Remove";
@@ -677,7 +679,7 @@
 "reader.contents_detail" = "Contents: %1";
 "reader.could_not_change_dark_mode" = "Could not change dark mode";
 "reader.could_not_save_reader_settings" = "Could not save reader settings";
-"reader.settings_write_error" = "Disk write error";
+"reader.settings_write_error" = "Disk Write Error";
 "reader.settings_write_error_description" = "Kobalt could not save your reader settings. Check the available storage space and try again.";
 "reader.could_not_save_reading_position" = "Could not save reading position";
 "reader.dark_mode" = "Dark mode";
@@ -994,7 +996,7 @@
 "sleep.letter_wake" = "Press the power button and we will carry on with this book.";
 "sleep.letter_restart" = "Press the power button to start me again.";
 "sleep.letter_closing" = "Yours,";
-"sleep.gallery_title" = "Sleep and power-off screen";
+"sleep.gallery_title" = "Sleep and Power-Off Screen";
 "sleep.design_stock" = "Use Kobo’s screen";
 "sleep.design_bookmark" = "Bookmark";
 "sleep.design_card" = "Card";
@@ -1012,7 +1014,7 @@
 "sleep.design_page" = "Reading page";
 "sleep.design_overlay" = "PNG over text";
 "sleep.design_custom" = "Custom";
-"sleep.custom_title" = "Customize Lock & Sleep Screen";
+"sleep.custom_title" = "Customize Lock and Sleep Screen";
 "sleep.custom_editing" = "Screen";
 "sleep.custom_background" = "Background";
 "sleep.custom_status" = "Status";
@@ -1049,12 +1051,12 @@
 "debug.section_caches" = "Caches";
 "debug.evict_cache" = "Evict book cache";
 "debug.evict_cache_description" = "Remove the parsed copy and the pages of this book, then close it. Your place, bookmarks and annotations stay.";
-"debug.evict_cache_title" = "Evict Book Cache?";
+"debug.evict_cache_title" = "Evict book cache?";
 "debug.evict_cache_confirm_description" = "The book closes. The next opening parses and lays out the book again.";
 "debug.evict" = "Evict";
 "debug.clear_caches" = "Clear all caches";
 "debug.clear_caches_description" = "Remove the parsed copies of all books and the preview tiles, then close the book. Reading data stays.";
-"debug.clear_caches_title" = "Clear All Caches?";
+"debug.clear_caches_title" = "Clear all caches?";
 "debug.clear_caches_confirm_description" = "The book closes. Every book parses and lays out again when it opens.";
 "debug.clear" = "Clear";
 "debug.section_diagnostics" = "Diagnostics";
@@ -1081,7 +1083,7 @@
 "finish.mark_finished" = "Mark as finished";
 
 /* sync */
-"sync.title" = "Synced reading position";
+"sync.title" = "Synced Reading Position";
 "sync.after" = "Your device just finished syncing. Last time your progress was synced, you were reading beyond this point. Do you want to skip to that point?";
 "sync.before" = "Your device just finished syncing. Last time your progress was synced, you were reading before your current position. Do you want to return to that point?";
 "sync.finished" = "The synced reading state marks this book as finished.";
@@ -1191,6 +1193,7 @@
 "stats.this_chapter_words" = "This chapter · %1";
 /* The book's word total below the Stats chart. Arguments: %1 */
 "stats.count_words_in" = "Book stats for";
+"stats.count_words_in_title" = "Book Stats For";
 "stats.scope_hint" = "Choose which pages, words and reading time the Book figures cover. This choice applies to all books.";
 "stats.scope_main" = "Main text";
 "stats.scope_main_hint" = "From the start to the end marked in Chapters or supplied by the book.";
@@ -1224,7 +1227,7 @@
 "activity.hide_book" = "Hide from Books";
 "activity.show_book" = "Show in Books";
 "activity.delete_book" = "Delete activity";
-"activity.delete_title" = "Delete Reading Activity?";
+"activity.delete_title" = "Delete reading activity?";
 /* Arguments: %1 is the book's title. */
 "activity.delete_detail" = "All reading sessions of “%1” will be deleted, and their time removed from your daily totals and streaks. This cannot be undone.";
 "activity.delete_confirm" = "Delete";
@@ -1409,7 +1412,7 @@
 "opening.go_back" = "Go back";
 
 "opening.remembered" = "This book uses Kobo's reader";
-"recovery.title" = "Saved data reset";
+"recovery.title" = "Saved Data Reset";
 "benchmark.finished" = "Benchmark finished";
 "benchmark.failed" = "Benchmark failed";
 "benchmark.counts" = "Completed: %1. Skipped: %2. Failed: %3.";
@@ -1523,7 +1526,7 @@
 
 "reader.both" = "Both";
 "reader.lock_current_rotation" = "Lock current rotation";
-"reader.formatting_warning" = "Formatting warning";
+"reader.formatting_warning" = "Formatting Warning";
 "reader.formatting_warning_description" = "This page uses unsupported formatting. You can keep reading, but some text or layout may not appear as intended.";
 
 "reader.hide_nonlinear_fragments" = "Hide non-linear fragments";
@@ -1558,7 +1561,7 @@
 "annotations.export_html" = "Export as HTML…";
 "annotations.export_compression" = "Exports are compressed ZIP files. Unarchive the ZIP to open the Markdown or HTML file.";
 /* Arguments: %1 */
-"annotations.export_format_title" = "Export annotations as %1";
+"annotations.export_format_title" = "Export Annotations as %1";
 "annotations.export_action" = "Export ZIP";
 "annotations.export_title" = "Export annotations?";
 "annotations.export_untitled" = "Untitled book";
@@ -1597,6 +1600,8 @@
 "annotations.add_note" = "Add note";
 "annotations.look_up" = "Look up";
 "annotations.edit_note" = "Edit note";
+"annotations.add_note_title" = "Add Note";
+"annotations.edit_note_title" = "Edit Note";
 "annotations.discard" = "Discard";
 "annotations.note_placeholder" = "Write a note";
 "annotations.note_save_failed" = "Could not save the note. Your text is kept.";
@@ -1753,6 +1758,7 @@
 "marks.sort_position" = "Book order";
 "marks.sort_position_description" = "Earlier passages in the book come first.";
 "marks.sort_title" = "Sort by";
+"marks.sort_dialog_title" = "Sort By";
 
 "settings.tappable_links" = "Tappable links";
 "settings.tappable_links_description" = "Choose how to open footnotes and links while reading.";
@@ -1793,13 +1799,15 @@
 
 "kosync.sideload_copy" = "To use KOSync, download a DRM-free copy of the book and add it to your device separately.";
 "kosync.learn_more" = "Learn More";
-"kosync.learn_more_title" = "Kobo sync and KOSync";
+"kosync.learn_more_title" = "Kobo Sync and KOSync";
 "kosync.learn_more_description" = "Kobo-managed books use Kobo’s built-in sync, even when the file has no DRM. Kobalt leaves their progress syncing to Kobo.\n\nKOSync is a separate service for KOReader and Kobalt. To use it for this title, add a DRM-free copy to your device as a separate sideloaded book and open that copy.\n\nUse the same book file on every device. Only reading progress is synced; books, bookmarks and annotations are not transferred.";
 
 "kosync.device_name" = "Device name";
+"kosync.device_name_title" = "Device Name";
 "kosync.device_name_saved" = "Device name saved.";
 
 "kosync.matching" = "Document matching";
+"kosync.matching_title" = "Document Matching";
 "kosync.match_binary" = "Binary (default)";
 "kosync.match_filename" = "Filename";
 "kosync.match_binary_description" = "Match identical book files, even if renamed. Use the same matching method on every device.";
@@ -1958,7 +1966,7 @@
 "text_presets.delete_prompt" = "Delete %1?";
 "text_presets.delete_detail" = "Books keep their text. Only the preset is removed.";
 "text_presets.restore" = "Restore default presets";
-"text_presets.restore_prompt" = "Restore Default Presets?";
+"text_presets.restore_prompt" = "Restore default presets?";
 "text_presets.restore_detail" = "The presets that come with Kobalt return as they shipped. Your own presets stay. The presets apply when you close Settings.";
 "text_presets.restore_confirm" = "Restore presets";
 "text_presets.restore_selected" = "Default presets selected";
@@ -2040,7 +2048,7 @@
 "words.no_entry_detail" = "The dictionary had no entry for this word. You added it to My Words yourself.";
 
 /* Android resource folders */
-"library.resource_folders" = "Resource folders";
+"library.resource_folders" = "Resource Folders";
 "library.resource_folders_description" = "Choose folders for dictionaries, fonts and custom icons. Changes load when you next open a book.";
 "library.dictionary_folder" = "Dictionaries";
 "library.font_folder" = "Fonts";

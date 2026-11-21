@@ -437,6 +437,8 @@ if(BUILD_TESTING)
             OR name STREQUAL "lifecycle.lightReplacesDefaultMenu"
             OR name STREQUAL "lifecycle.annotationFramesKeepFirstPaintComplete"
             OR name MATCHES "^lifecycle[.](pageButtonsAfterTouchUseDeliveryTime|pageFrameDuringHold|pageGestureBurstIgnoresRapidTurns|pageTurnTimingIgnoresNoopNavigation)$"
+            OR name MATCHES "^lifecycle[.](closeWithPendingBookmark|pageTurnsResumeWhenReaderIsShownAfterSleep)$"
+            OR name MATCHES "^lifecycle[.](readerUsesSelectedSleepScreen|sleepPrivateBookOverridesEveryDesign)$"
             OR name STREQUAL "lifecycle.nativeProgressWaitsForSleep"
             OR name STREQUAL "lifecycle.remoteKeyActivityRequiresActiveReading")
             list(APPEND names "${name}.hybrid")

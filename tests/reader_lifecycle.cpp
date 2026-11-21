@@ -2945,7 +2945,7 @@ private slots:
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);
         // wakeReader() shows the reader full screen. Open it at the screen
-        // size so page numbers stay comparable across wake. The offscreen
+        // size so the layout stays the same across wake. The offscreen
         // plugin resizes a full screen window to the screen; minimal keeps
         // the current size.
         const QSize screenSize = QGuiApplication::primaryScreen()->geometry().size();
@@ -2959,22 +2959,26 @@ private slots:
         QTRY_VERIFY(!host.session()->busy());
         host.session()->go(0);
         QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 0);
+        const auto position = [&] { return host.session()->state().value("position").toString(); };
+        const auto start = position();
+        QVERIFY(!start.isEmpty());
         host.window()->pageButton(1);
-        QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 1);
+        QTRY_VERIFY(!host.session()->busy() && !position().isEmpty() && position() != start);
+        const auto beforeSleep = position();
         host.window()->sleepReader();
         host.window()->pageButton(1);
         host.window()->pageButton(-1);
-        QCOMPARE(host.session()->page(), 1);
+        QCOMPARE(position(), beforeSleep);
         host.window()->sleepViewReady();
         host.window()->wakeReader();
         QVERIFY(host.window()->isVisible());
         QTRY_COMPARE(host.window()->size(), screenSize);
         test::skipPageTurnWindow();
         host.window()->pageButton(1);
-        QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 2);
+        QTRY_VERIFY(!host.session()->busy() && !position().isEmpty() && position() != beforeSleep);
         test::skipPageTurnWindow();
         host.window()->pageButton(-1);
-        QTRY_VERIFY(!host.session()->busy() && host.session()->page() == 1);
+        QTRY_VERIFY(!host.session()->busy() && position() == beforeSleep);
     }
 
     void closeWithPendingBookmark()
@@ -2999,7 +3003,7 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         QTRY_VERIFY(!host.session()->busy());
         // A page turn resolves the bookmark pages for this layout.
-        QVERIFY(host.session()->go(1));
+        QVERIFY(host.session()->turn(1));
         QTRY_VERIFY(!host.session()->busy());
         auto *page = static_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
         QVERIFY(page);

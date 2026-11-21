@@ -733,9 +733,10 @@ private:
     // Reads the preset and layout from the preferences and shows them.
     void loadChrome();
     // Saves the preset, and the Custom layout when given, then shows them.
-    bool saveChrome(kobalt::headerfooter::Preset preset,
+    void saveChrome(kobalt::headerfooter::Preset preset,
                     const kobalt::headerfooter::Layout *custom = nullptr,
-                    const kobalt::headerfooter::Layout *text = nullptr);
+                    const kobalt::headerfooter::Layout *text = nullptr,
+                    std::function<void()> saved = {});
     void syncChromeControls();
     void openFieldChooser(int slot);
     void closeFieldChooser();
@@ -958,7 +959,8 @@ private:
     ReaderSession *textPresetSettings();
     kobalt::reader::TextPresetView textPresetView(const kobalt::textpresets::Preset &preset);
     void applyTextPreset(const QString &id);
-    bool saveTextPresets(QJsonObject next, const QVector<kobalt::textpresets::Preset> &presets);
+    void saveTextPresets(QJsonObject next, const QVector<kobalt::textpresets::Preset> &presets,
+                         std::function<void()> saved = {});
     void updateTextPreset(const QString &id);
     void saveNewTextPreset();
     void editTextPresetName(const QString &id);
@@ -1016,7 +1018,7 @@ private:
     void openSleepChoice(const QString &name, const QString &optionPrefix, const QString &heading,
                          const QVector<SleepOption> &options, int current,
                          std::function<void(int)> chosen, const QString &description = {});
-    bool saveSleepPreferences(const QJsonObject &next);
+    void saveSleepPreferences(const QJsonObject &next, storage::RecordWriter::Done done = {});
     void closeSleepScreen();
 
     // One row of a choice pop-up.
@@ -1032,7 +1034,7 @@ private:
                          const QVector<ChoiceOption> &options, int current,
                          std::function<void(int)> chosen, bool focus = true);
     void closePopup(QPointer<kobalt::ui::ModalOverlay> &slot);
-    bool savePreferences(const QJsonObject &next);
+    void savePreferences(const QJsonObject &next, storage::RecordWriter::Done done = {});
     void showTapZones();
     void openTapZones();
     void showPageNavigation();
@@ -1056,7 +1058,6 @@ private:
     void applySettings();
     storage::RecordWriter::Write preferenceWrite(const QJsonObject &next) const;
     void recordPreferenceChanges(const QJsonObject &next);
-    bool writePreferences(const QJsonObject &next);
     using PreferencesWritten = std::function<void(const QJsonObject &, bool)>;
     void writePreferences(const QJsonObject &next, PreferencesWritten done);
     void finishSettingsWrite(const QJsonObject &next, bool saved);

@@ -60,7 +60,7 @@ public:
     // A tap on an unavailable entry, so the reader can say why.
     std::function<void(sleep::Design)> unavailable;
     std::function<void()> closed;
-    std::function<bool(bool)> followOrientationChanged;
+    std::function<void(bool, std::function<void(bool)>)> followOrientationChanged;
     // A long press on an entry with options; see customizable().
     std::function<void(sleep::Design)> customize;
 

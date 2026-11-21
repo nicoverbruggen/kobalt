@@ -6708,7 +6708,7 @@ private slots:
                              .object.value(sleep::followOrientationKey),
                      QJsonValue(false));
         auto *notice = gallery->findChild<QWidget *>("rrSleepOrientationNotice");
-        QVERIFY(notice && notice->isVisible());
+        QTRY_VERIFY(notice && notice->isVisible());
         auto *noticeText = notice->findChild<QLabel *>("rrButtonFeedbackText");
         QVERIFY(noticeText);
         QCOMPARE(noticeText->text(), strings::get("sleep.rotation_disabled"));
@@ -6716,7 +6716,7 @@ private slots:
         QTRY_COMPARE(storage::readPreferences(paths.preferences())
                              .object.value(sleep::followOrientationKey),
                      QJsonValue(true));
-        QCOMPARE(noticeText->text(), strings::get("sleep.rotation_enabled"));
+        QTRY_COMPARE(noticeText->text(), strings::get("sleep.rotation_enabled"));
 
         auto *counter = gallery->findChild<QLabel *>("rrSleepGalleryPage");
         QVERIFY(counter);
@@ -7028,7 +7028,7 @@ private slots:
         editor->setText("  Sleep well  ");
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSleepGreetingSave")));
         QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSleepGreeting"));
-        QCOMPARE(storage::readJson(paths.preferences()).value(sleep::greetingKey).toString(),
+        QTRY_COMPARE(storage::readJson(paths.preferences()).value(sleep::greetingKey).toString(),
                  QString("Sleep well"));
         QVERIFY(openEditor());
         editor = host.window()->findChild<QLineEdit *>("rrSleepGreetingInput");
@@ -7037,7 +7037,7 @@ private slots:
         editor->clear();
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSleepGreetingSave")));
         QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSleepGreeting"));
-        QVERIFY(!storage::readJson(paths.preferences()).contains(sleep::greetingKey));
+        QTRY_VERIFY(!storage::readJson(paths.preferences()).contains(sleep::greetingKey));
         QVERIFY(openEditor());
         editor = host.window()->findChild<QLineEdit *>("rrSleepGreetingInput");
         editor->setText("Do not save");
@@ -13019,8 +13019,8 @@ private slots:
                     auto *option = host.window()->findChild<QAbstractButton *>("rrStatsWordVolume");
                     QVERIFY(option && option->isVisible());
                     option->click();
-                    QCOMPARE(host.window()->findChild<QLabel *>("rrGraphBookPercent")->text(),
-                             strings::percentage(volume));
+                    QTRY_COMPARE(host.window()->findChild<QLabel *>("rrGraphBookPercent")->text(),
+                                 strings::percentage(volume));
                 }
                 QTRY_VERIFY(host.window()->readyForPresentation());
                 const int expected = whole ? volume : main;

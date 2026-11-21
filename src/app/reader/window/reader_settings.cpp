@@ -274,9 +274,9 @@ void Reader::loadChrome()
     header->setVisible(page->topHeight() > 0);
 }
 
-bool Reader::saveChrome(kobalt::headerfooter::Preset preset,
+void Reader::saveChrome(kobalt::headerfooter::Preset preset,
                         const kobalt::headerfooter::Layout *custom,
-                        const kobalt::headerfooter::Layout *text)
+                        const kobalt::headerfooter::Layout *text, std::function<void()> saved)
 {
     auto next = preferences;
     if (text || !next.value(kobalt::headerfooter::textKey).isObject())
@@ -285,17 +285,24 @@ bool Reader::saveChrome(kobalt::headerfooter::Preset preset,
     next[kobalt::headerfooter::presetKey] = kobalt::headerfooter::presetValue(preset);
     if (custom)
         next[kobalt::headerfooter::customKey] = kobalt::headerfooter::toJson(*custom);
-    if (next != preferences && !writePreferences(next)) {
-        syncChromeControls();
-        appearanceEdit.setError(strings::get("reader.could_not_save_reader_settings"));
+    const auto finish = [this, saved = std::move(saved)](const QJsonObject &applied, bool ok) {
+        if (!ok) {
+            syncChromeControls();
+            appearanceEdit.setError(strings::get("reader.could_not_save_reader_settings"));
+            refresh();
+            return;
+        }
+        preferences = applied;
+        appearanceEdit.clearError();
+        loadChrome();
         refresh();
-        return false;
-    }
-    preferences = next;
-    appearanceEdit.clearError();
-    loadChrome();
-    refresh();
-    return true;
+        if (saved && headerFooterView->isVisible())
+            saved();
+    };
+    if (next == preferences)
+        finish(next, true);
+    else
+        writePreferences(next, finish);
 }
 
 void Reader::syncChromeControls()
@@ -991,22 +998,6 @@ void Reader::recordPreferenceChanges(const QJsonObject &next)
     logSettingChanges(preferences, next, restoringDefaults);
 }
 
-bool Reader::writePreferences(const QJsonObject &next)
-{
-    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph)
-        return false;
-    // Known exception for callers that still wait for the result.
-    mainthread::AllowBlocking allow("settings write");
-    if (next.value("zen_stats") != preferences.value("zen_stats"))
-        ++zenStatsWrite;
-    if (auto write = preferenceWrite(next); write && !preferencesWriter.writeNow(std::move(write))) {
-        showSettingsWriteError();
-        return false;
-    }
-    recordPreferenceChanges(next);
-    return true;
-}
-
 void Reader::writePreferences(const QJsonObject &next, PreferencesWritten done)
 {
     if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
@@ -1025,12 +1016,17 @@ void Reader::writePreferences(const QJsonObject &next, PreferencesWritten done)
     if (general)
         general->setEnabled(false);
     menu->setEnabled(false);
+    const QPointer<QWidget> presetGallery(textPresetGallery.data());
+    if (presetGallery)
+        presetGallery->setEnabled(false);
+    if (headerFooterView)
+        headerFooterView->setEnabled(false);
     QPointer<Reader> guard(this);
-    preferencesWriter.post(std::move(write), [guard, before = preferences, next,
+    preferencesWriter.post(std::move(write), [guard, before = preferences, next, presetGallery,
                                              done = std::move(done)](bool saved) {
         qt::invoke(
                 QCoreApplication::instance(),
-                [guard, before, next, done, saved] {
+                [guard, before, next, presetGallery, done, saved] {
                     if (!guard)
                         return;
                     guard->savingPreferences = false;
@@ -1040,6 +1036,10 @@ void Reader::writePreferences(const QJsonObject &next, PreferencesWritten done)
                     if (guard->general)
                         guard->general->setEnabled(true);
                     guard->menu->setEnabled(true);
+                    if (presetGallery)
+                        presetGallery->setEnabled(true);
+                    if (guard->headerFooterView)
+                        guard->headerFooterView->setEnabled(true);
                     if (!saved) {
                         guard->showSettingsWriteError();
                         done(next, false);
@@ -1399,24 +1399,26 @@ void Reader::applyBoldReading(bool enabled)
     const auto mode = enabled ? QStringLiteral("bold") : QStringLiteral("off");
     auto next = preferences;
     next["bold_reading"] = mode;
-    if (!writePreferences(next)) {
-        bionicOption.set(
-                session->requestedAppearance().fields().value("bold_reading").toString("off")
-                == "bold");
-        return;
-    }
-    preferences = next;
-    settingsError->clear();
-    settingsError->hide();
-    session->editAppearance(appearance::Patch(qt::object({ { "bold_reading", mode } })));
-    // Keep a pending typography draft in the same mode, including a preview
-    // that has not finished opening yet.
-    if (appearanceEdit.preview()) {
-        mutateAppearance([mode](ReaderSession &preview) {
-            preview.editAppearance(appearance::Patch(qt::object({ { "bold_reading", mode } })));
-        });
-    }
-    refresh();
+    writePreferences(next, [this, mode](const QJsonObject &applied, bool saved) {
+        if (!saved) {
+            bionicOption.set(
+                    session->requestedAppearance().fields().value("bold_reading").toString("off")
+                    == "bold");
+            return;
+        }
+        preferences = applied;
+        settingsError->clear();
+        settingsError->hide();
+        session->editAppearance(appearance::Patch(qt::object({ { "bold_reading", mode } })));
+        // Keep a pending typography draft in the same mode, including a preview
+        // that has not finished opening yet.
+        if (appearanceEdit.preview()) {
+            mutateAppearance([mode](ReaderSession &preview) {
+                preview.editAppearance(appearance::Patch(qt::object({ { "bold_reading", mode } })));
+            });
+        }
+        refresh();
+    });
 }
 
 void Reader::applyAutomaticOpening(bool enabled)

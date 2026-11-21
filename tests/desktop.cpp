@@ -3863,12 +3863,16 @@ void checkHeaderFooterSizes(int preset, bool dark)
         auto *value = qobject_cast<QLabel *>(fixture.widget(qPrintable(name + "Value")));
         QVERIFY(value);
         QCOMPARE(value->text(), strings::get("reader.text_size_value").arg("5.8"));
+        QTRY_VERIFY(view->isEnabled());
         QVERIFY(fixture.press(qPrintable(name + "More")));
         QTRY_COMPARE(slider->value(), smallSize + 1);
+        QTRY_VERIFY(view->isEnabled());
         QVERIFY(fixture.press(qPrintable(name + "Less")));
         QTRY_COMPARE(slider->value(), smallSize);
+        QTRY_VERIFY(view->isEnabled());
         QVERIFY(fixture.press(qPrintable(name + "Less")));
         QTRY_COMPARE(slider->value(), offSize);
+        QTRY_VERIFY(view->isEnabled());
         QVERIFY(fixture.press(qPrintable(name + "More")));
         QTRY_COMPARE(slider->value(), smallSize);
         // Tap the actual canvas slider at every named checkpoint, then beyond L.
@@ -3876,11 +3880,12 @@ void checkHeaderFooterSizes(int preset, bool dark)
         const int span = slider->width() - 2 * inset;
         for (const auto point : { QPoint(1, smallSize), QPoint(2, mediumSize), QPoint(3, largeSize),
                                   QPoint(4, maximumSize) }) {
+            QTRY_VERIFY(view->isEnabled());
             QVERIFY(fixture.click(
                     slider, QPoint(inset + qRound(span * point.x() / 4.0), slider->height() / 2)));
             QTRY_COMPARE(slider->value(), point.y());
         }
-        QTRY_VERIFY(!fixture.state().value("busy").toBool()
+        QTRY_VERIFY(view->isEnabled() && !fixture.state().value("busy").toBool()
                     && !fixture.state().value("preview_busy").toBool());
     }
     QCOMPARE(page->chrome.headerSize, maximumSize);
@@ -3901,8 +3906,10 @@ void checkHeaderFooterSizes(int preset, bool dark)
         return fixture.click(
                 slider, QPoint(maximum ? slider->width() - inset : inset, slider->height() / 2));
     };
+    QTRY_VERIFY(view->isEnabled());
     QVERIFY(selectSize(header, false));
     QTRY_VERIFY(!page->chrome.headerEnabled);
+    QTRY_VERIFY(view->isEnabled());
     QVERIFY(selectSize(footer, false));
     QTRY_VERIFY(!page->chrome.footerEnabled);
     QCOMPARE(page->topHeight(), 0);
@@ -3914,27 +3921,36 @@ void checkHeaderFooterSizes(int preset, bool dark)
     QCOMPARE(saved.value("footer_font_size").toInt(), maximumSize);
     QVERIFY(!savedPreferences.contains(customKey));
     // Preset changes preserve independent text sizes and Off states.
+    QTRY_VERIFY(view->isEnabled());
     QVERIFY(fixture.press("rrHeaderFooterPreset_alternative_a"));
     QTRY_COMPARE(header->value(), offSize);
     QTRY_COMPARE(footer->value(), offSize);
+    QTRY_VERIFY(view->isEnabled());
     QVERIFY(fixture.press("rrHeaderFooterProgressBar_off"));
     QTRY_COMPARE(fixture.state().value("header_footer_preset").toString(), QString("custom"));
     const auto savedCustom = storage::readJson(fixture.paths.preferences()).value(customKey);
     QCoreApplication::processEvents();
+    QTRY_VERIFY(view->isEnabled());
     QVERIFY(fixture.press("rrHeaderFooterPreset_default"));
     QTRY_COMPARE(fixture.state().value("header_footer_preset").toString(), QString("default"));
     QTRY_COMPARE(header->value(), offSize);
+    QTRY_VERIFY(view->isEnabled());
     QVERIFY(fixture.press("rrHeaderTextSizeMore"));
     QTRY_COMPARE(header->value(), smallSize);
     QVERIFY(!fixture.visible("rrReplaceCustom"));
     QCOMPARE(fixture.state().value("header_footer_preset").toString(), QString("default"));
     QCOMPARE(storage::readJson(fixture.paths.preferences()).value(customKey), savedCustom);
+    QTRY_VERIFY(view->isEnabled());
     QVERIFY(selectSize(header, true));
     QTRY_COMPARE(header->value(), maximumSize);
+    QTRY_VERIFY(view->isEnabled());
     QVERIFY(selectSize(footer, true));
     QTRY_COMPARE(footer->value(), maximumSize);
+    QTRY_VERIFY(view->isEnabled());
     QVERIFY(selectSize(header, false));
+    QTRY_VERIFY(view->isEnabled());
     QVERIFY(fixture.press("rrHeaderFooterClose"));
+    QTRY_VERIFY(view->isEnabled());
     QVERIFY(fixture.press("rrPage"));
     QTRY_VERIFY(!fixture.state().value("busy").toBool()
                 && !fixture.state().value("preview_busy").toBool());
@@ -16015,13 +16031,19 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         if (!duringCount)
             QTRY_VERIFY(fixture.state().value("preview_ready").toBool());
         const auto card = "rrTextPreset_" + id.toLatin1();
-        QVERIFY(fixture.press(card.constData()));
+        QTRY_VERIFY(fixture.visible(card.constData()));
+        auto *choice = fixture.widget(card.constData());
+        QVERIFY(choice && fixture.reveal(choice));
+        auto *reader = fixture.window.readerWindow();
+        QTRY_VERIFY(reader->childAt(choice->mapTo(reader, choice->rect().center())) == choice);
+        QVERIFY(fixture.click(choice));
         if (duringCount)
             gate->release.release();
         QTRY_VERIFY(fixture.state().value("preview_ready").toBool()
                     && !fixture.state().value("preview_busy").toBool());
-        QCOMPARE(fixture.state().value("preview_settings").toObject().value("font_face").toString(),
-                 face);
+        QTRY_COMPARE(
+                fixture.state().value("preview_settings").toObject().value("font_face").toString(),
+                face);
         QCOMPARE(fixture.state().value("text_preset").toString(), id);
         QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(!fixture.visible("rrFont") && !fixture.state().value("busy").toBool());
@@ -16093,14 +16115,19 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             const auto name = input->text();
             input->setText("Evening reading");
             QVERIFY(fixture.press("rrTextPresetNameSave"));
-            const auto saved =
-                    textpresets::load(storage::readJson(fixture.paths.preferences())).first();
-            QCOMPARE(saved.name, QString("Evening reading"));
+            const auto storedPreset = [&] {
+                return textpresets::load(storage::readJson(fixture.paths.preferences())).first();
+            };
+            QTRY_COMPARE(storedPreset().name, QString("Evening reading"));
+            const auto saved = storedPreset();
             QCOMPARE(saved.fontFace, QString("NV Jost"));
             QVERIFY(name.contains("Jost"));
             QTRY_VERIFY(!fixture.widget("rrTextPresetName"));
+            QTRY_VERIFY(fixture.widget("rrTextPresetGalleryClose")->isEnabled());
             QVERIFY(fixture.press("rrTextPresetGalleryClose"));
-            QVERIFY(fixture.press(("rrTextPreset_" + last.toLatin1()).constData()));
+            const auto latest = "rrTextPreset_" + last.toLatin1();
+            QTRY_VERIFY(fixture.widget(latest.constData())->isEnabled());
+            QVERIFY(fixture.press(latest.constData()));
             QVERIFY(fixture.press("rrPage"));
         }
         QTRY_VERIFY_WITH_TIMEOUT(
@@ -16179,6 +16206,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         };
         QTRY_COMPARE(saved().first().name, QString("Evening"));
         QCOMPARE(saved().size(), 5);
+        QTRY_VERIFY(grid->isEnabled());
         QVERIFY(save());
         QTRY_VERIFY(fixture.visible("rrTextPresetNameInput"));
         input = fixture.window.readerWindow()->findChild<QLineEdit *>("rrTextPresetNameInput");
@@ -16190,6 +16218,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(saved()[1].name, QString("Evening"));
         QCOMPARE(saved()[2].id, QString("kobalt"));
         const auto order = saved();
+        QTRY_VERIFY(grid->isEnabled());
         // Save is first, Morning second, Evening third. Applying Evening keeps the order.
         QVERIFY(fixture.click(grid, QPoint(grid->width() / 4, grid->height() / 2)));
         QTRY_VERIFY(!fixture.visible("rrTextPresetGallery"));
@@ -16247,7 +16276,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                     && fixture.press("rrNavText")
                     && QTest::qWaitFor([&] { return fixture.visible("rrTextPresetToggle"); })
                     && (fixture.visible("rrTextPresetAll") || fixture.press("rrTextPresetToggle"))
-                    && QTest::qWaitFor([&] { return fixture.visible("rrTextPresetAll"); })
+                    && QTest::qWaitFor([&] {
+                           auto *all = fixture.widget("rrTextPresetAll");
+                           return all && all->isVisible() && all->isEnabled();
+                       })
                     && fixture.press("rrTextPresetAll")
                     && QTest::qWaitFor([&] { return fixture.visible("rrTextPresetGallery"); });
         };

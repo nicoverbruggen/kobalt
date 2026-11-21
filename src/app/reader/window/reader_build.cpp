@@ -1416,11 +1416,12 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
                 [this, slot] {
                     if (chromePreset != kobalt::headerfooter::Preset::Custom) {
                         const auto start = page->chrome;
-                        if (session->temporaryTypography()
-                            || !saveChrome(kobalt::headerfooter::Preset::Custom, &start))
-                            return;
+                        if (!session->temporaryTypography())
+                            saveChrome(kobalt::headerfooter::Preset::Custom, &start, nullptr,
+                                       [this, slot] { openFieldChooser(slot); });
+                    } else {
+                        openFieldChooser(slot);
                     }
-                    openFieldChooser(slot);
                 },
                 [] {});
     };
@@ -1433,9 +1434,10 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
                         [this, edit] {
                             auto custom = page->chrome;
                             edit(custom);
-                            if (session->temporaryTypography()
-                                || !saveChrome(kobalt::headerfooter::Preset::Custom, &custom))
+                            if (session->temporaryTypography())
                                 syncChromeControls();
+                            else
+                                saveChrome(kobalt::headerfooter::Preset::Custom, &custom);
                         },
                         [this] { syncChromeControls(); });
             };
@@ -1447,8 +1449,10 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
                     value != kobalt::headerfooter::offSize;
             if (value != kobalt::headerfooter::offSize)
                 (footer ? text.footerSize : text.headerSize) = value;
-            if (session->temporaryTypography() || !saveChrome(chromePreset, nullptr, &text))
+            if (session->temporaryTypography())
                 syncChromeControls();
+            else
+                saveChrome(chromePreset, nullptr, &text);
         };
     }
 

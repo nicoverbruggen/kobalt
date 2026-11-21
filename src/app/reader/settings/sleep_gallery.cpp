@@ -1,4 +1,6 @@
 #include "sleep_gallery.h"
+
+#include <QPointer>
 #include "settings_panel.h"
 
 #include "app/reader/views/sleep_screen.h"
@@ -268,19 +270,31 @@ SleepGallery::SleepGallery(QWidget *parent, QVector<Entry> entries, sleep::Desig
     orientationNotice_ = new ui::ButtonFeedback(this);
     orientationNotice_->setObjectName("rrSleepOrientationNotice");
     connect(followOrientation_, &QPushButton::clicked, this, [this](bool checked) {
-        if (followOrientationChanged && !followOrientationChanged(checked)) {
-            followOrientation_->setChecked(!checked);
-            return;
-        }
-        screen_ = checked ? readingScreen_
-                          : QSize(qMin(readingScreen_.width(), readingScreen_.height()),
-                                  qMax(readingScreen_.width(), readingScreen_.height()));
-        previews_.clear();
-        grid_->update();
-        orientationNotice_->showFor(
-                followOrientation_,
-                strings::get(checked ? "sleep.rotation_enabled" : "sleep.rotation_disabled"),
-                { ui::ButtonFeedback::AnchorSide::Below, {}, {} });
+        followOrientation_->setEnabled(false);
+        const auto finish = [guard = QPointer<SleepGallery>(this), checked](bool saved) {
+            if (!guard)
+                return;
+            auto &gallery = *guard;
+            gallery.followOrientation_->setEnabled(true);
+            if (!saved) {
+                gallery.followOrientation_->setChecked(!checked);
+                return;
+            }
+            const auto size = gallery.readingScreen_;
+            gallery.screen_ = checked ? size
+                                      : QSize(qMin(size.width(), size.height()),
+                                              qMax(size.width(), size.height()));
+            gallery.previews_.clear();
+            gallery.grid_->update();
+            gallery.orientationNotice_->showFor(
+                    gallery.followOrientation_,
+                    strings::get(checked ? "sleep.rotation_enabled" : "sleep.rotation_disabled"),
+                    { ui::ButtonFeedback::AnchorSide::Below, {}, {} });
+        };
+        if (followOrientationChanged)
+            followOrientationChanged(checked, finish);
+        else
+            finish(true);
     });
     close_ = new ui::CellButton(ui::ControlIcon::Close, heading);
     close_->setObjectName("rrSleepGalleryClose");

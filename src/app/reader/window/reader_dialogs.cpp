@@ -152,22 +152,29 @@ void Reader::showFontDefaultDialog(const QString &face, bool instructions)
                 diagnostic("font-default-confirm", {}, false);
                 auto next = preferences;
                 next["default_font_face"] = face;
-                if (!writePreferences(next)) {
-                    message->setText(strings::get("reader.could_not_save_reader_settings"));
-                    card->fitToWidth(card->width());
-                    dialog->centerCard();
-                    return;
-                }
-                preferences = next;
-                dismiss();
-                mutateAppearance([face](ReaderSession &preview) {
-                    const auto patch = appearance::Patch(
-                            qt::object({ { "default_font_face",
-                                           face.isEmpty() ? QString(defaultFontFace) : face } }));
-                    preview.requestAppearance(preview.displayedAppearance().settings.edited(patch));
+                const QPointer<ui::ModalOverlay> pending(dialog);
+                writePreferences(next, [this, pending, face, message, card, dismiss](
+                                               const QJsonObject &applied, bool saved) {
+                    if (saved)
+                        preferences = applied;
+                    if (!pending || pending != fontDefaultDialog)
+                        return;
+                    if (!saved) {
+                        message->setText(strings::get("reader.could_not_save_reader_settings"));
+                        card->fitToWidth(card->width());
+                        pending->centerCard();
+                        return;
+                    }
+                    dismiss();
+                    mutateAppearance([face](ReaderSession &preview) {
+                        const auto patch = appearance::Patch(
+                                qt::object({ { "default_font_face",
+                                               face.isEmpty() ? QString(defaultFontFace) : face } }));
+                        preview.requestAppearance(preview.displayedAppearance().settings.edited(patch));
+                    });
+                    showFontPicker();
+                    diagnostic("font-default-applied", {}, false);
                 });
-                showFontPicker();
-                diagnostic("font-default-applied", {}, false);
             });
     for (auto *button : card->findChildren<QPushButton *>()) {
         button->setFocusPolicy(Qt::StrongFocus);
@@ -914,21 +921,23 @@ void Reader::showScreenRefresh()
 
 // Writes the preferences. A failed write keeps the old ones and shows the
 // error line in Settings; a write that succeeds clears it.
-bool Reader::savePreferences(const QJsonObject &next)
+void Reader::savePreferences(const QJsonObject &next, storage::RecordWriter::Done done)
 {
-    if (!writePreferences(next)) {
+    writePreferences(next, [this, done = std::move(done)](const QJsonObject &applied, bool saved) {
+        if (saved)
+            preferences = applied;
         if (settingsError) {
-            settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
-            settingsError->show();
+            if (saved) {
+                settingsError->clear();
+                settingsError->hide();
+            } else {
+                settingsError->setText(strings::get("reader.could_not_save_reader_settings"));
+                settingsError->show();
+            }
         }
-        return false;
-    }
-    preferences = next;
-    if (settingsError) {
-        settingsError->clear();
-        settingsError->hide();
-    }
-    return true;
+        if (done)
+            done(saved);
+    });
 }
 
 void Reader::closePopup(QPointer<ui::ModalOverlay> &slot)
@@ -980,10 +989,13 @@ void Reader::openStatsWordScope()
                     statsUseWholeVolume() ? 1 : 0, [this](int index) {
                         auto next = preferences;
                         next["stats_word_scope"] = index ? QStringLiteral("volume") : QStringLiteral("main");
-                        if (savePreferences(next)) {
-                            closePopup(wordScopePopup);
-                            updateGraph();
-                        }
+                        savePreferences(next, [this, popup = wordScopePopup](bool saved) {
+                            if (saved) {
+                                if (popup && popup == wordScopePopup)
+                                    closePopup(wordScopePopup);
+                                updateGraph();
+                            }
+                        });
                     });
 }
 
@@ -1052,12 +1064,14 @@ void Reader::closeSleepScreen()
     closePopup(sleepPopup);
 }
 
-bool Reader::saveSleepPreferences(const QJsonObject &next)
+void Reader::saveSleepPreferences(const QJsonObject &next, storage::RecordWriter::Done done)
 {
-    if (!savePreferences(next))
-        return false;
-    showSleepScreen();
-    return true;
+    savePreferences(next, [this, done = std::move(done)](bool saved) {
+        if (saved)
+            showSleepScreen();
+        if (done)
+            done(saved);
+    });
 }
 
 sleep::Snapshot Reader::sleepPreviewSample()
@@ -1095,10 +1109,11 @@ void Reader::openSleepScreen()
                                                                 : sleep::NativePreview{},
                                     sleep::followsReading(preferences));
     sleepGallery->setGeometry(general ? general->geometry() : rect());
-    sleepGallery->followOrientationChanged = [this](bool checked) {
+    sleepGallery->followOrientationChanged = [this](bool checked,
+                                                     storage::RecordWriter::Done done) {
         auto next = preferences;
         next[sleep::followOrientationKey] = checked;
-        return saveSleepPreferences(next);
+        saveSleepPreferences(next, std::move(done));
     };
     sleepGallery->setCustom(sleep::custom(preferences));
     sleepGallery->setPlaces(sleepPlaces());
@@ -1112,9 +1127,12 @@ void Reader::openSleepScreen()
         auto next = preferences;
         sleep::setDesign(next, design);
         next.remove("kobalt_sleep_screen");
-        if (saveSleepPreferences(next))
-            prepareSleepCover();
-        closeSleepScreen();
+        saveSleepPreferences(next, [this, gallery = sleepGallery](bool saved) {
+            if (saved)
+                prepareSleepCover();
+            if (gallery && gallery == sleepGallery)
+                closeSleepScreen();
+        });
     };
     sleepGallery->unavailable = [this](sleep::Design design) {
         if (design == sleep::Design::Overlay)
@@ -1250,30 +1268,33 @@ void Reader::openSleepEditor(sleep::Design design)
             sleep::setDesign(next, sleep::Design::Custom);
             next.remove("kobalt_sleep_screen");
         }
-        if (book && own != ownBefore) {
-            book->setSleepPositions(own);
-            QJsonObject snapshot;
-            book->checkpoint(&snapshot, true);
-        }
-        if (!saveSleepPreferences(next))
-            return;
-        closeSleepEditor();
-        if (custom) {
-            // The gallery stays open and may open the editor again, so keep a
-            // cover that is already decoded; closing the gallery releases it.
-            if (sleepCover.isNull())
-                prepareSleepCover();
-            if (sleep::uses(preferences, sleep::Mode::Overlay))
-                prepareSleepOverlay();
-            prepareSleepWallpapers();
-            // Back to the list of lock screens, with Custom chosen.
-            if (sleepGallery) {
-                sleepGallery->setCustom(sleep::custom(preferences));
-                sleepGallery->setCurrent(sleep::Design::Custom);
+        saveSleepPreferences(next, [this, guard, own, ownBefore, custom](bool saved) {
+            if (!saved)
+                return;
+            if (book && own != ownBefore) {
+                book->setSleepPositions(own);
+                QJsonObject snapshot;
+                book->checkpoint(&snapshot, true);
             }
-        }
-        if (sleepGallery)
-            sleepGallery->setPlaces(sleepPlaces());
+            if (sleepEditor == guard)
+                closeSleepEditor();
+            if (custom) {
+                // The gallery stays open and may open the editor again, so keep a
+                // cover that is already decoded; closing the gallery releases it.
+                if (sleepCover.isNull())
+                    prepareSleepCover();
+                if (sleep::uses(preferences, sleep::Mode::Overlay))
+                    prepareSleepOverlay();
+                prepareSleepWallpapers();
+                // Back to the list of lock screens, with Custom chosen.
+                if (sleepGallery) {
+                    sleepGallery->setCustom(sleep::custom(preferences));
+                    sleepGallery->setCurrent(sleep::Design::Custom);
+                }
+            }
+            if (sleepGallery)
+                sleepGallery->setPlaces(sleepPlaces());
+        });
     };
     for (auto *widget : editor->findChildren<QWidget *>())
         textRefresh(widget);
@@ -1383,8 +1404,10 @@ void Reader::editSleepGreeting()
         // Native submission runs inside the controller; close after it returns.
         greetingEditor->hide();
         qt::later(0, this, close);
-        if (saveSleepPreferences(next) && sleepGallery)
-            sleepGallery->setSample(sleepPreviewSample());
+        saveSleepPreferences(next, [this](bool saved) {
+            if (saved && sleepGallery)
+                sleepGallery->setSample(sleepPreviewSample());
+        });
     };
     connect(dialog->secondaryButton(), &QPushButton::clicked, this, close);
     connect(dialog->primaryButton(), &QPushButton::clicked, this, submit);
@@ -1634,11 +1657,14 @@ void Reader::openTapZones()
             if (layout == tapZones::Layout::OneHanded)
                 next[pageNavigation::preferenceKey] =
                         pageNavigation::value(pageNavigation::Mode::TapsAndSwipes);
-            if (savePreferences(next)) {
-                showTapZones();
-                showPageNavigation();
-            }
-            closePopup(tapZonesPopup);
+            savePreferences(next, [this, popup = tapZonesPopup](bool saved) {
+                if (saved) {
+                    showTapZones();
+                    showPageNavigation();
+                }
+                if (popup && popup == tapZonesPopup)
+                    closePopup(tapZonesPopup);
+            });
         });
     }
     auto *note =
@@ -1701,9 +1727,12 @@ void Reader::openPageNavigation()
     sheet.list->chosen = [this, modes](int index) {
         auto next = preferences;
         next[pageNavigation::preferenceKey] = pageNavigation::value(modes[index]);
-        if (savePreferences(next))
-            showPageNavigation();
-        closePopup(pageNavigationPopup);
+        savePreferences(next, [this, popup = pageNavigationPopup](bool saved) {
+            if (saved)
+                showPageNavigation();
+            if (popup && popup == pageNavigationPopup)
+                closePopup(pageNavigationPopup);
+        });
     };
     auto *card = pageNavigationPopup->card();
     // Each header pages with its controls on short screens.
@@ -1736,8 +1765,10 @@ void Reader::openPageNavigation()
     connect(reverse, &QCheckBox::clicked, this, [this, reverse](bool checked) {
         auto next = preferences;
         next[pageNavigation::reverseSwipesKey] = checked;
-        if (!savePreferences(next))
-            reverse->setChecked(!checked);
+        savePreferences(next, [guard = QPointer<QCheckBox>(reverse), checked](bool saved) {
+            if (!saved && guard)
+                guard->setChecked(!checked);
+        });
     });
     section(strings::get("settings.swipe_direction"), "rrSwipeDirectionSection", reverse);
     const int width = qMin<int>(metrics::notice::cardWidth,
@@ -1784,9 +1815,12 @@ void Reader::openChapterGroups()
                     [this, modes](int index) {
                         auto next = preferences;
                         next["chapter_groups"] = modes[index];
-                        if (savePreferences(next))
-                            showChapterGroups();
-                        closePopup(chapterGroupsPopup);
+                        savePreferences(next, [this, popup = chapterGroupsPopup](bool saved) {
+                            if (saved)
+                                showChapterGroups();
+                            if (popup && popup == chapterGroupsPopup)
+                                closePopup(chapterGroupsPopup);
+                        });
                     });
 }
 
@@ -1818,9 +1852,12 @@ void Reader::openNavigationBarButtons()
                 auto next = preferences;
                 next[pageNavigation::barButtonsKey] =
                         pageNavigation::value(pageNavigation::barButtonsModes[index]);
-                if (savePreferences(next))
-                    showNavigationBarButtons();
-                closePopup(navigationBarPopup);
+                savePreferences(next, [this, popup = navigationBarPopup](bool saved) {
+                    if (saved)
+                        showNavigationBarButtons();
+                    if (popup && popup == navigationBarPopup)
+                        closePopup(navigationBarPopup);
+                });
             });
 }
 
@@ -1874,11 +1911,14 @@ void Reader::openTappableLinks()
                     [this, modes](int index) {
                         auto next = preferences;
                         next["tappable_links"] = modes[index];
-                        if (savePreferences(next)) {
-                            showTappableLinks();
-                            syncLinkDiscovery();
-                        }
-                        closePopup(tappableLinksPopup);
+                        savePreferences(next, [this, popup = tappableLinksPopup](bool saved) {
+                            if (saved) {
+                                showTappableLinks();
+                                syncLinkDiscovery();
+                            }
+                            if (popup && popup == tappableLinksPopup)
+                                closePopup(tappableLinksPopup);
+                        });
                     });
 }
 
@@ -1914,14 +1954,17 @@ void Reader::openAnnotationInteraction()
                     [this, modes](int index) {
                         auto next = preferences;
                         next["annotation_interaction"] = modes[index];
-                        if (savePreferences(next)) {
-                            showAnnotationInteraction();
-                            // A mode that the toggle opened ends with the toggle.
-                            if (quickAnnotations() && annotationMode)
-                                leaveAnnotations(false);
-                            syncReadingControls();
-                        }
-                        closePopup(annotationInteractionPopup);
+                        savePreferences(next, [this, popup = annotationInteractionPopup](bool saved) {
+                            if (saved) {
+                                showAnnotationInteraction();
+                                // A mode that the toggle opened ends with the toggle.
+                                if (quickAnnotations() && annotationMode)
+                                    leaveAnnotations(false);
+                                syncReadingControls();
+                            }
+                            if (popup && popup == annotationInteractionPopup)
+                                closePopup(annotationInteractionPopup);
+                        });
                     });
 }
 
@@ -1962,9 +2005,12 @@ void Reader::openMenuView()
                         next[pageNavigation::menuViewKey] = pageNavigation::value(modes[index]);
                         next.remove("pin_stats");
                         next.remove(pageNavigation::thumbnailsKey);
-                        if (savePreferences(next))
-                            showMenuView();
-                        closePopup(menuViewPopup);
+                        savePreferences(next, [this, popup = menuViewPopup](bool saved) {
+                            if (saved)
+                                showMenuView();
+                            if (popup && popup == menuViewPopup)
+                                closePopup(menuViewPopup);
+                        });
                     });
 }
 

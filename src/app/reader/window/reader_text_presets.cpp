@@ -190,11 +190,13 @@ void Reader::buildTextPresets()
     textPresetSection->toggled = [this] {
         auto next = preferences;
         next[textpresets::rowKey] = !textPresetSection->isOpen();
-        if (!writePreferences(next))
-            return;
-        preferences = next;
-        syncTextPresets();
-        refresh();
+        writePreferences(next, [this](const QJsonObject &applied, bool saved) {
+            if (!saved)
+                return;
+            preferences = applied;
+            syncTextPresets();
+            refresh();
+        });
     };
     textPresetSection->chosen = [this](const QString &id) { applyTextPreset(id); };
     textPresetSection->held = [this](const QString &id) { showTextPresetActions(id); };
@@ -285,23 +287,28 @@ void Reader::applyTextPreset(const QString &id)
     });
 }
 
-bool Reader::saveTextPresets(QJsonObject next, const QVector<Preset> &presets)
+void Reader::saveTextPresets(QJsonObject next, const QVector<Preset> &presets,
+                             std::function<void()> saved)
 {
     textpresets::store(next, presets);
-    if (!writePreferences(next)) {
-        appearanceEdit.setError(strings::get("text_presets.could_not_save"));
+    writePreferences(next, [this, presets, saved = std::move(saved)](const QJsonObject &applied,
+                                                                     bool ok) {
+        if (!ok) {
+            appearanceEdit.setError(strings::get("text_presets.could_not_save"));
+            refresh();
+            return;
+        }
+        preferences = applied;
+        if (saved)
+            saved();
+        drawTextPresetTiles(presets);
+        syncTextPresets();
+        if (general && general->isVisible()) {
+            showTextPresetSettings();
+            fitSettings();
+        }
         refresh();
-        return false;
-    }
-    preferences = next;
-    drawTextPresetTiles(presets);
-    syncTextPresets();
-    if (general && general->isVisible()) {
-        showTextPresetSettings();
-        fitSettings();
-    }
-    refresh();
-    return true;
+    });
 }
 
 void Reader::updateTextPreset(const QString &id)
@@ -314,8 +321,7 @@ void Reader::updateTextPreset(const QString &id)
         captured.id = preset.id;
         captured.name = preset.name;
         preset = captured;
-        book->setTextPreset(id);
-        saveTextPresets(preferences, presets);
+        saveTextPresets(preferences, presets, [this, id] { book->setTextPreset(id); });
         return;
     }
 }
@@ -446,10 +452,10 @@ void Reader::editTextPresetName(const QString &id)
         // Native submission runs inside the controller; close after it returns.
         textPresetEditor->hide();
         qt::later(0, this, close);
-        if (saveTextPresets(preferences, presets) && id.isEmpty()) {
-            book->setTextPreset(saved.id);
-            syncTextPresets();
-        }
+        saveTextPresets(preferences, presets, [this, id, created = saved.id] {
+            if (id.isEmpty())
+                book->setTextPreset(created);
+        });
     };
     connect(dialog->secondaryButton(), &QPushButton::clicked, this, close);
     connect(dialog->primaryButton(), &QPushButton::clicked, this, submit);
@@ -591,9 +597,10 @@ void Reader::confirmDeleteTextPreset(const QString &id)
         auto next = preferences;
         if (next.value(textpresets::newBookKey).toString() == id)
             next.remove(textpresets::newBookKey);
-        if (book->textPreset() == id)
-            book->setTextPreset({});
-        saveTextPresets(next, list);
+        saveTextPresets(next, list, [this, id] {
+            if (book->textPreset() == id)
+                book->setTextPreset({});
+        });
     });
     dialog->dismissed = close;
     dialog->show();
@@ -840,11 +847,13 @@ void Reader::openNewBookText()
         next[textpresets::newBookKey] = value;
         // Older builds read only the inheritance switch.
         next[appearance::inheritTextLayoutKey] = value != "book";
-        if (writePreferences(next)) {
-            preferences = next;
-            showTextPresetSettings();
-        }
-        closeTextPresetGallery();
+        writePreferences(next, [this](const QJsonObject &applied, bool saved) {
+            if (saved) {
+                preferences = applied;
+                showTextPresetSettings();
+            }
+            closeTextPresetGallery();
+        });
     };
     textPresetGallery->pageChanged = [this] { renderTextPresetGallery(); };
     for (auto *widget : textPresetGallery->findChildren<QWidget *>())

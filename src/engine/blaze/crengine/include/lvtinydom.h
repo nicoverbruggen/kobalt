@@ -573,6 +573,7 @@ protected:
     bool _mapped;
     bool _maperror;
     int  _mapSavingStage;
+    int  _nextNodeDataBlock = 0;
 
     img_scaling_options_t _imgScalingOptions;
     int  _spaceWidthScalePercent;
@@ -621,8 +622,7 @@ protected:
     bool loadStylesData();
     bool updateLoadedStyles( bool enabled );
     lUInt32 calcStyleHash(bool already_rendered, lUInt32 force_node_style_hash=0);
-    bool saveNodeData();
-    bool saveNodeData( lUInt16 type, ldomNode ** list, int nodecount );
+    ContinuousOperationResult saveNodeData( CRTimerUtil & maxTime );
     bool loadNodeData();
     bool loadNodeData( lUInt16 type, ldomNode ** list, int nodecount );
 

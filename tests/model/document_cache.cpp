@@ -1,3 +1,4 @@
+#include "book_fixtures.h"
 #include "check.h"
 #include "reader_inputs.h"
 #include "engine/blaze/adapter/engine_document.h"
@@ -8,11 +9,15 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
+#include <QEvent>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QTemporaryDir>
 #include <cstdio>
+#include <cstring>
+#include <functional>
+#include <utility>
 
 static QByteArray hash(const QImage &image)
 {
@@ -45,6 +50,92 @@ static void parkedCache()
                                .startsWith(root.path() + "/owner/"),
             "The resumed build writes to another document's cache");
     require(path.endsWith(U"/parked-book.00000001.0.cr3"), "The cache filename format changed");
+}
+
+// Observe the actual node stage of the finite adapter save without sleeping
+// or depending on how much a host can write before its timer expires.
+class NodeSaveTrace : public CRLog
+{
+public:
+    explicit NodeSaveTrace(std::function<void()> onFirstBlock)
+        : onFirstBlock_(std::move(onFirstBlock)), previous_(CRLOG)
+    {
+        curr_level = LL_TRACE;
+        CRLOG = this;
+    }
+
+    ~NodeSaveTrace() override { CRLOG = previous_; }
+
+    int nodeSteps = 0;
+
+private:
+    void log(const char *, const char *message, va_list) override
+    {
+        if (std::strcmp(message, "ldomDocument::saveChanges() - node data") == 0
+            && ++nodeSteps == 1)
+            onFirstBlock_();
+    }
+
+    std::function<void()> onFirstBlock_;
+    CRLog *previous_;
+};
+
+static void nodeSaveYields()
+{
+    QTemporaryDir root;
+    require(root.isValid(), "Cannot create the node save fixture");
+    // Each song contributes several element and text nodes. The fixture
+    // spans multiple 4096-node blocks of both kinds.
+    require(kobalt::test::writeBook(root.path(), "nodes.epub", kobalt::test::songbook(2000)),
+            "Cannot create the multi-block EPUB");
+    QFile epub(root.filePath("nodes.epub"));
+    require(epub.open(QIODevice::ReadOnly), "Cannot read the multi-block EPUB");
+    const auto bytes = epub.readAll();
+    const auto cache = root.filePath("cache");
+    const auto open = [&](kobalt::EngineDocument &document) {
+        QString error;
+        document.setDocumentCache(cache, QByteArray(64, 'b'), "node-save-test", bytes.size());
+        require(document.open(bytes, QSize(1072, 1328), {}, &error), qPrintable(error));
+    };
+
+    QByteArray savedPage;
+    int pages = 0;
+    {
+        kobalt::EngineDocument document(kobalt::test::readerFonts());
+        open(document);
+        pages = document.pages();
+        require(!document.openedFromCache() && pages > 1, "Expected a cold multi-page document");
+        bool finished = false;
+        bool turned = false;
+        QObject foreground;
+        NodeSaveTrace trace([&] {
+            require(kobalt::qt::invoke(
+                            &foreground,
+                            [&] {
+                                require(!finished, "The node save passed the queued page turn");
+                                turned = document.go(pages - 1);
+                            },
+                            Qt::QueuedConnection),
+                    "Cannot queue a foreground page turn");
+        });
+        for (int step = 0; !finished && step < 100; ++step) {
+            // A generous finite budget isolates the guaranteed node-block
+            // yield from timeouts in the other save stages.
+            finished = document.saveDocumentCacheStep(10000);
+            QCoreApplication::sendPostedEvents(&foreground, QEvent::MetaCall);
+        }
+        require(finished && turned && trace.nodeSteps >= 4,
+                "The finite save did not resume across multiple node blocks");
+        require(document.page() == pages - 1, "The queued turn did not move to the last page");
+        savedPage = hash(document.image(pages - 1));
+    }
+
+    kobalt::EngineDocument restored(kobalt::test::readerFonts());
+    open(restored);
+    require(restored.openedFromCache() && restored.pages() == pages,
+            "The resumed node save did not reopen from the cache");
+    require(restored.go(pages - 1) && hash(restored.image(pages - 1)) == savedPage,
+            "The resumed cache changed the final page");
 }
 
 // Run the writer with the previous engine and the checker with its replacement.
@@ -154,6 +245,7 @@ int main(int argc, char **argv)
     }
     QString error;
     parkedCache();
+    nodeSaveYields();
     {
         // A book saved to the document cache opens without parsing. It must
         // match a parsed book, including Kobalt's prose markers, and a changed

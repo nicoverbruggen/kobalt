@@ -2891,19 +2891,27 @@ bool tinyNodeCollection::loadNodeData(lUInt16 type, ldomNode ** list, int nodeco
     return true;
 }
 
-bool tinyNodeCollection::saveNodeData( lUInt16 type, ldomNode ** list, int nodecount )
+#define NODE_INDEX_MAGIC 0x19283746
+ContinuousOperationResult tinyNodeCollection::saveNodeData( CRTimerUtil & maxTime )
 {
-    int count = ((nodecount+TNC_PART_LEN-1) >> TNC_PART_SHIFT);
-    // Blaze: reuse one heap buffer for full and partial node chunks.
+    const int elemBlocks = (_elemCount + TNC_PART_LEN) >> TNC_PART_SHIFT;
+    const int textBlocks = (_textCount + TNC_PART_LEN) >> TNC_PART_SHIFT;
     std::vector<ldomNode> buf;
-    for (lUInt16 i=0; i<count; i++) {
-        if (!list[i])
+    while ( _nextNodeDataBlock < elemBlocks + textBlocks ) {
+        const bool elements = _nextNodeDataBlock < elemBlocks;
+        const int i = elements ? _nextNodeDataBlock : _nextNodeDataBlock - elemBlocks;
+        ldomNode ** list = elements ? _elemList : _textList;
+        if ( !list[i] ) {
+            ++_nextNodeDataBlock;
             continue;
-        int offs = i*TNC_PART_LEN;
-        int sz = TNC_PART_LEN;
-        if (offs + sz > nodecount) {
-            sz = nodecount - offs;
         }
+        if ( maxTime.expired() )
+            return CR_TIMEOUT;
+        const lUInt16 type = elements ? CBT_ELEM_NODE : CBT_TEXT_NODE;
+        const int nodecount = (elements ? _elemCount : _textCount) + 1;
+        int sz = nodecount - i * TNC_PART_LEN;
+        if ( sz > TNC_PART_LEN )
+            sz = TNC_PART_LEN;
         buf.resize(sz);
         const size_t bytes = buf.size() * sizeof(ldomNode);
         memcpy(buf.data(), list[i], bytes);
@@ -2924,24 +2932,18 @@ bool tinyNodeCollection::saveNodeData( lUInt16 type, ldomNode ** list, int nodec
         // stays marked dirty, so it is never opened again.
         if (!_cacheFile->write(type, i, (lUInt8*)buf.data(), bytes, COMPRESS_NODE_DATA)) {
             CRLog::error("Cannot write node data to cache file");
-            return false;
+            return CR_ERROR;
         }
+        ++_nextNodeDataBlock;
+        // Give the idle scheduler a chance to run foreground work between blocks.
+        if ( !maxTime.infinite() )
+            return CR_TIMEOUT;
     }
-    return true;
-}
-
-#define NODE_INDEX_MAGIC 0x19283746
-bool tinyNodeCollection::saveNodeData()
-{
-    SerialBuf buf(12, true);
-    buf << (lUInt32)NODE_INDEX_MAGIC << (lUInt32)_elemCount << (lUInt32)_textCount;
-    if ( !saveNodeData( CBT_ELEM_NODE, _elemList, _elemCount+1 ) )
-        return false;
-    if ( !saveNodeData( CBT_TEXT_NODE, _textList, _textCount+1 ) )
-        return false;
-    if ( !_cacheFile->write(CBT_NODE_INDEX, buf, COMPRESS_NODE_DATA) )
-        return false;
-    return true;
+    if ( maxTime.expired() )
+        return CR_TIMEOUT;
+    SerialBuf index(12, true);
+    index << (lUInt32)NODE_INDEX_MAGIC << (lUInt32)_elemCount << (lUInt32)_textCount;
+    return _cacheFile->write(CBT_NODE_INDEX, index, COMPRESS_NODE_DATA) ? CR_DONE : CR_ERROR;
 }
 
 bool tinyNodeCollection::loadNodeData()
@@ -18849,6 +18851,7 @@ ContinuousOperationResult ldomDocument::saveChanges( CRTimerUtil & maxTime, LVDo
     switch (_mapSavingStage) {
     default:
     case 0:
+        _nextNodeDataBlock = 0;
 
         if (!maxTime.infinite())
             _cacheFile->flush(false, maxTime);
@@ -18972,9 +18975,13 @@ ContinuousOperationResult ldomDocument::saveChanges( CRTimerUtil & maxTime, LVDo
         _mapSavingStage = 8;
 
         CRLog::trace("ldomDocument::saveChanges() - node data");
-        if ( !saveNodeData() ) {
-            CRLog::error("Error while node instance data");
-            return CR_ERROR;
+        {
+            const ContinuousOperationResult result = saveNodeData(maxTime);
+            if ( result != CR_DONE ) {
+                if ( result == CR_ERROR )
+                    CRLog::error("Error while saving node instance data");
+                return result;
+            }
         }
         if (!maxTime.infinite())
             _cacheFile->flush(false, maxTime); // intermediate flush

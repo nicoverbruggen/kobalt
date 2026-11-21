@@ -62,7 +62,11 @@ These checks leave device gaps. Full loader removal and restart after a failed s
 
 ## Native allocations
 
-The Qt5 native allocations were checked against the ARM32 libraries from firmware 4.38.23828, 4.45.23697 and 4.46.23836. The constructors and native allocation sites agree with the light, dictionary and settings storage that the adapters use. ContentSettings has a 72-byte array stride, including alignment padding. This inspection found no allocation mismatch. Each adapter checks its required symbols and available type metadata before use.
+The Qt5 light, dictionary and settings adapters were checked against the ARM32 libraries from firmware 4.38.21908, 4.38.23828, 4.40.23081, 4.45.23697 and 4.46.23836. The constructors and native allocation sites agree with the storage the adapters use. ContentSettings has a 72-byte array stride, including alignment padding. Each adapter checks its required symbols and available type metadata before use.
+
+Nickel allocates 28 bytes for KeyboardFrame and 36 for KeyboardReceiver in the minimum supported firmware, 4.38.21908 (Kobo channel 3), and in 4.40.23081 and 4.46.23836 (channel 13). These sizes come from allocation calls in each firmware's `libnickel.so.1.0.0`. Qt5 has no metatype size for either class.
+
+The NickelBench recent catalog records definitions for every native symbol named in the Qt5 keyboard, light and dictionary adapter sources across its firmware 4 builds from 4.38.21908 through 4.46.23836. The catalog records symbol presence. Object sizes in the other builds remain unverified.
 
 `pewter.keyboard` exercises native keyboard allocation, receiver ownership, submission, language switching, placement and cleanup in both SDKs. It also checks that a text box gets the `QTextEdit` receiver. A queued language change must not reopen a dismissed keyboard, and the next explicit opening must use the chosen language. Its synthetic widgets test the adapter contract, not Nickel’s key layout. Check letters, numbers, symbols, focus and both themes in firmware before deploying a keyboard change.
 

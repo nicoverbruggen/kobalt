@@ -771,8 +771,12 @@ sleep::Snapshot Reader::captureSleepScreen(bool poweredOff)
     // A book marked as finished is done, wherever its last page sits.
     const int percent = book->finishedHere() ? 100 : session->statsPercent(statsUseWholeVolume());
     snapshot.orientation = kobalt::shownOrientation(QGuiApplication::primaryScreen());
-    snapshot.progress =
-            strings::get("sleep.percent_read").arg(strings::percentArgument(percent, QLocale::c()));
+    snapshot.percent = percent;
+    // Progress percentages with one decimal show the same decimal when asleep.
+    if (headerfooter::decimalPercentages(preferences))
+        snapshot.percentTenths =
+                book->finishedHere() ? 1000 : session->statsPercentTenths(statsUseWholeVolume());
+    snapshot.progress = strings::get("sleep.percent_read").arg(sleepPercentText(snapshot, true));
     snapshot.remaining = sleepTimeLeft(book->estimates(statsUseWholeVolume()).bookMilliseconds,
                                        remainingTime::approximate(preferences));
     snapshot.dark = darkTheme;

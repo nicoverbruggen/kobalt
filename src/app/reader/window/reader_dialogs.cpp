@@ -1,3 +1,4 @@
+#include "reading/header_footer.h"
 #include "app/reader/settings/sleep_editor.h"
 #include "app/reader/settings/sleep_gallery.h"
 #include <QLineEdit>
@@ -1083,8 +1084,10 @@ sleep::Snapshot Reader::sleepPreviewSample(bool poweredOff)
             ? (book->finishedHere() ? 100 : session->statsPercent(statsUseWholeVolume()))
             : 0;
     sample.percent = percent;
-    sample.progress =
-            strings::get("sleep.percent_read").arg(strings::percentArgument(percent, QLocale::c()));
+    if (book && session && headerfooter::decimalPercentages(preferences))
+        sample.percentTenths =
+                book->finishedHere() ? 1000 : session->statsPercentTenths(statsUseWholeVolume());
+    sample.progress = strings::get("sleep.percent_read").arg(sleepPercentText(sample, true));
     if (book) {
         sample.remaining = sleepTimeLeft(book->estimates(statsUseWholeVolume()).bookMilliseconds,
                                          remainingTime::approximate(preferences));

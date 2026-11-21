@@ -397,8 +397,7 @@ private slots:
         QVERIFY(frame());
         sleep::Snapshot progress;
         progress.percent = 43;
-        progress.progress =
-                strings::get("sleep.percent_read").arg(strings::percentArgument(43, QLocale::c()));
+        progress.progress = strings::get("sleep.percent_read").arg(strings::percentArgument(43));
         const auto neutral =
                 sleep::privateSnapshot(window.size(), preferences, progress, false, powerOff);
         const auto expected = reader::sleepDesignImage(neutral.image, neutral, 31,
@@ -645,8 +644,8 @@ private slots:
             sleep::setDesign(preferences, sleep::Design::Letter);
             QVERIFY(storage::writePreferences(paths.preferences(), preferences));
             progress.percent = 100;
-            progress.progress = strings::get("sleep.percent_read")
-                                        .arg(strings::percentArgument(100, QLocale::c()));
+            progress.progress =
+                    strings::get("sleep.percent_read").arg(strings::percentArgument(100));
             const auto completed = sleep::privateSnapshot(window.size(), preferences, progress);
             owner.remember(completed, "private");
             owner.finishSave();
@@ -752,8 +751,7 @@ private slots:
         expected.place = sleep::Place::TopLeft;
         expected.dimPage = false;
         expected.percent = 42;
-        expected.progress =
-                strings::get("sleep.percent_read").arg(strings::percentArgument(42, QLocale::c()));
+        expected.progress = strings::get("sleep.percent_read").arg(strings::percentArgument(42));
         expected.details.title = "Type Tester";
         expected.details.author = "N. Farbridge";
         QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),

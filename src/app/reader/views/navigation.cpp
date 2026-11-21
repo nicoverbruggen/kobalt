@@ -1,3 +1,4 @@
+#include "support/percentage_text.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/icons.h"
 #include "ui/controls/panels.h"
@@ -1013,7 +1014,7 @@ void Navigation::placeZenToolbar(QSize size, const QVector<QWidget *> &actions,
         using Figure = ZenStatsPanel::Figure;
         QVector<Figure> figures{
             { unit(state.sessionMinutes), strings::get("zen.this_session"), false },
-            { { qMakePair(QString::number(state.pageTurns), QString()) },
+            { { qMakePair(strings::count(state.pageTurns), QString()) },
               strings::get("zen.pages_turned"),
               false },
             { state.chapterMinutes < 0 ? QVector<QPair<QString, QString>>{ qMakePair(

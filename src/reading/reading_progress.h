@@ -9,6 +9,8 @@ QString bookPageLabel(int page, int firstMain, int lastMain, const QString &styl
 // Display progress counts the current page as read. An unknown length is 0%.
 double pageProgressFraction(int page, int pages);
 int pageProgressPercent(int page, int pages);
+// The same progress in tenths of a percent, for one-decimal percentages.
+int pageProgressTenths(int page, int pages);
 
 struct ReadingProgress
 {

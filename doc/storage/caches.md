@@ -72,7 +72,7 @@ Older parsed caches add the optional page-note markers for labeled Gutenberg not
 - It is saved when a Kobalt book closes or finishes its last USB save. The status tile is drawn later, at sleep or power-off, in the style chosen then.
 - The file is replaced atomically. It is at most 20 MiB and 4,194,304 pixels. PNG compression is lossless, zlib level 1.
 - PNG metadata version 1 holds the last-read token, mode, orientation, progress, percentage, remaining-time text, theme and a dimming flag.
-- Optional metadata: title, author, chapter, reading font, greeting, cover bounds, design and `private_book` (default false). A private snapshot holds only an anonymous backdrop and statistics.
+- Optional metadata: title, author, chapter, reading font, greeting, cover bounds, design, `private_book` (default false) and `percent_tenths`, the progress in tenths of a percent when Progress percentages shows one decimal (absent otherwise; older builds ignore it). A private snapshot holds only an anonymous backdrop and statistics.
 - Images without a percentage still load. Styles that show it then leave it out.
 
 `cache/sleep-screen.json` replaces the PNG when Kobo's native `N3_FULL` cover supplied the book cover.

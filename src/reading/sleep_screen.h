@@ -79,6 +79,9 @@ struct Snapshot
     bool dimPage = true;
     // Unknown in snapshots saved before the percentage was stored.
     int percent = -1;
+    // Tenths of a percent when Progress percentages shows one decimal,
+    // otherwise -1 and the designs show the whole `percent`.
+    int percentTenths = -1;
     Tile tile = Tile::Bookmark;
     // The design that draws the status. A Custom screen is captured as the
     // status it chose, such as Seal, over its own `mode`.
@@ -731,6 +734,7 @@ inline Snapshot privateSnapshot(QSize size, const QJsonObject &preferences, Snap
         snapshot.image.fill(Qt::black);
     snapshot.place = source.place;
     snapshot.percent = source.percent;
+    snapshot.percentTenths = source.percentTenths;
     snapshot.progress = source.progress;
     snapshot.remaining = source.remaining;
     snapshot.details = source.details;

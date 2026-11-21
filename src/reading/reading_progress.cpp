@@ -70,6 +70,13 @@ int pageProgressPercent(int page, int pages)
     return int(100 * (qint64(qBound(0, page, pages - 1)) + 1) / pages);
 }
 
+int pageProgressTenths(int page, int pages)
+{
+    if (pages <= 0)
+        return 0;
+    return int(1000 * (qint64(qBound(0, page, pages - 1)) + 1) / pages);
+}
+
 bool ReadingProgress::samePosition(const ReadingProgress &other) const
 {
     return valid && other.valid && book == other.book && location == other.location

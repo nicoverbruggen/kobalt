@@ -249,30 +249,28 @@ int main()
                             == QStringLiteral("30.9%"),
             "Chapter mode lost decimal precision before estimates arrived");
     QLocale::setDefault(QLocale(QStringLiteral("it_IT")));
-    require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42,7%")
+    // One rule for numbers: the English interface formats them the same on
+    // every device, whatever its locale.
+    require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42.7%")
                     && content(Field::ChapterPercent, noPages, false).text
-                            == QStringLiteral("30,9%"),
-            "Book and chapter progress must use the device's decimal separator");
+                            == QStringLiteral("30.9%"),
+            "The device locale changed the decimal separator of progress");
     QLocale::setDefault(QLocale(QStringLiteral("fr_FR")));
-    require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42,7\u00a0%"),
-            "French progress needs a non-breaking space before the percent sign");
+    require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42.7%"),
+            "The device locale added a space before the percent sign");
     require(fieldDescription(Field::BatteryWarning)
-                    == QStringLiteral("Shows the battery only below %1\u00a0%.")
-                               .arg(batteryWarningBelow),
-            "A composed label must keep the localized percent sign and space");
+                    == QStringLiteral("Shows the battery only below %1%.").arg(batteryWarningBelow),
+            "A composed label must keep the interface's percent format");
     strings::showKeys(true);
     require(content(Field::BookPercent, noPages, false).text
-                    == QStringLiteral("common.percent [42,7]"),
+                    == QStringLiteral("common.percent [42.7]"),
             "Percentage formatting must keep the string key and its numeric argument");
     strings::showKeys(false);
-    QLocale::setDefault(QLocale(QStringLiteral("tr_TR")));
-    require(content(Field::BookPercent, noPages, false).text == QStringLiteral("%42,7"),
-            "Turkish progress needs the percent sign before the number");
-    QLocale::setDefault(QLocale(QStringLiteral("ar_EG")));
-    const QLocale arabic;
-    require(content(Field::BookPercent, noPages, false).text
-                    == QStringLiteral("\u0664\u0662\u066b\u0667") + arabic.percent(),
-            "Arabic progress needs localized digits, decimal separator and percent sign");
+    for (const auto *locale : { "tr_TR", "ar_EG" }) {
+        QLocale::setDefault(QLocale(QString::fromLatin1(locale)));
+        require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42.7%"),
+                "The device locale changed the order, digits or sign of progress");
+    }
     QLocale::setDefault(QLocale::c());
     require(content(Field::ChapterAndPage, estimated, false).text == QStringLiteral("6 of ~20"),
             "An estimated total beside a name needs its mark");

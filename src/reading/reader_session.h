@@ -451,6 +451,16 @@ public:
     double mainProgress() const;
     int mainPercent() const;
 
+    // statsPercent in tenths of a percent, for one-decimal percentages.
+    int statsPercentTenths(bool wholeVolume) const
+    {
+        if (!wholeVolume && mainPages() != bookPages())
+            return mainPage() < 0 ? 0 : pageProgressTenths(mainPage(), mainPages());
+        if (bookPages() > 0 && bookPage() >= 0)
+            return pageProgressTenths(bookPage(), bookPages());
+        return qBound(0, int(progressFraction() * 1000), 1000);
+    }
+
     int statsPercent(bool wholeVolume) const
     {
         if (!wholeVolume && mainPages() != bookPages())

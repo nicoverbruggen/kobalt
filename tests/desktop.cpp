@@ -3737,8 +3737,9 @@ void checkPercentageFormat(int preset, bool dark, bool screenshots)
     const auto *wholeOption = fixture.widget("rrPercentageFormat_whole");
     const auto *decimalOption = fixture.widget("rrPercentageFormat_decimal");
     QVERIFY(wholeOption && decimalOption);
-    QCOMPARE(wholeOption->accessibleDescription(), QStringLiteral("For example, 8\u00a0%"));
-    QCOMPARE(decimalOption->accessibleDescription(), QStringLiteral("For example, 8,1\u00a0%"));
+    // A French device still uses the English interface's number format.
+    QCOMPARE(wholeOption->accessibleDescription(), QStringLiteral("For example, 8%"));
+    QCOMPARE(decimalOption->accessibleDescription(), QStringLiteral("For example, 8.1%"));
     if (screenshots)
         QVERIFY(capture(fixture, name + "-settings-percentage-format"));
     QVERIFY(fixture.press("rrPercentageFormat_decimal"));
@@ -3752,9 +3753,9 @@ void checkPercentageFormat(int preset, bool dark, bool screenshots)
     QTRY_COMPARE(
             storage::readJson(fixture.paths.preferences()).value(headerfooter::percentageFormatKey),
             QJsonValue("decimal"));
-    QVERIFY(page->slotContents[5].text.contains(','));
+    QVERIFY(page->slotContents[5].text.contains('.'));
     QCOMPARE(page->slotContents[2].text, page->slotContents[5].text);
-    QVERIFY(page->slotContents[0].text.contains(','));
+    QVERIFY(page->slotContents[0].text.contains('.'));
     QCOMPARE(page->progressFraction, progress);
     QCOMPARE(fixture.state().value("page"), before.value("page"));
     QCOMPARE(fixture.state().value("pages"), before.value("pages"));
@@ -3785,7 +3786,7 @@ void checkPercentageFormat(int preset, bool dark, bool screenshots)
     QTRY_COMPARE(opened.count(), 2);
     QTRY_VERIFY(!fixture.state().value("busy").toBool());
     page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
-    QVERIFY(page->slotContents[5].text.contains(','));
+    QVERIFY(page->slotContents[5].text.contains('.'));
     QVERIFY(fixture.press("rrPage"));
     QVERIFY(fixture.press("rrSettings"));
     QVERIFY(fixture.press("rrSettingsSystem"));
@@ -3815,7 +3816,7 @@ void checkPercentageFormat(int preset, bool dark, bool screenshots)
             QJsonValue("whole"));
     QCOMPARE(storage::readJson(fixture.paths.preferences()).value(secondaryNumberKey).toString(),
              QString("prefixed"));
-    QVERIFY(!page->slotContents[5].text.contains(','));
+    QVERIFY(!page->slotContents[5].text.contains('.'));
 }
 
 void checkHeaderFooterSizes(int preset, bool dark)
@@ -19687,12 +19688,13 @@ private slots:
         QCOMPARE(reader::syncPercentText(0), QString("0.0%"));
         QCOMPARE(reader::syncPercentText(100), QString("100.0%"));
         QVERIFY(reader::syncPercentText(-1).isEmpty());
-        QLocale::setDefault(QLocale(QLocale::Dutch, QLocale::Belgium));
-        QCOMPARE(reader::syncPercentText(54.44), QStringLiteral("54,4%"));
-        QLocale::setDefault(QLocale(QLocale::French, QLocale::France));
-        QCOMPARE(reader::syncPercentText(54.44), QStringLiteral("54,4\u00a0%"));
-        QLocale::setDefault(QLocale(QLocale::Turkish, QLocale::Turkey));
-        QCOMPARE(reader::syncPercentText(54.44), QStringLiteral("%54,4"));
+        // Other device locales keep the interface's English format.
+        for (const auto &locale :
+             { QLocale(QLocale::Dutch, QLocale::Belgium), QLocale(QLocale::French, QLocale::France),
+               QLocale(QLocale::Turkish, QLocale::Turkey) }) {
+            QLocale::setDefault(locale);
+            QCOMPARE(reader::syncPercentText(54.44), QStringLiteral("54.4%"));
+        }
     }
 
     void kosyncChoice_data() { screenshotVariants(); }

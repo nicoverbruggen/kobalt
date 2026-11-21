@@ -125,6 +125,8 @@ QJsonObject metadataFor(const sleep::Snapshot &snapshot, const QString &token)
                                  { "dim", snapshot.dimPage },
                                  { "percent", snapshot.percent } });
     // Optional fields for the newer designs. Older readers ignore them.
+    if (snapshot.percentTenths >= 0)
+        metadata["percent_tenths"] = snapshot.percentTenths;
     const auto &details = snapshot.details;
     metadata["private_book"] = snapshot.privateBook;
     metadata["design"] = sleep::value(snapshot.design);
@@ -538,6 +540,9 @@ sleep::Snapshot readSleepSnapshot(const QString &path, const QString &token, sle
                               mode,
                               metadata.value("dim").toBool(),
                               percent >= 0 && percent <= 100 ? percent : -1 };
+    const int tenths = metadata.value("percent_tenths").toInt(-1);
+    if (snapshot.percent >= 0 && tenths >= 0 && tenths <= 1000)
+        snapshot.percentTenths = tenths;
     readDetails(metadata, snapshot);
     if (!reference) {
         snapshot.image = reader.read();

@@ -1,3 +1,4 @@
+#include "support/percentage_text.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/icons.h"
 #include "ui/controls/text.h"
@@ -544,7 +545,7 @@ void SearchPanel::redraw()
     const int scopeBottom = chrome::actionHeight + chrome::statusHeight;
     const auto matches =
             strings::get(shownCount == 1 ? "search_panel.match" : "search_panel.matches")
-                    .arg(shownCount);
+                    .arg(strings::count(shownCount));
     scopeStatus->setText(searched ? strings::get(complete ? "search_panel.matches_in_scope"
                                                           : "search_panel.matches_so_far_in_scope")
                                             .arg(matches, scopeLabel())

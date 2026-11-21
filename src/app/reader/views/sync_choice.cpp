@@ -30,7 +30,7 @@ QFont valueFont(bool bold = false)
 
 QString counted(int count, const QString &many, const QString &one)
 {
-    return count == 1 ? one : many.arg(count);
+    return count == 1 ? one : many.arg(strings::count(count));
 }
 
 QString pagesText(int direction, int distance)

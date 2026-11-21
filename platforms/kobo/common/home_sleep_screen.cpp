@@ -516,8 +516,8 @@ bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &opening
             bookState.contains(key) ? bookState.value(key) : bookState.value("percent");
     if (completed || percent.isDouble()) {
         source.percent = completed ? 100 : qBound(0, percent.toInt(), 100);
-        source.progress = strings::get("sleep.percent_read")
-                                  .arg(strings::percentArgument(source.percent, QLocale::c()));
+        source.progress =
+                strings::get("sleep.percent_read").arg(strings::percentArgument(source.percent));
     }
     const auto chosen = statusPick(preferences, powerOff);
     source.place = sleep::place(preferences, bookState.value("sleep_positions").toObject(),
@@ -586,8 +586,8 @@ bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIde
         shot.percent = book.percent >= 0 ? book.percent
                 : completed              ? 100
                                          : qBound(0, state.object.value("percent").toInt(), 100);
-        shot.progress = strings::get("sleep.percent_read")
-                                .arg(strings::percentArgument(shot.percent, QLocale::c()));
+        shot.progress =
+                strings::get("sleep.percent_read").arg(strings::percentArgument(shot.percent));
     }
     shot.details.title = book.title;
     shot.details.author = book.author;
@@ -698,8 +698,8 @@ void HomeSleepScreen::prepareCachedPowerOff(const QString &identity)
             shot.percent = inputs->book.percent >= 0 ? inputs->book.percent
                     : completed                     ? 100
                                                     : qBound(0, percent.toInt(), 100);
-            shot.progress = strings::get("sleep.percent_read")
-                                    .arg(strings::percentArgument(shot.percent, QLocale::c()));
+            shot.progress =
+                    strings::get("sleep.percent_read").arg(strings::percentArgument(shot.percent));
         }
         shot.place = sleep::place(preferences, state.value("sleep_positions").toObject(), look);
     }

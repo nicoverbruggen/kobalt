@@ -410,7 +410,7 @@ void ChapterGraph::refreshCells()
     const auto wordTotal = [](qint64 count) {
         if (count == 1)
             return strings::get("words.count_one");
-        return count >= 0 ? strings::get("stats.words").arg(count) : QString();
+        return count >= 0 ? strings::get("stats.words").arg(strings::count(count)) : QString();
     };
     // A chapter's total waits for the counts, and a failed count never shows
     // the page lengths that the chart falls back to.

@@ -3861,7 +3861,8 @@ private slots:
                                   15000);
         QCOMPARE(scopeStatus->text(),
                  strings::get("search_panel.matches_in_scope")
-                         .arg(strings::get("search_panel.matches").arg(referenceCount),
+                         .arg(strings::get("search_panel.matches")
+                                      .arg(strings::count(referenceCount)),
                               strings::get("search_panel.whole_book")));
         auto *jump = host.window()->findChild<QPushButton *>("rrSearchPageJump");
         QVERIFY(jump && click(canvas, jump));
@@ -4005,17 +4006,17 @@ private slots:
                          strings::get("search_panel.matches_in_scope")
                                  .arg(strings::get(count == 1 ? "search_panel.match"
                                                               : "search_panel.matches")
-                                              .arg(count),
+                                              .arg(strings::count(count)),
                                       strings::get(scopeKeys[id])));
                 QCOMPARE(counter->isVisible(), count > 0);
                 if (count == 1)
                     QCOMPARE(counter->text(), QString("Page 1 of 1"));
             }
         }
-        QCOMPARE(scopeStatus->text(), QString("1288 matches in Whole book"));
+        QCOMPARE(scopeStatus->text(), QString("1,288 matches in Whole book"));
         QLocale::setDefault(QLocale(QLocale::German, QLocale::Germany));
         panel->resize(panel->width() - 1, panel->height());
-        QCOMPARE(scopeStatus->text(), QString("1288 matches in Whole book"));
+        QCOMPARE(scopeStatus->text(), QString("1,288 matches in Whole book"));
         SearchBatch partial;
         partial.reset = true;
         partial.hits.append({ "first", "end", "Before", "match", "after", 0 });
@@ -4220,7 +4221,7 @@ private slots:
                  strings::get("search_panel.matches_in_scope")
                          .arg(strings::get(expectedCount == 1 ? "search_panel.match"
                                                               : "search_panel.matches")
-                                      .arg(expectedCount),
+                                      .arg(strings::count(expectedCount)),
                               strings::get("search_panel.whole_book")));
     }
 
@@ -4717,6 +4718,53 @@ private slots:
         QCOMPARE(state->savedCount, 0);
     }
 
+    // With one-decimal progress percentages, Kobalt's sleep and power-off
+    // screens show the same decimal; whole percentages stay whole.
+    void sleepScreenFollowsDecimalPercentages_data()
+    {
+        QTest::addColumn<bool>("decimal");
+        QTest::newRow("whole") << false;
+        QTest::newRow("decimal") << true;
+    }
+
+    void sleepScreenFollowsDecimalPercentages()
+    {
+        QFETCH(bool, decimal);
+        const auto paths = testPaths();
+        QVERIFY(storage::writeJson(
+                paths.preferences(),
+                { { sleep::preferenceKey, "page" },
+                  { headerfooter::percentageFormatKey, decimal ? "decimal" : "whole" } }));
+        auto state = std::make_shared<test::SleepPresentationState>();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        host.configureServices = [state](ReaderHostServices &services) {
+            services.presentation = [state](QWidget *) {
+                return std::make_unique<test::HostPresentation>(state);
+            };
+        };
+        host.progress = std::make_shared<test::HostProgress>();
+        CloseHost cleanup{ host };
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        host.window()->show();
+        QTRY_VERIFY(host.window()->readyForPresentation());
+        const auto snapshot = host.window()->powerScreenSnapshot();
+        QVERIFY(!snapshot.image.isNull() && snapshot.percent >= 0);
+        if (decimal) {
+            QVERIFY(snapshot.percentTenths >= 0);
+            QCOMPARE(snapshot.percentTenths / 10, snapshot.percent);
+            QCOMPARE(snapshot.progress,
+                     strings::get("sleep.percent_read")
+                             .arg(strings::percentArgument(snapshot.percentTenths / 10.0, 1)));
+        } else {
+            QCOMPARE(snapshot.percentTenths, -1);
+            QCOMPARE(snapshot.progress,
+                     strings::get("sleep.percent_read")
+                             .arg(strings::percentArgument(qint64(snapshot.percent))));
+        }
+    }
+
     void usbSavesBeforeReleaseWithinDeadline_data()
     {
         QTest::addColumn<bool>("stalled");
@@ -4795,6 +4843,13 @@ private slots:
         snapshot.percent = 42;
         QVERIFY(storage::writeSleepSnapshot(path, snapshot, "book-stamp"));
         QCOMPARE(storage::readSleepSnapshot(path, "book-stamp", sleep::Mode::Page).percent, 42);
+        QCOMPARE(storage::readSleepSnapshot(path, "book-stamp", sleep::Mode::Page).percentTenths,
+                 -1);
+        snapshot.percentTenths = 427;
+        QVERIFY(storage::writeSleepSnapshot(path, snapshot, "book-stamp"));
+        QCOMPARE(storage::readSleepSnapshot(path, "book-stamp", sleep::Mode::Page).percentTenths,
+                 427);
+        snapshot.percentTenths = -1;
         {
             // Images saved before the percentage was stored still load.
             QImageWriter writer(path, "png");
@@ -4988,9 +5043,8 @@ private slots:
         // This profile has no native reading pace and has not made forward turns.
         const auto expected = reader::sleepScreenImage(
                 background,
-                strings::get("sleep.percent_read")
-                        .arg(strings::percentArgument(percent, QLocale::c())),
-                {}, dark, 67, status, !useCover, sleep::tile(preferences), percent);
+                strings::get("sleep.percent_read").arg(strings::percentArgument(percent)), {}, dark,
+                67, status, !useCover, sleep::tile(preferences), percent);
         host.window()->sleepReader();
         QVERIFY(host.window()->isVisible());
         QVERIFY(sleep->image.isNull());
@@ -13299,8 +13353,7 @@ private slots:
         QVERIFY(!snapshot.image.isNull());
         QCOMPARE(snapshot.percent, sleepPercent);
         QCOMPARE(snapshot.progress,
-                 strings::get("sleep.percent_read")
-                         .arg(strings::percentArgument(sleepPercent, QLocale::c())));
+                 strings::get("sleep.percent_read").arg(strings::percentArgument(sleepPercent)));
         host.window()->checkpoint();
         QCOMPARE(storage::readBookState(paths, identity).object.value("percent").toInt(-1),
                  percent);

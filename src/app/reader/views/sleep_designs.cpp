@@ -85,7 +85,7 @@ struct Content
 
     QString word() const { return sleepStatusText(status); }
 
-    QString percent() const { return strings::percentage(qBound(0, shot.percent, 100)); }
+    QString percent() const { return sleepPercentText(shot); }
 };
 
 QFont mono(qreal pixels, qreal spacingEm)
@@ -437,8 +437,7 @@ PillLayout pillLayout(const Frame &frame, const Content &content)
     qreal width = 1.8 * frame.u + 2.2 * frame.u + ui::interfaceTextWidth(content.word(), font);
     QString progress;
     if (content.shot.percent >= 0) {
-        progress = strings::get("sleep.percent_read")
-                           .arg(strings::percentArgument(content.shot.percent));
+        progress = strings::get("sleep.percent_read").arg(sleepPercentText(content.shot, true));
         width += gap + ui::interfaceTextWidth(progress, font);
     }
     if (content.charging())
@@ -886,8 +885,7 @@ void paintNightText(QPainter &painter, const Frame &frame, const Content &conten
     QString line = content.shot.privateBook
             ? content.shot.progress
             : strings::get("sleep.percent_through")
-                      .arg(strings::percentArgument(qBound(0, content.shot.percent, 100)),
-                           content.shot.details.title);
+                      .arg(sleepPercentText(content.shot, true), content.shot.details.title);
     if (!content.shot.remaining.isEmpty())
         line += QStringLiteral(" · ") + content.shot.remaining;
     text(painter, detail, colors.ink,
@@ -1218,8 +1216,7 @@ QStringList letterParagraphs(const Content &content, const Palette &colors)
         const auto chapter = details.chapter.isEmpty()
                 ? QString()
                 : fill(strings::get("sleep.letter_chapter"), { escaped(details.chapter) });
-        const auto percent =
-                mark(strings::percentage(qBound(0, content.shot.percent, 100)), colors);
+        const auto percent = mark(sleepPercentText(content.shot), colors);
         main = fill(strings::get(off ? "sleep.letter_progress_off" : "sleep.letter_progress"),
                     { percent, title, chapter });
     }
@@ -1400,15 +1397,13 @@ sleep::Snapshot displaySnapshot(sleep::Snapshot shot)
     shot.details.greeting = metadata(shot.details.greeting);
     shot.details.left = metadata(shot.details.left);
     shot.details.clock = metadata(shot.details.clock);
-    // Generated snapshot text is stored in a stable format. Apply the current
-    // locale when displaying it, keeping any other saved progress text intact.
+    // Generated progress text follows the snapshot's percentage, so saved
+    // screens show its decimal when it has one. Other saved text stays.
     const auto progressLabel = strings::get("sleep.percent_read");
-    const auto localizedProgress = progressLabel.arg(strings::percentArgument(shot.percent));
-    const auto storedProgress =
-            progressLabel.arg(strings::percentArgument(shot.percent, QLocale::c()));
-    if (shot.percent >= 0
-        && (shot.progress == storedProgress || shot.progress == localizedProgress))
-        shot.progress = localizedProgress;
+    const auto shownProgress = progressLabel.arg(sleepPercentText(shot, true));
+    const auto wholeProgress = progressLabel.arg(strings::percentArgument(qint64(shot.percent)));
+    if (shot.percent >= 0 && (shot.progress == wholeProgress || shot.progress == shownProgress))
+        shot.progress = shownProgress;
     else
         shot.progress = metadata(shot.progress);
     shot.remaining = metadata(shot.remaining);
@@ -1416,6 +1411,15 @@ sleep::Snapshot displaySnapshot(sleep::Snapshot shot)
 }
 
 } // namespace
+
+QString sleepPercentText(const sleep::Snapshot &shot, bool argument)
+{
+    if (shot.percentTenths >= 0)
+        return argument ? strings::percentArgument(shot.percentTenths / 10.0, 1)
+                        : strings::percentage(shot.percentTenths / 10.0, 1);
+    const qint64 percent = qBound(0, shot.percent, 100);
+    return argument ? strings::percentArgument(percent) : strings::percentage(percent);
+}
 
 QImage sleepDesignImage(QImage backdrop, const sleep::Snapshot &source, int batteryPercent,
                         SleepStatus status, QVector<QImage> *underlay)

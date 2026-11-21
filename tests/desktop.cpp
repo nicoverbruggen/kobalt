@@ -2051,7 +2051,20 @@ void swipeChoices(Fixture &fixture, const QString &name = {})
     QVERIFY(fixture.press("rrNavigation_taps_only"));
     QTRY_VERIFY(!fixture.widget("rrPageNavigationPopup"));
     QVERIFY(fixture.press("rrPageNavigation"));
+    QSemaphore entered, release;
+    storage::RecordWriter blocker;
+    blocker.post(
+            [&] {
+                entered.release();
+                return release.tryAcquire(1, 3000);
+            },
+            {});
+    auto unblock = qScopeGuard([&] { release.release(); });
+    QVERIFY(entered.tryAcquire(1, 3000));
     QVERIFY(fixture.press("rrReverseSwipeDirection"));
+    QVERIFY(!fixture.widget("rrNavigation_swipes_only")->isEnabled());
+    release.release();
+    QTRY_VERIFY(fixture.widget("rrNavigation_swipes_only")->isEnabled());
     QVERIFY(fixture.visible("rrPageNavigationPopup"));
     QTRY_VERIFY(
             storage::readJson(fixture.paths.preferences()).value("reverse_page_swipes").toBool());

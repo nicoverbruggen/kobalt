@@ -1727,6 +1727,7 @@ void Reader::openPageNavigation()
     sheet.list->chosen = [this, modes](int index) {
         auto next = preferences;
         next[pageNavigation::preferenceKey] = pageNavigation::value(modes[index]);
+        pageNavigationPopup->setEnabled(false);
         savePreferences(next, [this, popup = pageNavigationPopup](bool saved) {
             if (saved)
                 showPageNavigation();
@@ -1765,10 +1766,15 @@ void Reader::openPageNavigation()
     connect(reverse, &QCheckBox::clicked, this, [this, reverse](bool checked) {
         auto next = preferences;
         next[pageNavigation::reverseSwipesKey] = checked;
-        savePreferences(next, [guard = QPointer<QCheckBox>(reverse), checked](bool saved) {
-            if (!saved && guard)
-                guard->setChecked(!checked);
-        });
+        pageNavigationPopup->setEnabled(false);
+        savePreferences(next,
+                        [popup = pageNavigationPopup, guard = QPointer<QCheckBox>(reverse),
+                         checked](bool saved) {
+                            if (popup)
+                                popup->setEnabled(true);
+                            if (!saved && guard)
+                                guard->setChecked(!checked);
+                        });
     });
     section(strings::get("settings.swipe_direction"), "rrSwipeDirectionSection", reverse);
     const int width = qMin<int>(metrics::notice::cardWidth,

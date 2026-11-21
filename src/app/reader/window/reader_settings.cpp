@@ -1182,8 +1182,12 @@ void Reader::finishSettingsWrite(const QJsonObject &next, bool saved)
             bionicOption.checked() ? QStringLiteral("bold") : QStringLiteral("off");
     if (restoringBook) {
         // The text a new book starts with now: Text for new books and the
-        // default font decide it. Margins and Styling are global.
-        const auto defaults = kobalt::appearance::bookDefaults(preferences);
+        // default font decide it. Margins and Styling are global. Same as
+        // last book is usually this book, so it restores Book default.
+        auto source = preferences;
+        if (textpresets::newBookChoice(source) == "last")
+            source[textpresets::newBookKey] = QStringLiteral("book");
+        const auto defaults = kobalt::appearance::bookDefaults(source);
         for (const auto *key : kobalt::appearance::typographyKeys)
             if (defaults.contains(key))
                 settings[key] = defaults.value(key);

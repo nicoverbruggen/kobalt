@@ -15972,6 +15972,37 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("margin_pixels").toInt(), margin);
     }
 
+    // With Same as last book, Restore book defaults restores Book default:
+    // the last book's text is usually this book's own.
+    void settingsRestoreBookLast()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences["new_book_text"] = "last";
+        preferences["last_text_layout"] =
+                QJsonObject{ { "font_pixels", 60 }, { "reading_ppi", 300 } };
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsDefaults"));
+        QVERIFY(revealSettingsOption(fixture, "rrRestoreBookDefaults"));
+        QVERIFY(fixture.press("rrRestoreBookDefaults"));
+        QTRY_VERIFY(fixture.visible("rrRestoreBookConfirmation"));
+        QVERIFY(fixture.press("rrConfirmBookDefaults"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        auto bookDefault = storage::readJson(fixture.paths.preferences());
+        bookDefault["new_book_text"] = "book";
+        const auto expected = appearance::bookDefaults(bookDefault).value("font_pixels");
+        QVERIFY(expected.toInt() != 60);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.state().value("font_pixels"), expected, 30000);
+    }
+
     // While presets are paused, the Theming row names a saved preset Custom.
     void settingsPausedPresetCaption()
     {

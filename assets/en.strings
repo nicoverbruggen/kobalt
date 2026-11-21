@@ -762,7 +762,7 @@
 "reader.restore_defaults" = "Restore defaults";
 "reader.restore_book_defaults" = "Restore book defaults";
 "reader.restore_book_defaults_prompt" = "Restore book defaults?";
-"reader.restore_book_defaults_detail" = "The font, size, line spacing, alignment, weight and hyphenation of this book return to what a new book starts with. Other books and other settings do not change. The defaults apply when you close Settings.";
+"reader.restore_book_defaults_detail" = "The font, size, line spacing, alignment, weight and hyphenation of this book return to Text for new books, or to Book default when that is Same as last book. Other books and other settings do not change. The defaults apply when you close Settings.";
 "reader.book_defaults_selected" = "Book defaults selected";
 "reader.return_to_passage" = "Return to passage";
 "reader.follow_link" = "Follow link";

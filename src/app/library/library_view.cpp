@@ -79,10 +79,15 @@ ui::Button *actionButton(QWidget *parent, const QString &text, const char *name,
     return button;
 }
 
-int minimumListRowHeight()
+QSize listCells(QSize screen, int availableHeight)
 {
-    return qMax<int>(ui::metrics::list::threeLines,
-                     metrics::thumbHeight + 2 * metrics::thumbPadding);
+    if (screen.width() > screen.height() && isPhoneScreen(screen, ui::density())) {
+        // Size compact rows for the three text lines, then fit the cover to the row.
+        return { 2, qBound(1, availableHeight / int(ui::metrics::list::threeLines), 2) };
+    }
+    const int rowHeight = qMax<int>(ui::metrics::list::threeLines,
+                                    metrics::thumbHeight + 2 * metrics::thumbPadding);
+    return { 1, qMax(1, availableHeight / rowHeight) };
 }
 
 QString countText(int count)
@@ -170,12 +175,20 @@ public:
         QVector<Placement> result;
         if (view == View::List) {
             const int first = page * perPage;
-            for (int row = 0; row < perPage && first + row < books.size(); ++row) {
+            for (int i = 0; i < perPage && first + i < books.size(); ++i) {
+                const int column = i % columns, row = i / columns;
+                const int left = column * width() / columns;
+                const int right = (column + 1) * width() / columns;
                 const int top = rowTop(row);
-                const QRect area(0, top, width(), rowTop(row + 1) - top);
-                const QRect cover(chrome::inset, area.center().y() - metrics::thumbHeight / 2,
-                                  metrics::thumbWidth, metrics::thumbHeight);
-                result.append({ area, cover, books[first + row] });
+                const QRect area(left, top, right - left, rowTop(row + 1) - top);
+                const int coverHeight = columns == 1
+                        ? int(metrics::thumbHeight)
+                        : qBound(1, area.height() - 2 * metrics::thumbPadding,
+                                 int(metrics::thumbHeight));
+                const QRect cover(left + chrome::inset, area.center().y() - coverHeight / 2,
+                                  columns == 1 ? int(metrics::thumbWidth) : coverHeight * 2 / 3,
+                                  coverHeight);
+                result.append({ area, cover, books[first + i] });
             }
         } else {
             const int first = page * perPage;
@@ -350,7 +363,7 @@ private:
     {
         // Round boundaries, not individual heights, so every list pixel belongs
         // to a row and the final row ends exactly at the pager.
-        return view == View::List ? int(qint64(row) * height() / perPage)
+        return view == View::List ? int(qint64(row) * height() / (perPage / columns))
                                   : firstTop + row * rowStep;
     }
 
@@ -390,8 +403,9 @@ private:
         laidOut = size();
         const int available = height();
         if (view == View::List) {
-            // Rows are tall enough for the cover with some room around it.
-            perPage = qMax(1, available / minimumListRowHeight());
+            const auto cells = listCells(parentWidget()->size(), available);
+            columns = cells.width();
+            perPage = columns * cells.height();
             pages = (books.size() + perPage - 1) / perPage;
         } else {
             const int room = width() - 2 * chrome::inset, height = available - metrics::gridTop;
@@ -483,6 +497,9 @@ private:
             // A pressed row turns the reader's pressed gray, as list rows do.
             if (isHighlighted(hit))
                 painter.fillRect(area, palette().color(QPalette::Midlight));
+            if (area.left() > 0)
+                painter.fillRect(area.left(), area.top(), qMax(1, ui::px(2)), area.height(),
+                                 divider);
             paintCover(painter, hit.cover, book, ink, paper, true);
             const int left = hit.cover.right() + 1 + chrome::inset,
                       right = area.right() - metrics::progressWidth;
@@ -1249,7 +1266,8 @@ void LibraryView::rebuild(bool keepPage)
         // Decide whether a pager is needed before measuring the list. Otherwise
         // its previous visibility can leave an unnecessary page or stale count.
         const int available = qMax(1, height() - chrome::actionHeight - chrome::toolStripHeight);
-        const int capacity = qMax(1, available / minimumListRowHeight());
+        const auto cells = listCells(size(), available);
+        const int capacity = cells.width() * cells.height();
         pager->setVisible(pages->books.size() > capacity);
         arrange();
     }

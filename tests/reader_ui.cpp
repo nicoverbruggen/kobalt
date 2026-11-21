@@ -1,3 +1,4 @@
+#include "library/arrangement.h"
 #include "app/reader/panels/choice_screen.h"
 #include "ui/input/hold_timer.h"
 #include "render/page_turn_paint.h"
@@ -2111,6 +2112,23 @@ private slots:
                                                    .arg(size.width())
                                                    .arg(size.height())));
             }
+        }
+        // A landscape phone pages four books at a time. Every cell, including
+        // the right column, opens its own book in reading order.
+        view.resize(ui::px(1480), ui::px(720));
+        QCoreApplication::processEvents();
+        QCOMPARE(counter->text(), QString("1 of 10"));
+        const auto sorted = library::arrange(index, { index.settings.sort, false, {} });
+        for (int page = 0; page < 2; ++page) {
+            for (int i = 0; i < 4; ++i) {
+                opened.clear();
+                QTest::mouseClick(pages, Qt::LeftButton, Qt::NoModifier,
+                                  QPoint((2 * (i % 2) + 1) * pages->width() / 4,
+                                         (2 * (i / 2) + 1) * pages->height() / 4));
+                QCOMPARE(opened, sorted.at(page * 4 + i)->key);
+            }
+            if (page == 0)
+                view.pageButton(1);
         }
         // Five rows fit without a pager here, but not with its old space
         // still reserved. Removing books must reclaim that space immediately.

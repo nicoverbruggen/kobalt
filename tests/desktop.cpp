@@ -8784,8 +8784,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.prepared);
         if (view == "downloaded-dictionaries")
             fixture.window.findChild<QComboBox *>("desktopScreenPicker")->setCurrentIndex(0);
+        QString opening = book;
+        if (view == "stats") {
+            // Stats keeps its own chapters, so it needs a book with more than
+            // the 20 bars of one page of the sparse chart.
+            QVERIFY(test::writeBook(fixture.directory.path(), "songs.epub", test::songbook(51)));
+            opening = fixture.directory.filePath("songs.epub");
+            auto saved = storage::readJson(fixture.paths.preferences());
+            saved["dense_stats_chart"] = false;
+            QVERIFY(storage::writeJson(fixture.paths.preferences(), saved));
+        }
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
-        fixture.window.openBook(book);
+        fixture.window.openBook(opening);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QCoreApplication::processEvents();
@@ -8853,15 +8863,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             choices->showChoices("Font", fonts, {}, ChoiceScreen::Mode::Fonts);
             counterName = "rrFontPagerPage";
         } else if (view == "stats") {
-            auto *graph = dynamic_cast<ChapterGraph *>(fixture.widget("rrChapterGraph"));
-            QVERIFY(graph);
-            QVector<ChapterLink> chapters;
-            for (int i = 0; i < 50; ++i)
-                chapters.append({ QString("Chapter %1").arg(i), QString::number(i), i, 0, 100 });
-            graph->changed = {};
-            graph->setDense(false);
-            graph->setData(chapters, {}, true, {});
-            graph->open();
+            QVERIFY(fixture.press("rrPage"));
+            QVERIFY(fixture.press("rrNavStats"));
+            QTRY_VERIFY(fixture.visible("rrChapterGraph"));
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.visible("rrGraphPage"), 30000);
             counterName = "rrGraphPage";
         } else if (view == "fields") {
             // The list is made the first time a slot is chosen.

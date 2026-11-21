@@ -5809,7 +5809,7 @@ private slots:
             QVERIFY(fixture.press("rrPage"));
             QVERIFY(fixture.press("rrNavStats"));
             // The two anchors enclose 35 paragraphs of 3 x 30 words and one two-word heading.
-            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Main text · 3152 words"));
+            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Main text · 3,152 words"));
             const auto mainPagesLeft = initial.value("main_last_page").toInt()
                     - initial.value("main_first_page").toInt() + 1;
             QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), mainPagesLeft);
@@ -5818,7 +5818,7 @@ private slots:
             QVERIFY(fixture.press("rrStatsWordVolume"));
             QTRY_VERIFY(!fixture.widget("rrStatsWordScopePopup"));
             QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), initial.value("pages").toInt());
-            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Volume · 8106 words"));
+            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Volume · 8,106 words"));
             QCOMPARE(storage::readJson(fixture.paths.preferences())
                              .value("stats_word_scope")
                              .toString(),
@@ -5828,7 +5828,7 @@ private slots:
             QVERIFY(fixture.press("rrStatsWordMain"));
             QTRY_VERIFY(!fixture.widget("rrStatsWordScopePopup"));
             QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), mainPagesLeft);
-            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Main text · 3152 words"));
+            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Main text · 3,152 words"));
             QVERIFY(fixture.press("rrPage"));
         }
         const auto chapters = [&] {

@@ -56,6 +56,22 @@ Two behaviors change. Without smooth scaling, a PNG that fails halfway has alrea
 
 **Upstream:** present upstream.
 
+### WebP images read only their header for the size, and decode at a smaller size
+
+**Summary:** the size of a WebP image comes from its first 64 bytes, and a still image that is drawn smaller than its size is decoded at that size.
+
+Upstream learns the size of a WebP image by calling `Decode(NULL)`, which reads the whole compressed file into memory before `WebPGetInfo` reads the header. Blaze reads the first 64 bytes and calls `WebPGetFeatures`. Layout needs the size of every image, so a book with many WebP images no longer reads each file to lay out a page.
+
+Upstream decodes every WebP image through `WebPAnimDecoder`, which makes a full-size canvas, also for a still image. Blaze decodes a still image with `WebPDecode`. When the drawing target accepts a smaller raster (`GetRasterTargetSize`, see [Large JPEG images decode at a smaller size](#large-jpeg-images-decode-at-a-smaller-size)), libwebp scales while it decodes, so the full-size image is never made. Upstream also shows only the first frame of an animated image. Blaze gets that frame from `WebPDemux` and decodes it into one canvas at its offset, where the animation decoder keeps two full canvases.
+
+Blaze also refuses a WebP file larger than 32 MB or an image of more than 16 million pixels. Upstream has no limits for WebP, and it calls `WebPAnimDecoderGetInfo` without checking that `WebPAnimDecoderNew` returned a decoder. We found these by reading the code.
+
+We did not measure this change on its own. The output of a scaled still image is not the same pixel for pixel, so check the quality on real images.
+
+**Code:** `LVWebpImageSource::Decode` in [lvimg.cpp](crengine/src/lvimg.cpp) and `decodeWebp` in [webp_decode.h](extensions/webp_decode.h).
+
+**Upstream:** present upstream.
+
 ### Packed hyphenation patterns
 
 **Summary:** hyphenation patterns can load from a compact binary file, with the XML patterns as a fallback.

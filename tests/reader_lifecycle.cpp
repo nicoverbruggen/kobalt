@@ -7673,8 +7673,10 @@ private slots:
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         QTRY_VERIFY(!host.session()->busy());
-        QVERIFY(host.session()->go(host.session()->pages() - 1));
+        QVERIFY(host.session()->goToFraction(1.0));
         QTRY_VERIFY(!host.session()->busy());
+        QVERIFY(!host.session()->continuesAfter());
+        QCOMPARE(host.session()->nextPage(), host.session()->page());
         if (closeFirst)
             QVERIFY(!host.window()->close());
         else
@@ -7707,9 +7709,9 @@ private slots:
         host.window()->sleepViewReady();
         host.window()->wakeReader();
         if (closeFirst) {
+            const int lastPage = host.session()->bookPage();
             host.window()->pageButton(-1);
-            QTRY_VERIFY(!host.session()->busy()
-                        && host.session()->page() == host.session()->pages() - 2);
+            QTRY_VERIFY(!host.session()->busy() && host.session()->bookPage() < lastPage);
             QVERIFY(!dialog || !dialog->isVisible());
             return;
         }
@@ -7760,7 +7762,7 @@ private slots:
             canvas.show();
             QVERIFY(QTest::qWaitForWindowExposed(&canvas));
             QTRY_VERIFY(!host.session()->busy());
-            QVERIFY(host.session()->go(host.session()->pages() - 1));
+            QVERIFY(host.session()->goToFraction(1.0));
             QTRY_VERIFY(!host.session()->busy());
             host.window()->pageButton(1);
             QPointer<QWidget> dialog;
@@ -7788,7 +7790,7 @@ private slots:
             canvas.show();
             QVERIFY(QTest::qWaitForWindowExposed(&canvas));
             QTRY_VERIFY(!host.session()->busy());
-            QVERIFY(host.session()->go(host.session()->pages() - 1));
+            QVERIFY(host.session()->goToFraction(1.0));
             QTRY_VERIFY(!host.session()->busy());
             host.window()->pageButton(1);
             QTest::qWait(100);
@@ -7804,7 +7806,7 @@ private slots:
             otherCanvas.show();
             QVERIFY(QTest::qWaitForWindowExposed(&otherCanvas));
             QTRY_VERIFY(!host.session()->busy());
-            QVERIFY(host.session()->go(host.session()->pages() - 1));
+            QVERIFY(host.session()->goToFraction(1.0));
             QTRY_VERIFY(!host.session()->busy());
             host.window()->pageButton(1);
             QTRY_VERIFY(host.window()->findChild<QWidget *>("rrFinishBook"));
@@ -12914,8 +12916,7 @@ private slots:
         canvas.resize(nativeSize);
         canvas.show();
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
-        QVERIFY(host.session()->pages() > 7);
-        const int pages = host.session()->pages();
+        QTRY_VERIFY(!host.session()->busy());
         if (position >= 4) {
             const bool backMatter = position == 5;
             bool applied = false;
@@ -12925,15 +12926,21 @@ private slots:
                         applied = action.apply();
             });
             QTRY_VERIFY(applied && !host.session()->busy());
-            const int page = backMatter ? host.session()->lastMainPage() + 1
-                                        : host.session()->firstMainPage() + 1;
-            QVERIFY(page > 0 && page < pages - 1);
-            QVERIFY(host.session()->go(page));
+            QVERIFY(host.session()->goToChapter(1));
             QTRY_VERIFY(!host.session()->busy());
-            QCOMPARE(host.session()->bookPage(), page);
+            QVERIFY(host.session()->turn(1));
+            QTRY_VERIFY(!host.session()->busy() && host.session()->bookPages() > 7);
+            const int page = host.session()->bookPage();
+            const int pages = host.session()->bookPages();
+            QVERIFY(page > 0 && page < pages - 1);
+            if (backMatter)
+                QVERIFY(page > host.session()->lastMainPage());
+            else
+                QVERIFY(page > host.session()->firstMainPage());
             const int main = backMatter
                     ? 100
-                    : pageProgressPercent(1, pages - host.session()->firstMainPage());
+                    : pageProgressPercent(page - host.session()->firstMainPage(),
+                                          host.session()->mainPages());
             const int volume = pageProgressPercent(page, pages);
             QVERIFY(main != volume);
             for (bool whole : { false, true }) {
@@ -12970,20 +12977,26 @@ private slots:
             }
             return;
         }
-        const int target = position == 0 ? 0
-                : position == 2          ? pages - 1
-                : position == 3          ? pages - 1 - pages / 20
-                                         : pages / 7;
-        if (host.session()->page() != target)
-            QVERIFY(host.session()->go(target));
-        QTRY_VERIFY(!host.session()->busy());
-        QCOMPARE(host.session()->page(), target);
+        const double target = position == 0 ? 0.0
+                : position == 2             ? 1.0
+                : position == 3             ? 0.95
+                                            : 0.15;
+        QVERIFY(host.session()->goToFraction(target));
+        QTRY_VERIFY(!host.session()->busy() && host.session()->bookPages() > 7);
+        const int pageIndex = host.session()->bookPage();
+        const int pages = host.session()->bookPages();
+        if (position == 0)
+            QCOMPARE(pageIndex, 0);
+        else if (position == 2)
+            QCOMPARE(pageIndex, pages - 1);
+        else
+            QVERIFY(pageIndex > 0 && pageIndex < pages - 1);
         // Nickel's count: the page on screen is read, and the result rounds down.
-        const int percent = int(100 * (target + 1) / pages);
+        const int percent = int(100 * (pageIndex + 1) / pages);
         auto *page = dynamic_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
         QVERIFY(page);
         QTRY_COMPARE(page->slotContents[5].text, strings::get("common.percent").arg(percent));
-        QCOMPARE(page->progressFraction, double(target + 1) / pages);
+        QCOMPARE(page->progressFraction, double(pageIndex + 1) / pages);
         page->tapped(page->rect().center());
         auto *stats = host.window()->findChild<QPushButton *>("rrNavStats");
         QVERIFY(stats);

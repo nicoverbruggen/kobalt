@@ -439,6 +439,7 @@ if(BUILD_TESTING)
             OR name MATCHES "^lifecycle[.](pageButtonsAfterTouchUseDeliveryTime|pageFrameDuringHold|pageGestureBurstIgnoresRapidTurns|pageTurnTimingIgnoresNoopNavigation)$"
             OR name MATCHES "^lifecycle[.](closeWithPendingBookmark|pageTurnsResumeWhenReaderIsShownAfterSleep)$"
             OR name MATCHES "^lifecycle[.](readerUsesSelectedSleepScreen|sleepPrivateBookOverridesEveryDesign)$"
+            OR name MATCHES "^lifecycle[.](finishChoiceSurvivesSleepAndRequiresActiveReader|finishPromptPersistence|progressPercentagesAgree)$"
             OR name STREQUAL "lifecycle.nativeProgressWaitsForSleep"
             OR name STREQUAL "lifecycle.remoteKeyActivityRequiresActiveReading")
             list(APPEND names "${name}.hybrid")

@@ -129,6 +129,10 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
         speed->restore(storage::readRecord(paths_.directory, "reading-speed", paths_.readingSpeed())
                                .object);
     }
+    if (session_->recoveredOpeningPosition()) {
+        QJsonObject snapshot;
+        checkpoint(&snapshot, true);
+    }
 }
 
 ReadingBook::~ReadingBook()

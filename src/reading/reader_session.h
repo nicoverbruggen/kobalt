@@ -174,6 +174,8 @@ public:
     // Whether the saved state passed to open belongs to this version of the book.
     bool savedStateMatched() const { return savedMatched; }
 
+    bool recoveredOpeningPosition() const { return openingResult_.recoveredPosition; }
+
     QJsonObject resourceStats() const { return frame.resources; }
 
     void openPreview(const ReaderSession &source, QSize size,

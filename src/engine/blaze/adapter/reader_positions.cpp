@@ -68,6 +68,25 @@ EngineDocument::PositionTarget EngineDocument::goToPlatformNearest(const Positio
     return goToFraction(0) ? PositionTarget::Book : PositionTarget::Unavailable;
 }
 
+OpeningResult EngineDocument::restoreSavedPosition(const QString &position)
+{
+    const auto item = spineItemIndex(position);
+    if (item < spineItemCount_ && goTo(position))
+        return {};
+    OpeningResult result;
+    result.recoveredPosition = true;
+    if (resourceError().isEmpty() && item >= 0 && item < spineItemCount_
+        && goTo(QString("/body/DocFragment[%1]").arg(item + 1)))
+        return result;
+    if (resourceError().isEmpty() && goToFraction(0))
+        return result;
+    const auto detail = resourceError();
+    return detail.isEmpty()
+            ? OpeningResult::failed(OpeningFailureKind::InvalidContent,
+                                    strings::key("error.saved_reading_position_no_longer_exists"))
+            : OpeningResult::failed(OpeningFailureKind::Io, "opening.resource-read", detail);
+}
+
 int EngineDocument::comparePlatformPosition(const PositionCodec &codec, const QString &location,
                                             QString *error)
 {

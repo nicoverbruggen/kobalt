@@ -129,6 +129,7 @@ public:
     // skip other non-linear sections. Returns `from` at either end.
     virtual int turnTarget(int from, int delta) const = 0;
     virtual bool goTo(const QString &position) = 0;
+    virtual OpeningResult restoreSavedPosition(const QString &position) = 0;
 
     // Goes to the entry `index` of chapters(), which has `position`. An
     // engine that loads the text of a part of the book can know the exact

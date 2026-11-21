@@ -242,7 +242,7 @@ int main(int argc, char **argv)
     const auto open = [&](QSize size = QSize(758, 900), const QJsonObject &state = QJsonObject(),
                           const QString &identity = QStringLiteral("test-book"),
                           PositionCodec positions = {}, bool restart = false,
-                          std::unique_ptr<ReaderSession> session = {}) {
+                          std::unique_ptr<ReaderSession> session = {}, bool *reused = nullptr) {
         if (!session)
             session =
                     std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
@@ -259,13 +259,70 @@ int main(int argc, char **argv)
         request.restartAtStart = restart;
         if (restart)
             request.platformLocation = "invalid-finished-native-location";
-        session->open(std::move(request), [&](const OpeningResult &result) {
-            require(result.ready(), qPrintable(openingMessage(result)));
-            ready = true;
-        });
+        session->open(
+                std::move(request),
+                [&](const OpeningResult &result) {
+                    require(result.ready(), qPrintable(openingMessage(result)));
+                    ready = true;
+                },
+                {}, {},
+                [reused] {
+                    if (reused)
+                        *reused = true;
+                });
         waitUntil([&] { return ready; });
         return session;
     };
+    // Both opening paths must replace an unresolvable position before any user input.
+    for (bool retained : { false, true }) {
+        enum Source { KnownChapter, UnknownChapter, ReplacedBook };
+
+        for (const auto source : { KnownChapter, UnknownChapter, ReplacedBook }) {
+            const QString identity = QString("lost-position-%1-%2").arg(retained).arg(source);
+            const QSize size(758, 900);
+            auto reference = open(size, {}, identity);
+            if (source == KnownChapter) {
+                require(reference->goToChapter(1), "Cannot reach the reference chapter");
+                waitUntil([&] { return !reference->busy(); });
+            }
+            const auto expected = reference->image();
+            const auto hash = reference->sourceHash();
+            auto saved = reference->state();
+            saved["schema"] = 1;
+            saved["book"] = identity;
+            saved["fingerprint"] =
+                    source == ReplacedBook ? QString(64, 'f') : QString::fromLatin1(hash);
+            saved["position"] = source == UnknownChapter ? "/body/DocFragment[99]/missing/text().0"
+                                                         : "/body/DocFragment[2]/missing/text().0";
+            require(storage::writeBookState(paths, identity, saved), "Cannot seed lost position");
+            reference.reset();
+            // Reopen a fresh retained layout at the first page, independently of
+            // the reference that jumped to the expected chapter.
+            std::unique_ptr<ReaderSession> session;
+            if (retained) {
+                auto first = open(size, {}, identity);
+                session = first->retained();
+                require(bool(session), "Cannot retain the fixture");
+                first.reset();
+                bool drained = false;
+                ReaderSession::drain([&] { drained = true; });
+                waitUntil([&] { return drained; });
+            }
+            bool reused = false;
+            session = open(size, saved, identity, {}, false, std::move(session), &reused);
+            if (source != ReplacedBook)
+                require(reused == retained, "Lost-position test missed its requested opening path");
+            const auto position = session->state().value("position").toString();
+            require(!position.isEmpty() && position != saved.value("position").toString()
+                            && session->image() == expected,
+                    "Lost position did not open at the start of its chapter or book");
+            ReadingBook book(std::move(session), paths.bookState(identity), paths, identity, hash,
+                             nullptr, {}, {});
+            waitUntil([&] { return !book.savesPending(); });
+            require(storage::readBookState(paths, identity).object.value("position") == position,
+                    "Recovered position was not saved immediately after opening");
+        }
+    }
     {
         Calls calls;
         const PositionCodec positions{

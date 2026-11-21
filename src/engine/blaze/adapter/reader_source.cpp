@@ -759,6 +759,15 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
                        strings::key("error.the_reading_engine_could_not_open_this_epub"))
                 : fail(OpeningFailureKind::Io, "opening.resource-read", resourceFailure);
     }
+    // A saved chapter may have disappeared. Start the first window at the book
+    // start and let position restoration report the fallback after layout.
+    if (result && firstSpineItem > 0 && firstSpineItem >= spineItems().size()) {
+        auto first = saved;
+        first["koblaze_first_spine_item"] = 0;
+        first["koblaze_last_spine_item"] = 0;
+        return openSource(source_, size, first, error, std::move(progress), result,
+                          std::move(coverReady), {}, std::move(cacheReady));
+    }
     if (coverReady)
         coverReady();
     source_->embeddedFonts = source_->parent ? source_->parent->embeddedFonts : embeddedFontCount();
@@ -896,15 +905,21 @@ bool EngineDocument::openSource(std::shared_ptr<ReaderSource> source, QSize size
     engine_->getCurPage();
     anchor_ = qstring(engine_->getBookmark().toString());
     const auto bookmark = saved.value("position").toString();
-    if (!bookmark.isEmpty() && !goTo(bookmark)) {
+    if (!bookmark.isEmpty() && result) {
+        *result = restoreSavedPosition(bookmark);
+        if (!result->ready()) {
+            engine_.reset();
+            if (error)
+                *error = result->failure()->detail.isEmpty()
+                        ? strings::get(result->failure()->reason.constData())
+                        : result->failure()->detail;
+            return false;
+        }
+    } else if (!bookmark.isEmpty() && !goTo(bookmark)) {
         engine_.reset();
         return fail(OpeningFailureKind::InvalidContent,
                     strings::key("error.saved_reading_position_no_longer_exists"));
     }
-    // The first slice has a layout now. The saved position can be in
-    // another one.
-    if (slices() && !saved.value("position").toString().isEmpty())
-        goTo(saved.value("position").toString());
     return true;
 }
 

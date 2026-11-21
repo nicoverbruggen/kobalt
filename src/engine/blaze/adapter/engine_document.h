@@ -113,6 +113,7 @@ public:
     // skip other non-linear sections. Returns `from` at either end.
     int turnTarget(int from, int delta) const override;
     bool goTo(const QString &position) override;
+    OpeningResult restoreSavedPosition(const QString &position) override;
     QString platformPosition(const PositionCodec &codec, QString *error) const override;
     bool goToPlatform(const PositionCodec &codec, const QString &location, QString *error) override;
     // With a codec, an unknown anchor opens its chapter and an unknown chapter

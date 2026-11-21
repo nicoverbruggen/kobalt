@@ -262,11 +262,8 @@ void openRetained(OpeningJob &job, OpeningState &state)
         restartBook(job, state);
     else if (!state.initial.isEmpty())
         locate(job, state, state.initial);
-    else if (!job.saved.value("position").toString().isEmpty()
-             && !engine->goTo(job.saved.value("position").toString()))
-        state.outcome =
-                OpeningResult::failed(OpeningFailureKind::InvalidContent,
-                                      strings::key("error.cannot_restore_the_retained_position"));
+    else if (!job.saved.value("position").toString().isEmpty())
+        state.outcome = engine->restoreSavedPosition(job.saved.value("position").toString());
     if (state.outcome.ready() && !job.cancelled()) {
         state.frame = capture(*engine, job.positions, false, job.markup, job.markupGeneration);
         state.frame.author = engine->author();
@@ -337,6 +334,11 @@ OpeningOutput runOpening(OpeningJob &job)
     diagnostic("open-start");
     inspectSource(job, state);
     if (outcome.ready()) {
+        // Source positions belong to one publication fingerprint. A replacement
+        // can supply a current native position, otherwise it opens at the start.
+        const bool obsoletePosition = !state.savedMatches
+                && !job.saved.value("position").toString().isEmpty()
+                && (job.saved.contains("fingerprint") || job.saved.contains("sha256"));
         mergeSavedState(job, state);
         job.engine->mainTextMarks = job.saved.value("main_text_marks").toObject();
         bindResources(job, state);
@@ -344,6 +346,8 @@ OpeningOutput runOpening(OpeningJob &job)
             openRetained(job, state);
         else if (outcome.ready())
             openCold(job, state);
+        if (outcome.ready() && obsoletePosition)
+            outcome.recoveredPosition = true;
         // From here only the engine keeps the resources, if it opened them.
         state.resources.reset();
     }

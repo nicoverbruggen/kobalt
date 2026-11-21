@@ -40,6 +40,9 @@ public:
         return result;
     }
 
+    // A successful opening used a fallback for the saved local reading position.
+    bool recoveredPosition = false;
+
     bool ready() const { return !failed_; }
 
     const OpeningFailure *failure() const { return failed_ ? &failure_ : nullptr; }

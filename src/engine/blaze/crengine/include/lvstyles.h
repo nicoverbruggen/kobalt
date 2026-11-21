@@ -101,6 +101,8 @@ enum css_style_rec_important_bit {
     imp_bit_float,
     imp_bit_clear,
     imp_bit_direction,
+    // Blaze: important bits for the writing-mode properties here, and for the flex
+    // properties at the end of the enum.
     imp_bit_writing_mode,
     imp_bit_text_orientation,
     imp_bit_text_combine_upright,
@@ -124,6 +126,8 @@ enum css_style_rec_important_bit {
     imp_bit_flex_basis,
     imp_bit_align_items
 };
+// Blaze: computed from the last bit of the enum. Upstream counts the bits by hand
+// in NB_IMP_BITS and stops the build when the slot count is not 3.
 constexpr int NB_IMP_SLOTS = 1 + imp_bit_align_items / 32;
 
 // Style handling flags

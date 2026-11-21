@@ -810,11 +810,14 @@ public:
                 /* Step 5: Start decompressor */
 
                 (void) jpeg_start_decompress(&cinfo);
+                // Blaze: the callback sees the decoded size, which can be reduced by the scale above.
                 callback->OnStartRasterDecode(this, cinfo.output_width, cinfo.output_height);
                 /* We can ignore the return value since suspension is not possible
                  * with the stdio data source.
                  */
                 // NOTE: We know that cinfo.output_components is 4, given the out_color_space we chose.
+                // Blaze: take the row buffer from libjpeg's pool. A plain local changed after setjmp is
+                // indeterminate after longjmp, so upstream can leak its new[] buffer or free a stale pointer on error.
                 JSAMPARRAY rows = (*cinfo.mem->alloc_sarray)(reinterpret_cast<j_common_ptr>(&cinfo),
                                                             JPOOL_IMAGE, cinfo.output_width * 4, 1);
                 /* Step 6: while (scan lines remain to be read) */
@@ -880,13 +883,16 @@ bool LVPngImageSource::Decode( LVImageDecoderCallback * callback )
     if ( !png_ptr )
         return false;
 
+    // Blaze: create the info struct before setjmp, so the error handler below always has a valid one.
+    // Upstream created it after setjmp and reported failure through the longjmp handler.
     info_ptr = png_create_info_struct(png_ptr);
     if (!info_ptr) {
         png_destroy_read_struct(&png_ptr, NULL, NULL);
         return false;
     }
-    // libpng errors jump past the decode loop. Keep its owned storage reachable
-    // and release it on that path as well as after a successful decode.
+    // Blaze: libpng errors jump past the decode loop. Keep its owned storage reachable
+    // and release it on that path as well as after a successful decode. It is volatile
+    // because it changes after setjmp. Upstream leaked it on a decode error.
     unsigned char * volatile storage = NULL;
     if (setjmp(png_jmpbuf(png_ptr))) {
         free(storage);
@@ -917,6 +923,7 @@ bool LVPngImageSource::Decode( LVImageDecoderCallback * callback )
 
     if ( callback )
     {
+        // Blaze: the callback gets the decoded size, which smooth scaling uses. Upstream called OnStartDecode.
         callback->OnStartRasterDecode(this, width, height);
 
         //int png_transforms = PNG_TRANSFORM_STRIP_16 | PNG_TRANSFORM_INVERT_ALPHA;
@@ -984,7 +991,7 @@ bool LVPngImageSource::Decode( LVImageDecoderCallback * callback )
             // Adam7 revisits rows across passes. Keep the existing full-image
             // path so partially decoded alpha is never blended into the page.
             const lUInt64 image_offset = (lUInt64(height) * sizeof(png_bytep) + 15) & ~lUInt64(15);
-            // Inline data images bypass the frontend's resource-header check.
+            // Blaze: limit the allocation to 64 MB. Inline data images bypass the frontend's resource-header check.
             // Adam7 needs all decoded rows, so bound that allocation here too.
             const lUInt64 storage_limit = 64 * 1024 * 1024;
             if (image_offset > storage_limit || (height && rowbytes > (storage_limit - image_offset) / height))
@@ -1663,7 +1670,8 @@ int LVGifFrame::DecodeFromBuffer( const unsigned char * buf, int buf_size, int &
 
     // create stream buffer
     stream_buffer = new unsigned char[stream_buffer_size+3];
-    // The decoder reads up to three bytes at a time, including at the end.
+    // Blaze: the decoder reads up to three bytes at a time, including at the end.
+    // Upstream left these bytes uninitialized.
     memset(stream_buffer + stream_buffer_size, 0, 3);
     // copy data to stream buffer
     int sb_index = 0;
@@ -1748,6 +1756,7 @@ public:
     static bool CheckPattern( const lUInt8 * buf, int len );
 };
 
+// Blaze: WebP decoding lives in the Blaze extensions. See LVWebpImageSource::Decode().
 #include "../../extensions/webp_decode.h"
 
 LVWebpImageSource::LVWebpImageSource( ldomNode * node, LVStreamRef stream )
@@ -2255,6 +2264,7 @@ bool LVSvgImageSource::LoadSVGDocument() {
 }
 
 lUInt8 * LVSvgImageSource::Render(int &width, int &height, lUInt32 fillcolor, bool unpremultiply) {
+    // Blaze: refuse to render an SVG that is already being rendered. See SVGRenderScope.
     SVGRenderScope scope(_stream.get());
     if (!scope.allowed())
         return NULL;
@@ -2280,6 +2290,7 @@ lUInt8 * LVSvgImageSource::Render(int &width, int &height, lUInt32 fillcolor, bo
 }
 
 bool LVSvgImageSource::Decode( LVImageDecoderCallback * callback ) {
+    // Blaze: refuse to decode an SVG that is already being rendered. See SVGRenderScope.
     SVGRenderScope scope(_stream.get());
     if (!scope.allowed())
         return false;
@@ -2381,6 +2392,7 @@ LVImageSourceRef LVCreateStreamImageSource( LVStreamRef stream, ldomDocument * d
     LVImageSourceRef ref;
     if ( stream.isNull() )
         return ref;
+    // Blaze: let the stream supply its own image source first. This is a host hook. Upstream sniffs the header only.
     if (LVImageSource *image = stream->CreateImageSource(doc, node))
         return LVImageSourceRef(image);
     lUInt8 hdr[256];

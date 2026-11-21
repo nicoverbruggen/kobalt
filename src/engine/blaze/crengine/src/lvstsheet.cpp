@@ -443,7 +443,7 @@ enum LVCssSelectorPseudoElement
     csspe_after  = 2,   // ::after
     csspe_first_letter  = 3,   // ::first-letter
     csspe_first_line    = 4,   // ::first-line
-    csspe_existing_first_letter = 5, // User-agent styling of an existing pseudo element.
+    csspe_existing_first_letter = 5, // Blaze: user-agent styling of an existing pseudo element.
 };
 
 static const char * css_pseudo_elements[] =
@@ -7929,6 +7929,8 @@ bool LVCssSelector::check( const ldomNode * node, bool allow_cache ) const
         }
         // We might be the pseudoElem that was created by this selector: we need to
         // confirm that by checking the rules on the real element that created us.
+        // Blaze: the user-agent pseudo-element -cr-existing-first-letter is checked on
+        // the originating element, like ::first-letter.
         if ( (_pseudo_elem == csspe_first_letter || _pseudo_elem == csspe_existing_first_letter)
              && node->hasAttribute(attr_FirstLetter) ) {
             // We need to find among ancestors the one that got to get a HasFirstLetter attribute
@@ -8009,6 +8011,8 @@ bool LVCssSelector::check( const ldomNode * node, bool allow_cache ) const
     return true;
 }
 
+// Blaze: the class to look for comes from requiredClassHash(), which the class
+// index also uses. Upstream asks the first rule, LVCssSelectorRule::quickClassCheck().
 bool LVCssSelector::quickClassCheck(const lUInt32 *classHashes, size_t size) const {
     lUInt32 hash;
     if ( !requiredClassHash(hash) )
@@ -8477,6 +8481,7 @@ bool LVCssSelector::parse( const char * &str, lxmlDocBase * doc, bool useragent_
                         if ( *str==':' ) // skip double ::
                             str++;
                         int n = parse_name( str, css_pseudo_elements, -1 );
+                        // Blaze: -cr-existing-first-letter is accepted only in the user-agent sheet.
                         if (n != -1 && (useragent_sheet || n+1 != csspe_existing_first_letter)) {
                             _pseudo_elem = n+1; // starts at 1
                             _specificity += WEIGHT_SPECIFICITY_ELEMENT;
@@ -8594,6 +8599,7 @@ void LVCssSelector::applyToPseudoElement( const ldomNode * node, css_style_rec_t
         // checks (the style remains the one of the cloneNode).
         node = node->getCloneNodeSource();
     }
+    // Blaze: only add the declarations. Upstream has no such pseudo-element.
     if ( _pseudo_elem == csspe_existing_first_letter ) {
         // Apply the decoration without changing display or marking this pseudo as active.
         // A previously generated first letter stays hidden when its author rule is gone.
@@ -8690,6 +8696,9 @@ void LVStyleSheet::copySelectorsTo(LVPtrVector<LVCssSelector> & target) const
         target.add(_selectors[i] ? new LVCssSelector(*_selectors[i]) : NULL);
 }
 
+// Blaze: copy the selector chains at the first change after push(), and swap the
+// originals back in pop(). Upstream copies every chain on each push() and again
+// on pop(). The class index points into the chains, so it moves with them.
 void LVStyleSheet::detachScope()
 {
     if (_stack.empty() || _stack.back().selectors)
@@ -8937,6 +8946,7 @@ bool LVStyleSheet::parseAndAdvance( const char * &str, bool useragent_sheet, lSt
         // We can't parse anything if no _doc to get element name ids from
         return false;
     }
+    // Blaze: copy the selectors before the first change, see detachScope().
     detachScope();
     LVCssSelector * selector = NULL;
     LVCssSelector * prev_selector;
@@ -9104,6 +9114,7 @@ bool LVStyleSheet::gatherNodeMatchingRulesets(ldomNode * node, const char * str,
 }
 
 void LVStyleSheet::merge(const LVStyleSheet &other) {
+    // Blaze: copy the selectors before the first change, see detachScope().
     detachScope();
     int length = other._selectors.length();
     if (length > _selectors.length())

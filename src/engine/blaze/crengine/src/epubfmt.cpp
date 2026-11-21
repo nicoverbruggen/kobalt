@@ -240,6 +240,9 @@ void ReadEpubNavToc( ldomDocument * doc, ldomNode * mapRoot, LVTocItem * baseToc
         ldomNode * a = li->findChildElement(LXML_NS_ANY, a_id, -1);
         if ( a ) {
             lString32 href = a->getAttributeValue("href");
+            // Blaze: navLabel() builds the label from the text of the link and from the
+            // alt or title of images in it. It also returns an image for an image-only
+            // label. Upstream takes the text of the link, then its title attribute.
             lString32 image;
             lString32 title = blaze::navLabel(a, appender, image);
             if ( !href.empty() ) {
@@ -1049,6 +1052,8 @@ LVStreamRef GetEpubCoverpage(LVContainerRef arc)
     return coverPageImageStream;
 }
 
+// Blaze: the caller can pass an opened archive in `arc`. Upstream always opens
+// `stream` as a ZIP archive.
 bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCallback * progressCallback,
             CacheLoadingCallback * formatCallback, bool metadataOnly,
             const elem_def_t * node_scheme, const attr_def_t * attr_scheme, const ns_def_t * ns_scheme, LVContainerRef arc )
@@ -1084,6 +1089,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
 
     EpubItems epubItems;
     LVArray<EpubItem*> spineItems;
+    // Blaze: both arrays are per spine slot. spineItems can hold a fallback item,
+    // and one manifest item can fill several slots.
     LVArray<EpubItem*> originalItems;
     LVArray<int> linearFlags;
 
@@ -1127,7 +1134,7 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
         ldomNode * manifest = doc->nodeFromXPath(lString32("package/manifest"));
         int nb_manifest_items = (manifest && manifest->isElement()) ? manifest->getChildCount() : 0;
 
-        // Kindle-compatible EPUB metadata. This is a document default, not an
+        // Blaze: Kindle-compatible EPUB metadata. This is a document default, not an
         // author stylesheet: explicit writing-mode on a fragment/body must win.
         lUInt16 meta_id = doc->getElementNameIndex(U"meta");
         for (int i = 0; i < nb_metadata_items; i++) {
@@ -1167,6 +1174,7 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                 if ( item->getNodeId() != identifier_id )
                     continue;
                 if ( item->getAttributeValue("id") == idpfUniqueIdentifier ) {
+                    // Blaze: no trim here. setIdpfManglingKey() removes all XML whitespace.
                     lString32 key = item->getText();
                     decryptor->setIdpfManglingKey(key);
                     break;
@@ -1400,6 +1408,7 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
 
         // We'll be reusing these later
         ldomNode * spine = doc->nodeFromXPath( cs32("package/spine") );
+        // Blaze: keep the page-progression-direction of the spine in the document properties.
         if (spine)
             m_doc_props->setString("doc.page-progression-direction", spine->getAttributeValue("page-progression-direction"));
         lUInt16 itemref_id = doc->getElementNameIndex(U"itemref");
@@ -1503,6 +1512,7 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                 epubItem->href = href;
                 epubItem->id = id;
                 epubItem->mediaType = mediaType;
+                // Blaze: remember the fallback item for spineFallback() and for link aliases.
                 epubItem->fallback = item->getAttributeValue("fallback");
                 epubItem->is_xhtml = mediaType == "application/xhtml+xml";
                 epubItems.add( epubItem );
@@ -1572,6 +1582,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                         continue;
                     EpubItem * epubItem = epubItems.findById( item->getAttributeValue("idref") );
                     if ( epubItem ) {
+                        // Blaze: keep `linear` per spine slot. Upstream stores nonlinear on the shared
+                        // manifest item, so two slots that use one item share the flag.
                         originalItems.add(epubItem);
                         linearFlags.add(lString32(item->getAttributeValue("linear")).lowercase() != U"no");
                         // Blaze: retain the spine slot even when several items share a fallback.
@@ -1627,6 +1639,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
     // Build a single DOM from all the spine items (each contained in a <DocFragment> internal element)
     ldomDocumentFragmentWriter appender(&writer, cs32("body"), cs32("DocFragment"), lString32::empty_str );
     writer.OnStart(NULL);
+    // Blaze: the body gets the primary writing mode as a style attribute, so a
+    // style on a fragment or on the body can override it.
     writer.OnTagOpen(U"", U"body");
     if (primaryWritingModeVerticalRL)
         writer.OnAttribute(U"", U"style", U"writing-mode: vertical-rl");
@@ -1651,7 +1665,7 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
             //CRLog::trace("subst: %s => %s", LCSTR(name), LCSTR(subst));
         }
     }
-    // A direct spine reference owns its href even when another slot uses it as a fallback.
+    // Blaze: a direct spine reference owns its href even when another slot uses it as a fallback.
     for (size_t i = 0; i < spineItemsNb; ++i) {
         if (originalItems[i]->hasSpineAlias)
             appender.addPathSubstitution(LVCombinePaths(codeBase, originalItems[i]->href),
@@ -1676,6 +1690,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                 // ones and get all xpointers (highlights, last page) invalid
                 // because their DocFragment index has been shifted.
                 bool handled = false;
+                // Blaze: also pass the fragment name and, when a fallback was used, the href of
+                // the original manifest item.
                 appender.setCodeBase(name, cs32("_doc_fragment_") + fmt::decimal(i),
                                      originalItems[i] == spineItems[i] ? lString32::empty_str
                                              : LVCombinePaths(codeBase, originalItems[i]->href));
@@ -1696,6 +1712,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                 if ( !stream.isNull() ) {
                     // Blaze: a host can stop the load of a chapter.
                     KoblazeParserCanStop canStop;
+                    // Blaze: a DTBook item goes through DtbookWriter first. When that finds no
+                    // body, the HTML parser reads the stream as upstream does.
                     if (spineItems[i]->mediaType == "application/x-dtbook+xml") {
                         blaze::DtbookWriter dtbook(appender);
                         LVXMLParser xml(stream, &dtbook, false);
@@ -1798,6 +1816,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                         // and not when we get back to it from a child to process next sibling
                         if (nextChildIndex == 0) {
                             if ( n->isElement() && n->getNodeId() == nav_id ) {
+                                // Blaze: epub:type holds space separated tokens. Match a token. Upstream
+                                // compares the whole value with "toc", "landmarks" and "page-list".
                                 lString32 type = n->getAttributeValue("type");
                                 type.trimDoubleSpaces(false,false,false);
                                 type = cs32(" ") + type + " ";
@@ -1828,6 +1848,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
                             break;
                     }
                 }
+                // Blaze: store the landmarks in the document properties, also when the
+                // landmarks list is not used as the table of contents.
                 if (n_landmarks)
                     blaze::readLandmarks(n_landmarks, m_doc, appender);
                 if ( !n_toc ) {
@@ -1897,6 +1919,8 @@ bool ImportEpubDocument( LVStreamRef stream, ldomDocument * m_doc, LVDocViewCall
         LVTocItem * baseToc = m_doc->getToc();
         for ( size_t i=0; i<spineItemsNb; i++ ) {
             if (relaxed_spine || spineItems[i]->is_xhtml) {
+                // Blaze: name the entry after the original item and point it to the fragment
+                // of the slot. Upstream uses the fallback item and its converted href.
                 lString32 title = originalItems[i]->id; // nothing much else to use
                 lString32 href = cs32("#_doc_fragment_") + fmt::decimal(i);
                 if ( href.empty() || href[0]!='#' )

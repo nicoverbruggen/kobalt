@@ -42,11 +42,11 @@ class GLDrawBuf; // workaround for no-rtti builds
 class LVDrawBuf : public CacheableObject
 {
 public:
-    // A table can occupy the page even when none of its cells contain text.
+    // Blaze: a table can occupy the page even when none of its cells contain text.
     virtual void OnTableDrawn() {}
     // Blaze: the host records unsupported formatting when the affected ink reaches the page.
     virtual void SetUnsupportedFormatting(bool unsupported) { (void)unsupported; }
-    // Report alpha-bearing image pixels after scaling and clipping, without a second decode.
+    // Blaze: report alpha-bearing image pixels after scaling and clipping, without a second decode.
     virtual void OnImageDrawn(bool visiblePixels) { (void)visiblePixels; }
 
 #if 0
@@ -333,6 +333,7 @@ public:
     /// Get surface of images drawn on buffer
     int getDrawnImagesSurface() const { return _drawnImagesSurface; }
 
+    // Blaze: start with a white background and black text. Upstream leaves both uninitialized.
     LVBaseDrawBuf() : _dx(0), _dy(0), _rowsize(0), _data(NULL), _drawExtraInfo(NULL),
                         _backgroundColor(0xFFFFFF), _textColor(0), _hidePartialGlyphs(true),
                         _invertImages(false), _invertColors(false), _ditherImages(false), _smoothImages(false),
@@ -630,6 +631,7 @@ private:
     bool has_ink;
     bool measure_hidden_content;
     bool ignore_decorations; // ignore borders and background
+    // Blaze: the clip margin is a constructor argument. The default 1000 is the upstream value.
     int clip_margin;
 public:
     /// get buffer bits per pixel
@@ -668,7 +670,7 @@ public:
         if ( ignore_decorations )
             return;
         // printf("  ink FillRect %d %d %d %d\n", x0, y0, x1, y1);
-        // A fill of any color contributes to the measured geometry.
+        // Blaze: a fill of any color counts. Upstream compared with the background color, which was uninitialized.
         updateInkBounds(x0, y0, x1, y1);
     }
 #if 0

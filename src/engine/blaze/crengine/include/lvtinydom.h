@@ -622,6 +622,8 @@ protected:
     bool loadStylesData();
     bool updateLoadedStyles( bool enabled );
     lUInt32 calcStyleHash(bool already_rendered, lUInt32 force_node_style_hash=0);
+    // Blaze: saves the node data in steps, so a time limit can stop it and a later
+    // call goes on at _nextNodeDataBlock. Upstream has one call that saves everything.
     ContinuousOperationResult saveNodeData( CRTimerUtil & maxTime );
     bool loadNodeData();
     bool loadNodeData( lUInt16 type, ldomNode ** list, int nodecount );
@@ -778,6 +780,7 @@ public:
     /// is cache file stale
     bool isCacheFileStale() { return _cacheFileStale; }
     /// set cache file stale flag
+    // Blaze: a stale file also restarts the save at its first stage.
     void setCacheFileStale( bool stale ) {
         _cacheFileStale = stale;
         if (stale)
@@ -805,7 +808,7 @@ public:
     void invalidateCacheFile() { _cacheFileLeaveAsDirty = true; }
     /// get cache file full path
     lString32 getCacheFilePath();
-    /// use the current document checksum for an already saved cache file
+    /// Blaze: use the current document checksum for an already saved cache file
     bool updateCacheFileName();
 #endif
 
@@ -1502,7 +1505,8 @@ public:
     */
     lUInt16 findElementNameIndex( const lChar8 * name );
 
-    /// Find a Unicode element name without registering an unknown name.
+    /// Blaze: find a Unicode element name without registering an unknown name. Saved
+    /// xpointers use it. Upstream registers the name with getElementNameIndex().
     lUInt16 findElementNameIndex( const lChar32 * name );
 
     /// Get element type properties structure by id
@@ -2189,7 +2193,7 @@ public:
 };
 
 /// DOM range
-// Search preparation uses the same normalization and source offsets as findText.
+// Blaze: search preparation uses the same normalization and source offsets as findText.
 // The caller owns the buffers and must discard them before changing the DOM/layout.
 struct ldomSearchOrigin {
     ldomNode * node;
@@ -2802,7 +2806,7 @@ private:
     // loaded document does not change, so each node is counted once.
     std::unordered_map<lUInt32, int> _koblazeTextLengths;
     std::unordered_map<lUInt32, std::vector<int> > _koblazeTextPrefixes;
-    // Original render method of each node changed by layout. An alternate
+    // Blaze: original render method of each node changed by layout. An alternate
     // layout may have no record of these changes.
     std::unordered_map<lUInt32, lUInt8> _koblazeChangedMethods;
     bool _koblazeChangedMethodsKnown = false;
@@ -2820,7 +2824,7 @@ private:
 #endif
     bool _just_rendered_from_cache;
 
-    // One alternate layout of this document, never another DOM or view.
+    // Blaze: one alternate layout of this document, never another DOM or view.
     struct LayoutNode {
         ldomNode *node;
         lInt32 parent;
@@ -2860,7 +2864,7 @@ private:
     lUInt32 _warnings_seen_bitmap;
     ldomXRangeList _selections;
     lUInt32 _doc_rendering_hash;
-    // Side allowances of the latest render(). Hanging punctuation and glyph
+    // Blaze: side allowances of the latest render(). Hanging punctuation and glyph
     // overflow use them, but the text width does not include them.
     int  _render_usable_left_overflow;
     int  _render_usable_right_overflow;
@@ -2932,6 +2936,8 @@ public:
 #if BUILD_LITE!=1
 #if USE_LIBUNIBREAK == 1
     // The returned decisions belong to this document until its next lookup.
+    // Blaze: keeps the line break decisions of a paragraph, so a later layout of the
+    // same text does not compute them again.
     const lUInt8 *paragraphBreaks(ldomNode *node, const lChar32 *text, int length,
                                   TextLangCfg *language, css_line_break_t lineBreak,
                                   css_word_break_t wordBreak);
@@ -2974,14 +2980,14 @@ public:
     int koblazeTextBefore( ldomNode * root, ldomNode * target );
     /// Blaze: true when a block without text at `start` characters is in the slice.
     bool koblazeEmptyBlockInSlice( int start ) const;
-    /// koblaze, for the layout only: true when the next block after `node`,
+    /// Blaze: for the layout only, true when the next block after `node`,
     /// which ends at `end` characters, is a table that ends where the slice
     /// starts.
     bool koblazeTableEndsSliceAfter( ldomNode * node, int end );
-    /// koblaze, for the layout only: true when the block is in the slice.
+    /// Blaze: for the layout only, true when the block is in the slice.
     bool koblazeEnterBlock( ldomNode * node, bool spineItem, bool container );
     lvdom_element_render_method koblazeSourceMethod( ldomNode * node, lvdom_element_render_method method ) const;
-    /// koblaze, for the layout only: changes the layout method of a node and
+    /// Blaze: for the layout only, changes the layout method of a node and
     /// records the method it had, for koblazeRelayout().
     void koblazeChangeRendMethod( ldomNode * node, lvdom_element_render_method method );
     /// Blaze: lay out again in the next render, with the styles of the last
@@ -3146,7 +3152,7 @@ public:
     virtual ~ldomDocument();
 #if BUILD_LITE!=1
     bool isRendered() { return _rendered; }
-    // Retain/swap only fully rendered layouts. The caller invalidates on changes
+    // Blaze: retain and swap only fully rendered layouts. The caller invalidates on changes
     // other than viewport geometry. Structural changes reject the snapshot.
     bool retainLayout(size_t maxBytes);
     bool swapLayout(LVRendPageList *pages);
@@ -3402,6 +3408,8 @@ private:
     lString32 baseTagReplacement;
     lString32 codeBase;
     lString32 filePathName;
+    // Blaze: the href of the original manifest item when a fallback item is in the
+    // spine. It becomes the SpineHref attribute of the DocFragment.
     lString32 originalSpinePath;
     lString32 fragmentType;
     lString32 codeBasePrefix;
@@ -3443,6 +3451,9 @@ public:
     bool hasMetBaseTag() { return baseTagMet; }
     void setFragmentType( lString32 fragment_type=lString32::empty_str ) { fragmentType = fragment_type; }
 
+    // Blaze: `fragmentPrefix` sets the fragment name directly, so two spine items
+    // that share a fallback file keep their own fragments. `originalPath` is the
+    // href of the original item, kept as SpineHref.
     void setCodeBase( lString32 filePath, lString32 fragmentPrefix=lString32::empty_str, lString32 originalPath=lString32::empty_str );
     /// returns flags
     virtual lUInt32 getFlags() { return parent->getFlags(); }
@@ -3551,6 +3562,8 @@ public:
     static bool init( lString32 cacheDir, lvsize_t maxSize );
     /// close document cache manager
     static bool close();
+    // Blaze: renameExisting() and removeObsolete() are not in upstream. They keep one
+    // cache file per document.
     /// rename an already saved cache file when its checksum changes
     static bool renameExisting( lString32 filename, lUInt32 crc, lUInt32 docFlags, lString32 &cachePath );
     /// remove older cache files for a document after a successful save

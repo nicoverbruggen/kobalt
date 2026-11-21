@@ -519,6 +519,7 @@ static lChar32 getReplacementChar(lUInt32 code, bool * can_be_ignored = NULL) {
     case UNICODE_NO_BREAK_SPACE:
         return ' ';
     case UNICODE_WORD_JOINER:
+    // Blaze: ignore U+FEFF like U+2060. Upstream drew the default character for it.
     case UNICODE_ZERO_WIDTH_NO_BREAK_SPACE:
         if (can_be_ignored)
             *can_be_ignored = true;
@@ -1822,6 +1823,7 @@ public:
     }
 
     /// get fallback font for this font (when it is used as the main font)
+    // Blaze: preserve_size returns the fallback at the nominal size, without x-height matching. Vertical runs use it.
     LVFontRef getFallbackFont(bool preserve_size=false) {
         // x-height matching is useful when mixing Latin fonts horizontally,
         // but a vertical CJK run is laid out in nominal em-sized capsules.
@@ -1848,6 +1850,7 @@ public:
     }
 
     /// get next fallback font for this font (when it is already used as a fallback font)
+    // Blaze: preserve_size returns the next fallback at the nominal size. See getFallbackFont().
     LVFontRef getNextFallbackFont(bool preserve_size=false) {
         if ( preserve_size )
             return fontMan->GetNominalFallbackFont(
@@ -2619,8 +2622,9 @@ public:
         bool can_be_ignored = false;
         lChar32 res = getReplacementChar(code, &can_be_ignored);
         if (can_be_ignored || res == ' ') {
-            // HarfBuzz hides format controls and supplies missing space widths.
-            // Keep their codepoints even in the last fallback font.
+            // Blaze: HarfBuzz hides format controls and supplies missing space widths.
+            // Keep their codepoints even in the last fallback font. Upstream returned the
+            // replacement or the default character, which drew a visible glyph.
             return code;
         }
         if (res != 0)
@@ -2702,8 +2706,9 @@ public:
 #endif // USE_HARFBUZZ==1
 
     FT_UInt getCharIndex( lChar32 code, lChar32 def_char ) {
-        // These layout controls must stay invisible. Some fonts supply visible
+        // Blaze: These layout controls must stay invisible. Some fonts supply visible
         // control-picture glyphs, which the direct FreeType path would draw.
+        // Upstream only handled U+200B here.
         if (code == UNICODE_ZERO_WIDTH_SPACE || code == UNICODE_WORD_JOINER
                 || code == UNICODE_ZERO_WIDTH_NO_BREAK_SPACE) {
             return 0;
@@ -2736,6 +2741,8 @@ public:
         return ch_glyph_index;
     }
 
+    // Blaze: ask the font for native small caps (smcp or c2sc) for the script and language of this
+    // character. Upstream decided once per face. The result is cached per script and language.
     bool hasNativeCaps(lChar32 ch, TextLangCfg *lang, int feature) {
 #if USE_HARFBUZZ==1
         FONT_GUARD
@@ -2767,6 +2774,8 @@ public:
 #endif
     }
 
+    // Blaze: true when this face, not a fallback font, has the glyph. Small caps use it to keep
+    // missing capitals in the original size.
     bool hasOwnGlyph(lChar32 code) override {
         FONT_GUARD
         return getCharIndex(code, 0) != 0;
@@ -6054,7 +6063,8 @@ class LVFontSmallCapsTransform : public LVFontProxy
                     lower ? LFNT_OT_FEATURES_P_SMCP : LFNT_OT_FEATURES_P_C2SC))
                 return;
             const auto upper = lower ? toUppercase(ch) : ch;
-            // Leave missing characters to normal fallback at their original size and case.
+            // Blaze: Leave missing characters to normal fallback at their original size and case.
+            // Upstream always mapped lowercase to uppercase in the small font.
             if (_smallFont->hasOwnGlyph(upper)) {
                 font = _smallFont;
                 mapped = upper;
@@ -6080,7 +6090,7 @@ class LVFontSmallCapsTransform : public LVFontProxy
         for (int i = 0; i < len; i++) {
             mapChar(text[i], run.font[i], run.mapped[i], lang);
 #if USE_HARFBUZZ==1
-            // Keep accents in the shaping run of the reduced capital they follow.
+            // Blaze: Keep accents in the shaping run of the reduced capital they follow.
             if (i && run.font[i - 1] == _smallFont && run.font[i] != _smallFont) {
                 const auto category = hb_unicode_general_category(hb_unicode_funcs_get_default(), text[i]);
                 if (category == HB_UNICODE_GENERAL_CATEGORY_NON_SPACING_MARK
@@ -8590,7 +8600,8 @@ public:
             hb_face_t* hb_face = hb_ft_face_create(ft_face, NULL);
             if (hb_ot_math_has_data(hb_face))
                 def.has_ot_math = true;
-            // Small caps can be declared under any script, regardless of script order.
+            // Blaze: Small caps can be declared under any script, regardless of script order.
+            // Upstream looked at the first script and default language, for smcp only.
             const hb_tag_t tags[] = { HB_TAG('s','m','c','p'), HB_TAG('c','2','s','c'), HB_TAG_NONE };
             auto *matches = hb_set_create();
             hb_ot_layout_collect_features(hb_face, HB_OT_TAG_GSUB, nullptr, nullptr, tags, matches);
@@ -8744,6 +8755,9 @@ public:
 
         // Apply small-caps synthesis: wrap with a transform that routes lowercase
         // letters to uppercase glyphs rendered at ~75% of the normal size.
+        // Blaze: always wrap when small caps are requested, even if the font has smcp. The wrapper
+        // decides per character, because native caps depend on script and language. Upstream skipped
+        // the wrapper for a font with smcp.
         bool needsSmallCaps = (features & (LFNT_OT_FEATURES_P_SMCP | LFNT_OT_FEATURES_P_C2SC));
         if (needsSmallCaps) {
             int small_size = (size * 3 + 2) / 4; // ~75%, rounded up
@@ -8755,7 +8769,7 @@ public:
             // of extra weight on the small font to compensate.
             int small_weight = weight + 100;
             if (small_weight > 1000) small_weight = 1000;
-            // Use the selected face. Matching the family again can lose a
+            // Blaze: Use the selected face, with its variations. Matching the family again can lose a
             // chapter-scoped embedded face or choose a different weight face.
             auto smallRef = fontForFace(face, small_size, small_weight, italic,
                     features & ~(LFNT_OT_FEATURES_P_SMCP | LFNT_OT_FEATURES_P_C2SC),
@@ -8903,7 +8917,8 @@ public:
             return true;
         name.trim(); // Remove any " " appended to avoid url override with duplicates
         const auto openFont = [&](const lString32 &path) {
-            // Opening a resource stream can read the entire ZIP member.
+            // Blaze: Opening a resource stream can read the entire ZIP member, so check the size from
+            // the container entry first. Upstream opened the stream before the size check.
             const auto *item = container->GetObjectInfo(path);
             if (item && item->GetSize() > MaxEmbeddedFontBytes) {
                 printf("CRE WARNING: document font '%s' ignored: file too big\n", LCSTR(path));
@@ -8919,6 +8934,7 @@ public:
         }
         if (stream.isNull())
             return false;
+        // Blaze: keep the size as lvsize_t. Upstream cast it to lUInt32 before the size checks.
         const lvsize_t size = stream->GetSize();
         if (size < 100) {
             printf("CRE WARNING: document font '%s' ignored: file too small\n", LCSTR(name));
@@ -9162,6 +9178,7 @@ public:
     // Font instances will be created as need from the LVFontDef name or buf.
     // (The similar functions do most of the same work, and some code
     // could be factorized between them.)
+    // Blaze: register one face of a font file under a given family, weight and style. Upstream has no such call.
     bool RegisterStaticFontFace(lString8 name, int index, lString8 family,
                                        int weight, bool italic) override
     {

@@ -301,6 +301,9 @@ private:
 
     int _selector_count;
     LVPtrVector<LVCssSelector> _selectors;
+    // Blaze: push() only records the selector count. The first change after push()
+    // copies the chains, see detachScope(), and pop() swaps the originals back.
+    // Upstream copies every chain on push() and again on pop().
     struct SavedScope {
         int selectorCount;
         std::unique_ptr<LVPtrVector<LVCssSelector>> selectors;

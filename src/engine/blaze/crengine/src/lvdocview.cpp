@@ -2031,7 +2031,7 @@ void LVDocView::drawPageTo(LVDrawBuf * drawbuf, LVRendPageInfo & page,
 	// that is set to be on prev/next page).
 	lvRect clip;
 	clip.top = pageRect->top + m_pageMargins.top + headerHeight;
-	// In vertical-rl mode, `height` (= page.height) is the page-split stride
+	// Blaze: in vertical-rl mode, `height` (= page.height) is the page-split stride
 	// in the COLUMN-PROGRESSION direction (horizontal), NOT the vertical
 	// extent.  Using it for clip.bottom truncates each column at clip.top +
 	// page_split_stride, leaving the lower portion of the screen empty and
@@ -2049,14 +2049,14 @@ void LVDocView::drawPageTo(LVDrawBuf * drawbuf, LVRendPageInfo & page,
 	// this allows glyphs that need to (like 'J' at start of line or 'f' at
 	// end of line with some fonts) to not be cut by this clipping.
 	if ( is_vert ) {
-		// In vertical-rl, clip.right is the column anchor: line_x = clip.right - doc_y.
+		// Blaze: in vertical-rl, clip.right is the column anchor: line_x = clip.right - doc_y.
 		// vertPageRight() centers the text block so left and right gaps are equal.
 		clip.right = vertPageRight( *pageRect, height );
 	} else {
 		clip.right = pageRect->left + pageRect->width();
 	}
 	if ( is_vert ) {
-		// In vertical-rl, the column-progression direction is the SCREEN-X
+		// Blaze: in vertical-rl, the column-progression direction is the SCREEN-X
 		// axis (right-to-left).  The page covers c_x ∈ [page.start,
 		// page.start + page.height).  When DrawDocument descends a block
 		// that straddles the page boundary, LFormattedText::Draw iterates
@@ -2079,6 +2079,8 @@ void LVDocView::drawPageTo(LVDrawBuf * drawbuf, LVRendPageInfo & page,
 	draw_extra_info_t draw_extra_info = { 0 };
 	drawbuf->SetDrawExtraInfo(&draw_extra_info);
 	draw_extra_info.is_page_mode = true;
+    // Blaze: with a vertical spacing mode, tell DrawDocument() the page, the mode,
+    // the available height and the top, so it spreads the lines over the page.
     if (m_verticalSpacingMode && (!m_verticalSpacingOnlyProtection || (page.flags & RN_PAGE_PARAGRAPH_PROTECTION_GAP))) {
         draw_extra_info.justification_page = &page;
         draw_extra_info.justification_mode = m_verticalSpacingMode;
@@ -2104,7 +2106,7 @@ void LVDocView::drawPageTo(LVDrawBuf * drawbuf, LVRendPageInfo & page,
 	draw_extra_info.content_overflow_clip.top = headerHeight;
 	draw_extra_info.content_overflow_clip.bottom = fullRect.bottom; // will be reduced if footnotes
 	draw_extra_info.content_overflow_clip.left = fullRect.left;
-	// For vertical-rl: widen the draw clip to allow ruby annotations on the first
+	// Blaze: for vertical-rl, widen the draw clip to allow ruby annotations on the first
 	// (rightmost) column to draw into the physical right margin without being clipped.
 	// The column anchor is stored separately so Draw() can use it for positioning.
 	draw_extra_info.content_overflow_clip.right = fullRect.right;
@@ -2681,7 +2683,7 @@ void LVDocView::Draw(LVDrawBuf & drawbuf, int position, int page, bool rotate, b
 //Draw( m_drawbuf, m_pos, true );
 //}
 
-// vertPageRight and isVerticalText (fork-only) moved to lvdocview_vert.cpp,
+// Blaze: vertPageRight and isVerticalText (fork-only) moved to lvdocview_vert.cpp,
 // which is #included at the end of this file.
 
 /// converts point from window to document coordinates, returns true if success
@@ -2789,6 +2791,8 @@ bool LVDocView::windowToDocPoint(lvPoint & pt, bool pullInPageArea) {
 			}
 			pt.x -= rc->left;
 			pt.y -= rc->top;
+            // Blaze: map the point back through the vertical spacing of the page, so a tap
+            // matches the lines as drawn.
             if (m_verticalSpacingMode && (!m_verticalSpacingOnlyProtection || (m_pages[page]->flags & RN_PAGE_PARAGRAPH_PROTECTION_GAP))) {
                 int available = rc->height();
                 pt.y = m_pages[page]->justificationSourceY(pt.y, available, m_verticalSpacingMode, pullInPageArea);
@@ -2907,6 +2911,8 @@ bool LVDocView::docToWindowPoint(lvPoint & pt, bool isRectBottom, bool fitToPage
                     // ensure anything and crop on the right, and this allows text
                     // selection to grab bits of overflowed glyph
                     pt.x = pt.x + m_pageRects[index].left + m_pageMargins.left;
+                    // Blaze: move the point through the vertical spacing of the page, so a
+                    // selection rect matches the lines as drawn.
                     if (m_verticalSpacingMode && (!m_verticalSpacingOnlyProtection || (m_pages[page+index]->flags & RN_PAGE_PARAGRAPH_PROTECTION_GAP))) {
                         LVRendPageInfo *info = m_pages[page+index];
                         int available = m_dy - getPageHeaderHeight() - m_pageMargins.top - m_pageMargins.bottom;
@@ -3127,6 +3133,8 @@ LVRef<ldomXRange> LVDocView::getPageDocumentRange(int pageIndex, bool visibleTex
             if (page->flags & RN_PAGE_TYPE_COVER)
                 return res;
             start_y = page->start;
+            // Blaze: visibleTextOnly ends the range one pixel earlier. Page text then does
+            // not take the first line of the next page.
             end_y = page->start + page->height - (visibleTextOnly ? 1 : 0);
         }
         else {
@@ -3229,6 +3237,7 @@ lString32 LVDocView::getPageText(bool, int pageIndex) {
 	LVLock lock(getMutex());
     CHECK_RENDER("getPageText()")
 	lString32 txt;
+	// Blaze: ask for visible text only, see getPageDocumentRange().
 	LVRef < ldomXRange > range = getPageDocumentRange(pageIndex, true);
 	if (!range.isNull())
 		txt = range->getRangeText();
@@ -4213,6 +4222,8 @@ void LVDocView::Resize(int dx, int dy) {
 	clearImageCache();
 	//m_drawbuf.Resize(dx, dy);
 	if (m_doc) {
+		// Blaze: pass the new size. Upstream passes the old m_dx and m_dy, so the
+		// @media queries see the previous size.
 		m_doc->setScreenSize(dx, dy); // only used for CSS @media queries
 		//ldomXPointer bm = getBookmark();
 		if (dx != m_dx || dy != m_dy || m_view_mode != DVM_SCROLL
@@ -4594,6 +4605,9 @@ void LVDocView::createDefaultDocument(lString32 title, lString32 message) {
 }
 
 /// load document from stream
+// Blaze: `epubContainer` is an archive that is already open. When it is set, the
+// stream is not tested for PDB or EPUB, and the container goes to
+// ImportEpubDocument().
 bool LVDocView::LoadDocument(LVStreamRef stream, bool metadataOnly, LVContainerRef epubContainer) {
 
 

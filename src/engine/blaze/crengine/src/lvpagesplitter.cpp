@@ -10,6 +10,7 @@
     See LICENSE file for details.
 */
 
+// Blaze: koblaze.h declares KoblazeRenderCancelled, thrown in updateRenderProgress().
 #include "../include/koblaze.h"
 #include "crsetup.h"
 
@@ -79,6 +80,7 @@ bool LVRendPageContext::updateRenderProgress( int numFinalBlocksRendered )
         // flows' contexts can forward their progress to it
         main_context = this;
     }
+    // Blaze: the host can stop a layout here. Koblaze catches KoblazeRenderCancelled.
     if ( callback->OnRenderCancelRequested() )
         throw KoblazeRenderCancelled();
     renderedFinalBlocks += numFinalBlocksRendered;
@@ -1023,6 +1025,8 @@ public:
             if ( lines_max_bottom - cur_page_bottom <= page_height ) {
                 // If we end current page at the current cur_page_bottom,
                 // these lines will fit in a new empty page
+                // Blaze: when widow or orphan protection ends a page early and the next lines would have fit,
+                // flag the page RN_PAGE_PARAGRAPH_PROTECTION_GAP so the spacing code can see the gap.
                 bool protected_boundary = false, text_would_fit = false;
                 for (int j=start; j<=end; ++j) {
                     protected_boundary |= (lines[j]->flags & RN_LINE_PARAGRAPH_PROTECTION) != 0;
@@ -1373,6 +1377,7 @@ public:
             }
             if ( force_new_page || is_last_line ) {
                 flushCurrentPage();
+                // Blaze: mark the flushed page for page spacing. RN_PAGE_ENDS_AT_FORCED_BREAK says a forced break ended it.
                 if (page_list->length()) {
                     page_list->last()->flags |= RN_PAGE_KEEP_VERTICAL_SPACING;
                     if (force_new_page)
@@ -1452,6 +1457,7 @@ void LVRendPageContext::split()
 #endif // USE_LEGACY_PAGESPLITTER
 }
 
+// Blaze: drop the collected lines of a cancelled layout. Upstream has no Abandon().
 void LVRendPageContext::Abandon()
 {
     lines.clear();
@@ -1471,6 +1477,7 @@ void LVRendPageContext::Finalize()
     }
 }
 
+// Blaze: pagelist_magic is an array, so deserialize() can take the signature size with sizeof.
 static const char pagelist_magic[] = "PageList";
 
 static const int min_page_size = 22; // fixed fields with empty line, gap and footnote lists
@@ -1492,6 +1499,8 @@ bool LVRendPageList::serialize( SerialBuf & buf )
 
 bool LVRendPageList::deserialize( SerialBuf & buf )
 {
+    // Blaze: deserialize() checks the remaining buffer before each read, clears the list on any failure and rebuilds the flags.
+    // Upstream trusts the page count and keeps a partial list after a failure.
     clear();
     has_nonlinear_flows = false;
     has_mixed_writing_modes = false;
@@ -1559,6 +1568,7 @@ bool LVRendPageInfo::serialize( SerialBuf & buf )
 
 bool LVRendPageInfo::deserialize( SerialBuf & buf )
 {
+    // Blaze: also read the spacing data from serialize() and reject values that do not fit the page. Upstream reads only the fixed fields.
     if ( buf.error() || buf.space() < min_page_size )
         return false;
     lUInt32 n1;

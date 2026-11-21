@@ -11,6 +11,7 @@
 
 *******************************************************/
 
+// Blaze: koblaze.h and the extension headers below are Blaze additions. Keep these includes.
 #include "koblaze.h"
 #include <algorithm>
 #include <cmath>
@@ -172,7 +173,7 @@ public:
     // char halign; // not used
     char valign;
     ldomNode * elem;
-    // border-collapse builds all winners before writing styles back, so a
+    // Blaze: border-collapse builds all winners before writing styles back, so a
     // later cell can still inspect an adjacent cell's original opposite edge.
     css_style_ref_t collapsed_style;
     CCRTableCell() : col(NULL), row(NULL)
@@ -292,6 +293,8 @@ int StrToIntPercent( const lChar32 * s, int digitwidth )
     return n;
 }
 
+// Blaze: collapse_border() is rewritten. Each edge keeps one winner (hidden, then width, then owner rank) and the cell styles are written after the loop.
+// Upstream overwrites the cell style in place, so a later cell sees changed neighbours and a hidden edge is lost.
 // Utility function used in CCRTable::PlaceCells() when border-collapse.
 // CSS 2.1 resolves a shared edge by first honouring hidden, then its width,
 // then the table-structure owner (cell > row > rowgroup > column > colgroup
@@ -1674,6 +1677,7 @@ public:
                                             && !STYLE_HAS_CR_HINT(parent->getStyle(), NOTEREF_IGNORE) ) {
                                     lString32 href = parent->getAttributeValue(LXML_NS_ANY, attr_href);
                                     if ( href.firstChar()=='#' ) {
+                                        // Blaze: percent-decode the link target before it is recorded. Upstream records the escaped text.
                                         href = DecodeHTMLUrlString(href.substr(1));
                                         caption_links.add( href );
                                     }
@@ -1892,6 +1896,7 @@ public:
                                                         && !STYLE_HAS_CR_HINT(parent->getStyle(), NOTEREF_IGNORE) ) {
                                                 lString32 href = parent->getAttributeValue(LXML_NS_ANY, attr_href);
                                                 if ( href.firstChar()=='#' ) {
+                                                    // Blaze: percent-decode the link target before it is recorded. Upstream records the escaped text.
                                                     href = DecodeHTMLUrlString(href.substr(1));
                                                     if ( is_single_column )
                                                         row->single_col_context->addLink( href, link_insert_pos );
@@ -2109,7 +2114,7 @@ public:
                 }
             }
         }
-        // A sole full-height table in an EPUB spine item uses the reading
+        // Blaze: A sole full-height table in an EPUB spine item uses the reading
         // viewport. Grow rows before positioning cells so vertical-align still
         // applies, and never shrink content that needs more than one page.
         if ( enhanced_rendering && nb_rows > 0 &&
@@ -2855,6 +2860,7 @@ static ldomNode * getRootUnitNode(ldomNode * node)
 // Convert CSS value (type + number value) to screen px
 int lengthToPx( ldomNode * node, css_length_t val, int base_px, int base_em, bool unspecified_as_em )
 {
+    // Blaze: css_val_screen_px_hanging is a pixel text-indent with the hanging keyword. Treat it as a plain pixel value here.
     if (val.type == css_val_screen_px || val.type == css_val_screen_px_hanging) { // use value as is
         return val.value;
     }
@@ -3245,7 +3251,7 @@ bool getStyledImageSize( ldomNode * enode, int & img_width, int & img_height, in
     // But this parent container height might not even be enforced, and it feels
     // really tedious - so let's think about that when if feels really needed.
 
-    // Kobalt: keep the authored proportions of HTML images under maximum
+    // Blaze: keep the authored proportions of HTML images under maximum
     // constraints (https://github.com/nicoverbruggen/kobalt/discussions/87).
     // Attribute hints and explicit CSS sizes follow the same policy. Leave
     // SVG viewports, automatic sizes and zero sizes to the existing rules.
@@ -3912,7 +3918,7 @@ void renderFinalBlock( ldomNode * enode, LFormattedText * txform, RenderRectAcce
             // below, and get rid of it in AddSourceLine())
             css_length_t paragraph_text_indent = style->text_indent;
             if ( rm == erm_final && STYLE_HAS_CR_HINT(style, DEFAULT_TEXT_INDENT) ) {
-                // A reading default is not authored document geometry. Keep it
+                // Blaze: A reading default is not authored document geometry. Keep it
                 // for unstyled prose, but let an authored non-initial value on
                 // a containing block inherit into this paragraph.
                 for ( ldomNode * ancestor = enode->getParentNode(); ancestor;
@@ -3973,7 +3979,7 @@ void renderFinalBlock( ldomNode * enode, LFormattedText * txform, RenderRectAcce
                     indent = -indent; // (restore it)
                 }
             }
-            // lvstsheet stores the `hanging` keyword in the low bit.  It changes
+            // Blaze: lvstsheet stores the `hanging` keyword in the low bit.  It changes
             // which lines the indent applies to; it does not change the sign of
             // the CSS length.  Keep these two facts separate in LFormattedText,
             // otherwise an ordinary negative text-indent is indistinguishable
@@ -4025,6 +4031,7 @@ void renderFinalBlock( ldomNode * enode, LFormattedText * txform, RenderRectAcce
         if ( style->word_break > css_wb_break_word ) { // break-all or keep-all (break-word is handled as normal)
             flags |= LTEXT_HAS_EXTRA;
         }
+        // Blaze: text-combine-upright and text-emphasis ask the formatter for its extra per-text data (LTEXT_HAS_EXTRA).
         if ( style->text_combine_upright != css_tcu_none ) { // tate-chu-yoko
             flags |= LTEXT_IS_TCY | LTEXT_HAS_EXTRA;
         }
@@ -5033,6 +5040,7 @@ void renderFinalBlock( ldomNode * enode, LFormattedText * txform, RenderRectAcce
             // ignoring this single letter.
 
             if ( txt.length() > 0 ) {
+                // Blaze: Bold Reading adds a text node as separate runs, each with its own font.
                 LVFontRef emphasis = blaze::bionicFont(enode, font, txt.length(), textOffset, legacy_rendering);
                 if (!emphasis.isNull()) {
                     auto runs = lvBionicRuns(txt.c_str(), txt.length(), blaze::bionicContinuation(enode));
@@ -5105,6 +5113,7 @@ void copystyle( css_style_ref_t source, css_style_ref_t dest )
     dest->display = source->display ;
     dest->white_space = source->white_space ;
     dest->text_align = source->text_align ;
+    // Blaze: copy the flex fields too, or a copied style loses them.
     dest->justify_content = source->justify_content;
     dest->flex_basis = source->flex_basis;
     dest->flex_grow = source->flex_grow;
@@ -5588,6 +5597,7 @@ int renderBlockElementLegacy( LVRendPageContext & context, ldomNode * enode, int
                 // DrawDocument will then render a small figure...
                 if (enode->getRendMethod() >= erm_table) {
                     printf("CRE WARNING: no width to draw %s\n", UnicodeToLocal(ldomXPointer(enode, 0).toString()).c_str());
+                    // Blaze: change the render method through Koblaze, so its chapter data sees it.
                     enode->getDocument()->koblazeChangeRendMethod( enode, erm_killed );
                     fmt.setHeight( 15 ); // not squared, so it does not look
                     fmt.setWidth( 10 );  // like a list square bullet
@@ -5954,6 +5964,7 @@ int renderBlockElementLegacy( LVRendPageContext & context, ldomNode * enode, int
                                                 && !STYLE_HAS_CR_HINT(parent->getStyle(), NOTEREF_IGNORE) ) {
                                         lString32 href = parent->getAttributeValue(LXML_NS_ANY, attr_href);
                                         if ( href.firstChar()=='#' ) {
+                                            // Blaze: percent-decode the link target before it is recorded. Upstream records the escaped text.
                                             href = DecodeHTMLUrlString(href.substr(1));
                                             context.addLink( href, link_insert_pos );
                                         }
@@ -5990,6 +6001,7 @@ int renderBlockElementLegacy( LVRendPageContext & context, ldomNode * enode, int
                                                 && !STYLE_HAS_CR_HINT(parent->getStyle(), NOTEREF_IGNORE) ) {
                                         lString32 href = parent->getAttributeValue(LXML_NS_ANY, attr_href);
                                         if ( href.firstChar()=='#' ) {
+                                            // Blaze: percent-decode the link target before it is recorded. Upstream records the escaped text.
                                             href = DecodeHTMLUrlString(href.substr(1));
                                             context.addLink( href, link_insert_pos );
                                         }
@@ -6667,7 +6679,7 @@ public:
             else {
                 flags = (flags & ~((0x7 << RN_SPLIT_BEFORE) | (0x7 << RN_SPLIT_AFTER))) | RN_SPLIT_BOTH_AVOID;
             }
-            // Keep geometry metadata when changing break flags. This group is
+            // Blaze: Keep geometry metadata when changing break flags. This group is
             // protected by break-inside, not specifically by widows/orphans.
             flags &= ~RN_LINE_PARAGRAPH_PROTECTION;
         }
@@ -6680,7 +6692,7 @@ public:
             resetFloatsLevelToTopLevel();
         }
         if ( force_next_content_split_before ) {
-            // A forced publisher break still wins inside a keep-together block.
+            // Blaze: A forced publisher break still wins inside a keep-together block.
             // The discarded margin path must cancel the preceding avoid flag,
             // just as the retained margin path in pushVerticalMargin() does.
             if ( last_split_after_flag == RN_SPLIT_AVOID )
@@ -7000,6 +7012,7 @@ public:
                     // (Note that Prince does not do this: the top margin of an element
                     // with "page-break-before: always" is discarded.)
                     flags = RN_SPLIT_BEFORE_ALWAYS | RN_SPLIT_AFTER_AVOID;
+                    // Blaze: DISCARD_FORCED_BREAK_MARGINS drops the margin at a forced break. The next content line then carries the break (force_next_content_split_before).
                     if ( BLOCK_RENDERING(rend_flags, DISCARD_FORCED_BREAK_MARGINS) ) {
                         margin = 0;
                         force_next_content_split_before = true;
@@ -8188,6 +8201,7 @@ int BlockFloatFootprint::getTopShiftX(int final_width, bool get_right_shift)
     return shift_x;
 }
 
+// Blaze: flex row layout, used by renderBlockElementEnhanced() and getRenderedWidths().
 #include "../../extensions/flex_rows.inc"
 
 // Enhanced block rendering
@@ -9313,6 +9327,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
             // (Avoid this with float or inline tables, that have been measured
             // and can have a 0-width when they have no content.)
             printf("CRE WARNING: no width to draw %s\n", UnicodeToLocal(ldomXPointer(enode, 0).toString()).c_str());
+            // Blaze: change the render method through Koblaze, so its chapter data sees it.
             enode->getDocument()->koblazeChangeRendMethod( enode, erm_killed );
             fmt.setHeight( 15 ); // not squared, so it does not look
             fmt.setWidth( 10 );  // like a list square bullet
@@ -9333,7 +9348,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                 flow->clearFloats( css_c_both );
                 flow->advancePastCarriedInitialLetter();
                 flow->pushVerticalMargin();
-                // Tables add their lines directly to the page context. Consume
+                // Blaze: Tables add their lines directly to the page context. Consume
                 // a pending chapter break before entering that separate flow.
                 if ( flow->hasPendingPageBreak() ) {
                     flow->addContentLine(0, RN_SPLIT_AFTER_AVOID);
@@ -9540,6 +9555,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
 
                 // recurse all sub-blocks for blocks
                 int cnt = enode->getChildCount();
+                // Blaze: renderFlexRows() lays out a flex row container, then the loop below skips its children (cnt = 0).
                 if (css_is_flex(style->display) && renderFlexRows(flow, enode, padding_left,
                         width - padding_left - padding_right, direction, flags, style_h - padding_top - padding_bottom))
                     cnt = 0;
@@ -9583,6 +9599,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                     if ( child->isFloatingBox() ) {
                         // The float lays out in its own flow below. Account for its
                         // whole subtree in the main flow's chapter slice first.
+                        // Blaze: count a float subtree in the chapter slice too, like the check at the start of this function.
                         if ( flow->isMainFlow() && !child->getDocument()->koblazeEnterBlock(child, false, false) ) {
                             child->getDocument()->koblazeChangeRendMethod(child, erm_invisible);
                             continue;
@@ -9854,7 +9871,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                 // (We used to extend the padding with the widest marker width,
                 // but this was not per-CSS-specs).
 
-                // Keep padding intact for negative text-indent.  The formatter
+                // Blaze: Keep padding intact for negative text-indent.  The formatter
                 // applies the signed indent to the first line, allowing it to
                 // occupy inline-start padding or overflow the content box as
                 // CSS specifies.  The former padding rewrite was coupled to
@@ -10200,6 +10217,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                     // surroundings.
 
                     // Honor widows and orphans
+                    // Blaze: tag widow and orphan lines with RN_LINE_PARAGRAPH_PROTECTION, so the page splitter can tell a gap they cause from other keep-together gaps.
                     if (orphans > 1 && i > 0 && i < orphans)
                         // with orphans:2, and we're the 2nd line (i=1), avoid split before
                         // so we stick to first line
@@ -10226,7 +10244,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                             line_flags |= RN_SPLIT_AFTER_AVOID;
                     }
 
-                    // General keep-together rules must not be reported as a gap
+                    // Blaze: General keep-together rules must not be reported as a gap
                     // caused specifically by widow/orphan protection.
                     if (break_inside == RN_SPLIT_AVOID ||
                         (line->flags & (LTEXT_LINE_SPLIT_AVOID_BEFORE | LTEXT_LINE_SPLIT_AVOID_AFTER)))
@@ -10298,6 +10316,7 @@ void renderBlockElementEnhanced( FlowState * flow, ldomNode * enode, int x, int 
                                                 && !STYLE_HAS_CR_HINT(parent->getStyle(), NOTEREF_IGNORE) ) {
                                         lString32 href = parent->getAttributeValue(LXML_NS_ANY, attr_href);
                                         if ( href.firstChar()=='#' ) {
+                                            // Blaze: percent-decode the link target before it is recorded. Upstream records the escaped text.
                                             href = DecodeHTMLUrlString(href.substr(1));
                                             flow->getPageContext()->addLink( href, link_insert_pos );
                                         }
@@ -10526,7 +10545,7 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * enode, int x0, int y0, int dx
     // where we could do a simple tweak to behave as web browsers.
     if ( enode->isElement() )
     {
-        // A block omitted from this slice can still have its previous rectangle.
+        // Blaze: A block omitted from this slice can still have its previous rectangle.
         // Leave it out before painting its background.
         lvdom_element_render_method rm = enode->getRendMethod();
         if ( rm == erm_invisible )
@@ -10585,6 +10604,7 @@ void DrawDocument( LVDrawBuf & drawbuf, ldomNode * enode, int x0, int y0, int dx
         // flag and won't be drawn.
         bool isHidden = style->visibility >= css_v_hidden && !drawbuf.WantsHiddenContent();
 
+        // Blaze: tell the draw buffer that a table is on the page, even when no cell has text.
         if (rm == erm_table && draw_content && !isHidden)
             drawbuf.OnTableDrawn();
 
@@ -11758,7 +11778,7 @@ void setNodeStyle( ldomNode * enode, css_style_ref_t parent_style, LVFontRef par
         // (No risk to override all the 'display' fixups done above, as they never leave it as 'inherit')
     }
 
-    // Resolve the reader's default only after publisher and inline styles.
+    // Blaze: Resolve the reader's default only after publisher and inline styles.
     // Authored auto/avoid values have already replaced this internal value.
     if (pstyle->page_break_inside == css_pb_avoid_normal_block) {
         bool normal = pstyle->display == css_d_block && pstyle->float_ == css_f_none;
@@ -12008,6 +12028,7 @@ void setNodeStyle( ldomNode * enode, css_style_ref_t parent_style, LVFontRef par
     inheritLength( pstyle->letter_spacing, parent_style->letter_spacing, parent_font_size, parent_font_size );
 
     // text-indent: computed value: "the percentage as specified or the absolute length, plus any keywords as specified"
+    // Blaze: an inherited hanging text-indent is kept as css_val_screen_px_hanging, not as the low bit of a pixel value, because every pixel value is significant.
     css_length_t parent_text_indent = parent_style->text_indent;
     bool text_indent_hanging = parent_text_indent.type == css_val_screen_px_hanging ||
             (parent_text_indent.type != css_val_screen_px && (parent_text_indent.value & 0x00000001));
@@ -12089,7 +12110,7 @@ void setNodeStyle( ldomNode * enode, css_style_ref_t parent_style, LVFontRef par
             inheritLength( pstyle->border_width[3], parent_style->border_width[3], parent_font_size );
     }
 
-    // Keep horizontal-rule pixel strokes thin on dense reading screens.
+    // Blaze: Keep horizontal-rule pixel strokes thin on dense reading screens.
     // Resolve before caching so layout and paint use the same widths. Leave
     // physical and font-relative border lengths on their normal scale.
     if ( enode->getNodeId() == el_hr ) {
@@ -12525,6 +12546,7 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
         css_length_t style_width = style->width;
         // ('width: fit-content' is actually what this function returns as maxWidth)
         bool has_fit_content_width = style_width.type == css_val_unspecified && style_width.value == css_generic_fit_content;
+        // Blaze: ignoreStyleWidth lets a caller measure the content only, skipping the CSS width (an auto-width flex item).
         if ( !ignoreStyleWidth && BLOCK_RENDERING(rendFlags, ENSURE_STYLE_WIDTH) && !has_fit_content_width ) {
             // Ignore width for table sub-elements - but allow it for our boxing elements, as we can set it
             // for some explicit rendering purpose (i.e. for the MathML <msqrt> mathBox root symbol)
@@ -12863,6 +12885,7 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
             // Block node that contains other stacked block or final nodes
             // Process children, which are all block-like nodes:
             // our *Width are the max of our children *Width
+            // Blaze: a flex row adds the widths of its items and their column gaps. Upstream takes the widest child.
             bool flex_row = css_is_flex(style->display) && !(style->flex_direction & 1);
             int gap = flex_row ? lengthToPx(node, style->column_gap, 0) : 0;
             bool first_item = true;
@@ -13233,6 +13256,7 @@ void getRenderedWidths(ldomNode * node, int &maxWidth, int &minWidth, int direct
         lbCtx.lbpLang = lang_cfg->getLBProps();
         lb_process_next_char(&lbCtx, (utf32_t)(*txt));
         #endif
+        // Blaze: measure Bold Reading runs with their own font, as renderFinalBlock() lays them out.
         LVFontRef emphasis = blaze::bionicFont(node, font, text.length(), start,
             !BLOCK_RENDERING_N(node, ENHANCED));
         auto runs = emphasis.isNull() ? std::vector<LVBionicRun>()

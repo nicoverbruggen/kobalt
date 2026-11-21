@@ -457,8 +457,10 @@ private:
     bool invert;
     bool smoothscale;
     lUInt8 * __restrict decoded;
+    // Blaze: scales rows while they decode, so a large image needs no full-size 32bpp copy. Upstream always buffers the whole decoded image.
     std::unique_ptr<CRe::SmoothRowScaler> rowScaler;
     bool isNinePatch;
+    // Blaze: set when any pixel is not fully transparent. Draw() reports it through OnImageDrawn().
     bool visiblePixels = false;
 public:
     bool hasVisiblePixels() const { return visiblePixels; }
@@ -542,6 +544,7 @@ public:
                 ymap = GenMap( src_dy, dst_dy );
         }
     }
+    // Blaze: decoders that can scale while decoding ask for the target size here. Nine-patch images keep the upstream path.
     bool GetRasterTargetSize(int &width, int &height) const override {
         if (!smoothscale || isNinePatch)
             return false;
@@ -579,7 +582,8 @@ public:
             if (y == 0 || y == src_dy-1) // ignore first and last lines
                 return true;
         }
-        // Keep the scaled result off the drawing surface until decoding succeeds.
+        // Blaze: Keep the scaled result off the drawing surface until decoding succeeds.
+        // The buffer is allocated on the first row, with size_t math, so large images do not overflow int.
         if (smoothscale) {
             //fprintf( stderr, "Smoothscale l_%d pass\n", y );
             if (rowScaler) {
@@ -872,6 +876,7 @@ public:
     }
     virtual void OnEndDecode( LVImageSource * obj, bool errors )
     {
+        // Blaze: skip the smooth scaling pass when decoding failed, so a partial image is not drawn.
         if (errors || !smoothscale) {
             return;
         }
@@ -1658,6 +1663,7 @@ int  LVColorDrawBuf::GetBitsPerPixel() const
 
 void LVColorDrawBuf::Draw( LVImageSourceRef img, int x, int y, int width, int height, bool dither )
 {
+    // Blaze: nothing to draw at zero size. Return before the image is decoded for no result.
     if (width <= 0 || height <= 0)
         return;
     //fprintf( stderr, "LVColorDrawBuf::Draw( img(%d, %d), %d, %d, %d, %d\n", img->GetWidth(), img->GetHeight(), x, y, width, height );

@@ -2379,8 +2379,8 @@ void RenderRectAccessor::getInvolvedFloatIds( int & float_count, lUInt32 * float
         rr_lock( _node );
 #endif
     }
-    // A zero data index ends the list. The vertical inline extent can use
-    // _extra0 on the same final block.
+    // Blaze: a zero data index ends the list. Upstream stores the count in
+    // _extra0, but the vertical inline extent can use _extra0 on the same final block.
     const int ids[] = { _extra1, _extra2, _extra3, _extra4, _extra5 };
     float_count = 0;
     while ( float_count < 5 && ids[float_count] ) {
@@ -2397,6 +2397,7 @@ void RenderRectAccessor::setInvolvedFloatIds( int float_count, const lUInt32 * f
         rr_lock( _node );
 #endif
     }
+    // Blaze: no count is stored. Unused slots stay zero, see getInvolvedFloatIds().
     _extra1 = float_count > 0 ? float_ids[0] : 0;
     _extra2 = float_count > 1 ? float_ids[1] : 0;
     _extra3 = float_count > 2 ? float_ids[2] : 0;
@@ -2738,6 +2739,8 @@ lString32 tinyNodeCollection::getCacheFilePath() {
     return _cacheFile != NULL ? _cacheFile->getCachePath() : lString32::empty_str;
 }
 
+// Blaze: rename the cache file of a document that is already saved when its
+// checksum changes. Upstream has no such rename.
 bool tinyNodeCollection::updateCacheFileName() {
     if (!_cacheFile)
         return false;
@@ -2896,6 +2899,8 @@ ContinuousOperationResult tinyNodeCollection::saveNodeData( CRTimerUtil & maxTim
 {
     const int elemBlocks = (_elemCount + TNC_PART_LEN) >> TNC_PART_SHIFT;
     const int textBlocks = (_textCount + TNC_PART_LEN) >> TNC_PART_SHIFT;
+    // Blaze: a heap buffer. Upstream uses a variable-length array of about 64 KB
+    // on the stack.
     std::vector<ldomNode> buf;
     while ( _nextNodeDataBlock < elemBlocks + textBlocks ) {
         const bool elements = _nextNodeDataBlock < elemBlocks;
@@ -2928,8 +2933,8 @@ ContinuousOperationResult tinyNodeCollection::saveNodeData( CRTimerUtil & maxTim
             buf[j]._data._nextFreeIndex = tmp;         // restore 32bits part
 #endif
         }
-        // A full or failing disk must not end the host process. The file
-        // stays marked dirty, so it is never opened again.
+        // Blaze: a full or failing disk must not end the host process. Upstream calls
+        // crFatalError here. The file stays marked dirty, so it is never opened again.
         if (!_cacheFile->write(type, i, (lUInt8*)buf.data(), bytes, COMPRESS_NODE_DATA)) {
             CRLog::error("Cannot write node data to cache file");
             return CR_ERROR;
@@ -3505,7 +3510,8 @@ void ldomDataStorageManager::compact( lUInt32 reservedSpace, const ldomTextStora
 					_owner->createCacheFile();
 				if ( _cache ) {
 					if ( !p->swapToCache(true) ) {
-						// Keep the chunk in memory when the cache file cannot take it.
+						// Blaze: keep the chunk in memory when the cache file cannot take it.
+						// Upstream calls crFatalError(111).
 						sumsize += p->_bufsize;
 					}
 					// Blaze: each chunk is packed and written. Other
@@ -3609,7 +3615,8 @@ bool ldomTextStorageChunk::swapToCache( bool removeFromMemory )
             CRLog::debug("Writing %d bytes of chunk %c%d to cache", _bufpos, _type, _index);
 #endif
             if ( !_manager->_cache->write( _manager->cacheType(), _index, _buf, _bufpos, COMPRESS_NODE_STORAGE_DATA) ) {
-                // The chunk stays in memory and the file stays marked dirty.
+                // Blaze: the chunk stays in memory and the file stays marked dirty. Upstream
+                // calls crFatalError here.
                 CRLog::error("Error while swapping of chunk %c%d to cache file", _type, _index);
                 return false;
             }
@@ -5194,7 +5201,7 @@ ldomDocument::~ldomDocument()
     destroyNodes();
     _def_font.Clear();
     _fonts.clear();
-    // Without a slot the index is -1, which is also the index of the fonts
+    // Blaze: without a slot the index is -1, which is also the index of the fonts
     // of the system: those must stay.
     if ( _docIndex >= 0 )
         fontMan->UnregisterDocumentFonts(_docIndex);
@@ -7716,6 +7723,8 @@ bool ldomNode::isBoxingInlineBox() const
     if ( getNodeId() == el_inlineBox && BLOCK_RENDERING_N(this, BOX_INLINE_BLOCKS) ) {
         if (getChildCount() == 1) {
             css_display_t d = getChildNode(0)->getStyle()->display;
+            // Blaze: css_is_inline_box() also accepts inline-flex. Upstream tests only
+            // inline-block and inline-table.
             if (css_is_inline_box(d)) {
                 return true;
             }
@@ -7742,6 +7751,7 @@ bool ldomNode::isEmbeddedBlockBoxingInlineBox(bool inline_box_checks_done) const
         if (getChildCount() != 1)
             return false;
         css_display_t d = getChildNode(0)->getStyle()->display;
+        // Blaze: also inline-flex, see css_is_inline_box().
         if (css_is_inline_box(d)) {
             return false; // regular boxing inlineBox
         }
@@ -7847,7 +7857,7 @@ void ldomNode::initNodeRendMethod()
         //recurseElements( resetRendMethodToInvisible );
         setRendMethod(erm_invisible);
     } else if ( d==css_d_inline ) {
-        // Ruby boxing nodes (rubyBox, el_rbc, el_rtc) have css_d_inline as their
+        // Blaze: ruby boxing nodes (rubyBox, el_rbc, el_rtc) have css_d_inline as their
         // default display, but they need specific render methods based on their role
         // in the ruby table structure. Detect them by structural position so that
         // initNodeRendMethod() (called deepest-first) sets the correct method without
@@ -8939,7 +8949,7 @@ void ldomNode::initNodeRendMethod()
         // All wrapping done, or assumed to have already been done correctly.
         // We can set the rendering methods to make all this a table.
         // All unexpected elements will be erm_invisible.
-        // On re-renders (needs_wrapping=false), render methods are kept correct by the
+        // Blaze: on re-renders (needs_wrapping=false), render methods are kept correct by the
         // el_rubyBox special-case in the css_d_inline branch of initNodeRendMethod above:
         // each rubyBox sets its own render method based on its structural position.
         // We only call persist() here for newly created nodes (needs_wrapping=true).
@@ -9163,6 +9173,7 @@ void ldomNode::initNodeRendMethod()
         // - a inlineBox has ALWAYS ->display=css_d_inline and erm_method=erm_inline
         // - a inlineBox child keeps its original ->display, and may have
         //   erm_method = erm_final or erm_block (depending on its content)
+        // Blaze: also inline-flex, see css_is_inline_box().
         bool isInlineBlock = (css_is_inline_box(d));
         bool isInlineBox = (getNodeId() == el_inlineBox);
         if ( isInlineBlock || isInlineBox ) {
@@ -11096,7 +11107,7 @@ bool ldomXPointer::getRect(lvRect & rect, bool extended, bool adjusted, int * ct
                 printf(" if (%x==%x || %x==%x)\n", src->object, node , ((ldomNode*)(src->object))->getEffectiveNode(), node);
                 printf(" %d %s %s vs. %d\n", i, LCSTR(ldomXPointer((ldomNode*)(src->object),src->t.offset).toStringV1()),
                                     LCSTR(ldomXPointer(((ldomNode*)(src->object))->getEffectiveNode() ,src->t.offset).toStringV1()), offset); */
-                // Prefix runs share a DOM node but cover distinct offset ranges.
+                // Blaze: prefix runs share a DOM node but cover distinct offset ranges.
                 if (!isObject && txtform->IsReadingText(src->t.text)
                     && (offset < src->t.offset || (offset >= src->t.len && src->t.len < node->getText().length())))
                     continue;
@@ -11683,6 +11694,8 @@ ldomXPointer ldomDocument::createXPointerV1( ldomNode * baseNode, const lString3
         case xpath_step_element:
             // element of type 'name' with 'index'        /elemname[N]/
             {
+                // Blaze: a name that no element has is not in the document. Upstream registers
+                // it as a new element name, so a stale saved xpointer changes the name table.
                 lUInt16 id = findElementNameIndex( name.c_str() );
                 if (!id)
                     return ldomXPointer();
@@ -11788,6 +11801,8 @@ ldomXPointer ldomDocument::createXPointerV2( ldomNode * baseNode, const lString3
         case xpath_step_element:
             // element of type 'name' with 'index'        /elemname[N]/
             {
+                // Blaze: a name that no element has is not in the document. Upstream registers
+                // it as a new element name, so a stale saved xpointer changes the name table.
                 lUInt16 id = findElementNameIndex( name.c_str() );
                 if (!id)
                     return ldomXPointer();
@@ -13922,6 +13937,8 @@ static bool buildForwardEnhancedSearchBlock(const ldomXPointerEx & start, const 
     return buffer.hasNodes;
 }
 
+// Blaze: search preparation for callers outside the engine. It folds the pattern
+// and builds the text blocks the same way as findText().
 lString32 ldomFoldSearchPattern(const lString32 & pattern, lUInt32 flags)
 {
     return buildFoldedFindTextPattern(pattern, true, flags);
@@ -15290,6 +15307,9 @@ KoblazeSourceText::~KoblazeSourceText()
     sourceTextDocument = previous;
 }
 
+// Blaze: while a KoblazeSourceText lives for this document, give the render
+// method that the node had before layout changed it. Upstream always uses the
+// current method.
 static lvdom_element_render_method textRenderMethod(ldomNode *node)
 {
     lvdom_element_render_method method = node->getRendMethod();
@@ -16753,6 +16773,7 @@ public:
             // look at the initial CSS display, as we might have boxed some
             // inline-like elements for rendering purpose.
             css_display_t d = style->display;
+            // Blaze: also inline-flex, see css_is_inline_box().
             if ( d <= css_d_inline || css_is_inline_box(d) ) {
                 // inline, ruby; consider inline-block/-table as inline, in case
                 // they don't contain much (if they do, some inner block element
@@ -17201,6 +17222,7 @@ ldomNode * ldomDocumentFragmentWriter::OnTagOpen( const lChar32 * nsname, const 
                 parent->OnAttribute(U"", U"NonLinear", U"" );
             if ( !fragmentType.empty() ) // let it known if any
                 parent->OnAttribute(U"", U"T", fragmentType.c_str() );
+            // Blaze: record the href of the original manifest item of a fallback spine item.
             if (!originalSpinePath.empty())
                 parent->OnAttribute(U"", U"SpineHref", originalSpinePath.c_str());
             if ( !filePathName.empty() ) // may help users find the file to investigate in the EPUB
@@ -18933,6 +18955,9 @@ ContinuousOperationResult ldomDocument::saveChanges( CRTimerUtil & maxTime, LVDo
         }
         if (!maxTime.infinite())
             _cacheFile->flush(false, maxTime); // intermediate flush
+        // Blaze: this and the later stage lines at the end of a stage set the next stage
+        // before the time check. A save that resumes after a timeout then does not
+        // repeat the stage that finished. Upstream sets the stage only at its start.
         _mapSavingStage = 6;
         CHECK_EXPIRATION("saving props data")
         if (progressCallback) progressCallback->OnSaveCacheFileProgress(45);
@@ -19518,6 +19543,7 @@ public:
         CRLog::trace("ldomDocCacheImpl(%s maxSize=%d)", LCSTR(_cacheDir), (int)maxSize);
     }
 
+    // Blaze: `force` writes the index even when its CRC and size did not change.
     bool writeIndex(bool force = false)
     {
         lString32 filename = _cacheDir + "cr3cache.inx";
@@ -19533,6 +19559,9 @@ public:
             buf << item->size;
             CRLog::trace("cache item: %s %d", LCSTR(item->filename), (int)item->size);
         }
+        // Blaze: take the CRC before putCRC(). Upstream compares a CRC that includes
+        // the CRC32 appended to the data. For a given length that value is constant,
+        // so an index of the same length was never rewritten.
         const lUInt32 newCRC = buf.getCRC();
         buf.putCRC( buf.pos() - start );
         if ( buf.error() )
@@ -19589,6 +19618,8 @@ public:
             if ( buf.error() )
                 return false;
 
+            // Blaze: seed the old CRC from the data that was read, without its CRC32, to
+            // match writeIndex(). Upstream reads the old file again in writeIndex().
             _oldStreamCRC = lStr_crc32(0, sb->getReadOnly(), buf.pos() - sizeof(lUInt32));
             _oldStreamSize = buf.pos();
             CRLog::info( "Document cache index file read ok, %d files in cache, %d bytes", _files.length(), totalSize );
@@ -20039,9 +20070,9 @@ void ldomDocument::updateRenderContext()
     _nodeStyleHash = 0; // force recalculation by calcStyleHash()
     lUInt32 styleHash = calcStyleHash(_rendered, _partial_rerendering_fake_node_style_hash);
     lUInt32 stylesheetHash = (((_ua_stylesheet.getHash() * 31) + calcHash(_def_style))*31 + calcHash(_def_font))*31 + getFontFamilyFontsHash();
-    // Prefix weights change advances and pagination even though CSS is unchanged.
+    // Blaze: prefix weights change advances and pagination even though CSS is unchanged.
     stylesheetHash = stylesheetHash * 31 + getProps()->getIntDef("kobalt.bionic.mode", 0);
-    // Paragraphs keep the side allowances they were laid out with.
+    // Blaze: paragraphs keep the side allowances they were laid out with.
     stylesheetHash = (stylesheetHash * 31 + _render_usable_left_overflow) * 31 + _render_usable_right_overflow;
     //calcStyleHash( getRootNode(), styleHash );
     _hdr.render_style_hash = styleHash;
@@ -20073,9 +20104,9 @@ bool ldomDocument::checkRenderContext()
     // printf("checkRenderContext: _nodeStyleHash before %x\n", _nodeStyleHash);
     lUInt32 styleHash = calcStyleHash(_rendered, _partial_rerendering_fake_node_style_hash);
     lUInt32 stylesheetHash = (((_ua_stylesheet.getHash() * 31) + calcHash(_def_style))*31 + calcHash(_def_font))*31 + getFontFamilyFontsHash();
-    // Prefix weights change advances and pagination even though CSS is unchanged.
+    // Blaze: prefix weights change advances and pagination even though CSS is unchanged.
     stylesheetHash = stylesheetHash * 31 + getProps()->getIntDef("kobalt.bionic.mode", 0);
-    // Paragraphs keep the side allowances they were laid out with.
+    // Blaze: paragraphs keep the side allowances they were laid out with.
     stylesheetHash = (stylesheetHash * 31 + _render_usable_left_overflow) * 31 + _render_usable_right_overflow;
     //calcStyleHash( getRootNode(), styleHash );
     // printf("checkRenderContext: _nodeStyleHash after  %x\n", _nodeStyleHash);

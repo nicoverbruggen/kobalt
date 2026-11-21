@@ -5422,13 +5422,35 @@ static void tryHyphenBreak(
     }
 }
 
-    /// Split paragraph into lines
+static bool thaiDependentVowelOrMark(lChar32 ch)
+{
+    return (ch >= 0x0e30 && ch <= 0x0e3a) || ch == 0x0e45
+            || (ch >= 0x0e47 && ch <= 0x0e4e);
+}
+
+static bool insideThaiLetterGroup(const LVFormatter* fmt, int boundary)
+{
+    if (boundary <= 0 || boundary >= fmt->m_length)
+        return false;
+    const lChar32 before = fmt->m_text[boundary - 1];
+    const lChar32 after = fmt->m_text[boundary];
+    const bool beforeConsonant = before >= 0x0e01 && before <= 0x0e2e;
+    const bool leadingVowel = before >= 0x0e40 && before <= 0x0e44;
+    const bool joined = (leadingVowel && after >= 0x0e01 && after <= 0x0e2e)
+            || (thaiDependentVowelOrMark(after)
+                && (beforeConsonant || thaiDependentVowelOrMark(before)));
+    // The first-line clone and the start of the original text are separate runs.
+    return joined && !((fmt->m_srcs[boundary - 1]->flags ^ fmt->m_srcs[boundary]->flags)
+                       & LTEXT_IS_FIRST_LINE_CLONE);
+}
+
 // -----------------------------------------------------------------------------
 // processParagraphHorizontal
 // Origin: upstream lvtextfm.cpp `void LVFormatter::processParagraph(...)` (~line
 // 4692 pre-f8b0bbe1).  Member -> free function as above.  The vertical-mode
 // sibling is processParagraphVertical in lvtextfm_vert.cpp.
 // -----------------------------------------------------------------------------
+/// Split paragraph into lines
 void processParagraphHorizontal( LVFormatter* fmt, int start, int end, bool isLastPara )
     {
         TR("processParagraph(%d, %d)", start, end);
@@ -5883,8 +5905,20 @@ void processParagraphHorizontal( LVFormatter* fmt, int start, int end, bool isLa
             else {
                 if ( wrapPos < lastNormalWrap )
                     wrapPos = lastNormalWrap;
-                if ( wrapPos < 0 ) // no wrap opportunity (e.g. very long non-hyphenable word)
-                    wrapPos = i-1;
+                if ( wrapPos < 0 ) {
+                    // An emergency wrap can split Thai text that has no word
+                    // boundaries. Keep attached vowels and marks with their base.
+                    int boundary = i;
+                    while (boundary > pos && insideThaiLetterGroup(fmt, boundary))
+                        --boundary;
+                    if (boundary == pos) {
+                        // Fit at least one complete group even if it is too wide.
+                        boundary = i;
+                        while (insideThaiLetterGroup(fmt, boundary))
+                            ++boundary;
+                    }
+                    wrapPos = boundary - 1;
+                }
                 #if (USE_LIBUNIBREAK!=1)
                 if ( wrapPos <= upSkipPos ) {
                     // Ensure that what, when dealing with previous line, we pushed to

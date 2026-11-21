@@ -112,6 +112,60 @@ static void checkReflowReusesBreaks()
     }
 }
 
+// One line per page lets the test inspect the source offset of every wrap.
+static void checkThaiWraps()
+{
+    auto fonts = kobalt::test::readerFonts();
+    fonts.sources.bundled = fonts.sources.bundled.filter("NotoSerifThai");
+    require(!fonts.sources.bundled.isEmpty(), "The Thai font fixture is missing");
+
+    for (const bool hinted : { false, true }) {
+        // Preposed vowel plus consonant, consonant pair, and two base-plus-mark pairs.
+        const auto sample = hinted ? QStringLiteral("ไป\u200bพบ\u200bกิ\u200bก้\u200b")
+                                   : QStringLiteral("ไปพบกิก้");
+        const auto content =
+                QStringLiteral("<html xmlns='http://www.w3.org/1999/xhtml'><head><style>"
+                               "html,body,p{margin:0;padding:0}p{font-family:'Noto Serif Thai';"
+                               "font-size:32px;text-indent:0;text-align:left;line-height:1.25}"
+                               "</style></head><body><p lang='th'>%1</p></body></html>")
+                        .arg(sample.repeated(36))
+                        .toUtf8();
+        for (const int width : { 110, 128, 140 }) {
+            kobalt::EngineDocument model(fonts);
+            open(model, content, QSize(width, 50));
+            require(model.pages() > 10, "The Thai passage did not wrap across enough pages");
+            for (int page = 1; page < model.pages(); ++page) {
+                bool parsed = false;
+                const int offset = model.pageStart(page).section('.', -1).toInt(&parsed);
+                require(parsed && offset > 0, "The Thai page start has no source offset");
+                const int boundary = offset % sample.size();
+                const bool valid = hinted ? boundary % 3 == 0
+                                          : boundary != 1 && boundary != 5 && boundary != 7;
+                require(valid,
+                        qPrintable(QStringLiteral("Thai wrap at offset %1 at width %2")
+                                           .arg(offset)
+                                           .arg(width)));
+            }
+        }
+    }
+
+    // The first vowel alone is wider than the line. Every page still consumes
+    // one complete group, including the final group at the paragraph end.
+    const QByteArray oversized = "<html xmlns='http://www.w3.org/1999/xhtml'><head><style>"
+                                 "html,body,p{margin:0;padding:0}p{font-family:'Noto Serif Thai';"
+                                 "font-size:280px;text-indent:0;text-align:left;line-height:1.25}"
+                                 "</style></head><body><p lang='th'>ไปไปไปไป</p></body></html>";
+    kobalt::EngineDocument narrow(fonts);
+    open(narrow, oversized, QSize(80, 440));
+    require(narrow.pages() == 4, "An oversized Thai group must advance exactly one line");
+    for (int page = 1; page < narrow.pages(); ++page) {
+        bool parsed = false;
+        const int offset = narrow.pageStart(page).section('.', -1).toInt(&parsed);
+        require(parsed && offset == page * 2,
+                "A narrow page must begin with a complete Thai group");
+    }
+}
+
 static Layout render(const QByteArray &mode)
 {
     const QByteArray content =
@@ -141,6 +195,7 @@ int main(int argc, char **argv)
     // Keep the narrow CSS-pixel viewport used to distinguish these two
     // line-break modes. Device-density CSS sizing has its own reader check.
     const int previousPpi = kobalt::readingPpi.exchange(96);
+    checkThaiWraps();
     const auto strict = render("strict");
     const auto loose = render("loose");
     kobalt::readingPpi.store(previousPpi);

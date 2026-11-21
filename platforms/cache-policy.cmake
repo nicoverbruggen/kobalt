@@ -21,7 +21,8 @@ set(layout_policy "849b421de582bf6b89f84263eab8e27dabd97cc0a8cfc807504f170a6ac35
 # Version 18: repaginate flex rows with horizontal item margins.
 # Version 19: repaginate block flex rows with percentage item width limits.
 # Version 20: repaginate flex rows with horizontal auto margins.
-set(rendering_version 20)
+# Version 21: repaginate emergency Thai line wraps around attached vowels and marks.
+set(rendering_version 21)
 file(GLOB cache_patterns CONFIGURE_DEPENDS
     "${KOBALT_ROOT}/assets/hyph/*.pattern" "${KOBALT_ROOT}/assets/hyph/*.khg")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${cache_patterns})

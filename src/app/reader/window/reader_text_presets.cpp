@@ -195,6 +195,10 @@ void Reader::buildTextPresets()
                 return;
             preferences = applied;
             syncTextPresets();
+            // While the preview opens, refresh skips the appearance controls and their layout.
+            if (menu->isVisible()
+                && appearanceEdit.previewState() == AppearanceEditSession::PreviewState::Opening)
+                fitAppearance();
             refresh();
         });
     };

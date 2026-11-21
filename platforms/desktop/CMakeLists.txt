@@ -925,3 +925,18 @@ if(BUILD_TESTING)
             -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake"
         DEPENDS kobalt-desktop-tests USES_TERMINAL VERBATIM)
 endif()
+
+# Optional out-of-tree add-ons, such as extra checks kept in another
+# repository. Each folder is added after the public targets, so it can link
+# them and inherit their dependencies. Empty by default.
+set(KOBALT_ADDON_DIRS "" CACHE STRING "Folders with a CMakeLists.txt to add after the public targets")
+if(BUILD_TESTING)
+    set(addon_index 0)
+    foreach(addon IN LISTS KOBALT_ADDON_DIRS)
+        if(NOT EXISTS "${addon}/CMakeLists.txt")
+            message(FATAL_ERROR "KOBALT_ADDON_DIRS names a folder without CMakeLists.txt: ${addon}")
+        endif()
+        add_subdirectory("${addon}" "${CMAKE_CURRENT_BINARY_DIR}/addons/${addon_index}")
+        math(EXPR addon_index "${addon_index} + 1")
+    endforeach()
+endif()

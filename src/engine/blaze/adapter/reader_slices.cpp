@@ -1351,6 +1351,17 @@ int EngineDocument::wholeBookPageCount() const
     return fullDocumentReady() ? full_->pages() : 0;
 }
 
+void EngineDocument::prepareWholeBookText(const QString &first, const QString &after,
+                                          const std::function<bool()> &current)
+{
+    // The whole book finds its own main text and counts its own words: both
+    // are kept with it, and the chapter document's figures can differ.
+    if (windowFirst_ < 0 || !fullDocumentReady())
+        return;
+    full_->mainTextHints();
+    full_->wordsInMainText(first, after, current);
+}
+
 QVector<ChapterLink> EngineDocument::wholeBookChapters() const
 {
     if (windowFirst_ < 0)

@@ -205,6 +205,10 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
     result.state["main_text_bounded"] =
             !first.isEmpty() || !after.isEmpty() || !engine.mainTextMarks.isEmpty();
     result.mainWords = engine.wordsInMainText(first, after, current);
+    // The whole book is shown at a later turn. It does this work now, on the
+    // background capture that follows its preparation.
+    if (engine.partOfBook())
+        engine.prepareWholeBookText(first, after, current);
     result.state["main_text_first"] = firstPage;
     result.state["main_text_last"] = lastPage;
     result.chapterTicks = wholeBookTicks(engine, first, after, deferred, current);

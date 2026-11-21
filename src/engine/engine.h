@@ -347,6 +347,17 @@ public:
     // The page count of that layout, or 0 when there is none.
     virtual int wholeBookPageCount() const { return partOfBook() ? 0 : pages(); }
 
+    // Finds the main text and counts its words in that layout ahead of time,
+    // so the turn that shows it does not. A part of the book calls this once
+    // the layout is ready.
+    virtual void prepareWholeBookText(const QString &first, const QString &after,
+                                      const std::function<bool()> &current)
+    {
+        Q_UNUSED(first);
+        Q_UNUSED(after);
+        Q_UNUSED(current);
+    }
+
     // The contents of that layout, whose positions resolve in it. A part of
     // the book has placeholders for the entries of spine items it has not
     // laid out.

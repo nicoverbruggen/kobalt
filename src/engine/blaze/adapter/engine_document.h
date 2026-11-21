@@ -232,6 +232,8 @@ public:
                                 bool rangeEndpoints = false) const override;
     int wholeBookPageCount() const override;
     QVector<ChapterLink> wholeBookChapters() const override;
+    void prepareWholeBookText(const QString &first, const QString &after,
+                              const std::function<bool()> &current) override;
     void rememberWholeBookTicks(const QVector<double> &ticks, const QString &range) override;
     bool savedWholeBookTicks(const QString &range, QVector<double> *ticks) const override;
     QVector<int> bookPages(const QStringList &positions, const std::function<bool()> &current = {},

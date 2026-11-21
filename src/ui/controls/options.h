@@ -83,6 +83,7 @@ public:
 protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void resizeEvent(QResizeEvent *) override;
+    bool event(QEvent *event) override;
     bool hitButton(const QPoint &position) const override;
     void paintEvent(QPaintEvent *) override;
 
@@ -105,6 +106,11 @@ private:
     // its capitals center on the indicator.
     int labelRaise(const QFont &labelFont) const;
     int descriptionTop() const;
+    // The title line, before a label that stands alone is raised.
+    QRect labelLine() const;
+    QFont labelFont() const;
+    // Moves the title label to its place in the title line.
+    void placeTitleLabel();
 };
 
 // A pick-one list: a row per choice with a radio on the left, its label and

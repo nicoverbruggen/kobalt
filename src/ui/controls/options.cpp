@@ -59,6 +59,7 @@ void DescribedOption::setPresentation(const Presentation &value)
     appearance = value;
     setMinimumHeight(appearance.minimumRowHeight);
     updateGeometry();
+    placeTitleLabel();
     update();
 }
 
@@ -74,6 +75,7 @@ void DescribedOption::setDescription(const QString &text)
     description = text;
     setAccessibleDescription(text);
     updateGeometry();
+    placeTitleLabel();
     update();
 }
 
@@ -83,6 +85,7 @@ void DescribedOption::setValue(const QString &next, const ValueStyle &style)
         return;
     value = next;
     valueStyle = style;
+    placeTitleLabel();
     update();
 }
 
@@ -109,6 +112,7 @@ void DescribedOption::setPreview(QWidget *widget, QSize size)
     preview->setAttribute(Qt::WA_TransparentForMouseEvents);
     preview->show();
     updateGeometry();
+    placeTitleLabel();
     update();
 }
 
@@ -117,6 +121,7 @@ void DescribedOption::setTitleLabel(QLabel *label)
     titleLabel = label;
     label->setAttribute(Qt::WA_TransparentForMouseEvents);
     label->show();
+    placeTitleLabel();
     update();
 }
 
@@ -125,6 +130,7 @@ void DescribedOption::setLeadingIcon(ControlIcon icon, IconBranch branch)
     leadingIcon = int(icon);
     iconBranch = branch;
     updateGeometry();
+    placeTitleLabel();
     update();
 }
 
@@ -221,6 +227,7 @@ void DescribedOption::resizeEvent(QResizeEvent *event)
         preview->setGeometry(width() - appearance.horizontalInset - previewSize.width(),
                              (height() - previewSize.height()) / 2, previewSize.width(),
                              previewSize.height());
+    placeTitleLabel();
 }
 
 bool DescribedOption::hitButton(const QPoint &position) const
@@ -228,11 +235,8 @@ bool DescribedOption::hitButton(const QPoint &position) const
     return rect().contains(position);
 }
 
-void DescribedOption::paintEvent(QPaintEvent *)
+QRect DescribedOption::labelLine() const
 {
-    QPainter painter(this);
-    const auto ink = palette().color(QPalette::WindowText);
-    const auto paper = palette().color(QPalette::Window);
     QFont descriptionFont = font();
     descriptionFont.setPixelSize(appearance.descriptionPixels);
     descriptionFont.setWeight(QFont::Normal);
@@ -248,16 +252,70 @@ void DescribedOption::paintEvent(QPaintEvent *)
     const int textOffset =
             (height() - (textBottom + valueHeight() - metrics::settings::checkboxTop)) / 2
             - metrics::settings::checkboxTop;
+    const int textLeft =
+            (appearance.leadingIndicator
+                     ? appearance.horizontalInset + metrics::settings::labelLeft
+                             + appearance.indicatorSize.width() + metrics::settings::toggleGap
+                     : appearance.horizontalInset + metrics::settings::labelLeft)
+            + iconSpace();
+    return QRect(textLeft, metrics::settings::checkboxTop + textOffset, textWidth, labelHeight());
+}
+
+QFont DescribedOption::labelFont() const
+{
+    QFont labelFont = font();
+    labelFont.setPixelSize(appearance.labelPixels);
+    labelFont.setWeight(QFont::Normal);
+    labelFont.setItalic(false);
+    return labelFont;
+}
+
+void DescribedOption::placeTitleLabel()
+{
+    if (!titleLabel)
+        return;
+    // Placed here, never while painting: a move during a paint asks for a
+    // second paint, which is a second screen update on e-ink.
+    const auto line = labelLine().translated(0, -labelRaise(labelFont()));
+    const auto size = titleLabel->sizeHint();
+    const QRect bounds(line.left(), line.top() + (line.height() - size.height()) / 2, size.width(),
+                       size.height());
+    if (titleLabel->geometry() != bounds)
+        titleLabel->setGeometry(bounds);
+}
+
+bool DescribedOption::event(QEvent *event)
+{
+    const bool handled = QCheckBox::event(event);
+    // A font or theme change can resize the title without resizing the row.
+    // The title posts LayoutRequest here when its own size hint changes.
+    switch (event->type()) {
+    case QEvent::LayoutRequest:
+    case QEvent::FontChange:
+    case QEvent::StyleChange:
+    case QEvent::Polish:
+        placeTitleLabel();
+        break;
+    default:
+        break;
+    }
+    return handled;
+}
+
+void DescribedOption::paintEvent(QPaintEvent *)
+{
+    QPainter painter(this);
+    const auto ink = palette().color(QPalette::WindowText);
+    const auto paper = palette().color(QPalette::Window);
+    const QRect labelLine = this->labelLine();
+    const int textWidth = labelLine.width(), textLeft = labelLine.left();
+    const int textOffset = labelLine.top() - metrics::settings::checkboxTop;
     const int boxTop = (height() - appearance.indicatorSize.height()) / 2;
     const int boxLeft = appearance.leadingIndicator
             ? appearance.horizontalInset + metrics::settings::labelLeft
             : width() - appearance.horizontalInset - appearance.indicatorSize.width();
     const QRect box(boxLeft, boxTop, appearance.indicatorSize.width(),
                     appearance.indicatorSize.height());
-    const int textLeft = (appearance.leadingIndicator
-                                  ? box.right() + 1 + metrics::settings::toggleGap
-                                  : appearance.horizontalInset + metrics::settings::labelLeft)
-            + iconSpace();
     const bool held = appearance.pressedFill && isEnabled() && isDown();
     // The pressed gray of list rows such as Chapters.
     painter.fillRect(rect(), held ? themeColors(this).pressedPaper : paper);
@@ -337,14 +395,9 @@ void DescribedOption::paintEvent(QPaintEvent *)
             icon.paint(&painter, bounds);
     }
     painter.setPen(ink);
-    QFont labelFont = font();
-    labelFont.setPixelSize(appearance.labelPixels);
-    labelFont.setWeight(QFont::Normal);
-    labelFont.setItalic(false);
+    QFont labelFont = this->labelFont();
     painter.setFont(labelFont);
     // Only the label is raised; a value on the same line keeps its place.
-    const QRect labelLine(textLeft, metrics::settings::checkboxTop + textOffset, textWidth,
-                          labelHeight());
     QRect labelBounds = labelLine.translated(0, -labelRaise(labelFont));
     if (!value.isEmpty() || valueStyle.battery) {
         // The value keeps the right of the line; the label keeps at least three fifths.
@@ -401,16 +454,7 @@ void DescribedOption::paintEvent(QPaintEvent *)
         }
         painter.restore();
     }
-    if (titleLabel) {
-        // Use the final title metrics, including after a font or theme change
-        // that repaints the checkbox without resizing it.
-        const auto size = titleLabel->sizeHint();
-        const QRect bounds(labelBounds.left(),
-                           labelBounds.top() + (labelBounds.height() - size.height()) / 2,
-                           size.width(), size.height());
-        if (titleLabel->geometry() != bounds)
-            titleLabel->setGeometry(bounds);
-    } else {
+    if (!titleLabel) {
         const auto label = interfaceTextWidth(text(), labelFont) > labelBounds.width()
                 ? elideInterfaceText(text(), labelFont, labelBounds.width())
                 : text();

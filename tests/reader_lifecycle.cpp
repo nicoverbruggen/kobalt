@@ -2493,7 +2493,7 @@ private slots:
 
         engineActivity().pause(true);
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsClose")));
-        QVERIFY(host.session()->busy() && panel->isVisible());
+        QTRY_VERIFY(host.session()->busy() && panel->isVisible());
         host.window()->pageButton(1);
         QCOMPARE(counter->text(), settingsPage);
         host.window()->pageButton(-1);
@@ -2582,7 +2582,23 @@ private slots:
 
         auto *search = host.window()->findChild<QPushButton *>("rrSearchOpen");
         QVERIFY(search);
+        QSemaphore entered, release;
+        std::atomic_bool writerTimedOut{ false };
+        storage::RecordWriter blocker;
+        const auto unblock = qScopeGuard([&] { release.release(); });
+        blocker.post(
+                [&] {
+                    entered.release();
+                    writerTimedOut = !release.tryAcquire(1, 3000);
+                    return true;
+                },
+                {});
+        QVERIFY(entered.tryAcquire(1, 3000));
         QVERIFY(click(canvas, search));
+        QVERIFY2(!writerTimedOut, "Leaving Layout waited for the profile writer");
+        QCOMPARE(host.session()->state()["margin_pixels"], original["margin_pixels"]);
+        QVERIFY(!host.window()->findChild<QWidget *>("rrSearch")->isVisible());
+        release.release();
         auto *error = host.window()->findChild<QLabel *>("rrPreviewLabel");
         QVERIFY(error);
         QTRY_VERIFY(error->isVisible() && !error->text().isEmpty());
@@ -2598,8 +2614,10 @@ private slots:
             QVERIFY(!host.idle());
             QVERIFY(host.window()->isEnabled());
             QVERIFY(inspectReader(host)["preview_ready"].toBool());
-            QVERIFY(click(canvas,
-                          host.window()->findChild<QPushButton *>("rrSettingsWriteErrorConfirm")));
+            auto *confirm = host.window()->findChild<QPushButton *>("rrSettingsWriteErrorConfirm");
+            QTRY_VERIFY((confirm = host.window()->findChild<QPushButton *>(
+                                 "rrSettingsWriteErrorConfirm")) && confirm->isVisible());
+            QVERIFY(click(canvas, confirm));
             QTRY_VERIFY(!host.window()->findChild<QWidget *>("rrSettingsWriteError"));
         }
         QVERIFY(QDir(path).removeRecursively());

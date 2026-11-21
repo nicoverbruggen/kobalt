@@ -1054,7 +1054,13 @@ private:
     void openNavigationBarButtons();
     void applyAutomaticOpening(bool enabled);
     void applySettings();
+    storage::RecordWriter::Write preferenceWrite(const QJsonObject &next) const;
+    void recordPreferenceChanges(const QJsonObject &next);
     bool writePreferences(const QJsonObject &next);
+    using PreferencesWritten = std::function<void(const QJsonObject &, bool)>;
+    void writePreferences(const QJsonObject &next, PreferencesWritten done);
+    void finishSettingsWrite(const QJsonObject &next, bool saved);
+    void finishPreviewWrite(const QJsonObject &next, bool saved);
     pageButtons::Buttons buttonControls() const;
     void saveButtonControls(const QJsonObject &actions);
     void saveMarksSort(const QString &order);
@@ -1064,7 +1070,7 @@ private:
         int pending = 0;
     };
     std::shared_ptr<MarksSortWrites> marksSortWrites;
-    bool savingButtonControls = false, savingDenseGraph = false;
+    bool savingPreferences = false, savingButtonControls = false, savingDenseGraph = false;
     // Counts preferences writes. An asynchronous save that fails undoes its
     // change only when no later write started: a later write already carries
     // the change, and its own result decides.

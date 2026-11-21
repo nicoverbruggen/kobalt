@@ -450,7 +450,7 @@ bool Reader::hideNativeStatus() const
 
 void Reader::openSettings()
 {
-    if (session->temporaryTypography())
+    if (savingPreferences || session->temporaryTypography())
         return;
     kobalt::ui::PanelTiming timing("settings");
     ensureSettings();
@@ -889,7 +889,7 @@ pageButtons::Buttons Reader::buttonControls() const
 
 void Reader::saveButtonControls(const QJsonObject &actions)
 {
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph)
+    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph)
         return;
     const auto before = qt::object(
             { { pageButtons::preferenceKey, preferences.value(pageButtons::preferenceKey) } });
@@ -924,7 +924,7 @@ void Reader::saveButtonControls(const QJsonObject &actions)
 void Reader::saveMarksSort(const QString &order)
 {
     const auto before = preferences.value("marks_sort");
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
+    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
         bookmarkList->setSortOrder(before.toString("position"));
         return;
     }
@@ -969,43 +969,105 @@ void Reader::saveMarksSort(const QString &order)
                            });
 }
 
-bool Reader::writePreferences(const QJsonObject &next)
+storage::RecordWriter::Write Reader::preferenceWrite(const QJsonObject &next) const
 {
-    // Do not replace a pending asynchronous dark-mode save.
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph)
-        return false;
-    // Known exception: a settings change waits for its write, so each caller
-    // can undo the change when the write fails.
-    mainthread::AllowBlocking allow("settings write");
     const auto before = appearance::globalPreferences(preferences);
     auto global = appearance::globalPreferences(next);
     appearance::rememberTextLayout(global, session->state());
     appearance::rememberPageMargins(global, session->state());
-    // On the writer thread, after any queued layout memory, so neither write
-    // loses the other's change.
-    if (next.value("zen_stats") != preferences.value("zen_stats"))
-        ++zenStatsWrite;
-    // Closing Settings without a change must not wait for the file.
-    if (global != before
-        && !preferencesWriter.writeNow([path = book->paths().preferences(), before, global] {
-               return kobalt::storage::updatePreferences(path, before, global);
-           })) {
-        showSettingsWriteError();
-        return false;
-    }
+    if (global == before)
+        return {};
+    return [path = book->paths().preferences(), before, global] {
+        return storage::updatePreferences(path, before, global);
+    };
+}
+
+void Reader::recordPreferenceChanges(const QJsonObject &next)
+{
     // Disabling all three lists clears their saved order. Earlier sort
     // completions must not put that preference back.
     if (next.value("marks_sort") != preferences.value("marks_sort"))
         marksSortWrites.reset();
     logSettingChanges(preferences, next, restoringDefaults);
+}
+
+bool Reader::writePreferences(const QJsonObject &next)
+{
+    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph)
+        return false;
+    // Known exception for callers that still wait for the result.
+    mainthread::AllowBlocking allow("settings write");
+    if (next.value("zen_stats") != preferences.value("zen_stats"))
+        ++zenStatsWrite;
+    if (auto write = preferenceWrite(next); write && !preferencesWriter.writeNow(std::move(write))) {
+        showSettingsWriteError();
+        return false;
+    }
+    recordPreferenceChanges(next);
     return true;
+}
+
+void Reader::writePreferences(const QJsonObject &next, PreferencesWritten done)
+{
+    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
+        done(next, false);
+        return;
+    }
+    if (next.value("zen_stats") != preferences.value("zen_stats"))
+        ++zenStatsWrite;
+    auto write = preferenceWrite(next);
+    if (!write) {
+        recordPreferenceChanges(next);
+        done(next, true);
+        return;
+    }
+    savingPreferences = true;
+    if (general)
+        general->setEnabled(false);
+    menu->setEnabled(false);
+    QPointer<Reader> guard(this);
+    preferencesWriter.post(std::move(write), [guard, before = preferences, next,
+                                             done = std::move(done)](bool saved) {
+        qt::invoke(
+                QCoreApplication::instance(),
+                [guard, before, next, done, saved] {
+                    if (!guard)
+                        return;
+                    guard->savingPreferences = false;
+                    saves::settled();
+                    if (guard->releasingForUsb)
+                        return;
+                    if (guard->general)
+                        guard->general->setEnabled(true);
+                    guard->menu->setEnabled(true);
+                    if (!saved) {
+                        guard->showSettingsWriteError();
+                        done(next, false);
+                        return;
+                    }
+                    // An earlier asynchronous save can have settled while
+                    // this write was queued. Apply only this write's changes.
+                    auto applied = guard->preferences;
+                    for (auto it = before.begin(); it != before.end(); ++it) {
+                        if (!next.contains(it.key()))
+                            applied.remove(it.key());
+                    }
+                    for (auto it = next.begin(); it != next.end(); ++it) {
+                        if (before.value(it.key()) != it.value())
+                            applied[it.key()] = it.value();
+                    }
+                    guard->recordPreferenceChanges(applied);
+                    done(applied, true);
+                },
+                Qt::QueuedConnection);
+    });
 }
 
 void Reader::applySettings()
 {
     // Settings applies the choices in its own controls.
-    if (!general || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph
-        || session->temporaryTypography())
+    if (!general || savingPreferences || savingButtonControls || savingDarkMode >= 0
+        || savingDenseGraph || session->temporaryTypography())
         return;
     // Leaving an unanswered confirmation must not select or save defaults.
     static_cast<SettingsPanel *>(general)->dismissRestore();
@@ -1093,7 +1155,14 @@ void Reader::applySettings()
     for (auto it = rotation.begin(); it != rotation.end(); ++it)
         next[it.key()] = it.value();
     next = appearance::cleanPreferences(next);
-    if (!writePreferences(next)) {
+    writePreferences(next, [this](const QJsonObject &applied, bool saved) {
+        finishSettingsWrite(applied, saved);
+    });
+}
+
+void Reader::finishSettingsWrite(const QJsonObject &next, bool saved)
+{
+    if (!saved) {
         bionicOption.set(
                 session->requestedAppearance().fields().value("bold_reading").toString("off")
                 == "bold");
@@ -1198,7 +1267,7 @@ void Reader::applySettings()
 
 void Reader::setDenseGraph(bool dense)
 {
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
+    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
         chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
         refresh();
         return;
@@ -1240,7 +1309,7 @@ void Reader::toggleZenStats()
 {
     // Do not overtake a pending dark mode or button save, as writePreferences
     // does. The button already toggled itself, so put it back.
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
+    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
         syncNavigation();
         return;
     }
@@ -1279,8 +1348,8 @@ void Reader::toggleZenStats()
 
 void Reader::applyDarkMode(bool enabled)
 {
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph || pendingDarkMode >= 0
-        || session->busy() || session->temporaryTypography()) {
+    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph
+        || pendingDarkMode >= 0 || session->busy() || session->temporaryTypography()) {
         refresh();
         return;
     }
@@ -1613,7 +1682,7 @@ void Reader::mutateAppearance(std::function<void(ReaderSession &)> operation)
 
 void Reader::finishPreview()
 {
-    if (session->temporaryTypography())
+    if (savingPreferences || session->temporaryTypography())
         return;
     if (!appearanceEdit.panelOpen())
         return;
@@ -1650,7 +1719,18 @@ void Reader::finishPreview()
     const auto rotation = orientation->settings();
     for (auto it = rotation.begin(); it != rotation.end(); ++it)
         next[it.key()] = it.value();
-    if (next != preferences && !writePreferences(next)) {
+    if (next == preferences) {
+        finishPreviewWrite(next, true);
+        return;
+    }
+    writePreferences(next, [this](const QJsonObject &applied, bool saved) {
+        finishPreviewWrite(applied, saved);
+    });
+}
+
+void Reader::finishPreviewWrite(const QJsonObject &next, bool saved)
+{
+    if (!saved) {
         appearanceEdit.cancelNavigation();
         appearanceEdit.setError(strings::get("reader.could_not_save_reader_settings"));
         refresh();

@@ -3244,8 +3244,8 @@ void Reader::recordOpening()
 void Reader::finishExit()
 {
     if (!exitPending || closing || exportRunning || closeSaveError || session->busy()
-        || appearanceEdit.panelOpen() || appearanceEdit.applying() || appearanceEdit.finishPending()
-        || lifecycleHidden || services.suspended())
+        || savingPreferences || appearanceEdit.panelOpen() || appearanceEdit.applying()
+        || appearanceEdit.finishPending() || lifecycleHidden || services.suspended())
         return;
     if (finishDialog || annotationErrorDialog || settingsWriteErrorDialog)
         return;
@@ -3610,8 +3610,8 @@ bool Reader::pendingStorageSave() const
 
 bool Reader::localStorageSavePending() const
 {
-    return (annotationExporter && annotationExporter->writing()) || savingButtonControls
-            || savingDenseGraph || book->savesPending() || bookmarks->saving()
+    return (annotationExporter && annotationExporter->writing()) || savingPreferences
+            || savingButtonControls || savingDenseGraph || book->savesPending() || bookmarks->saving()
             || highlights->saving() || annotationSaving || (reportWriter && !reportWriter->idle());
 }
 

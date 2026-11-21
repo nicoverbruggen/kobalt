@@ -594,6 +594,18 @@ sleep::Snapshot Reader::powerScreenSnapshot()
     return captureSleepScreen(true);
 }
 
+sleep::Snapshot Reader::presentedSleepSnapshot() const
+{
+    if (!lifecycleHidden || (!sleepFramePresented
+                             && (!privateSleepFrame || !privateSleepFrame->isVisible())))
+        return {};
+    sleep::Snapshot frame;
+    frame.image = sleepImage;
+    frame.orientation = sleepOrientation;
+    frame.privateBook = sleepShot.privateBook;
+    return frame;
+}
+
 sleep::Details Reader::sleepDetails()
 {
     sleep::Details details;
@@ -895,6 +907,7 @@ void Reader::sleepViewReady()
     const bool presented = !sleepImage.isNull()
             && presentation->presentSleepScreen(sleepImage, sleepOrientation,
                                                 sleepNeedsImageCleanup);
+    sleepFramePresented = presented;
     if (!presented && book->hideBookOnSleepScreen())
         return;
     // Hiding a top-level window immediately submits the backing store
@@ -920,6 +933,7 @@ void Reader::wakeReader()
     kosyncWaking = true;
     syncCoordinator->resetBackgroundFailures();
     sleepImage = {};
+    sleepFramePresented = false;
     presentation->clearSleepScreen();
     setProperty("reader_sleep_clean_pending", false);
     const bool menuStayedVisible = lifecycleHidden && topControls->isVisible();

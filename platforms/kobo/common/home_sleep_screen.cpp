@@ -492,6 +492,19 @@ void HomeSleepScreen::preparePowerOff(sleep::Snapshot next)
     compose();
 }
 
+bool HomeSleepScreen::keepPresentedForPowerOff(sleep::Snapshot shown)
+{
+    if (!shown.image.isNull()) {
+        clearFrame();
+        snapshot = std::move(shown);
+    } else if (!presented) {
+        return false;
+    }
+    fontBackdrop = {};
+    poweredOff = true;
+    return true;
+}
+
 void HomeSleepScreen::persistPowerOff(const QString &identity)
 {
     if (poweredOff && !shutdownBackdrop.image.isNull()) {
@@ -563,7 +576,7 @@ void HomeSleepScreen::present()
 {
     // Nickel owned the outgoing screen. Clean it when the cover first paints.
     if (!snapshot.image.isNull())
-        presentation->presentSleepScreen(snapshot.image, snapshot.orientation, true);
+        presented = presentation->presentSleepScreen(snapshot.image, snapshot.orientation, true);
 }
 
 void HomeSleepScreen::clear()
@@ -579,7 +592,7 @@ void HomeSleepScreen::clearFrame()
     underlay.clear();
     shutdownBackdrop = {};
     fontBackdrop = {};
-    poweredOff = false;
+    poweredOff = presented = false;
 }
 
 void HomeSleepScreen::updateBattery()

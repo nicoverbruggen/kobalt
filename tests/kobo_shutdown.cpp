@@ -154,7 +154,7 @@ void N3PowerWorkflowManager::powerOff(bool low)
     ::powerOff(this, low);
 }
 
-// Checks that power-off, battery-low power-off and reboot wait for saves without a deadline, close the profile first and chain with Screensaver.
+// Checks direct Nickel handoff, the storage gate and the Screensaver chain.
 class ShutdownTests : public QObject
 {
     Q_OBJECT
@@ -300,9 +300,6 @@ private slots:
         profilePath = profile.path();
         kobalt::NativeLifecycle lifecycle(nullptr);
         QVERIFY(lifecycle.connected());
-        lifecycle.prepareShutdown = [](std::function<void()>) {
-            QFAIL("Reboot requested a reader save before calling Nickel");
-        };
         QSemaphore started, release;
         std::atomic_bool timedOut{ false };
         kobalt::storage::RecordWriter writer;
@@ -321,102 +318,57 @@ private slots:
                                                      [](QSqlDatabase &) { return true; }));
     }
 
-    void completion_data()
+    void powerOffDoesNotWaitForWriter_data()
     {
-        QTest::addColumn<int>("mode");
-        QTest::addColumn<bool>("stalled");
-        for (int mode = 0; mode < 2; ++mode) {
-            const auto name = QByteArray::number(mode);
-            QTest::newRow((name + "-drained").constData()) << mode << false;
-            QTest::newRow((name + "-stalled").constData()) << mode << true;
-        }
+        QTest::addColumn<bool>("low");
+        QTest::newRow("manual") << false;
+        QTest::newRow("battery-low") << true;
     }
 
-    void completion()
+    void powerOffDoesNotWaitForWriter()
     {
-        QFETCH(int, mode);
-        QFETCH(bool, stalled);
+        QFETCH(bool, low);
         QTemporaryDir profile;
         profilePath = profile.path();
-        const auto available = [&] {
-            return kobalt::storage::profileTransaction(profile.path(),
-                                                       [](QSqlDatabase &) { return true; });
-        };
-        QVERIFY(available());
         kobalt::NativeLifecycle lifecycle(nullptr);
         QVERIFY(lifecycle.connected());
-        QVERIFY(kobalt::NativeLifecycle::nativeProgressSaveAllowed());
-        std::function<void()> drained;
-        lifecycle.prepareShutdown = [&](std::function<void()> ready) {
-            drained = std::move(ready);
+        int screens = 0;
+        lifecycle.preparePowerScreen = [&](kobalt::NativeLifecycle::Shutdown mode) {
+            QCOMPARE(mode == kobalt::NativeLifecycle::Shutdown::BatteryLow, low);
+            ++screens;
         };
-        QObject manager;
-        QVERIFY(kobalt::NativeLifecycle::interceptShutdown(
-                &manager, kobalt::NativeLifecycle::Shutdown(mode)));
-        QVERIFY(drained);
-        QCOMPARE(powerOffs + reboots, 0);
-        QVERIFY(kobalt::NativeLifecycle::nativeSessionSaveAllowed());
-        if (stalled) {
-            // No deadline forces the shutdown: required saves must retain
-            // storage for every shutdown mode. Check that no timer is left
-            // that could end the wait, instead of waiting past a deadline.
-            processQueuedEvents();
-            QVERIFY2(pendingSingleShots(lifecycle).isEmpty(),
-                     qPrintable("A timer could end the held shutdown: "
-                                + pendingSingleShots(lifecycle).join(", ")));
-            QCOMPARE(powerOffs + reboots, 0);
-            QVERIFY2(available(), "Pending shutdown closed the profile before saves completed");
-            QVERIFY(kobalt::NativeLifecycle::nativeSessionSaveAllowed());
-            QVERIFY2(!kobalt::NativeLifecycle::canSuspend(),
-                     "Pending shutdown allowed CPU suspension");
-            QVERIFY(kobalt::NativeLifecycle::interceptShutdown(
-                    &manager, kobalt::NativeLifecycle::Shutdown(mode)));
-            QCOMPARE(powerOffs + reboots, 0);
-        }
-        drained();
-        QCOMPARE(reboots, mode == 2 ? 1 : 0);
-        QCOMPARE(powerOffs, mode == 2 ? 0 : 1);
-        QCOMPARE(batteryLow, mode == 1);
-        QVERIFY2(profileClosedAtHandoff, "The native action ran before the profile was blocked");
-        QVERIFY2(!available(), "Power-off left the shared profile open or writable");
+        QSemaphore started, release;
+        std::atomic_bool timedOut{ false };
+        kobalt::storage::RecordWriter writer;
+        QVERIFY(writer.tryPost([&] {
+            started.release();
+            timedOut = !release.tryAcquire(1, 5000);
+            return true;
+        }));
+        QVERIFY(started.tryAcquire(1, 5000));
+        // The native double must not submit its own profile transaction while
+        // that worker is held. Check the local profile gate after releasing it.
+        kobalt::nativePowerOff = [](void *, bool critical) {
+            QVERIFY(!kobalt::NativeLifecycle::nativeSessionSaveAllowed());
+            ++powerOffs;
+            batteryLow = critical;
+        };
+        auto *power = N3PowerWorkflowManager::sharedInstance();
+        kobalt_power_off(power, low);
+        const int immediateCalls = powerOffs;
+        const bool workStillActive = !writer.idle();
+        release.release();
+        QVERIFY(writer.flush(5000));
+        QVERIFY(!timedOut);
+        QCOMPARE(immediateCalls, 1);
+        QVERIFY(workStillActive);
+        QCOMPARE(screens, 1);
+        QCOMPARE(batteryLow, low);
+        kobalt_power_off(power, !low);
         kobalt::NativeLifecycle::disconnected();
-        QVERIFY2(!available(), "USB disconnect reopened the profile during power-off");
-        drained();
-        drained();
-        QVERIFY(kobalt::NativeLifecycle::interceptShutdown(
-                &manager, kobalt::NativeLifecycle::Shutdown(mode)));
-        QCOMPARE(powerOffs + reboots, 1);
-    }
-
-    void lowBatteryDuringPendingPowerOff()
-    {
-        using namespace kobalt;
-        QTemporaryDir profile;
-        profilePath = profile.path();
-        QVERIFY(storage::profileTransaction(profilePath, [](QSqlDatabase &) { return true; }));
-        NativeLifecycle lifecycle(nullptr);
-        int requests = 0, escalations = 0;
-        std::function<void()> drained;
-        lifecycle.prepareShutdown = [&](std::function<void()> ready) {
-            ++requests;
-            drained = std::move(ready);
-        };
-        lifecycle.criticalBatteryShutdown = [&] { ++escalations; };
-        QObject manager;
-        QVERIFY(NativeLifecycle::interceptShutdown(&manager, NativeLifecycle::Shutdown::PowerOff));
-        QVERIFY(drained);
-        for (int i = 0; i < 2; ++i)
-            QVERIFY(NativeLifecycle::interceptShutdown(&manager,
-                                                       NativeLifecycle::Shutdown::BatteryLow));
-        QCOMPARE(requests, 1);
-        QCOMPARE(escalations, 1);
-        QCOMPARE(powerOffs, 0);
-        QVERIFY(NativeLifecycle::nativeSessionSaveAllowed());
-        drained();
-        drained();
         QCOMPARE(powerOffs, 1);
-        QVERIFY(batteryLow);
-        QVERIFY(profileClosedAtHandoff);
+        QVERIFY(!kobalt::storage::profileTransaction(profilePath,
+                                                      [](QSqlDatabase &) { return true; }));
     }
 
     void sleepingShutdown_data()
@@ -446,21 +398,14 @@ private slots:
         QVERIFY(lifecycle.connected());
         QVERIFY(kobalt::NativeLifecycle::suspended());
         QVERIFY(!kobalt::NativeLifecycle::nativeProgressSaveAllowed());
-        std::function<void()> drained;
-        lifecycle.prepareShutdown = [&](std::function<void()> ready) {
-            QVERIFY2(
-                    kobalt::NativeLifecycle::nativeProgressSaveAllowed(),
-                    "A held shutdown could not write progress behind the native sleep or PIN screen");
-            drained = std::move(ready);
+        int prepared = 0;
+        lifecycle.preparePowerScreen = [&](kobalt::NativeLifecycle::Shutdown action) {
+            QCOMPARE(action, kobalt::NativeLifecycle::Shutdown(mode));
+            ++prepared;
         };
-        QObject manager;
-        QVERIFY(kobalt::NativeLifecycle::interceptShutdown(
-                &manager, kobalt::NativeLifecycle::Shutdown(mode)));
-        QVERIFY(drained);
-        QVERIFY(kobalt::NativeLifecycle::nativeProgressSaveAllowed());
-        QCOMPARE(powerOffs + reboots, 0);
-        drained();
-        QCOMPARE(powerOffs + reboots, 1);
+        kobalt_power_off(power, mode == 1);
+        QCOMPARE(prepared, 1);
+        QCOMPARE(powerOffs, 1);
         QVERIFY(profileClosedAtHandoff);
         QVERIFY(!kobalt::NativeLifecycle::nativeProgressSaveAllowed());
         power->asleep = power->sleepVisible = power->pinVisible = false;
@@ -476,9 +421,6 @@ private slots:
         QVERIFY(lifecycle.connected());
         kobalt::nativeUsbConnect = usbConnect;
         lifecycle.prepareUsb = [](std::function<void()> ready) { ready(); };
-        lifecycle.prepareShutdown = [](std::function<void()>) {
-            QFAIL("Shutdown tried to reclaim exported storage");
-        };
         QObject manager;
         QVERIFY(kobalt::NativeLifecycle::interceptUsb(&manager));
         QCOMPARE(usbHandoffs, 1);
@@ -486,38 +428,6 @@ private slots:
         QVERIFY(!kobalt::NativeLifecycle::interceptShutdown(
                 &manager, kobalt::NativeLifecycle::Shutdown::PowerOff));
         QVERIFY(!kobalt::NativeLifecycle::nativeProgressSaveAllowed());
-    }
-
-    void destroyedLifecycleIgnoresCompletion()
-    {
-        std::function<void()> drained;
-        QObject manager;
-        {
-            kobalt::NativeLifecycle lifecycle(nullptr);
-            lifecycle.prepareShutdown = [&](std::function<void()> ready) {
-                drained = std::move(ready);
-            };
-            QVERIFY(kobalt::NativeLifecycle::interceptShutdown(
-                    &manager, kobalt::NativeLifecycle::Shutdown::PowerOff));
-        }
-        drained();
-        QCOMPARE(powerOffs + reboots, 0);
-    }
-
-    void destroyedManagerIgnoresCompletion()
-    {
-        kobalt::NativeLifecycle lifecycle(nullptr);
-        QVERIFY(lifecycle.connected());
-        std::function<void()> drained;
-        lifecycle.prepareShutdown = [&](std::function<void()> ready) {
-            drained = std::move(ready);
-        };
-        auto *manager = new QObject;
-        QVERIFY(kobalt::NativeLifecycle::interceptShutdown(
-                manager, kobalt::NativeLifecycle::Shutdown::PowerOff));
-        delete manager;
-        drained();
-        QCOMPARE(powerOffs + reboots, 0);
     }
 
     void screensaverChain()
@@ -559,33 +469,12 @@ private:
             QVERIFY(lifecycle.connected());
             // Repeated discovery must not turn either load order into a cycle.
             QVERIFY(kobalt::connectScreensaverPowerOff());
-            std::function<void()> drained;
-            lifecycle.prepareShutdown = [&](std::function<void()> ready) {
-                drained = std::move(ready);
-            };
             const auto entry = screensaverLast ? hook : kobalt_power_off;
             entry(N3PowerWorkflowManager::sharedInstance(), low);
-            QVERIFY(drained);
-            QCOMPARE(powerOffs, 0);
-            QVERIFY(kobalt::NativeLifecycle::nativeSessionSaveAllowed());
-            // A slow or failed save must not be bypassed by the other mod,
-            // and no timer may end the held shutdown.
-            processQueuedEvents();
-            QVERIFY2(pendingSingleShots(lifecycle).isEmpty(),
-                     qPrintable("A timer could end the held shutdown: "
-                                + pendingSingleShots(lifecycle).join(", ")));
-            QCOMPARE(powerOffs, 0);
-            QVERIFY(kobalt::storage::profileTransaction(profilePath,
-                                                        [](QSqlDatabase &) { return true; }));
-            QVERIFY(kobalt::NativeLifecycle::nativeProgressSaveAllowed());
-            drained();
             QCOMPARE(powerOffs, 1);
             QCOMPARE(calls(), 1);
             QCOMPARE(batteryLow, low);
             QVERIFY(profileClosedAtHandoff);
-            drained();
-            QCOMPARE(powerOffs, 1);
-            QCOMPARE(calls(), 1);
         }
         // An unknown third-party continuation must not be overwritten.
         reset(powerOff);

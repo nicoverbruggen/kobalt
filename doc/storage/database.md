@@ -76,9 +76,9 @@
 - Sleep checkpoints the log. Sleep and host checkpoints wait for their save result.
 - Ordinary standby does not force a batch or a checkpoint.
 - At 5% battery or less, while not charging, activity makes a durable batch due after one minute. Standby first queues dirty reading data and a checkpoint. After a failed checkpoint, standby waits five minutes before asking again. These cooldowns never block standby. The reader uses the existing battery observation and adds no polling.
-- The connection closes when a book closes, when the reader is disposed for a transition, at USB export and at power-off.
+- The connection closes when a book closes, when the reader is disposed for a transition, and at USB export.
 - An ordinary close drains queued writes. The profile checkpoints, switches back to a `DELETE` journal and closes the file, even when nothing changed. A copy, a computer over USB and older builds then see one plain file.
-- USB drops queued reader writes and blocks new transactions as soon as the connection is confirmed. A running transaction can finish before the connection closes. After the close at USB export or power-off, every operation fails until the partition is mounted again or USB disconnects before the export. The firmware unmounts lazily before export and freezes Nickel at power-off, so no file may stay open.
+- USB drops queued reader writes and blocks new transactions as soon as the connection is confirmed. A running transaction can finish before the connection closes. After the close at USB export, every operation fails until the partition is mounted again or USB disconnects before the export. Power-off blocks new transactions without waiting for the profile connection to close. The firmware unmounts lazily before export and freezes Nickel at power-off, so no file may stay open.
 - Only the current USB request can close and block the profile. A cancelled drain cannot block it again. Unplugging cannot reopen it during power-off.
 - The first operation after a close opens the file again.
 - When a manual transition fails three times, the reader offers Retry or quitting without saving. A low-battery shutdown makes the same attempts, logs the failure and continues without a dialog.

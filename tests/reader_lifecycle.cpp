@@ -4922,9 +4922,11 @@ private slots:
         host.window()->sleepReader();
         QVERIFY(host.window()->isVisible());
         QVERIFY(sleep->image.isNull());
+        QVERIFY(host.window()->presentedSleepSnapshot().image.isNull());
         host.window()->sleepViewReady();
         QCOMPARE(sleep->presented, supported && enabled ? 1 : 0);
         QVERIFY(!host.window()->isVisible());
+        QCOMPARE(host.window()->presentedSleepSnapshot().image, sleep->image);
         if (supported && enabled) {
             QCOMPARE(sleep->image.size(), original.size());
             QVERIFY(sleep->image != original);

@@ -1,7 +1,6 @@
 #include "support/qt_compat.h"
 #include "platforms/kobo/common/native_symbol.h"
 #include "native_lifecycle.h"
-#include "startup_recovery.h"
 #include "screensaver_compatibility.h"
 #include "reader_environment.h"
 #include "engine/engine_activity.h"
@@ -171,10 +170,6 @@ bool NativeLifecycle::nativeProgressSaveAllowed()
 {
     if (!nativeSessionSaveAllowed())
         return false;
-    // The shutdown hook owns storage until its save continuation returns.
-    // A visible sleep screen or PIN must not prevent that final write.
-    if (active && active->shuttingDown())
-        return !active->storageBlocked();
     return !suspended() || sleepSaveAllowed();
 }
 
@@ -298,9 +293,6 @@ void (*nativeReboot)(void *);
 extern "C" __attribute__((visibility("default"))) void kobalt_power_off(void *manager,
                                                                         bool batteryLow)
 {
-#ifdef KOBALT_READER_HARDWARE
-    kobalt_startup_complete(nickel::startupPath);
-#endif
     const auto mode = batteryLow ? NativeLifecycle::Shutdown::BatteryLow
                                  : NativeLifecycle::Shutdown::PowerOff;
     if (!NativeLifecycle::interceptShutdown(static_cast<QObject *>(manager), mode))
@@ -523,78 +515,28 @@ bool NativeLifecycle::canSuspend()
             && (!active->beforeStandby || active->beforeStandby());
 }
 
-bool NativeLifecycle::interceptShutdown(QObject *manager, Shutdown mode)
+bool NativeLifecycle::interceptShutdown(QObject *, Shutdown mode)
 {
-    if (mode == Shutdown::Reboot) {
-        sessionStorageAvailable.store(false);
-        storage::blockProfile();
-        if (!active || stockStorageBlocked()) {
-            stockHandoff().begin(StockStorageHandoff::State::Shutdown);
-        } else {
-            active->poweringOff = true;
-            ++active->generation;
-            active->usbPending = false;
-            active->pendingWorkflow.clear();
-            active->pendingGadget.clear();
-        }
-        return false;
-    }
-    if (!active || !active->prepareShutdown || stockStorageBlocked()) {
-        stockHandoff().begin(StockStorageHandoff::State::Shutdown);
-        return false;
-    }
-    if (active->poweringOff) {
-        if (mode == Shutdown::BatteryLow && !active->batteryLow_ && active->criticalBatteryShutdown
-            && nativeSessionSaveAllowed()) {
-            active->batteryLow_ = true;
-            const auto escalate = active->criticalBatteryShutdown;
-            escalate();
-        }
+    if (active && active->poweringOff)
         return true;
-    }
-    if (!active->storageBlocked() && active->preparePowerScreen)
+    if (active && mode != Shutdown::Reboot && !active->storageBlocked()
+        && active->preparePowerScreen) {
         active->preparePowerScreen(mode);
-    active->poweringOff = true;
-    active->batteryLow_ = mode == Shutdown::BatteryLow;
-    // USB export has already released the book. Do not touch exported storage.
-    if (active->exported)
-        return false;
-    ++active->generation;
-    active->usbPending = false;
-    active->pendingGadget.clear();
-    active->pendingWorkflow.clear();
-    engineActivity().pause(false);
-    diagnostic("shutdown-release-start",
-               kobalt::qt::object({ { "reboot", mode == Shutdown::Reboot } }));
-    QPointer<QObject> guard(manager);
-    // Callback copies share one completion. Consume it before calling Nickel,
-    // whose shutdown path can reenter this hook while the manager still lives.
-    const auto completed = std::make_shared<bool>(false);
-    const auto lifecycle = active;
-    const auto request = active->generation;
-    const auto finish = [guard, lifecycle, mode, completed, request] {
-        if (!guard || !lifecycle || lifecycle != active || *completed || request != lifecycle->generation)
-            return;
-        *completed = true;
-        // Nickel stops EventEngine and closes its databases in powerOff().
-        // Every software shutdown, including battery-low shutdown, waits for
-        // save outcome and the worker drain. Battery-low may waive completed
-        // failures, never active storage calls. Physical power loss is separate.
-        diagnostic("shutdown-release-complete");
-        // Close and block the profile before Nickel freezes its threads.
-        // Late saves must keep failing afterward.
-        sessionStorageAvailable.store(false);
-        storage::closeProfile(true);
-        // The event log is written on its own thread. Let it finish the
-        // last events, briefly, before Nickel freezes its threads.
-        flushDiagnostics(1000);
-        if (mode == Shutdown::Reboot && !lifecycle->batteryLowShutdown())
-            nativeReboot(guard.data());
-        else
-            nativePowerOff(guard.data(), lifecycle->batteryLowShutdown());
-    };
-    active->prepareShutdown([finish] { storage::afterSleepSnapshotWork(finish); });
-    return true;
+    }
+    // Nickel owns shutdown. Gate new saves without waiting for a writer,
+    // snapshot worker or engine job to finish.
+    sessionStorageAvailable.store(false);
+    storage::blockProfile();
+    if (!active || stockStorageBlocked()) {
+        stockHandoff().begin(StockStorageHandoff::State::Shutdown);
+    } else {
+        active->poweringOff = true;
+        ++active->generation;
+        active->usbPending = false;
+        active->pendingWorkflow.clear();
+        active->pendingGadget.clear();
+    }
+    return false;
 }
 
 bool NativeLifecycle::interceptUsbWorkflow(QObject *manager)
@@ -810,7 +752,7 @@ bool NativeLifecycle::restartAfterRemoval()
     removalPending = true;
     // Reboot does not depend on whether Nickel can display the message.
     // Leave the current processing stack and give the overlay time to paint.
-    // The normal shutdown hook drains Kobalt before Nickel closes its databases.
+    // The reboot hook blocks new saves before Nickel closes its databases.
     QPointer<QObject> guard(power);
     qt::later(3000, this, [this, guard] {
         if (guard)

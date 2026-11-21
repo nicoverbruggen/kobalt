@@ -59,8 +59,7 @@ public:
     // it, even when storage returns before the worker reports its result.
     // Zero means USB or shutdown currently owns storage.
     static quint64 stockStorageGeneration();
-    // GUI-thread permission for progress writes, including a held shutdown
-    // while Nickel's sleep or PIN screen is still visible.
+    // GUI-thread permission for progress writes, including the sleep handoff.
     static bool nativeProgressSaveAllowed();
 
     bool connected() const { return connected_; }
@@ -70,8 +69,6 @@ public:
     bool scanLibrary(std::function<void()> done);
 
     bool blocked() const { return asleep || storageBlocked() || poweringOff || removalPending; }
-
-    bool batteryLowShutdown() const { return poweringOff && batteryLow_; }
 
     bool shuttingDown() const { return poweringOff; }
 
@@ -88,11 +85,10 @@ public:
     // canSuspend then answers false. A dialog that waits for the user is not
     // opening work.
     std::function<bool()> openingWorkPending, openingSaveParked;
-    std::function<void()> usbCancelled, criticalBatteryShutdown;
+    std::function<void()> usbCancelled;
     static void finishSleepView();
     std::function<void(std::function<void()>)> prepareUsb;
     std::function<void()> storageReleased, storageRestored;
-    std::function<void(std::function<void()>)> prepareShutdown;
     // False keeps the device awake while pending reader saves are started.
     std::function<bool()> beforeStandby;
     std::function<void()> afterStandby;
@@ -130,7 +126,6 @@ private:
     bool sleepHandoffPending = false;
     QTimer sleepViewCheck;
     bool savingBeforeSleep = false;
-    bool batteryLow_ = false;
     bool connected_ = false, asleep = false, usbPending = false, exported = false,
          poweringOff = false;
     bool storageReady = false, remounting = false;

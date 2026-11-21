@@ -1241,6 +1241,34 @@ private slots:
         QVERIFY(!power.findChild<QWidget *>("rrSleepFrame"));
     }
 
+    void powerOffKeepsPresentedPixels()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        MainWindowView window;
+        window.resize(800, 1200);
+        AbstractPowerView sleeping(&window), poweredOff(&window);
+        sleeping.setGeometry(window.rect());
+        poweredOff.setGeometry(window.rect());
+        poweredOff.hide();
+        window.show();
+        sleeping.show();
+        kobalt::nickel::HomeSleepScreen screen({ directory.path() }, nullptr);
+        QVERIFY(!screen.keepPresentedForPowerOff());
+        kobalt::sleep::Snapshot visible;
+        visible.image = QImage(window.size(), QImage::Format_RGB32);
+        visible.image.fill(QColor(175, 175, 175));
+        visible.orientation = Qt::PortraitOrientation;
+        visible.privateBook = true;
+        QVERIFY(directory.remove());
+        QVERIFY(screen.keepPresentedForPowerOff(visible));
+        sleeping.hide();
+        poweredOff.show();
+        auto *frame = poweredOff.findChild<QWidget *>("rrSleepFrame");
+        QVERIFY(frame);
+        QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32), visible.image);
+    }
+
     void powerOffKeepsSelectedDesign_data()
     {
         QTest::addColumn<int>("design");

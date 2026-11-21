@@ -373,36 +373,17 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         }
         // The reader hides after handing its sleep frame to Nickel, but still
         // owns this book and the clean backdrop needed for power-off.
-        if (run.reader && !busy && !BrowserHandoff::activeFor(run.reader))
+        const bool readerOwnsScreen = run.reader && !busy && !BrowserHandoff::activeFor(run.reader);
+        if (lifecycle->sleepRequested()
+            && homeSleep->keepPresentedForPowerOff(
+                    readerOwnsScreen ? run.reader->presentedSleepSnapshot() : sleep::Snapshot{}))
+            return;
+        if (readerOwnsScreen)
             homeSleep->preparePowerOff(run.reader->powerScreenSnapshot());
         else if (bindings_.enabled())
             homeSleep->prepareHomeScreen(true, busy || run.reader ? run.identity : QString());
         else
             homeSleep->clear();
-    };
-    lifecycle->prepareShutdown = [this](std::function<void()> ready) {
-        homeAfterClose = false;
-        authorization->setBlocked(true);
-        timer.stop();
-        // Revocation can dispose the reader while its bookmark is being
-        // exported. Keep the shutdown continuation with the shared drain.
-        // Nickel only freezes Kobalt at power-off, so close the profile first.
-        cleanupCallbacks.append([ready = std::move(ready)] {
-            kobalt::storage::closeProfile(true);
-            ready();
-        });
-        if (disposingForUsb)
-            return; // The USB drain already owns the files and the shutdown continuation.
-        if (sleepingOpening) {
-            // The original disposal already owns the reader and its completion.
-            sleepingOpening->setOpeningSaveState(lifecycle->batteryLowShutdown()
-                                                         ? OpeningSaveState::LowBatteryShutdown
-                                                         : OpeningSaveState::Required);
-        } else if (run.reader && !busy)
-            run.reader->prepareShutdown([this] { disposeForTransition([] { }); },
-                                        lifecycle->batteryLowShutdown());
-        else
-            disposeForTransition([] { });
     };
     if (bindings_.installInput)
         bindings_.installInput(this);
@@ -872,10 +853,6 @@ void ReaderCoordinator::disposeForTransition(std::function<void()> finished, boo
         && (lifecycle->sleepRequested() || NativeLifecycle::deviceSleeping())) {
         sleepingOpening = run.reader;
         sleepingOpening->setOpeningSaveState(OpeningSaveState::Sleeping);
-        lifecycle->criticalBatteryShutdown = [reader = sleepingOpening] {
-            if (reader)
-                reader->setOpeningSaveState(OpeningSaveState::LowBatteryShutdown);
-        };
     }
     const QString finalStatus = busy ? "cancelled" : "closed";
     ++generation;
@@ -901,10 +878,8 @@ void ReaderCoordinator::finishDisposal(const QString &finalStatus, bool nativeAl
             if (!saved && !usb)
                 kobalt::diagnostic("reader-disposed-unsaved", {},
                                    kobalt::DiagnosticSeverity::Error);
-            if (reader == guard->sleepingOpening) {
+            if (reader == guard->sleepingOpening)
                 guard->sleepingOpening.clear();
-                guard->lifecycle->criticalBatteryShutdown = {};
-            }
             delete reader.data();
             if (guard)
                 guard->finishDisposal(finalStatus, nativeAllowed);

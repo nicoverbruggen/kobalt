@@ -61,6 +61,7 @@ public:
     virtual void prepareShutdown(std::function<void()> finished, bool allowFailedSave = false) = 0;
 
     virtual sleep::Snapshot powerScreenSnapshot() { return {}; }
+    virtual sleep::Snapshot presentedSleepSnapshot() const { return {}; }
 
     virtual void sleepReader(bool externalScreenVisible = false) = 0;
 

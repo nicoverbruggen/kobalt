@@ -5,6 +5,8 @@
 #include "storage/record_writer.h"
 #include "storage/sleep_snapshot.h"
 #include "check.h"
+
+extern "C" void kobalt_power_off(void *, bool);
 #include "support/diagnostics.h"
 #include <QCoreApplication>
 #include <QEvent>
@@ -582,19 +584,14 @@ int main(int argc, char **argv)
     require(enteredSnapshot.tryAcquire(1, 5000), "Snapshot did not start");
     kobalt::NativeLifecycle::interceptUsb(usb);
     const auto abandoned = drains.takeLast();
-    lifecycle.prepareShutdown = [](std::function<void()> ready) {
-        kobalt::storage::closeProfile(true);
-        ready();
-    };
     power->asleep = true;
     emit power->aboutToSleep();
     power->visible = true;
-    require(kobalt::NativeLifecycle::interceptShutdown(usb,
-                                                       kobalt::NativeLifecycle::Shutdown::PowerOff),
-            "Power-off was not intercepted");
+    kobalt_power_off(power, false);
+    require(shutdowns == 1, "Power-off waited for an active snapshot");
     kobalt::NativeLifecycle::disconnected();
     abandoned();
-    require(!shutdowns, "Power-off interrupted snapshot storage");
+    require(shutdowns == 1, "An abandoned USB completion repeated power-off");
     QEventLoop delivered;
     kobalt::storage::afterSleepSnapshotWork([&] { delivered.quit(); });
     QTimer::singleShot(5000, &delivered, &QEventLoop::quit);

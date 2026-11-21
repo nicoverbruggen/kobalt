@@ -91,11 +91,15 @@ The page count `len` comes from the cache file and goes to `reserve(len)` and th
 
 **Upstream:** present in `master`. Confirmed by reading the master code.
 
-### Page text can include the next page's first line
+### Page text can take the first line of the next page
 
-**Summary:** `getPageText` can return the first line of the following page.
+**Summary:** `getPageText` can return the first line of the following page, because the end of the page range is found by scanning from a row that already belongs to that page.
 
-The page range ends at `page->start + page->height`, and the text range treats that end as inclusive. When the next line starts exactly there, it becomes part of the page text. For page text, Blaze ends the range one pixel earlier. Link collection keeps the old range.
+`getPageDocumentRange` scans upward from `end_y = page->start + page->height` for the last position on the page, and accepts it when its top is at most `end_y`. The row at `end_y` is the first row of the next page. When a line starts exactly there, the scan finds that line and its top passes the check, so the page text takes it. The last page of a chapter, for example, can take the first line of the next chapter. This is not specific to one script: it happens with plain English text and with a right-to-left Arabic book.
+
+For page text, Blaze starts the scan one row higher, on the last row of the page, and keeps the check at `end_y`. The check has to stay there: the caret after the last character of a wrapped line sits at the top of the next line, which is `end_y` for the last line of a page. An earlier Blaze version moved `end_y` itself up one pixel, and that left out the last line of every page. Link collection keeps the old scan.
+
+Reproduced in Blaze: with upstream's scan, two tests fail, and with Blaze's scan, both pass. One is a paragraph of numbered words followed by a short chapter, which checks that each page keeps its last line and leaves out the next chapter (`pageExcerptsKeepTheirLastLine` in [page_layout.cpp](../../../tests/model/page_layout.cpp)). The other is the Arabic book (`pageExcerptsStopAtTheVisibleBoundary` in [multilingual.cpp](../../../tests/model/multilingual.cpp)).
 
 **Code:** `getPageDocumentRange` in [lvdocview.cpp](crengine/src/lvdocview.cpp).
 

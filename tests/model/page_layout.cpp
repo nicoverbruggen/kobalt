@@ -275,11 +275,40 @@ void flexRows()
     require(plain.image(0) == unused.image(0), "An unmatched flex rule changed ordinary blocks");
 }
 
+// Checks that page excerpts keep the last line of each page and leave out the next page's first line.
+void pageExcerptsKeepTheirLastLine()
+{
+    QByteArray words;
+    for (int i = 1; i <= 120; ++i) {
+        words += "w" + QByteArray::number(i) + " ";
+    }
+    kobalt::EngineDocument doc(kobalt::test::readerFonts());
+    open(doc, "<p>" + words.trimmed() + "</p>", {}, {}, QSize(400, 300), false, true);
+    require(doc.pages() >= 4, "Excerpt fixture did not span several pages");
+    int expected = 1;
+    for (int page = 0; page + 1 < doc.pages(); ++page) {
+        const auto excerpt = doc.pageExcerpt(page);
+        std::printf("Excerpt %d: %s\n", page, qPrintable(excerpt));
+        require(excerpt.size() < 200, "Page excerpt is too long to compare whole pages");
+        require(!excerpt.contains("Next chapter"), "Page excerpt took the next chapter");
+        for (const auto &word : excerpt.split(' ', Qt::SkipEmptyParts)) {
+            require(word == "w" + QString::number(expected),
+                    qPrintable(QString("Page %1 excerpt has %2 where w%3 belongs")
+                                       .arg(page)
+                                       .arg(word)
+                                       .arg(expected)));
+            ++expected;
+        }
+    }
+    require(expected == 121, "Page excerpts left out the last line of a page");
+}
+
 } // namespace
 
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    pageExcerptsKeepTheirLastLine();
     flexRows();
     const QByteArray svg =
             "<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%' viewBox='0 0 200 100' preserveAspectRatio='xMidYMid meet'><rect width='200' height='100' fill='red'/></svg>";

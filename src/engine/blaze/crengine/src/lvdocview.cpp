@@ -3133,9 +3133,7 @@ LVRef<ldomXRange> LVDocView::getPageDocumentRange(int pageIndex, bool visibleTex
             if (page->flags & RN_PAGE_TYPE_COVER)
                 return res;
             start_y = page->start;
-            // Blaze: visibleTextOnly ends the range one pixel earlier. Page text then does
-            // not take the first line of the next page.
-            end_y = page->start + page->height - (visibleTextOnly ? 1 : 0);
+            end_y = page->start + page->height;
         }
         else {
             return res;
@@ -3174,7 +3172,12 @@ LVRef<ldomXRange> LVDocView::getPageDocumentRange(int pageIndex, bool visibleTex
         }
     }
     int end_h;
-    for (end_h=height; end_h >= start_h; end_h--) {
+    // Blaze: for visible text, start the scan on the last pixel row of the page.
+    // The row at end_y belongs to the first line of the next page, and its caret
+    // passes the check below, so page text took that line. The check itself keeps
+    // end_y: the caret after the last character of a wrapped line sits at the top
+    // of the next line, which is end_y for the last line of a page.
+    for (end_h = height - (visibleTextOnly ? 1 : 0); end_h >= start_h; end_h--) {
         end = m_doc->createXPointer(lvPoint(GetWidth(), start_y + end_h), PT_DIR_SCAN_BACKWARD_LOGICAL_LAST);
             // (x=GetWidth() might be redundant with PT_DIR_SCAN_BACKWARD_LOGICAL_LAST, but it might help skiping floats)
         // printf("  end (%d=%d): %s\n", end_h, start_y + end_h, UnicodeToLocal(end.toString()).c_str());

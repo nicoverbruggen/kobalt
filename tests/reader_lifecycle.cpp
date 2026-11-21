@@ -3332,6 +3332,7 @@ private slots:
             return;
         }
         const auto imageKey = page->image.cacheKey();
+        const auto sessionImageKey = host.session()->image().cacheKey();
         const auto layout = host.session()->layoutRevision();
         const auto position = host.session()->state().value("position");
         const QPoint point(page->width() / 2, page->topHeight() + 100);
@@ -3363,7 +3364,8 @@ private slots:
         bool tokenBoundaryReached = false, imageBeforeToken = false;
         if (pendingSelection) {
             host.session()->updated = [&] {
-                imageBeforeToken = !tokenBoundaryReached;
+                if (host.session()->image().cacheKey() != sessionImageKey && !tokenBoundaryReached)
+                    imageBeforeToken = true;
                 publish();
             };
             // This marker is queued before the held contact requests its token.
@@ -3373,16 +3375,18 @@ private slots:
         }
         QRect sheet, firstHandle, lastHandle;
         if (delayedPublication) {
+            const auto releaseFrame = [&] {
+                host.session()->updated = publish;
+                publish();
+            };
             if (stage == "selection-open")
                 page->annotationRequested();
-            // Hold back only the image's GUI notification. The engine can resolve
-            // text against its unchanged layout while the old pixels stay visible.
-            bool captured = false;
-            host.session()->updated = [&] { captured = true; };
+            // Keep the decoded frame off screen until the chosen input stage.
+            // An estimate update can also publish the frame already in the session.
+            host.session()->updated = [] {};
             engineActivity().pause(false);
-            QTRY_VERIFY(captured);
+            QTRY_VERIFY(host.session()->image().cacheKey() != sessionImageKey);
             QCOMPARE(page->image.cacheKey(), imageKey);
-            host.session()->updated = publish;
             engineActivity().pause(true);
             send(QEvent::MouseButtonPress, 1000);
             send(QEvent::MouseButtonRelease, 1709);
@@ -3405,7 +3409,7 @@ private slots:
                                 && !page->annotationContains(point - QPoint(0, page->topHeight()))
                                 && !dictionary->isVisible();
                         if (geometryPending)
-                            publish();
+                            releaseFrame();
                         probed = true;
                     });
                 };
@@ -3433,7 +3437,7 @@ private slots:
                 lastHandle = page->annotationHandleRect(false);
                 QVERIFY(!firstHandle.isEmpty() && !lastHandle.isEmpty());
                 QCOMPARE(page->image.cacheKey(), imageKey);
-                publish();
+                releaseFrame();
             }
         } else {
             send(QEvent::MouseButtonPress, 1000);

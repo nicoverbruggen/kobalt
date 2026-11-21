@@ -1268,9 +1268,11 @@ QString Reader::annotationViewportKey() const
     // Preview frames have separate geometry and cannot start a lookup.
     if (appearanceEdit.panelOpen())
         return "preview:" + QString::number(page->image.cacheKey());
-    return QString::number(session->layoutRevision()) + ':' + layoutKey() + ':'
-            + QString::number(session->page()) + ':'
-            + session->state().value("position").toString();
+    // Book page estimates can change without replacing the visible text layout.
+    const auto &state = session->state();
+    const auto slice = state.value("slice_start").toString();
+    return QString::number(session->layoutRevision()) + ':' + slice + ':'
+            + QString::number(session->page()) + ':' + state.value("position").toString();
 }
 
 void Reader::syncAnnotations()

@@ -16,6 +16,7 @@ native progress
 opening status before reader input
 remembered layout before reader input
 scenario wifi step
+settings write
 sleep
 wifi-off at sleep
 wifi-off before reader input

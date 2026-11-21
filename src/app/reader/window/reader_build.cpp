@@ -529,9 +529,7 @@ void Reader::buildReadingPage()
             dictionaryPanel->open(lookupText, result, lookupBounds);
             return;
         }
-        dictionaryPanel->setEnabled(false);
         book->saveDictionaryChoice(id, [this, previous](bool saved) {
-            dictionaryPanel->setEnabled(true);
             if (!saved) {
                 if (!previous.isEmpty()) {
                     QString ignored;

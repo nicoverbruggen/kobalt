@@ -2613,23 +2613,8 @@ private slots:
 
         auto *search = host.window()->findChild<QPushButton *>("rrSearchOpen");
         QVERIFY(search);
-        QSemaphore entered, release;
-        std::atomic_bool writerTimedOut{ false };
-        storage::RecordWriter blocker;
-        const auto unblock = qScopeGuard([&] { release.release(); });
-        blocker.post(
-                [&] {
-                    entered.release();
-                    writerTimedOut = !release.tryAcquire(1, 3000);
-                    return true;
-                },
-                {});
-        QVERIFY(entered.tryAcquire(1, 3000));
+        // Leaving Layout waits for the settings write, which fails here.
         QVERIFY(click(canvas, search));
-        QVERIFY2(!writerTimedOut, "Leaving Layout waited for the profile writer");
-        QCOMPARE(host.session()->state()["margin_pixels"], original["margin_pixels"]);
-        QVERIFY(!host.window()->findChild<QWidget *>("rrSearch")->isVisible());
-        release.release();
         auto *error = host.window()->findChild<QLabel *>("rrPreviewLabel");
         QVERIFY(error);
         QTRY_VERIFY(error->isVisible() && !error->text().isEmpty());

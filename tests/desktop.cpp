@@ -2051,20 +2051,7 @@ void swipeChoices(Fixture &fixture, const QString &name = {})
     QVERIFY(fixture.press("rrNavigation_taps_only"));
     QTRY_VERIFY(!fixture.widget("rrPageNavigationPopup"));
     QVERIFY(fixture.press("rrPageNavigation"));
-    QSemaphore entered, release;
-    storage::RecordWriter blocker;
-    blocker.post(
-            [&] {
-                entered.release();
-                return release.tryAcquire(1, 3000);
-            },
-            {});
-    auto unblock = qScopeGuard([&] { release.release(); });
-    QVERIFY(entered.tryAcquire(1, 3000));
     QVERIFY(fixture.press("rrReverseSwipeDirection"));
-    QVERIFY(!fixture.widget("rrNavigation_swipes_only")->isEnabled());
-    release.release();
-    QTRY_VERIFY(fixture.widget("rrNavigation_swipes_only")->isEnabled());
     QVERIFY(fixture.visible("rrPageNavigationPopup"));
     QTRY_VERIFY(
             storage::readJson(fixture.paths.preferences()).value("reverse_page_swipes").toBool());
@@ -9204,22 +9191,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             }
             QVERIFY(fixture.press("rrDictionarySelect"));
             QTRY_VERIFY(fixture.visible("rrDictionaryChoice1"));
-            QSemaphore entered, release;
-            std::atomic_bool writerTimedOut{ false };
-            storage::RecordWriter blocker;
-            const auto unblock = qScopeGuard([&] { release.release(); });
-            blocker.post(
-                    [&] {
-                        entered.release();
-                        writerTimedOut = !release.tryAcquire(1, 3000);
-                        return true;
-                    },
-                    {});
-            QVERIFY(entered.tryAcquire(1, 3000));
+            // The choice saves before the press returns.
             QVERIFY(fixture.press("rrDictionaryChoice1"));
-            QVERIFY2(!writerTimedOut, "Selecting a dictionary waited for the profile writer");
-            QCOMPARE(selector->toolTip(), QString("fixture"));
-            release.release();
             QTRY_COMPARE(selector->toolTip(), QString("alternate"));
             QTRY_VERIFY(!fixture.visible("rrDictionaryChoices"));
             QVERIFY(fixture.press("rrDictionarySave"));
@@ -12219,43 +12192,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QCOMPARE(probe->palette().color(QPalette::WindowText),
                      QColor(dark ? Qt::white : Qt::black));
         }
-        const auto whileWriterHeld = [](const std::function<bool()> &choose) {
-            QSemaphore entered, release;
-            std::atomic_bool timedOut{ false };
-            storage::RecordWriter blocker;
-            if (!blocker.tryPost([&] {
-                    entered.release();
-                    timedOut = !release.tryAcquire(1, 3000);
-                    return true;
-                })
-                || !entered.tryAcquire(1, 3000))
-                return false;
-            const bool selected = choose();
-            release.release();
-            return blocker.flush() && selected && !timedOut;
-        };
-        if (!dark && !pickerExport) {
-            QVERIFY2(whileWriterHeld([&] { return fixture.press("rrMarksSort_newest"); }),
-                     "Selecting the bookmark order waited for the profile writer");
-        } else {
-            QVERIFY(fixture.press("rrMarksSort_newest"));
-        }
+        QVERIFY(fixture.press("rrMarksSort_newest"));
         QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("marks_sort").toString(),
                      QString("newest"));
         QTRY_VERIFY(!fixture.widget("rrMarksSortPopup"));
         if (!dark && !pickerExport) {
-            // Both newer choices fail. The lists must return to the last
+            // A newer choice fails. The lists must return to the last
             // persisted order, and the unsupported file must stay intact.
             const auto path = fixture.paths.preferences();
             const auto saved = storage::readJson(path);
             const QJsonObject unsupported{ { "schema", 999 } };
             QVERIFY(storage::writeJson(path, unsupported));
-            QVERIFY(whileWriterHeld([&] {
-                if (!fixture.press("rrMarksSort") || !fixture.press("rrMarksSort_oldest"))
-                    return false;
-                QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-                return fixture.press("rrMarksSort") && fixture.press("rrMarksSort_position");
-            }));
+            QVERIFY(fixture.press("rrMarksSort") && fixture.press("rrMarksSort_oldest"));
             QTRY_VERIFY(fixture.visible("rrSettingsWriteErrorConfirm"));
             QCOMPARE(storage::readJson(path), unsupported);
             QVERIFY(storage::writeJson(path, saved));
@@ -12918,6 +12866,58 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
 
     // Checks that a reused font cell repaints its whole area after paging.
     // Qt 5.2 does not repaint a hidden caption's area; desktop Qt 6 does, so this cannot show that failure.
+    void fontPagingClearsCaptions()
+    {
+        // Font pages reuse their cells. A cell that shows another font must
+        // repaint completely, so a caption from the previous page cannot stay
+        // on screen. Qt 5.2 on Kobo leaves a hidden caption's area unpainted
+        // unless the cell asks for a full repaint. Desktop Qt 6 repaints that
+        // area by itself, so this check guards the contract but cannot show
+        // the Qt 5.2 failure.
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavText"));
+        QVERIFY(fixture.press("rrFont"));
+        QTRY_VERIFY(fixture.visible("rrChoices"));
+        auto *choices = dynamic_cast<ChoiceScreen *>(fixture.widget("rrChoices"));
+        QVERIFY(choices);
+        QVector<Choice> fonts{
+            { "Publisher Fonts", {}, "testFont0", "Fonts", 0, -1, "No embedded fonts\nUses Libron" }
+        };
+        for (int i = 1; i < 40; ++i)
+            fonts.append(
+                    { QString("Font %1").arg(i), "Libron", QString("testFont%1").arg(i), "Fonts" });
+        choices->showChoices("Font", fonts, {}, ChoiceScreen::Mode::Fonts);
+        QTRY_VERIFY(fixture.visible("testFont0Detail"));
+        auto *cell = fixture.widget("testFont0");
+        QVERIFY(cell);
+        QTest::qWait(100);
+
+        struct Paints : QObject
+        {
+            QRegion painted;
+
+            bool eventFilter(QObject *, QEvent *event) override
+            {
+                if (event->type() == QEvent::Paint)
+                    painted += static_cast<QPaintEvent *>(event)->region();
+                return false;
+            }
+        } paints;
+
+        cell->installEventFilter(&paints);
+        QVERIFY(fixture.press("rrFontPagerNext"));
+        QTRY_VERIFY(cell->isVisible() && cell->objectName() != "testFont0");
+        QTRY_VERIFY2(paints.painted.contains(cell->rect()),
+                     "A reused font cell kept pixels from the previous page");
+        cell->removeEventFilter(&paints);
+    }
+
     // Checks that interface font pickers leave out families of 3 MB or more, show
     // such custom fonts disabled with the reason, and keep a chosen family loaded.
     void interfaceFontSizeLimit()
@@ -12973,58 +12973,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(QFile::remove(small));
         ui::refreshInterfaceText(fixture.window.readerWindow());
         QVERIFY(!ui::renderPrivateText("Mark text", ui::interfaceFont(20)).image.isNull());
-    }
-
-    void fontPagingClearsCaptions()
-    {
-        // Font pages reuse their cells. A cell that shows another font must
-        // repaint completely, so a caption from the previous page cannot stay
-        // on screen. Qt 5.2 on Kobo leaves a hidden caption's area unpainted
-        // unless the cell asks for a full repaint. Desktop Qt 6 repaints that
-        // area by itself, so this check guards the contract but cannot show
-        // the Qt 5.2 failure.
-        Fixture fixture;
-        QVERIFY(fixture.prepared);
-        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
-        fixture.window.openBook(book);
-        QTRY_COMPARE(opened.count(), 1);
-        QTRY_VERIFY(!fixture.state().value("busy").toBool());
-        QVERIFY(fixture.press("rrPage"));
-        QVERIFY(fixture.press("rrNavText"));
-        QVERIFY(fixture.press("rrFont"));
-        QTRY_VERIFY(fixture.visible("rrChoices"));
-        auto *choices = dynamic_cast<ChoiceScreen *>(fixture.widget("rrChoices"));
-        QVERIFY(choices);
-        QVector<Choice> fonts{
-            { "Publisher Fonts", {}, "testFont0", "Fonts", 0, -1, "No embedded fonts\nUses Libron" }
-        };
-        for (int i = 1; i < 40; ++i)
-            fonts.append(
-                    { QString("Font %1").arg(i), "Libron", QString("testFont%1").arg(i), "Fonts" });
-        choices->showChoices("Font", fonts, {}, ChoiceScreen::Mode::Fonts);
-        QTRY_VERIFY(fixture.visible("testFont0Detail"));
-        auto *cell = fixture.widget("testFont0");
-        QVERIFY(cell);
-        QTest::qWait(100);
-
-        struct Paints : QObject
-        {
-            QRegion painted;
-
-            bool eventFilter(QObject *, QEvent *event) override
-            {
-                if (event->type() == QEvent::Paint)
-                    painted += static_cast<QPaintEvent *>(event)->region();
-                return false;
-            }
-        } paints;
-
-        cell->installEventFilter(&paints);
-        QVERIFY(fixture.press("rrFontPagerNext"));
-        QTRY_VERIFY(cell->isVisible() && cell->objectName() != "testFont0");
-        QTRY_VERIFY2(paints.painted.contains(cell->rect()),
-                     "A reused font cell kept pixels from the previous page");
-        cell->removeEventFilter(&paints);
     }
 
     // Checks the selected KF row in both font pickers, unchanged defaults and the reading position after reopening.

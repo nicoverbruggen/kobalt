@@ -461,7 +461,7 @@ bool Reader::hideNativeStatus() const
 
 void Reader::openSettings()
 {
-    if (savingPreferences || session->temporaryTypography())
+    if (session->temporaryTypography())
         return;
     kobalt::ui::PanelTiming timing("settings");
     ensureSettings();
@@ -900,7 +900,7 @@ pageButtons::Buttons Reader::buttonControls() const
 
 void Reader::saveButtonControls(const QJsonObject &actions)
 {
-    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph)
+    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph)
         return;
     const auto before = qt::object(
             { { pageButtons::preferenceKey, preferences.value(pageButtons::preferenceKey) } });
@@ -934,50 +934,21 @@ void Reader::saveButtonControls(const QJsonObject &actions)
 
 void Reader::saveMarksSort(const QString &order)
 {
-    const auto before = preferences.value("marks_sort");
-    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
-        bookmarkList->setSortOrder(before.toString("position"));
-        return;
-    }
     if (wordList)
         wordList->setSortOrder(order);
-    if (before == order)
+    if (preferences.value("marks_sort") == order)
         return;
-    if (!marksSortWrites) {
-        marksSortWrites = std::make_shared<MarksSortWrites>();
-        marksSortWrites->saved = before;
-    }
-    ++marksSortWrites->pending;
-    const auto next = qt::object({ { "marks_sort", order } });
-    logSettingChanges(qt::object({ { "marks_sort", before } }), next);
-    preferences["marks_sort"] = order;
-    QPointer<Reader> guard(this);
-    preferencesWriter.post([path = book->paths().preferences(),
-                            next] { return storage::updatePreferences(path, {}, next); },
-                           [guard, writes = marksSortWrites, order](bool saved) {
-                               qt::invoke(
-                                       QCoreApplication::instance(),
-                                       [guard, writes, order, saved] {
-                                           if (!guard || guard->marksSortWrites != writes)
-                                               return;
-                                           // All writes finish in order. If the final choice fails, use
-                                           // the last choice that reached disk, even after several taps.
-                                           if (saved)
-                                               writes->saved = order;
-                                           if (--writes->pending)
-                                               return;
-                                           guard->marksSortWrites.reset();
-                                           if (saved)
-                                               return;
-                                           guard->preferences["marks_sort"] = writes->saved;
-                                           const auto restored = writes->saved.toString("position");
-                                           guard->bookmarkList->setSortOrder(restored);
-                                           if (guard->wordList)
-                                               guard->wordList->setSortOrder(restored);
-                                           guard->showSettingsWriteError();
-                                       },
-                                       Qt::QueuedConnection);
-                           });
+    auto next = preferences;
+    next["marks_sort"] = order;
+    // A failed save puts back the order that is on disk.
+    savePreferences(next, [this](bool saved) {
+        if (saved)
+            return;
+        const auto restored = preferences.value("marks_sort").toString("position");
+        bookmarkList->setSortOrder(restored);
+        if (wordList)
+            wordList->setSortOrder(restored);
+    });
 }
 
 storage::RecordWriter::Write Reader::preferenceWrite(const QJsonObject &next) const
@@ -995,16 +966,12 @@ storage::RecordWriter::Write Reader::preferenceWrite(const QJsonObject &next) co
 
 void Reader::recordPreferenceChanges(const QJsonObject &next)
 {
-    // Disabling all three lists clears their saved order. Earlier sort
-    // completions must not put that preference back.
-    if (next.value("marks_sort") != preferences.value("marks_sort"))
-        marksSortWrites.reset();
     logSettingChanges(preferences, next, restoringDefaults);
 }
 
 void Reader::writePreferences(const QJsonObject &next, PreferencesWritten done)
 {
-    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
+    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
         done(next, false);
         return;
     }
@@ -1016,61 +983,24 @@ void Reader::writePreferences(const QJsonObject &next, PreferencesWritten done)
         done(next, true);
         return;
     }
-    savingPreferences = true;
-    if (general)
-        general->setEnabled(false);
-    menu->setEnabled(false);
-    const QPointer<QWidget> presetGallery(textPresetGallery.data());
-    if (presetGallery)
-        presetGallery->setEnabled(false);
-    if (headerFooterView)
-        headerFooterView->setEnabled(false);
-    QPointer<Reader> guard(this);
-    preferencesWriter.post(std::move(write), [guard, before = preferences, next, presetGallery,
-                                             done = std::move(done)](bool saved) {
-        qt::invoke(
-                QCoreApplication::instance(),
-                [guard, before, next, presetGallery, done, saved] {
-                    if (!guard)
-                        return;
-                    guard->savingPreferences = false;
-                    saves::settled();
-                    if (guard->releasingForUsb)
-                        return;
-                    if (guard->general)
-                        guard->general->setEnabled(true);
-                    guard->menu->setEnabled(true);
-                    if (presetGallery)
-                        presetGallery->setEnabled(true);
-                    if (guard->headerFooterView)
-                        guard->headerFooterView->setEnabled(true);
-                    if (!saved) {
-                        guard->showSettingsWriteError();
-                        done(next, false);
-                        return;
-                    }
-                    // An earlier asynchronous save can have settled while
-                    // this write was queued. Apply only this write's changes.
-                    auto applied = guard->preferences;
-                    for (auto it = before.begin(); it != before.end(); ++it) {
-                        if (!next.contains(it.key()))
-                            applied.remove(it.key());
-                    }
-                    for (auto it = next.begin(); it != next.end(); ++it) {
-                        if (before.value(it.key()) != it.value())
-                            applied[it.key()] = it.value();
-                    }
-                    guard->recordPreferenceChanges(applied);
-                    done(applied, true);
-                },
-                Qt::QueuedConnection);
-    });
+    // Known exception: a settings change waits for its write, so the caller
+    // can undo exactly that change when the write fails, and Settings never
+    // shows a save in progress. It happens on a tap in Settings, not on a
+    // page turn.
+    mainthread::AllowBlocking allow("settings write");
+    if (!preferencesWriter.writeNow(std::move(write))) {
+        showSettingsWriteError();
+        done(next, false);
+        return;
+    }
+    recordPreferenceChanges(next);
+    done(next, true);
 }
 
 void Reader::applySettings()
 {
     // Settings applies the choices in its own controls.
-    if (!general || savingPreferences || savingButtonControls || savingDarkMode >= 0
+    if (!general || savingButtonControls || savingDarkMode >= 0
         || savingDenseGraph || session->temporaryTypography())
         return;
     // Leaving an unanswered confirmation must not select or save defaults.
@@ -1271,7 +1201,7 @@ void Reader::finishSettingsWrite(const QJsonObject &next, bool saved)
 
 void Reader::setDenseGraph(bool dense)
 {
-    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
+    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
         chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
         refresh();
         return;
@@ -1313,7 +1243,7 @@ void Reader::toggleZenStats()
 {
     // Do not overtake a pending dark mode or button save, as writePreferences
     // does. The button already toggled itself, so put it back.
-    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
+    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
         syncNavigation();
         return;
     }
@@ -1352,7 +1282,7 @@ void Reader::toggleZenStats()
 
 void Reader::applyDarkMode(bool enabled)
 {
-    if (savingPreferences || savingButtonControls || savingDarkMode >= 0 || savingDenseGraph
+    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph
         || pendingDarkMode >= 0 || session->busy() || session->temporaryTypography()) {
         refresh();
         return;
@@ -1688,7 +1618,7 @@ void Reader::mutateAppearance(std::function<void(ReaderSession &)> operation)
 
 void Reader::finishPreview()
 {
-    if (savingPreferences || session->temporaryTypography())
+    if (session->temporaryTypography())
         return;
     if (!appearanceEdit.panelOpen())
         return;
@@ -1718,16 +1648,6 @@ void Reader::finishPreview()
     // Finish opening the draft before applying it to the reading session.
     if (appearanceEdit.preview() && !appearanceEdit.ready()) {
         appearanceEdit.deferApply();
-bool Reader::interfaceFontFits(const QString &family) const
-{
-    if (family.isEmpty())
-        return true;
-    for (const auto &font : session->fontCatalog())
-        if (font.family == family)
-            return fitsInterfaceFont(font);
-    return true;
-}
-
         return;
     }
     appearanceEdit.cancelDeferredApply();
@@ -1763,8 +1683,6 @@ void Reader::finishPreviewWrite(const QJsonObject &next, bool saved)
     header->setVisible(page->topHeight() > 0);
     if (appearanceEdit.destination() == AppearanceDestination::None)
         appearanceEdit.request(AppearanceDestination::Controls);
-    // Read the chosen faces now, so a later screen cannot find them unreadable.
-    ui::keepPrivateInterfaceFamilies({ themeDraft.mainFace, settingsMonoFace, settingsStripFace });
     applyingText = session->busy();
     appearanceEdit.beginApply();
     refresh();
@@ -1798,6 +1716,16 @@ QString Reader::interfaceTheme() const
 InterfaceStyle Reader::themeStyle(const QString &theme) const
 {
     return theme == "custom" ? customTheme : themePreset(theme);
+}
+
+bool Reader::interfaceFontFits(const QString &family) const
+{
+    if (family.isEmpty())
+        return true;
+    for (const auto &font : session->fontCatalog())
+        if (font.family == family)
+            return fitsInterfaceFont(font);
+    return true;
 }
 
 void Reader::loadThemeSettings()
@@ -1835,6 +1763,8 @@ void Reader::applyInterfaceFonts()
     for (const auto &face : { themeDraft.mainFace, settingsMonoFace, settingsStripFace })
         if (!face.isEmpty())
             registerPickerFonts(face);
+    // Read the chosen faces now, so a later screen cannot find them unreadable.
+    ui::keepPrivateInterfaceFamilies({ themeDraft.mainFace, settingsMonoFace, settingsStripFace });
     const auto previousUi = ui::interfaceFont().family(),
                previousStrip = ui::headerFooterFont().family(),
                previousMono = ui::chromeFont().family();
@@ -1906,13 +1836,6 @@ void Reader::showSettingsFonts(SettingsPage section)
         panel->uiFontButton->setCaption(
                 (themeDraft.mainFace.isEmpty()
                          ? strings::get("settings.font_default_value").arg("IBM Plex Sans")
-    // Interface families stay in memory. Larger ones are left out, except
-    // custom fonts, which show why they cannot be chosen.
-    const bool interfaceChoice = isUi || isMono || isHeaderFooter;
-    if (interfaceChoice)
-        for (int row = fonts.size() - 1; row >= 0; --row)
-            if (!fitsInterfaceFont(fonts[row]) && fonts[row].origin != FontOrigin::Sideloaded)
-                fonts.removeAt(row);
                          : fontDisplayName(themeDraft.mainFace))
                         .toUpper());
         panel->uiMonoFontButton->setCaption(
@@ -1933,7 +1856,6 @@ void Reader::showSettingsFonts(SettingsPage section)
         sample(panel->headerFooterFontButton,
                settingsStripFace.isEmpty() ? QStringLiteral("IBM Plex Mono") : settingsStripFace);
     } else if (section == SettingsPage::Defaults) {
-            interfaceChoice,
         sample(panel->defaultFontButton, settingsDefaultFontFace);
         panel->defaultFontButton->setCaption((settingsDefaultFontFace.isEmpty()
                                                       ? strings::get("reader.publisher_fonts")
@@ -1984,6 +1906,13 @@ void Reader::openSettingsFont(const QString &key)
         if (fonts[row].origin == FontOrigin::BuiltIn
             && !nativeFamilies.contains(fonts[row].family, Qt::CaseInsensitive))
             fonts.removeAt(row);
+    // Interface families stay in memory. Larger ones are left out, except
+    // custom fonts, which show why they cannot be chosen.
+    const bool interfaceChoice = isUi || isMono || isHeaderFooter;
+    if (interfaceChoice)
+        for (int row = fonts.size() - 1; row >= 0; --row)
+            if (!fitsInterfaceFont(fonts[row]) && fonts[row].origin != FontOrigin::Sideloaded)
+                fonts.removeAt(row);
     fonts = orderedReadingFonts(std::move(fonts), { selected });
     fonts.prepend({ QString(), {}, FontOrigin::Recommended, {}, {} });
     panel->showFontChoices(
@@ -2004,6 +1933,7 @@ void Reader::openSettingsFont(const QString &key)
                                               : isDictionary
                                               ? bookFace()
                                               : fallbackFontDefaults(session->fontFaces())[index])),
+            interfaceChoice,
             [this, key, selected, isDefault, isUi, isMono, isHeaderFooter,
              isDictionary](const QString &family) {
                 if (isDefault)

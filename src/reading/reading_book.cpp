@@ -169,7 +169,7 @@ bool ReadingBook::discardQueuedWrites()
 
 bool ReadingBook::savesPending() const
 {
-    return activityPending || appearancePending || dictionaryChoicePending
+    return activityPending || appearancePending
             || deferredCheckpointEpoch
             || !deferredCloses.isEmpty() || (activityWriter && !activityWriter->idle())
             || (appearanceWriter && !appearanceWriter->idle()) || closeCheckpointPending
@@ -890,7 +890,7 @@ NativeSaveResult ReadingBook::nativeSaveResult() const
 
 void ReadingBook::saveDictionaryChoice(const QString &id, std::function<void(bool)> done)
 {
-    if (discardSaves || dictionaryChoicePending) {
+    if (discardSaves) {
         done(false);
         return;
     }
@@ -909,30 +909,16 @@ void ReadingBook::saveDictionaryChoice(const QString &id, std::function<void(boo
         checkpoint["dictionary_id"] = id;
     if (!dictionaryWriter)
         dictionaryWriter = std::make_unique<storage::RecordWriter>();
-    dictionaryChoicePending = true;
-    std::weak_ptr<ReadingBook *> guard = alive;
-    dictionaryWriter->post(
+    // Known exception: like a settings change, the choice waits for its write,
+    // so the dictionary panel never shows a save in progress.
+    mainthread::AllowBlocking allow("settings write");
+    const bool saved = dictionaryWriter->writeNow(
             [paths = paths_, identity = identity_, checkpoint, path = statePath] {
                 return storage::writeBookDictionaryChoice(paths, identity, checkpoint, path);
-            },
-            [guard, id, done = std::move(done)](bool saved) {
-                qt::invoke(
-                        QCoreApplication::instance(),
-                        [guard, id, done, saved] {
-                            const auto owner = guard.lock();
-                            if (!owner)
-                                return;
-                            auto *book = *owner;
-                            book->dictionaryChoicePending = false;
-                            saves::settled();
-                            if (book->discardSaves)
-                                return;
-                            if (saved)
-                                book->dictionaryChoice_ = id;
-                            done(saved);
-                        },
-                        Qt::QueuedConnection);
             });
+    if (saved)
+        dictionaryChoice_ = id;
+    done(saved);
 }
 
 QJsonObject ReadingBook::imageView(const QString &id) const

@@ -285,7 +285,6 @@ private:
     // Waits for the reading history's write when a close checkpoint ends.
     SaveWait saveWait;
     QString dictionaryChoice_;
-    bool dictionaryChoicePending = false;
     QString textPreset_;
 };
 } // namespace kobalt

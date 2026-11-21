@@ -1212,12 +1212,14 @@ int main(int argc, char **argv)
             require(saved, "Cannot save dictionary choice");
             dictionarySaved = true;
         });
-        // A snapshot can capture the old choice before the writer replies.
-        QJsonObject pendingDictionarySnapshot;
-        require(local.checkpoint(&pendingDictionarySnapshot, true),
-                "Cannot queue a checkpoint behind the dictionary write");
-        require(!pendingDictionarySnapshot.contains("dictionary_id"),
-                "An unacknowledged dictionary choice entered the checkpoint");
+        // The choice is saved before the call returns, so the next
+        // checkpoint already carries it.
+        require(dictionarySaved, "The dictionary choice did not save synchronously");
+        QJsonObject dictionarySnapshot;
+        require(local.checkpoint(&dictionarySnapshot, true),
+                "Cannot queue a checkpoint after the dictionary write");
+        require(dictionarySnapshot.value("dictionary_id") == "test-dictionary",
+                "A checkpoint after the dictionary choice left it out");
         waitUntil([&] { return dictionarySaved && !local.savesPending(); });
         require(storage::readBookState(paths, "local-id").object.value("dictionary_id")
                         == "test-dictionary",

@@ -504,6 +504,8 @@ void Reader::showFinishChoice()
         finishDialog.clear();
         finishChoiceResolved = exitPending || finished;
         exitPending = exitPending || finished;
+        if (exitPending)
+            session->pauseHybridTurnPreparation(true);
         updateOrientationBlock();
         save(false, true);
         refresh();

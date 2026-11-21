@@ -215,6 +215,8 @@ public:
     bool turn(int direction);
     bool canTurn() const;
     void cancelPendingTurn();
+    // Suspend optional work for the next Hybrid turn while the reader is closing.
+    void pauseHybridTurnPreparation(bool paused);
     void requestMenuPagination();
     bool paginationPending() const;
     bool go(int page);
@@ -580,11 +582,17 @@ private:
     // `requests` is engineWorkRequests() from when this step was queued:
     // work that was announced after that is in the queue behind this step,
     // or will be, and goes first.
+    enum class HybridTurnPreparation { Allowed, Paused, Deferred };
+    struct BackgroundWork
+    {
+        std::atomic_bool count{ false };
+        std::atomic<HybridTurnPreparation> hybridTurn{ HybridTurnPreparation::Allowed };
+    };
     static void refinePageEstimate(std::shared_ptr<Engine> engine,
                                    const std::function<bool()> &current,
                                    QPointer<ReaderSession> guard, quint64 job,
                                    const std::shared_ptr<SourceLease> &lease, quint64 requests,
-                                   const std::shared_ptr<std::atomic_bool> &count);
+                                   const std::shared_ptr<BackgroundWork> &background);
     // Calls `settled` on the GUI thread while the lease is current.
     static void notifySettled(QPointer<ReaderSession> guard,
                               const std::shared_ptr<SourceLease> &lease);
@@ -624,9 +632,8 @@ private:
     // Page turns since the book opened or the appearance changed. Hybrid
     // rendering counts the pages of the book after a few of them.
     int quietTurns_ = 0;
-    // The UI sets this while the engine worker can be replacing its document.
-    const std::shared_ptr<std::atomic_bool> backgroundCount_ =
-            std::make_shared<std::atomic_bool>(false);
+    // These flags are shared with idle work that can outlive this session.
+    const std::shared_ptr<BackgroundWork> background_ = std::make_shared<BackgroundWork>();
     // The entry of chapters() that `destination` is, or -1.
     int chapterTarget = -1;
     int pageDelta = 0;

@@ -1697,6 +1697,8 @@ void EngineDocument::prepareFullDocumentTurn(const std::function<bool()> &curren
     // adoptLayout() keeps the place on screen. A document that is there
     // already does not move at the turn.
     const auto place = position();
+    if (stopped())
+        return;
     if (whole.position() != place && (!whole.hasPageAt(place) || !whole.goTo(place)))
         return;
     if (stopped())
@@ -1708,7 +1710,11 @@ void EngineDocument::prepareFullDocumentTurn(const std::function<bool()> &curren
     const int spread = preparedSpreadTurn(1, &continues);
     const int target = spread >= 0 ? spread : whole.turnTarget(whole.page(), 1);
     if (continues && target != whole.page()) {
+        if (stopped())
+            return;
         const auto next = whole.image(target);
+        if (stopped())
+            return;
         const auto shown = cache_.value(page());
         auto &damage = whole.adoptionDamage_;
         if (!next.isNull() && !shown.isNull() && !stopped()
@@ -1720,7 +1726,9 @@ void EngineDocument::prepareFullDocumentTurn(const std::function<bool()> &curren
         // The links of that page lay out the blocks that they point to.
         // The turn then finds them laid out.
         if (!stopped() && whole.go(target)) {
-            whole.pageLinks();
+            if (!stopped())
+                whole.pageLinks();
+            // Restore the reading position even when close interrupts preparation.
             if (!whole.goTo(place))
                 return;
         }
@@ -1733,6 +1741,8 @@ void EngineDocument::prepareFullDocumentTurn(const std::function<bool()> &curren
         whole.setChapters(contents_, graph_);
         whole.externalChapters_ = true;
     }
+    if (stopped())
+        return;
     whole.chapters();
     if (stopped())
         return;

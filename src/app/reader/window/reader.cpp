@@ -213,6 +213,7 @@ void Reader::prepareUsb(std::function<void()> finished)
 
 void Reader::prepareTransition(std::function<void()> finished, bool usb)
 {
+    session->pauseHybridTurnPreparation(true);
     if (usb) {
         releasingForUsb = closeWithoutSaving = true;
         retryDisposal = {};
@@ -951,6 +952,8 @@ void Reader::wakeReader()
         wakePositionEpoch = book->advancePositionSaveEpoch();
     }
     lifecycleHidden = false;
+    if (!closing && !exitPending)
+        session->pauseHybridTurnPreparation(false);
     if (sleep::uses(preferences, sleep::Mode::Overlay))
         prepareSleepOverlay();
     // A random wallpaper may change with every sleep. A named one is already
@@ -1783,6 +1786,7 @@ void Reader::closeEvent(QCloseEvent *event)
             closingTimes.started.start();
         event->ignore();
         exitPending = true;
+        session->pauseHybridTurnPreparation(true);
         QElapsedTimer stopping;
         stopping.start();
         book->stopReading(true);
@@ -3621,6 +3625,7 @@ void Reader::cancelExit()
 {
     ++closeRequest;
     clearPendingExit();
+    session->pauseHybridTurnPreparation(false);
     observeReading();
     refresh();
 }
@@ -3639,6 +3644,7 @@ bool Reader::localStorageSavePending() const
 
 void Reader::finishStorageSave(std::function<void(bool)> finished, bool nativeAllowed)
 {
+    session->pauseHybridTurnPreparation(true);
     if (imageViewer && imageViewer->isVisible())
         imageViewer->closeImage();
     ++closeRequest;
@@ -3657,6 +3663,7 @@ void Reader::finishStorageSave(std::function<void(bool)> finished, bool nativeAl
 
 void Reader::revokeNativeReading()
 {
+    session->pauseHybridTurnPreparation(true);
     ++closeRequest;
     exitPending = exportRunning = false;
     closing = lifecycleHidden = true;

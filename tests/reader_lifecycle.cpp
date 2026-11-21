@@ -11201,6 +11201,123 @@ private slots:
                  latest);
     }
 
+    void hybridTurnPreparationDuringExit_data()
+    {
+        QTest::addColumn<QString>("exit");
+        for (const auto *exit : { "reading", "closed", "cancelled", "failed" })
+            QTest::newRow(exit) << QString::fromLatin1(exit);
+    }
+
+    // Closing stops idle whole-book turn preparation until reading resumes.
+    void hybridTurnPreparationDuringExit()
+    {
+        QFETCH(QString, exit);
+        renderingMode::setOverride(2);
+        const int quiet = renderingMode::buildQuietMilliseconds();
+        renderingMode::setBuildQuietMilliseconds(0);
+        const auto restoreMode = qScopeGuard([quiet] {
+            renderingMode::setOverride(-1);
+            renderingMode::setBuildQuietMilliseconds(quiet);
+        });
+
+        QTemporaryDir book;
+        QVERIFY(book.isValid());
+        QVERIFY(test::writeBook(book.path(), "songs.epub", test::songbook(200)));
+        const auto paths = testPaths();
+        bool syncing = exit == "cancelled";
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        host.configureServices = [&](ReaderHostServices &services) {
+            services.nickelSyncing = [&] { return syncing; };
+        };
+        if (exit == "failed") {
+            host.progress = std::make_shared<test::HostProgress>();
+            const auto identity = QUrl::fromLocalFile(book.filePath("songs.epub")).toString();
+            host.progress->current = { identity, "songs.xhtml", 100, 1, true };
+            host.positions = nickel::positionCodec();
+        }
+
+        struct Preparation
+        {
+            QSemaphore release;
+            std::atomic_int starts{ 0 }, finished{ 0 }, completed{ 0 };
+            std::atomic_bool gateTimedOut{ false };
+        };
+
+        const auto prep = std::make_shared<Preparation>();
+        initializeDiagnostics(paths.directory + "/diagnostics", false);
+        pauseDiagnostics(false);
+        setDiagnosticObserver([prep](const QJsonObject &event) {
+            if (event.value("work").toString() != "Whole-book turn")
+                return;
+            if (event.value("event").toString() == "engine-work-start") {
+                if (++prep->starts == 1)
+                    prep->gateTimedOut = !prep->release.tryAcquire(1, 20000);
+            } else if (event.value("event").toString() == "engine-work-end") {
+                if (event.value("completed").toBool())
+                    ++prep->completed;
+                ++prep->finished;
+            }
+        });
+        const auto release = qScopeGuard([prep] {
+            prep->release.release();
+            setDiagnosticObserver({});
+            pauseDiagnostics(true);
+        });
+
+        QSignalSpy opened(&host, &ReaderFixture::opened), closed(&host, &ReaderFixture::closed);
+        host.open(book.filePath("songs.epub"), nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        Canvas canvas(host.window(), nativeSize);
+        canvas.resize(900, 900);
+        canvas.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&canvas));
+        QTRY_VERIFY(!host.session()->busy());
+        // Three page turns make Hybrid start building the whole book.
+        for (int turn = 0; turn < 3; ++turn) {
+            const auto position = host.session()->state().value("position");
+            QVERIFY(host.session()->turn(1));
+            QTRY_VERIFY(!host.session()->busy()
+                        && host.session()->state().value("position") != position);
+        }
+        QTRY_COMPARE_WITH_TIMEOUT(prep->starts.load(), 1, 10000);
+
+        if (exit == "reading") {
+            prep->release.release();
+            QTRY_COMPARE(prep->completed.load(), 1);
+            QVERIFY(!prep->gateTimedOut.load());
+            return;
+        }
+        if (exit == "failed")
+            host.progress->failFinish = true;
+        host.window()->close();
+        if (syncing)
+            QTRY_VERIFY(host.window()->findChild<QPushButton *>("rrExitWaitForSync"));
+        prep->release.release();
+        QTRY_COMPARE(prep->finished.load(), 1);
+        QVERIFY(!prep->gateTimedOut.load());
+        QCOMPARE(prep->completed.load(), 0);
+        if (exit == "closed") {
+            QTRY_COMPARE(closed.count(), 1);
+            QCOMPARE(prep->starts.load(), 1);
+            return;
+        }
+
+        if (syncing) {
+            QVERIFY(clickAt(canvas, QPoint(12, 12)));
+            syncing = false;
+        } else {
+            QPushButton *stay = nullptr;
+            QTRY_VERIFY((stay = host.window()->findChild<QPushButton *>("rrCloseSaveReturn"))
+                        && stay->isVisible());
+            host.progress->failFinish = false;
+            QVERIFY(click(canvas, stay));
+        }
+        // Resuming reading restarts preparation without another page turn.
+        QTRY_COMPARE(prep->completed.load(), 1);
+        QCOMPARE(closed.count(), 0);
+    }
+
     // Checks that a whole-book build that is ready stops the layout clock.
     // Hybrid shows that layout from the next turn, which can come much
     // later; Book status shows how long the build took.

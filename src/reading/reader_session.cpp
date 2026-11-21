@@ -404,28 +404,28 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                                        const std::function<bool()> &current,
                                        QPointer<ReaderSession> guard, quint64 job,
                                        const std::shared_ptr<SourceLease> &lease, quint64 requests,
-                                       const std::shared_ptr<std::atomic_bool> &count)
+                                       const std::shared_ptr<BackgroundWork> &background)
 {
     const std::function<bool()> wanted = [current, requests] {
         return current() && engineWorkRequests() == requests;
     };
     // A new engine request can be a preview of this same book, so it does
     // not necessarily change the session revision. Resume behind that work.
-    const auto resumeAfterWork = [count, engine, current, guard, job, lease] {
+    const auto resumeAfterWork = [background, engine, current, guard, job, lease] {
         kobalt::qt::invoke(
                 qApp,
-                [count, engine, current, guard, job, lease] {
+                [background, engine, current, guard, job, lease] {
                     if (!guard || !current() || !lease || lease->revoked())
                         return;
                     const quint64 queued = engineWorkRequests();
                     kobalt::qt::invoke(
                             engineWorkerForIdle(),
-                            [count, engine, current, guard, job, lease, queued] {
+                            [background, engine, current, guard, job, lease, queued] {
                                 if (!current() || !lease || lease->revoked())
                                     return;
                                 EngineJob activity;
                                 refinePageEstimate(engine, current, guard, job, lease, queued,
-                                                   count);
+                                                   background);
                             },
                             Qt::QueuedConnection);
                 },
@@ -469,7 +469,7 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     // the user reads, only a book that is in the parsed-book cache is
     // worth the work: it needs no parsing. It comes before the measuring:
     // it has the real pages. Without a cache file the try ends at once.
-    const bool reading = count->load();
+    const bool reading = background->count.load();
     // The page estimate does not wait for the whole book: a build from the
     // cache goes first only once the estimate has every spine item.
     const bool cacheFirst =
@@ -532,13 +532,27 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
             // The turn that shows the whole book would draw its page and
             // find its place in the contents. Idle time does that now, in
             // steps that stop when other work waits. The turn does the rest.
-            {
-                BackgroundDiagnostic diagnostic("Whole-book turn", *engine, wanted);
-                EngineSlowdownScope slowdown(true, [&wanted] { return !wanted(); });
+            // Only restart if the engine actually saw the pause. Keep this attempt
+            // stopped if the GUI has already resumed and queued its replacement.
+            bool paused = false;
+            const auto prepareWanted = [&] {
+                if (!paused) {
+                    auto state = background->hybridTurn.load(std::memory_order_relaxed);
+                    if (state == HybridTurnPreparation::Paused)
+                        paused = background->hybridTurn.compare_exchange_strong(
+                                state, HybridTurnPreparation::Deferred,
+                                std::memory_order_relaxed);
+                    paused = paused || state == HybridTurnPreparation::Deferred;
+                }
+                return !paused && wanted();
+            };
+            if (prepareWanted()) {
+                BackgroundDiagnostic diagnostic("Whole-book turn", *engine, prepareWanted);
+                EngineSlowdownScope slowdown(true, [&] { return !prepareWanted(); });
                 engineActivity().checkpoint();
-                engine->prepareFullDocumentTurn(wanted);
+                engine->prepareFullDocumentTurn(prepareWanted);
             }
-            if (current() && !wanted())
+            if (!paused && current() && !wanted())
                 resumeAfterWork();
             return;
         }
@@ -568,23 +582,23 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
     if (!more && wait) {
         kobalt::qt::invoke(
                 qApp,
-                [count, engine, current, guard, job, lease, quiet] {
+                [background, engine, current, guard, job, lease, quiet] {
                     if (!guard || !current() || !lease || lease->revoked())
                         return;
                     kobalt::qt::later(
                             int(quiet) + 1, guard.data(),
-                            [count, engine, current, guard, job, lease] {
+                            [background, engine, current, guard, job, lease] {
                                 if (!guard || !current() || !lease || lease->revoked())
                                     return;
                                 const quint64 queued = engineWorkRequests();
                                 kobalt::qt::invoke(
                                         engineWorkerForIdle(),
-                                        [count, engine, current, guard, job, lease, queued] {
+                                        [background, engine, current, guard, job, lease, queued] {
                                             if (!current() || !lease || lease->revoked())
                                                 return;
                                             EngineJob activity;
                                             refinePageEstimate(engine, current, guard, job, lease,
-                                                               queued, count);
+                                                               queued, background);
                                         },
                                         Qt::QueuedConnection);
                             });
@@ -597,11 +611,11 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
         const quint64 queued = engineWorkRequests();
         kobalt::qt::invoke(
                 engineWorker(),
-                [count, engine, current, guard, job, lease, queued] {
+                [background, engine, current, guard, job, lease, queued] {
                     if (!current() || !lease || lease->revoked())
                         return;
                     EngineJob activity;
-                    refinePageEstimate(engine, current, guard, job, lease, queued, count);
+                    refinePageEstimate(engine, current, guard, job, lease, queued, background);
                 },
                 Qt::QueuedConnection);
     }
@@ -813,7 +827,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
                          std::function<void()> reusing)
 {
     quietTurns_ = 0;
-    backgroundCount_->store(false);
+    background_->count.store(false);
     fullDocumentPending_ = false;
     syncDigest_.clear();
     syncFilename_ = QFileInfo(request.syncFilename.isNull() ? request.path : request.syncFilename)
@@ -1151,7 +1165,7 @@ void ReaderSession::requestAppearance(const appearance::Requested &settings, QSi
 {
     // While the appearance changes, a count would be thrown away.
     quietTurns_ = 0;
-    backgroundCount_->store(false);
+    background_->count.store(false);
     auto next = desired;
     if (temporaryTypography())
         appearance::copy(next, temporaryAppearance);
@@ -1321,7 +1335,7 @@ bool ReaderSession::paginationPending() const
 
 void ReaderSession::requestMenuPagination()
 {
-    if (!paginationPending() || backgroundCount_->exchange(true))
+    if (!paginationPending() || background_->count.exchange(true))
         return;
     // The initial estimate may already have finished and left the worker idle.
     resumeIdleWork(0, revision);
@@ -1330,6 +1344,19 @@ void ReaderSession::requestMenuPagination()
 void ReaderSession::cancelPendingTurn()
 {
     pendingTurn = 0;
+}
+
+void ReaderSession::pauseHybridTurnPreparation(bool paused)
+{
+    if (paused) {
+        auto allowed = HybridTurnPreparation::Allowed;
+        background_->hybridTurn.compare_exchange_strong(allowed, HybridTurnPreparation::Paused,
+                                                        std::memory_order_relaxed);
+    } else if (background_->hybridTurn.exchange(HybridTurnPreparation::Allowed,
+                                                std::memory_order_relaxed)
+               == HybridTurnPreparation::Deferred) {
+        resumeIdleWork(0, revision);
+    }
 }
 
 bool ReaderSession::turn(int direction)
@@ -1357,7 +1384,7 @@ bool ReaderSession::turn(int direction)
     // A reader who turns pages has settled on the appearance: the count of
     // the whole book is worth its work from here on.
     if (++quietTurns_ == backgroundCountTurns && renderingMode::countsInBackground())
-        backgroundCount_->store(true);
+        background_->count.store(true);
     ++revision;
     newest->store(revision);
     dispatch(true);
@@ -2723,7 +2750,7 @@ void ReaderSession::resize(QSize size)
     // book again would hold up the reader; it follows in the background.
     if (!preview_ && renderingMode::countsInBackground()) {
         quietTurns_ = 0;
-        backgroundCount_->store(false);
+        background_->count.store(false);
         fullDocumentPending_ = false;
         desiredChapterMode = 1;
     }
@@ -3014,7 +3041,7 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, latest, direction, job, guard, lease, neighbours, count = backgroundCount_] {
+            [engine, latest, direction, job, guard, lease, neighbours, background = background_] {
                 EngineJob activity;
                 const bool timing = diagnosticsActive();
                 QElapsedTimer timer;
@@ -3058,14 +3085,14 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                 const quint64 queued = engineWorkRequests();
                 kobalt::qt::invoke(
                         engineWorker(),
-                        [count, engine, current, guard, job, lease, queued] {
+                        [background, engine, current, guard, job, lease, queued] {
                             if (!current())
                                 return;
                             EngineJob activity;
                             // After the neighbour pages: the documents that
                             // the last turn replaced.
                             engine->releaseRetired();
-                            refinePageEstimate(engine, current, guard, job, lease, queued, count);
+                            refinePageEstimate(engine, current, guard, job, lease, queued, background);
                         },
                         Qt::QueuedConnection);
             },

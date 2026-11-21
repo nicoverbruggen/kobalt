@@ -3796,6 +3796,25 @@ private slots:
     }
 
     // Checks partial tab refresh coverage without changing panel or overlay cleanup policies.
+    // A new palette replaces the text colors that style sheets gave widgets.
+    // refreshInterfaceText gives them back, as after a palette-only theme switch.
+    void paletteSwitchKeepsSheetColors()
+    {
+        QWidget root;
+        root.setStyleSheet("QLabel{color:#cccccc;}");
+        QLabel caption("CAPTION", &root);
+        root.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&root));
+        const QColor sheet(0xcc, 0xcc, 0xcc);
+        QCOMPARE(caption.palette().color(QPalette::WindowText), sheet);
+        auto palette = caption.palette();
+        palette.setColor(QPalette::WindowText, Qt::white);
+        caption.setPalette(palette);
+        QCOMPARE(caption.palette().color(QPalette::WindowText), QColor(Qt::white));
+        ui::refreshInterfaceText(&root);
+        QCOMPARE(caption.palette().color(QPalette::WindowText), sheet);
+    }
+
     void navigationRefreshKeepsOverlayAndPanelPolicies()
     {
         QWidget owner;

@@ -1784,13 +1784,19 @@ void Reader::applyInterfaceFonts()
     // that style sheets gave each widget. A new interface font then changes
     // the reader's sheet, and its one repolish gives those colors back.
     setProperty("kobalt_icon_style", int(themeDraft.icons));
+    const auto previousPalette = property("kobalt_palette").toString();
     if (themeReady)
         applyTheme(darkTheme);
     applyThemeFonts();
     if (previousUi == ui::interfaceFont().family()
         && previousStrip == ui::headerFooterFont().family()
-        && previousMono == ui::chromeFont().family())
+        && previousMono == ui::chromeFont().family()) {
+        // Without a new font nothing repolishes below, so a new palette would
+        // keep the text colors it put over the sheets' colors.
+        if (property("kobalt_palette").toString() != previousPalette)
+            ui::refreshInterfaceText(this);
         return;
+    }
     // Restyling takes a while on a Kobo, so a notice with a bar shows first.
     // The work runs on this thread, so the bar is painted by hand: empty before
     // the widgets restyle, half full before the reader's sheet repolishes the

@@ -18022,12 +18022,16 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.visible("rrTextSize"));
         QVERIFY(save("text"));
         QVERIFY(fixture.press("rrNavLayout"));
+        QTRY_VERIFY(fixture.visible("rrHeaderFooter"));
         QVERIFY(save("layout"));
         QVERIFY(fixture.press("rrNavStats"));
+        QTRY_VERIFY(fixture.visible("rrChapterGraph"));
         QVERIFY(save("stats"));
         QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrContents"));
         QVERIFY(save("chapters"));
         QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(!fixture.visible("rrContents"));
         QVERIFY(fixture.press("rrSettings"));
         QTRY_VERIFY(fixture.visible("rrSettingsTitle"));
         QCOMPARE(fixture.widget("rrSettingsTitle")->contentsMargins().left(),

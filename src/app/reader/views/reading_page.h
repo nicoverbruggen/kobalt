@@ -71,7 +71,15 @@ public:
 
     bool showFooter() const { return chrome.footer(); }
 
-    bool showProgress() const { return chrome.progressBar; }
+    bool progressAtTop() const
+    {
+        return headerfooter::progressEdge(chrome) == headerfooter::BarEdge::Top;
+    }
+
+    bool progressAtBottom() const
+    {
+        return headerfooter::progressEdge(chrome) == headerfooter::BarEdge::Bottom;
+    }
 
     int headerTextPixels() const
     {
@@ -184,8 +192,8 @@ private:
     int animationTurnDirection = 0, animationStep = -1;
     // Text weight and family changes draw the strips again.
     using Slots = std::array<headerfooter::Content, 3>;
-    using HeaderState = std::tuple<Slots, std::array<headerfooter::Field, 3>, bool, bool, int, int,
-                                   qint64, int, QString>;
+    using HeaderState = std::tuple<Slots, std::array<headerfooter::Field, 3>, bool, bool, qreal,
+                                   bool, int, int, qint64, int, QString>;
     using FooterState = std::tuple<Slots, std::array<headerfooter::Field, 3>, QString, bool, bool,
                                    qreal, int, int, qint64, int, QString>;
     Slots stripSlots(bool footer) const;

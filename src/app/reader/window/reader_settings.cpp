@@ -183,7 +183,8 @@ bool Reader::customModified() const
     const auto custom = fromJson(saved.toObject(), standard);
     return saved.isObject()
             && (custom.slotFields != standard.slotFields || custom.uppercase != standard.uppercase
-                || custom.progressBar != standard.progressBar);
+                || custom.progressBar != standard.progressBar
+                || custom.progressBarTop != standard.progressBarTop);
 }
 
 bool Reader::chromeTicks() const
@@ -353,7 +354,8 @@ void Reader::syncChromeControls()
     headerSizeControl->setSize(current.headerSize, current.headerEnabled);
     footerSizeControl->setSize(current.footerSize, current.footerEnabled);
     for (auto *button : progressBarButtons)
-        button->setChecked(button->property("switch_on").toBool() == current.progressBar);
+        button->setChecked(button->property("bar_edge").toInt()
+                           == int(kobalt::headerfooter::progressEdge(current)));
     // A modified Custom layout carries a star, as on its card.
     const bool starred = chromePreset == Preset::Custom && modified;
     headerFooterRow->setText(

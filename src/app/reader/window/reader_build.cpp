@@ -1471,9 +1471,15 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
     }
 
     for (auto *button : progressBarButtons) {
-        const bool on = button->property("switch_on").toBool();
-        connect(button, &QPushButton::clicked, this, [editCustom, on] {
-            editCustom([on](kobalt::headerfooter::Layout &custom) { custom.progressBar = on; });
+        using kobalt::headerfooter::BarEdge;
+        const auto edge = BarEdge(button->property("bar_edge").toInt());
+        connect(button, &QPushButton::clicked, this, [editCustom, edge] {
+            editCustom([edge](kobalt::headerfooter::Layout &custom) {
+                custom.progressBar = edge != BarEdge::None;
+                // Off keeps the edge, so turning the bar on again restores it.
+                if (edge != BarEdge::None)
+                    custom.progressBarTop = edge == BarEdge::Top;
+            });
         });
     }
     fieldChooserEdit = editCustom;

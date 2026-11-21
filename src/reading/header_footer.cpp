@@ -166,7 +166,7 @@ bool Layout::operator==(const Layout &other) const
     return slotFields == other.slotFields && headerSize == other.headerSize
             && footerSize == other.footerSize && headerEnabled == other.headerEnabled
             && footerEnabled == other.footerEnabled && uppercase == other.uppercase
-            && progressBar == other.progressBar;
+            && progressBar == other.progressBar && progressBarTop == other.progressBarTop;
 }
 
 Layout presetLayout(Preset preset)
@@ -301,6 +301,8 @@ QJsonObject toJson(const Layout &layout)
         uppercase.append(value);
     object["uppercase"] = uppercase;
     object["progress_bar"] = layout.progressBar;
+    // Optional. Older builds ignore it and draw the bar at the bottom.
+    object["progress_bar_position"] = QString::fromLatin1(layout.progressBarTop ? "top" : "bottom");
     return object;
 }
 
@@ -323,6 +325,9 @@ Layout fromJson(const QJsonObject &object, const Layout &fallback)
             if (uppercase.toArray().at(slot).isBool())
                 layout.uppercase[slot] = uppercase.toArray().at(slot).toBool();
     layout.progressBar = object.value("progress_bar").toBool(fallback.progressBar);
+    const auto position = object.value("progress_bar_position").toString();
+    if (position == "top" || position == "bottom")
+        layout.progressBarTop = position == "top";
     return layout;
 }
 

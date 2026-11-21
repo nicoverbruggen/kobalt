@@ -100,6 +100,8 @@ struct Layout
     // Each slot chooses its own case.
     std::array<bool, slotCount> uppercase{ { true, true, true, true, true, true } };
     bool progressBar = true;
+    // The bar sits along the bottom edge, or along the top edge when this is set.
+    bool progressBarTop = false;
     // A strip is drawn when enabled and one of its slots shows something.
     bool header() const;
     bool footer() const;
@@ -107,6 +109,16 @@ struct Layout
 
     bool operator!=(const Layout &other) const { return !(*this == other); }
 };
+
+// Where the progress bar is drawn, if at all.
+enum class BarEdge { None, Top, Bottom };
+
+inline BarEdge progressEdge(const Layout &layout)
+{
+    return !layout.progressBar      ? BarEdge::None
+            : layout.progressBarTop ? BarEdge::Top
+                                    : BarEdge::Bottom;
+}
 
 // The preset is saved per book. Custom is one layout shared by every book.
 inline constexpr auto presetKey = "header_footer";

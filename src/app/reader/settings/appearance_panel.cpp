@@ -556,19 +556,27 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout,
                         + "font-style:italic;color:palette(placeholder-text);");
     customRows->addWidget(slotHint);
     customRows->addSpacing(metrics::spacing::row);
-    auto switchRow = [custom, customRows](const char *name, const QString &label,
-                                          QVector<QPushButton *> &buttons) {
-        ui::SegmentedRow row(custom, customRows, name, label,
-                             strings::get("header_footer.progress_bar_detail"));
-        for (const bool enabled : { false, true }) {
-            auto *button = row.add(QString(name) + (enabled ? "_on" : "_off"),
-                                   strings::get(enabled ? "common.on" : "common.off"));
-            button->setProperty("switch_on", enabled);
-            buttons.append(button);
-        }
+    // Off, or the edge the bar runs along.
+    ui::SegmentedRow barRow(custom, customRows, "rrHeaderFooterProgressBar",
+                            strings::get("header_footer.progress_bar"),
+                            strings::get("header_footer.progress_bar_detail"));
+    using headerfooter::BarEdge;
+
+    struct BarChoice
+    {
+        BarEdge edge;
+        const char *id, *label;
     };
-    switchRow("rrHeaderFooterProgressBar", strings::get("header_footer.progress_bar"),
-              progressBarButtons);
+
+    for (const auto &choice :
+         { BarChoice{ BarEdge::None, "off", "common.off" },
+           BarChoice{ BarEdge::Bottom, "bottom", "header_footer.progress_bar_bottom" },
+           BarChoice{ BarEdge::Top, "top", "header_footer.progress_bar_top" } }) {
+        auto *button = barRow.add(QString("rrHeaderFooterProgressBar_") + choice.id,
+                                  strings::get(choice.label));
+        button->setProperty("bar_edge", int(choice.edge));
+        progressBarButtons.append(button);
+    }
     customRows->addSpacing(metrics::spacing::row);
     auto *divider = new ui::Panel(custom);
     divider->setObjectName("rrHeaderFooterSizeDivider");

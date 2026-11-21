@@ -144,7 +144,8 @@ public:
         setEnabled(editable);
     }
 
-    void show(Field shownField, const Content &next, bool stripShown, bool bar, int textPixels)
+    void show(Field shownField, const Content &next, bool stripShown, headerfooter::BarEdge bar,
+              int textPixels)
     {
         if (field == shownField && content == next && shown == stripShown && progressBar == bar
             && pixels == textPixels)
@@ -174,11 +175,12 @@ protected:
         // The strip's own font and size, so Small, Medium and Large show as on the page.
         painter.setFont(ui::headerFooterFont(pixels));
         // Header slots keep the top edge and footer slots the bottom edge,
-        // above the progress bar when there is one, as on the page.
+        // inside the progress bar when it is on their edge, as on the page.
         const bool footer = headerfooter::footerSlot(slot);
         const int line = painter.fontMetrics().height();
+        const auto barEdge = footer ? headerfooter::BarEdge::Bottom : headerfooter::BarEdge::Top;
         const int edge =
-                headerFooterMetrics::mapEdgeInset + (footer && progressBar ? progressSpace() : 0);
+                headerFooterMetrics::mapEdgeInset + (progressBar == barEdge ? progressSpace() : 0);
         const int boxHeight = line + 2 * headerFooterMetrics::slotPadding;
         // Boxes keep half a gap from each other and a wider margin from the page's sides.
         const int column = slot % 3;
@@ -218,7 +220,8 @@ protected:
 
 private:
     int slot;
-    bool editable, shown = true, progressBar = false;
+    bool editable, shown = true;
+    headerfooter::BarEdge progressBar = headerfooter::BarEdge::None;
     int pixels = 0;
     Field field = Field::Nothing;
     Content content;
@@ -256,9 +259,9 @@ void SlotMap::setSlot(int slot, const Content &content)
 {
     const bool footer = headerfooter::footerSlot(slot);
     const int size = footer ? layout.footerSize : layout.headerSize;
-    cells[slot]->show(layout.slotFields[slot], content,
-                      footer ? layout.footerEnabled : layout.headerEnabled, layout.progressBar,
-                      metrics::reading::textPixels(size, footer));
+    cells[slot]->show(
+            layout.slotFields[slot], content, footer ? layout.footerEnabled : layout.headerEnabled,
+            headerfooter::progressEdge(layout), metrics::reading::textPixels(size, footer));
 }
 
 void SlotMap::updateBattery(const headerfooter::Values &values)
@@ -294,8 +297,9 @@ void SlotMap::resizeEvent(QResizeEvent *)
         const int column = slot % 3;
         const int left = border + inner * column / 3, right = border + inner * (column + 1) / 3;
         const bool footer = headerfooter::footerSlot(slot);
+        // Either row leaves room for the bar, which can be on either edge.
         const int rowHeight = headerFooterMetrics::mapEdgeInset
-                + slotBoxHeight(headerfooter::maximumSize, footer) + (footer ? progressSpace() : 0);
+                + slotBoxHeight(headerfooter::maximumSize, footer) + progressSpace();
         const int top = footer ? height() - border - rowHeight : border;
         cells[slot]->setGeometry(left, top, right - left, rowHeight);
     }
@@ -316,10 +320,13 @@ void SlotMap::paintEvent(QPaintEvent *)
     // the header and footer slots.
     const int lineLeft = border + headerFooterMetrics::mapLineInset,
               lineWidth = inner - 2 * headerFooterMetrics::mapLineInset;
-    const int headerBottom =
-            border + headerFooterMetrics::mapEdgeInset + slotBoxHeight(layout.headerSize, false);
+    const auto bar = headerfooter::progressEdge(layout);
+    const int headerBottom = border + headerFooterMetrics::mapEdgeInset
+            + (bar == headerfooter::BarEdge::Top ? progressSpace() : 0)
+            + slotBoxHeight(layout.headerSize, false);
     const int footerTop = height() - border - headerFooterMetrics::mapEdgeInset
-            - (layout.progressBar ? progressSpace() : 0) - slotBoxHeight(layout.footerSize, true);
+            - (bar == headerfooter::BarEdge::Bottom ? progressSpace() : 0)
+            - slotBoxHeight(layout.footerSize, true);
     const int first = (headerBottom + footerTop - headerFooterMetrics::mapLineGap
                        - headerFooterMetrics::mapLineHeight)
             / 2;
@@ -328,9 +335,11 @@ void SlotMap::paintEvent(QPaintEvent *)
                          line == 1 ? lineWidth * 3 / 4 : lineWidth,
                          headerFooterMetrics::mapLineHeight, lines);
     }
-    if (layout.progressBar) {
-        // Where the page draws it: above the bottom edge, across the width.
-        const int y = height() - border - progressSpace();
+    if (bar != headerfooter::BarEdge::None) {
+        // Where the page draws it: inside the top or bottom edge, across the width.
+        const int y = bar == headerfooter::BarEdge::Top
+                ? border + int(metrics::reading::progressBottom)
+                : height() - border - progressSpace();
         painter.fillRect(border, y, inner, metrics::reading::progressFillHeight, lines);
         painter.fillRect(border, y, inner / 30, metrics::reading::progressFillHeight, ink);
     }
@@ -443,7 +452,9 @@ void PresetCard::paintEvent(QPaintEvent *)
                          metrics::control::border, lines);
     if (miniature.progressBar)
         painter.fillRect(page.x() + edge,
-                         page.bottom() + 1 - edge - headerFooterMetrics::dashHeight / 2,
+                         miniature.progressBarTop
+                                 ? page.y() + edge
+                                 : page.bottom() + 1 - edge - headerFooterMetrics::dashHeight / 2,
                          pageWidth / 12, headerFooterMetrics::dashHeight / 2, ink);
     const QFont label = ui::interfaceFont(metrics::text::secondary);
     painter.setFont(label);

@@ -549,6 +549,20 @@ int main()
     auto oldLayout = standard;
     oldLayout.uppercase.fill(false);
     require(fromJson(old, standard) == oldLayout, "An old layout changed on load");
+    // The bar position is optional: missing or unknown keeps the fallback,
+    // and a saved layout keeps the position it had.
+    require(!fromJson(old, standard).progressBarTop, "A layout without a position moved the bar");
+    auto topBar = standard;
+    topBar.progressBar = topBar.progressBarTop = true;
+    require(toJson(topBar).value("progress_bar_position").toString() == "top",
+            "A top bar was not saved as top");
+    require(fromJson(toJson(topBar), standard) == topBar, "A top bar did not load back");
+    auto unknownPosition = toJson(topBar);
+    unknownPosition["progress_bar_position"] = "left";
+    require(fromJson(unknownPosition, standard).progressBarTop == standard.progressBarTop,
+            "An unknown bar position was used");
+    require(progressEdge(topBar) == BarEdge::Top && progressEdge(standard) == BarEdge::None,
+            "The bar edge does not follow the layout");
     for (int slot = 0; slot < slotCount; ++slot)
         require(!slotLabel(slot).isEmpty(), "A slot has no name");
     for (const auto field : fields)

@@ -511,6 +511,8 @@
 "header_footer.uppercase" = "Uppercase";
 "header_footer.progress_bar" = "Progress bar";
 "header_footer.progress_bar_detail" = "% of book";
+"header_footer.progress_bar_bottom" = "Bottom";
+"header_footer.progress_bar_top" = "Top";
 /* Arguments: %1 */
 "header_footer.time_left" = "%1 left";
 "header_footer.learning_pace" = "Learning reading speed";

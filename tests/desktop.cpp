@@ -3877,7 +3877,7 @@ void checkHeaderFooterSizes(int preset, bool dark)
             QVERIFY(!other.intersects(cell->geometry()));
         slotBounds.append(cell->geometry());
     }
-    auto *progress = fixture.widget("rrHeaderFooterProgressBar_on");
+    auto *progress = fixture.widget("rrHeaderFooterProgressBar_bottom");
     QVERIFY(fixture.reveal(progress));
     QVERIFY(view->rect().contains(QRect(progress->mapTo(view, QPoint()), progress->size())));
     QCOMPARE(header->mapTo(view, QPoint()).x(), footer->mapTo(view, QPoint()).x());
@@ -10760,6 +10760,52 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QFETCH(int, preset);
         QFETCH(bool, dark);
         checkPercentageFormat(preset, dark, false);
+    }
+
+    // The progress bar along the top: the header strip holds it, the footer
+    // gives up its room, the rule runs under the top edge, and it saves.
+    void headerFooterProgressTop()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page);
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavLayout"));
+        QTRY_VERIFY(fixture.visible("rrHeaderFooter"));
+        QVERIFY(fixture.press("rrHeaderFooter"));
+        QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+        QVERIFY(fixture.reveal(fixture.widget("rrHeaderFooterProgressBar_bottom")));
+        QVERIFY(fixture.press("rrHeaderFooterProgressBar_bottom"));
+        QTRY_VERIFY(page->progressAtBottom());
+        const int top = page->topHeight(), bottom = page->bottomHeight();
+        QVERIFY(fixture.press("rrHeaderFooterProgressBar_top"));
+        QTRY_VERIFY(page->progressAtTop());
+        const int bar = ui::metrics::reading::progressHeight;
+        QCOMPARE(page->topHeight(), top + bar);
+        QCOMPARE(page->bottomHeight(), bottom - bar);
+        QTRY_VERIFY(fixture.widget("rrHeaderFooterClose")->isEnabled());
+        QVERIFY(fixture.press("rrHeaderFooterClose"));
+        QTRY_VERIFY(!fixture.visible("rrHeaderFooterView"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(!fixture.visible("rrMenu"));
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QTRY_COMPARE(storage::readJson(fixture.paths.preferences())
+                             .value(headerfooter::customKey)
+                             .toObject()
+                             .value("progress_bar_position")
+                             .toString(),
+                     QString("top"));
+        // The rule spans the width just inside the top edge.
+        const auto header = page->headerImage();
+        QVERIFY(!header.isNull());
+        const int rule = int(ui::metrics::reading::progressBottom) - 1;
+        QCOMPARE(header.pixelColor(header.width() - 2, rule),
+                 page->palette().color(QPalette::WindowText));
     }
 
     void headerFooterSizes_data() { screenshotVariants(); }

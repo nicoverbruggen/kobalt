@@ -76,12 +76,13 @@ QVector<double> wholeBookTicks(Engine &engine, const QString &first, const QStri
     const int mainPages = lastPage - firstPage + 1;
     // The shallowest level of the contents with three chapter starts inside
     // the main text, between its first and last page, or else the level with
-    // the most, up to 100. Some books put their chapters
+    // the most that the bar can hold. Some books put their chapters
     // under a part or a half-title, beside front and back matter.
     const auto chapters = engine.wholeBookChapters();
     int deepest = 0;
     for (const auto &chapter : chapters)
         deepest = qMax(deepest, chapter.depth);
+    const int maxTicks = engine.viewport().width() / qMax(1, readingPixels(12));
     QVector<double> ticks;
     for (int depth = 0; depth <= deepest && ticks.size() < 3; ++depth) {
         QStringList positions;
@@ -100,10 +101,10 @@ QVector<double> wholeBookTicks(Engine &engine, const QString &first, const QStri
             if (page > 0 && main > 0 && main < mainPages - 1)
                 level.append(std::round(pageProgressFraction(main, mainPages) * 1000000) / 1000000);
         }
-        // More ticks than this would cut the bar away, and every save of
-        // the book would carry them. Deeper levels would only show part of
-        // the book, so the search ends here.
-        constexpr int maxTicks = 100;
+        // Each tick cuts a 4-pixel gap in the bar, so the bar's width sets
+        // how many it can hold: one every 12 design pixels on average keeps
+        // two thirds of the bar. Deeper levels would only show part of the
+        // book, so the search ends at a level with more.
         if (level.size() > maxTicks)
             break;
         if (level.size() > ticks.size())

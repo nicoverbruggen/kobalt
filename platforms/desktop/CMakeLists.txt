@@ -59,9 +59,12 @@ if(KOBALT_SANITIZE)
         add_compile_options("$<$<CONFIG:Debug>:-O1>")
     endif()
     # Instrument the app and tests. Some external libraries build without RTTI.
-    add_compile_options(-fsanitize=address -fno-omit-frame-pointer
+    # x86 traps an integer division by zero, while arm64 returns 0, so check
+    # it on every host and stop the test there.
+    add_compile_options(-fsanitize=address,integer-divide-by-zero
+                        -fno-sanitize-recover=integer-divide-by-zero -fno-omit-frame-pointer
                         "$<$<COMPILE_LANGUAGE:CXX>:-fsanitize=vptr>")
-    add_link_options(-fsanitize=address,vptr)
+    add_link_options(-fsanitize=address,vptr,integer-divide-by-zero)
 endif()
 add_subdirectory("${KOBALT_ROOT}/assets" "${CMAKE_CURRENT_BINARY_DIR}/assets")
 

@@ -31,6 +31,7 @@ struct SnapshotWorker
 {
     QThreadPool pool;
     std::mutex mutex;
+    bool blocked = false;
     QHash<QString, std::function<void()>> queued;
     // Only the GUI thread registers and delivers handoffs.
     QList<std::function<void()>> handoffs;
@@ -69,7 +70,8 @@ public:
             work = worker.queued.take(path);
         }
         try {
-            work();
+            if (work)
+                work();
         } catch (...) {
             qWarning("Sleep snapshot job failed with an exception");
         }
@@ -276,6 +278,8 @@ void queueSleepSnapshotWork(const QString &path, std::function<void()> work)
     auto &worker = snapshotWorker();
     {
         std::lock_guard<std::mutex> lock(worker.mutex);
+        if (worker.blocked)
+            return;
         auto &queued = worker.queued[path];
         // Drop unstarted saves of the same file, including their large images.
         queued.swap(work);
@@ -284,6 +288,15 @@ void queueSleepSnapshotWork(const QString &path, std::function<void()> work)
         ++pendingJobs;
     }
     worker.pool.start(new SnapshotJob(path));
+}
+
+void blockSleepSnapshotWork(bool blocked)
+{
+    auto &worker = snapshotWorker();
+    std::lock_guard<std::mutex> lock(worker.mutex);
+    worker.blocked = blocked;
+    if (blocked)
+        worker.queued.clear();
 }
 
 bool sleepSnapshotWorkPending()

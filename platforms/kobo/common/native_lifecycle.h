@@ -51,7 +51,6 @@ public:
     // PIN entry can own native rotation while the reader remains suspended.
     static bool pinScreenActive();
     static bool sleepSaveAllowed();
-    static bool usbSaveAllowed();
     // Thread-safe gate for queued session writes. Closed before storage is
     // handed to USB or Nickel begins its final shutdown.
     static bool nativeSessionSaveAllowed();

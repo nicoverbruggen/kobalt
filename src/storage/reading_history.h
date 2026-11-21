@@ -38,6 +38,7 @@ public:
 
     // Capture on the owner thread. Complete only after the enclosing transaction.
     Snapshot snapshot();
+    bool discardQueuedWrites() { return !writer || writer->discardQueued(); }
     bool saving() const;
     // Acknowledge completed background work without waiting or starting a write.
     bool savesSucceeded();

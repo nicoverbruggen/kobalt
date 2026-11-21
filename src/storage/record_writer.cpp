@@ -182,7 +182,7 @@ public:
     {
         {
             std::lock_guard<std::mutex> lock(mutex);
-            if (!start(launchFailure))
+            if (writer->stopped || !start(launchFailure))
                 return false;
             if (writer->pending && writer->delivery == RecordWriter::Delivery::Latest) {
                 auto pending = std::find_if(queue.begin(), queue.end(), [writer](const Job &job) {
@@ -204,14 +204,29 @@ public:
     {
         std::unique_lock<std::mutex> lock(mutex);
         assertNotRunner();
+        discardQueuedLocked(writer);
+        finished.wait(lock, [writer] { return !writer->running; });
+    }
+
+    bool discardQueued(RecordWriter *writer)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        writer->stopped = true;
+        discardQueuedLocked(writer);
+        return !writer->running;
+    }
+
+private:
+    void discardQueuedLocked(RecordWriter *writer)
+    {
         queue.erase(std::remove_if(queue.begin(), queue.end(),
                                    [writer](const Job &job) { return job.owner == writer; }),
                     queue.end());
         writer->pending = 0;
         finished.notifyAll();
-        finished.wait(lock, [writer] { return !writer->running; });
     }
 
+public:
     bool flush(RecordWriter *writer, int milliseconds)
     {
         std::unique_lock<std::mutex> lock(mutex);
@@ -358,6 +373,11 @@ void RecordWriter::cancel()
 {
     mainthread::BlockingOperation operation("record-writer-cancel", !idle());
     WriterThread::instance().cancel(this);
+}
+
+bool RecordWriter::discardQueued()
+{
+    return WriterThread::instance().discardQueued(this);
 }
 
 bool RecordWriter::writeNow(Write write)

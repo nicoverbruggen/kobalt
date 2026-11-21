@@ -70,6 +70,7 @@ public:
     bool remove(const QString &id);
 
     // True until the newest save has reported back.
+    bool discardQueuedWrites() { return !writer_ || writer_->discardQueued(); }
     bool saving() const { return reported_ < posted_; }
 
     // Waits for the running and pending save, for example before USB export.

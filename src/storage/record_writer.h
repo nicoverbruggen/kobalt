@@ -31,6 +31,8 @@ public:
     // Drops a pending write and waits for a running one. A synchronous write
     // that follows cannot then be overwritten by an older one.
     void cancel();
+    // Reject future writes and drop queued writes without waiting. False means a write is still running.
+    bool discardQueued();
     // Posts using this writer's delivery rule and waits for its result.
     bool writeNow(Write write);
     // Waits for this writer's pending and running write. False when
@@ -42,7 +44,7 @@ private:
     friend class WriterThread;
     const Delivery delivery;
     std::size_t pending = 0;
-    bool running = false;
+    bool running = false, stopped = false;
 };
 
 // Runs `operation` on the writer thread and waits for it. On the writer

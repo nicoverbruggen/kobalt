@@ -103,14 +103,6 @@ bool NativeLifecycle::suspended()
     return (manager && visible && visible(manager())) || nativeSleeping();
 }
 
-bool NativeLifecycle::usbSaveAllowed()
-{
-    // The USB prompt can cover the reader before storage is exported. Only
-    // the held workflow permits its final write; sleep and PIN still block it.
-    return active && active->pendingWorkflow && !active->exported && !active->poweringOff
-            && !nativeSleeping();
-}
-
 void StockStorageHandoff::begin(State next)
 {
     // Native workflow and gadget hooks can call each other. Only the first
@@ -183,7 +175,7 @@ bool NativeLifecycle::nativeProgressSaveAllowed()
     // A visible sleep screen or PIN must not prevent that final write.
     if (active && active->shuttingDown())
         return !active->storageBlocked();
-    return !suspended() || usbSaveAllowed() || sleepSaveAllowed();
+    return !suspended() || sleepSaveAllowed();
 }
 
 bool NativeLifecycle::sleepSaveAllowed()
@@ -579,8 +571,9 @@ bool NativeLifecycle::interceptShutdown(QObject *manager, Shutdown mode)
     // whose shutdown path can reenter this hook while the manager still lives.
     const auto completed = std::make_shared<bool>(false);
     const auto lifecycle = active;
-    const auto finish = [guard, lifecycle, mode, completed] {
-        if (!guard || !lifecycle || lifecycle != active || *completed || !nativeSessionSaveAllowed())
+    const auto request = active->generation;
+    const auto finish = [guard, lifecycle, mode, completed, request] {
+        if (!guard || !lifecycle || lifecycle != active || *completed || request != lifecycle->generation)
             return;
         *completed = true;
         // Nickel stops EventEngine and closes its databases in powerOff().
@@ -621,15 +614,18 @@ bool NativeLifecycle::interceptUsbWorkflow(QObject *manager)
     const auto request = ++active->generation;
     active->pendingWorkflow = manager;
     active->usbPending = true;
+    sessionStorageAvailable.store(false);
+    storage::blockProfile();
+    storage::blockSleepSnapshotWork(true);
     active->storageReady = false;
     engineActivity().pause(false);
-    diagnostic("usb-save-start");
+    diagnostic("usb-release-start");
     const auto handoff = [guard, request] {
         if (!guard || request != guard->generation || !guard->usbPending || guard->storageReady
             || !guard->pendingWorkflow) {
             return;
         }
-        // Only a current USB request may block storage. The reader drain can
+        // Only a current USB request may close the profile. The reader drain can
         // finish after disconnect has cancelled it and reopened the profile.
         sessionStorageAvailable.store(false);
         storage::closeProfile(true);
@@ -642,7 +638,7 @@ bool NativeLifecycle::interceptUsbWorkflow(QObject *manager)
         auto *manager = guard->pendingWorkflow.data();
         guard->pendingWorkflow.clear();
         // Resume the whole caller, not just its aboutToConnect signal. Nickel
-        // can now clear its views and databases without racing our save.
+        // can now clear its views and databases after releasing our files.
         nativeUsbWorkflow(manager);
     };
     active->prepareUsb([handoff] { storage::afterSleepSnapshotWork(handoff); });
@@ -663,6 +659,9 @@ void NativeLifecycle::beginUsb()
     auto guard = active;
     const auto request = ++active->generation;
     active->usbPending = true;
+    sessionStorageAvailable.store(false);
+    storage::blockProfile();
+    storage::blockSleepSnapshotWork(true);
     active->storageReady = false;
     engineActivity().pause(false);
     diagnostic("usb-release-start");
@@ -735,6 +734,7 @@ void NativeLifecycle::disconnected()
     const bool preparing = active->usbPending;
     const bool released = active->storageReady;
     storage::reopenProfile();
+    storage::blockSleepSnapshotWork(false);
     sessionStorageAvailable.store(true);
     ++active->generation;
     active->usbPending = false;
@@ -777,6 +777,7 @@ void NativeLifecycle::processingDone()
     usbPending = exported = storageReady = false;
     pendingGadget.clear();
     storage::reopenProfile();
+    storage::blockSleepSnapshotWork(false);
     sessionStorageAvailable.store(true);
     pauseDiagnostics(false);
     diagnostic("usb-storage-ready");

@@ -479,10 +479,15 @@ int main(int argc, char **argv)
     }
     // Both native USB entry points must release the connection before handoff.
     for (bool fullWorkflow : { false, true }) {
-        QSemaphore release;
+        const int releasesBefore = assetReleases;
+        QSemaphore entered, release;
         std::atomic_bool timedOut{ false };
         kobalt::storage::queueSleepSnapshotWork("held-snapshot",
-                                                [&] { timedOut = !release.tryAcquire(1, 5000); });
+                                                [&] {
+                                                    entered.release();
+                                                    timedOut = !release.tryAcquire(1, 5000);
+                                                });
+        require(entered.tryAcquire(1, 5000), "Snapshot did not start");
         std::atomic_bool savedNext{ false };
         if (fullWorkflow)
             kobalt::storage::queueSleepSnapshotWork("failed-snapshot",
@@ -495,19 +500,19 @@ int main(int argc, char **argv)
             kobalt::NativeLifecycle::interceptUsbWorkflow(usb);
         else
             kobalt::NativeLifecycle::interceptUsb(usb);
-        require(available(), "Pending USB preparation blocked storage before its final save");
-        require(kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
-                "Pending USB blocked its native final save");
+        require(!available(), "Pending USB allowed a new profile operation");
+        require(!kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+                "Pending USB allowed a new native save");
         const auto finish = drains.takeLast();
         finish();
-        require(available(), "USB took storage while a snapshot was pending");
+        require(!available() && assetReleases == releasesBefore, "USB released storage while a snapshot was pending");
         QEventLoop delivered;
         kobalt::storage::afterSleepSnapshotWork([&] { delivered.quit(); });
         QTimer::singleShot(5000, &delivered, &QEventLoop::quit);
         release.release();
         delivered.exec();
         require(!timedOut, "USB blocked the event thread on the snapshot");
-        require(savedNext, "A failed or empty snapshot job discarded the next save");
+        require(!savedNext, "Queued snapshot ran after USB took over");
         require(!available(), "USB preparation did not keep the profile closed");
         const int count = handoffs;
         finish();
@@ -536,7 +541,7 @@ int main(int argc, char **argv)
         kobalt::NativeLifecycle::interceptUsbWorkflow(usb);
         const auto current = drains.takeLast();
         cancelled();
-        require(available() && lifecycle.storageBlocked(),
+        require(!available() && lifecycle.storageBlocked(),
                 "A stale completion affected the newer USB request");
         require(assetReleases == releases && assetRestores == restores,
                 "A stale USB completion changed the asset gate");
@@ -570,6 +575,11 @@ int main(int argc, char **argv)
     remount();
     // Power-off supersedes a pending USB drain. A cable disconnect cannot
     // release the shutdown's storage barrier.
+    QSemaphore enteredSnapshot, releaseSnapshot;
+    std::atomic_bool snapshotTimedOut{ false };
+    kobalt::storage::queueSleepSnapshotWork(
+            "power-off", [&] { enteredSnapshot.release(); snapshotTimedOut = !releaseSnapshot.tryAcquire(1, 5000); });
+    require(enteredSnapshot.tryAcquire(1, 5000), "Snapshot did not start");
     kobalt::NativeLifecycle::interceptUsb(usb);
     const auto abandoned = drains.takeLast();
     lifecycle.prepareShutdown = [](std::function<void()> ready) {
@@ -579,10 +589,6 @@ int main(int argc, char **argv)
     power->asleep = true;
     emit power->aboutToSleep();
     power->visible = true;
-    QSemaphore releaseSnapshot;
-    std::atomic_bool snapshotTimedOut{ false };
-    kobalt::storage::queueSleepSnapshotWork(
-            "power-off", [&] { snapshotTimedOut = !releaseSnapshot.tryAcquire(1, 5000); });
     require(kobalt::NativeLifecycle::interceptShutdown(usb,
                                                        kobalt::NativeLifecycle::Shutdown::PowerOff),
             "Power-off was not intercepted");

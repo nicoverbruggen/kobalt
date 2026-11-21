@@ -888,7 +888,7 @@ void Reader::prepareAnnotation(bool leave, std::function<void()> after)
     annotationSaving = true;
     QPointer<Reader> guard(this);
     annotationDraft->prepareSave([guard, leave, after](AnnotationDraft::Prepared result, quint64) {
-        if (!guard)
+        if (!guard || guard->releasingForUsb)
             return;
         guard->annotationSaving = false;
         saves::settled();

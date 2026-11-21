@@ -200,6 +200,7 @@ protected:
 private:
     void observeReading();
     void prepareTransition(std::function<void()> finished, bool usb);
+    void releaseUsbWrites(std::function<void()> finished);
     // Construction, in this order. Each step builds one group of widgets and
     // connects its signals.
     void saveNativeProgress();
@@ -1230,7 +1231,7 @@ private:
     void saveExit(quint64 request);
     void finishExitNative(quint64 request, const QString &location, const QString &error);
     void finishExitSaved(quint64 request);
-    void saveTransition(quint64 request, bool usb, const QString &location, const QString &error,
+    void saveTransition(quint64 request, const QString &location, const QString &error,
                         bool mapped, std::function<void()> finished, int failures = 0);
     void finishStorageData(std::function<void(bool)> finished, bool nativeAllowed, int failures = 0,
                            bool retriedAnnotations = false);
@@ -1249,7 +1250,7 @@ private:
     void recoverSleepSave();
     void clearPendingExit();
     void cancelExit();
-    bool closeSaveRetried = false, closeWithoutSaving = false;
+    bool closeSaveRetried = false, closeWithoutSaving = false, releasingForUsb = false;
     quint64 closeRequest = 0;
     QElapsedTimer closeStage;
     QPointer<kobalt::ui::ChoiceModal> closeSaveError;

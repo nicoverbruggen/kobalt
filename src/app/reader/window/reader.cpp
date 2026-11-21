@@ -71,7 +71,7 @@ Reader::~Reader()
     if (general)
         static_cast<SettingsPanel *>(general)->stylingHidden = {};
     cancelStylingSamples();
-    if (kosyncClient)
+    if (kosyncClient && !releasingForUsb)
         kosyncClient->persistSyncTime();
     if (closeWithoutSaving)
         book->discardPendingSaves();
@@ -213,9 +213,14 @@ void Reader::prepareUsb(std::function<void()> finished)
 
 void Reader::prepareTransition(std::function<void()> finished, bool usb)
 {
+    if (usb) {
+        releasingForUsb = closeWithoutSaving = true;
+        retryDisposal = {};
+    } else {
+        book->retryFailedReadingSave();
+    }
     if (imageViewer && imageViewer->isVisible())
         imageViewer->closeImage();
-    book->retryFailedReadingSave();
     clearExitSyncWait();
     const auto request = ++closeRequest;
     setProperty("reader_transition_save_failed", false);
@@ -229,7 +234,10 @@ void Reader::prepareTransition(std::function<void()> finished, bool usb)
     sleepImage = {};
     presentation->clearSleepScreen();
     session->cancelPendingTurn();
-    book->stopReading(true);
+    if (usb)
+        book->releaseNative(false);
+    else
+        book->stopReading(true);
     lifecycleHidden = true;
     exitPending = exportRunning = false;
     closing = true;
@@ -239,25 +247,28 @@ void Reader::prepareTransition(std::function<void()> finished, bool usb)
     if (statusTimer)
         statusTimer->stop();
     setEnabled(false);
+    if (usb) {
+        releaseUsbWrites(std::move(finished));
+        return;
+    }
     auto completed = std::make_shared<bool>(false);
-    auto complete = [this, request, usb, finished](const QString &location, const QString &error,
+    auto complete = [this, request, finished](const QString &location, const QString &error,
                                                    bool mapped) {
         if (request != closeRequest)
             return;
-        saveTransition(request, usb, location, error, mapped, finished);
+        saveTransition(request, location, error, mapped, finished);
     };
     // Bound the engine mapping wait, not required storage acknowledgements.
-    // USB must not release a session that still owns unsaved reading time.
     // Each request has its own deadline, so a superseded request still reports
     // its timeout. The name lets tests check and run it instead of waiting.
     auto *deadline = new QTimer(this);
     deadline->setObjectName("rrTransitionMappingDeadline");
     deadline->setSingleShot(true);
-    connect(deadline, &QTimer::timeout, this, [deadline, completed, complete, usb] {
+    connect(deadline, &QTimer::timeout, this, [deadline, completed, complete] {
         deadline->deleteLater();
         if (std::exchange(*completed, true))
             return;
-        kobalt::diagnostic(usb ? "usb-save-timeout" : "shutdown-save-timeout");
+        kobalt::diagnostic("shutdown-save-timeout");
         complete({}, {}, false);
     });
     deadline->start(2000);
@@ -273,35 +284,54 @@ void Reader::prepareTransition(std::function<void()> finished, bool usb)
     });
 }
 
-void Reader::saveTransition(quint64 request, bool usb, const QString &location,
+void Reader::releaseUsbWrites(std::function<void()> finished)
+{
+    // A queued write owns no storage yet. Give up those writes and release Nickel
+    // once active writes and any open export destination have closed.
+    bool idle = book->discardQueuedWrites();
+    idle &= bookmarks->discardQueuedWrites();
+    idle &= highlights->discardQueuedWrites();
+    idle &= preferencesWriter.discardQueued();
+    if (savedWords)
+        idle &= savedWords->discardQueuedWrites();
+    if (reportWriter)
+        idle &= reportWriter->discardQueued();
+    if (idle && (!annotationExporter || !annotationExporter->writing())) {
+        finished();
+        return;
+    }
+    saveWait.after([this, finished] { releaseUsbWrites(finished); });
+}
+
+void Reader::saveTransition(quint64 request, const QString &location,
                             const QString &error, bool mapped, std::function<void()> finished,
                             int failures)
 {
     if (request != closeRequest)
         return;
     const QPointer<Reader> guard(this);
-    const auto again = [this, request, usb, location, error, mapped, finished](int failures) {
+    const auto again = [this, request, location, error, mapped, finished](int failures) {
         auto *timer = new QTimer(this);
         timer->setObjectName("rrTransitionSaveRetry");
         timer->setSingleShot(true);
         timer->setTimerType(Qt::PreciseTimer);
         connect(timer, &QTimer::timeout, this,
-                [this, timer, request, usb, location, error, mapped, finished, failures] {
+                [this, timer, request, location, error, mapped, finished, failures] {
                     timer->deleteLater();
-                    saveTransition(request, usb, location, error, mapped, finished, failures);
+                    saveTransition(request, location, error, mapped, finished, failures);
                 });
         timer->start(100);
     };
     // Waiting for an active operation does not spend or renew its retry budget.
     if (pendingStorageSave()) {
-        saveWait.after([this, request, usb, location, error, mapped, finished, failures] {
-            saveTransition(request, usb, location, error, mapped, finished, failures);
+        saveWait.after([this, request, location, error, mapped, finished, failures] {
+            saveTransition(request, location, error, mapped, finished, failures);
         });
         return;
     }
     if (failures >= 3) {
         setProperty("reader_transition_save_failed", true);
-        kobalt::diagnostic(usb ? "usb-save-failed" : "shutdown-save-failed",
+        kobalt::diagnostic("shutdown-save-failed",
                            { { "attempts", failures } }, kobalt::DiagnosticSeverity::Error);
         if (allowFailedTransition || closeWithoutSaving) {
             closeWithoutSaving = true;
@@ -3665,6 +3695,8 @@ void Reader::handleDisposalFailure()
 void Reader::finishStorageData(std::function<void(bool)> finished, bool nativeAllowed, int failures,
                                bool retriedAnnotations)
 {
+    if (releasingForUsb)
+        return;
     if (pendingStorageSave()) {
         saveWait.after([this, finished, nativeAllowed, failures, retriedAnnotations] {
             finishStorageData(finished, nativeAllowed, failures, retriedAnnotations);
@@ -3707,7 +3739,7 @@ void Reader::finishStorageData(std::function<void(bool)> finished, bool nativeAl
     }
     const QPointer<Reader> guard(this);
     book->checkpointForClose([this, guard, finished, nativeAllowed, retry](bool saved) {
-        if (!guard)
+        if (!guard || guard->releasingForUsb)
             return;
         if (!saved) {
             retry();
@@ -3718,7 +3750,7 @@ void Reader::finishStorageData(std::function<void(bool)> finished, bool nativeAl
             return;
         }
         book->finishReading([guard, finished, retry](NativeActivityResult activityResult) {
-            if (!guard)
+            if (!guard || guard->releasingForUsb)
                 return;
             if (activityCompleted(activityResult))
                 finished(true);

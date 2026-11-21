@@ -5,7 +5,6 @@
 #include "reader_coordinator.h"
 #include "home_sleep_screen.h"
 #include "window_presentation.h"
-#include "usb_transition.h"
 #include "support/qt_compat.h"
 #include "support/strings.h"
 #include "book_menu.h"
@@ -352,15 +351,7 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         homeAfterClose = false;
         authorization->setBlocked(true);
         timer.stop();
-        prepareUsbTransition(
-                busy ? nullptr : run.reader.data(), cleanupCallbacks,
-                [this] {
-                    kobalt::diagnostic("usb-release-start");
-                    if (sleepingOpening)
-                        sleepingOpening->setOpeningSaveState(OpeningSaveState::Required);
-                    disposeForTransition([] { });
-                },
-                std::move(ready));
+        disposeForTransition(std::move(ready), false, true);
     };
     lifecycle->usbCancelled = [this] {
         if (sleepingOpening && (lifecycle->sleepRequested() || NativeLifecycle::suspended()))
@@ -400,6 +391,8 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
             kobalt::storage::closeProfile(true);
             ready();
         });
+        if (disposingForUsb)
+            return; // The USB drain already owns the files and the shutdown continuation.
         if (sleepingOpening) {
             // The original disposal already owns the reader and its completion.
             sleepingOpening->setOpeningSaveState(lifecycle->batteryLowShutdown()
@@ -856,7 +849,8 @@ void ReaderCoordinator::drainReadingJobs(std::function<void()> finished)
     kobalt::ReaderSession::drain(std::move(finished));
 }
 
-void ReaderCoordinator::disposeForTransition(std::function<void()> finished, bool nativeAllowed)
+void ReaderCoordinator::disposeForTransition(std::function<void()> finished, bool nativeAllowed,
+                                             bool usb)
 {
     environment_.cancelOpeningFontWait();
     cancelPreload();
@@ -864,8 +858,14 @@ void ReaderCoordinator::disposeForTransition(std::function<void()> finished, boo
     if (run.fallbackAlert)
         run.fallbackAlert->reject();
     cleanupCallbacks.append(std::move(finished));
-    if (lifecycle->draining)
+    if (lifecycle->draining) {
+        if (usb && !disposingForUsb && run.reader) {
+            disposingForUsb = true;
+            finishDisposal(busy ? "cancelled" : "closed", false);
+        }
         return;
+    }
+    disposingForUsb = usb;
     lifecycle->draining = true;
     if (busy && run.reader && nativeAllowed && !lifecycle->storageBlocked()
         && !lifecycle->shuttingDown()
@@ -891,25 +891,28 @@ void ReaderCoordinator::finishDisposal(const QString &finalStatus, bool nativeAl
     if (run.reader) {
         const QPointer<ReaderCoordinator> guard(this);
         const auto reader = run.reader;
-        reader->finishStorageSave(
-                [guard, reader, finalStatus, nativeAllowed](bool saved) {
-                    if (!guard || !reader || guard->run.reader != reader
-                        || !NativeLifecycle::nativeSessionSaveAllowed())
-                        return;
-                    // Reader completion means every in-flight write has ended, even
-                    // when the bounded save job failed. Do not renew its budget here.
-                    if (!saved)
-                        kobalt::diagnostic("reader-disposed-unsaved", {},
-                                           kobalt::DiagnosticSeverity::Error);
-                    if (reader == guard->sleepingOpening) {
-                        guard->sleepingOpening.clear();
-                        guard->lifecycle->criticalBatteryShutdown = {};
-                    }
-                    delete reader.data();
-                    if (guard)
-                        guard->finishDisposal(finalStatus, nativeAllowed);
-                },
-                nativeAllowed);
+        const bool usb = disposingForUsb;
+        const auto released = [guard, reader, finalStatus, nativeAllowed, usb](bool saved) {
+            if (!guard || !reader || guard->run.reader != reader || guard->disposingForUsb != usb
+                || (!usb && !NativeLifecycle::nativeSessionSaveAllowed()))
+                return;
+            // Reader completion means every in-flight write has ended, even
+            // when the bounded save job failed. Do not renew its budget here.
+            if (!saved && !usb)
+                kobalt::diagnostic("reader-disposed-unsaved", {},
+                                   kobalt::DiagnosticSeverity::Error);
+            if (reader == guard->sleepingOpening) {
+                guard->sleepingOpening.clear();
+                guard->lifecycle->criticalBatteryShutdown = {};
+            }
+            delete reader.data();
+            if (guard)
+                guard->finishDisposal(finalStatus, nativeAllowed);
+        };
+        if (usb)
+            reader->prepareUsb([released] { released(false); });
+        else
+            reader->finishStorageSave(released, nativeAllowed);
         return;
     }
     run.session.reset();
@@ -925,6 +928,7 @@ void ReaderCoordinator::finishDisposal(const QString &finalStatus, bool nativeAl
         QFile::remove(activePath);
         status(finalStatus);
         kobalt::releaseResourceConnections([this] {
+            disposingForUsb = false;
             lifecycle->draining = false;
             if (lifecycle->blocked() && !lifecycle->storageBlocked())
                 kobalt::engineActivity().pause(true);
@@ -1232,8 +1236,7 @@ kobalt::ReaderWindow *ReaderCoordinator::createReader(bool koboCloud)
         return makeWindowPresentation(
                 reader, nativeReaderSleepScreenAvailable(),
                 [this, identity](const sleep::Snapshot &snapshot) {
-                    if ((!lifecycle->blocked() && !NativeLifecycle::suspended())
-                        || NativeLifecycle::usbSaveAllowed()) {
+                    if (!lifecycle->blocked() && !NativeLifecycle::suspended()) {
                         homeSleep->remember(snapshot, identity);
                     }
                 });

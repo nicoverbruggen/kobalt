@@ -32,6 +32,7 @@ public:
                 ReadingHistory::UtcClock utc = {}, ReadingTimer::Clock readingClock = {});
     ~ReadingBook();
 
+    bool discardQueuedWrites();
     void discardPendingSaves() { discardSaves = true; }
 
     ReaderSession *session() const { return session_.get(); }

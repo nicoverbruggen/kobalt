@@ -152,6 +152,19 @@ ReadingBook::~ReadingBook()
     speedWriter.reset();
 }
 
+bool ReadingBook::discardQueuedWrites()
+{
+    discardSaves = true;
+    deferredCheckpointEpoch = 0;
+    deferredCloses.clear();
+    bool idle = !history || history->discardQueuedWrites();
+    for (const auto *slot : { &writer, &activityWriter, &appearanceWriter, &speedWriter }) {
+        if (*slot && !(*slot)->discardQueued())
+            idle = false;
+    }
+    return idle;
+}
+
 bool ReadingBook::savesPending() const
 {
     return activityPending || appearancePending || deferredCheckpointEpoch

@@ -135,6 +135,7 @@ private:
     } run;
 
     // A cancelled opening can retain its reader and failed checkpoint until unlock.
+    bool disposingForUsb = false;
     QPointer<kobalt::ReaderWindow> sleepingOpening;
 
     void updateOpening(kobalt::OpeningStage stage, int percent);
@@ -153,7 +154,7 @@ private:
     void status(const QString &value, const QString &reason = {});
     void hideLoading();
     void drainReadingJobs(std::function<void()> finished);
-    void disposeForTransition(std::function<void()> finished, bool nativeAllowed = true);
+    void disposeForTransition(std::function<void()> finished, bool nativeAllowed = true, bool usb = false);
     void finishDisposal(const QString &finalStatus, bool nativeAllowed);
     void release(bool endAuthorization = true);
     void cancelOpening();

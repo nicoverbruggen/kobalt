@@ -56,7 +56,7 @@ public:
 
     virtual bool openingSaveParked() const { return false; }
 
-    // Limit the native-position wait to two seconds before file release.
+    // Abandon queued saves and release after active storage users have finished.
     virtual void prepareUsb(std::function<void()> finished) = 0;
     virtual void prepareShutdown(std::function<void()> finished, bool allowFailedSave = false) = 0;
 

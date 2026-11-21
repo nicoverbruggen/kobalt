@@ -24,6 +24,8 @@ sleep::Snapshot readSleepSnapshot(const QString &path, const QString &token, sle
 void removeSleepSnapshot(const QString &path);
 // Snapshot jobs share one worker so an opening's deletion follows the previous close's save.
 void queueSleepSnapshotWork(const QString &path, std::function<void()> work);
+// USB drops queued snapshots and prevents new jobs until storage returns.
+void blockSleepSnapshotWork(bool blocked);
 bool sleepSnapshotWorkPending();
 // Called on the GUI thread. Runs ready there once all snapshot storage work has finished.
 void afterSleepSnapshotWork(std::function<void()> ready);

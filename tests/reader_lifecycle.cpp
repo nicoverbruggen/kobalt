@@ -287,20 +287,20 @@ EngineFontInputs testFonts;
 QString testPlaceholder;
 QString profile;
 QString coverBook, textBook;
-std::atomic_bool delayUsbEncoding{ false }, releaseUsbEncoding{ false },
-        usbEncodingReturned{ false };
+std::atomic_bool delayShutdownEncoding{ false }, releaseShutdownEncoding{ false },
+        shutdownEncodingReturned{ false };
 
 // A delayed encoding holds the engine worker until the test releases it, so
 // the mapping outlasts the reader's deadline without a fixed sleep. The bound
 // keeps a failed test from holding the worker for good.
-QString usbPosition(const Engine &model, QString *error)
+QString shutdownPosition(const Engine &model, QString *error)
 {
-    if (delayUsbEncoding) {
+    if (delayShutdownEncoding) {
         QElapsedTimer held;
         held.start();
-        while (!releaseUsbEncoding && held.elapsed() < 10000)
+        while (!releaseShutdownEncoding && held.elapsed() < 10000)
             QThread::msleep(1);
-        usbEncodingReturned = true;
+        shutdownEncodingReturned = true;
     }
     return nickel::positionCodec().encode(model, error);
 }
@@ -572,7 +572,7 @@ bool runKosyncDeadline(ReaderWindow *window, int interval = 10000)
     return true;
 }
 
-// The position-mapping deadline of the reader's only shutdown or USB request:
+// The position-mapping deadline of the reader's shutdown request:
 // a single-shot 2 s timer. Returns nullptr when there is not exactly one.
 QTimer *transitionMappingDeadline(ReaderWindow *window)
 {
@@ -4656,6 +4656,7 @@ private slots:
                 return std::make_unique<test::HostPresentation>(state);
             };
         };
+        host.progress = std::make_shared<test::HostProgress>();
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);
         host.open(textBook);
@@ -4664,9 +4665,19 @@ private slots:
         QTRY_VERIFY(host.window()->readyForPresentation());
         const auto expected = host.window()->powerScreenSnapshot();
         QVERIFY(!expected.image.isNull());
+        host.progress->finishPending = true;
+        const auto releaseNative = qScopeGuard([&] { host.progress->completeFinish(true); });
+        QVERIFY(host.window()->pendingStorageSave());
+        const int writes = host.progress->writeAttempts;
         bool released = false;
+        int ordinaryCompletions = 0;
+        host.window()->finishStorageSave([&](bool) { ++ordinaryCompletions; });
         host.window()->prepareUsb([&] { released = true; });
-        QTRY_VERIFY(released);
+        QTRY_VERIFY_WITH_TIMEOUT(released, 500);
+        host.progress->completeFinish(true);
+        QCoreApplication::processEvents();
+        QCOMPARE(ordinaryCompletions, 0);
+        QCOMPARE(host.progress->writeAttempts, writes);
         QCOMPARE(state->savedCount, 0);
     }
 
@@ -12171,7 +12182,7 @@ private slots:
         QCOMPARE(position(), after);
     }
 
-    void usbFinalSave_data()
+    void shutdownFinalSave_data()
     {
         QTest::addColumn<QString>("outcome");
         for (const auto &outcome : { "saved", "failed", "persistent-failure", "persistent-retry",
@@ -12180,7 +12191,7 @@ private slots:
         }
     }
 
-    void usbFinalSave()
+    void shutdownFinalSave()
     {
         QFETCH(QString, outcome);
         QTemporaryDir root;
@@ -12195,8 +12206,8 @@ private slots:
         {
             ~ResetDelay()
             {
-                delayUsbEncoding = false;
-                releaseUsbEncoding = true;
+                delayShutdownEncoding = false;
+                releaseShutdownEncoding = true;
             }
         } resetDelay;
 
@@ -12205,7 +12216,7 @@ private slots:
         host.progress = std::make_shared<test::HostProgress>();
         host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
         host.positions = nickel::positionCodec();
-        host.positions.encode = usbPosition;
+        host.positions.encode = shutdownPosition;
         QSignalSpy opened(&host, &ReaderFixture::opened);
         host.open(textBook, nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
@@ -12217,17 +12228,14 @@ private slots:
             host.progress->publish({ identity, "OEBPS/c3.xhtml#kobo.8.1:7", 200, 1, true });
         }
         const auto before = host.progress->current;
-        usbEncodingReturned = releaseUsbEncoding = false;
-        delayUsbEncoding = outcome == "timeout";
+        shutdownEncodingReturned = releaseShutdownEncoding = false;
+        delayShutdownEncoding = outcome == "timeout";
         const int attempts = host.progress->writeAttempts;
         int completed = 0;
         QElapsedTimer elapsed;
         elapsed.start();
         host.progress->holdFinish = outcome == "battery-low-held";
-        if (outcome.startsWith("battery-low"))
-            host.window()->prepareShutdown([&] { ++completed; }, true);
-        else
-            host.window()->prepareUsb([&] { ++completed; });
+        host.window()->prepareShutdown([&] { ++completed; }, outcome.startsWith("battery-low"));
         // The engine mapping has a 2 s deadline. Check the timer and run it
         // now instead of waiting for it.
         QPointer<QTimer> mappingDeadline = transitionMappingDeadline(host.window());
@@ -12304,13 +12312,13 @@ private slots:
         QTRY_COMPARE_WITH_TIMEOUT(completed, 1, 3000);
         QVERIFY(elapsed.elapsed() < 2400);
         if (outcome == "timeout") {
-            QVERIFY(!usbEncodingReturned);
-            releaseUsbEncoding = true;
-            QTRY_VERIFY(usbEncodingReturned.load());
+            QVERIFY(!shutdownEncodingReturned);
+            releaseShutdownEncoding = true;
+            QTRY_VERIFY(shutdownEncodingReturned.load());
             // Drain the late engine callback while the window remains alive.
             QTest::qWait(100);
         }
-        delayUsbEncoding = false;
+        delayShutdownEncoding = false;
         QCOMPARE(completed, 1);
         if (outcome == "persistent-failure" || outcome == "battery-low") {
             QCOMPARE(host.progress->writeAttempts - attempts, 3);

@@ -40,6 +40,7 @@ public:
     // A word already saved for this book counts one more lookup. It keeps its
     // first sentence and position and takes the latest definition, but an
     // empty definition never replaces a saved one.
+    bool discardQueuedWrites() { return writer.discardQueued(); }
     void record(SavedWord word, std::function<void(bool)> finished = {});
     void remove(const QString &book, const QString &word, std::function<void(bool)> finished = {});
     // An opened book updates the path and title its saved words point to.

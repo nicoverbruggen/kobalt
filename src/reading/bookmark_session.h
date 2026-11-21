@@ -107,6 +107,7 @@ public:
     const QVector<int> &pages() const { return pages_; }
 
     // True until the newest save has reported back.
+    bool discardQueuedWrites() { return !writer || writer->discardQueued(); }
     bool saving() const { return reported < posted; }
 
     // Waits for the running and pending save, for example before USB export.

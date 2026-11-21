@@ -319,6 +319,27 @@ int main()
         require(log.text().empty(), "A cancelled write ran");
     }
     {
+        // USB discards queued writes without waiting for the running write.
+        Log log;
+        Gate gate;
+        RecordWriter saver;
+        saver.post(
+                [&] {
+                    gate.wait();
+                    log.add("active");
+                    return true;
+                },
+                {});
+        gate.awaitEntered();
+        saver.post(record(log, "queued"), [&](bool) { log.add("queued completion"); });
+        require(!saver.discardQueued() && !saver.idle(),
+                "Discard reported that the active write was finished");
+        require(!saver.tryPost(record(log, "late")), "Stopped writer accepted new work");
+        gate.release();
+        require(saver.flush() && saver.discardQueued(), "The active write did not retire");
+        require(log.text() == "active ", "Discard ran queued work or dropped the active write");
+    }
+    {
         // Destruction finishes a waiting write. A writer cancelled while
         // still queued leaves no dangling entry for the thread.
         Log log;

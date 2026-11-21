@@ -1,4 +1,5 @@
 #include "publication/zip_resource.h"
+#include "publication/zip_directory.h"
 #include "support/qt_compat.h"
 #include "publication/resource_cache.h"
 #include <QCoreApplication>
@@ -36,7 +37,33 @@ void replace32(QByteArray &bytes, int offset, quint32 value)
     bytes.replace(offset, encoded.size(), encoded);
 }
 
-QByteArray zip(const QByteArray &source, bool deflated, bool badCrc = false, bool truncated = false)
+void checkZip64MemberSize()
+{
+    QByteArray header(46, '\0');
+    replace32(header, 24, 0xffffffff);
+    replace16(header, 30, 12);
+    QByteArray extra;
+    u16(extra, 1);
+    u16(extra, 8);
+    u32(extra, 17);
+    u32(extra, 1);
+
+    zip::Member member{};
+    for (int available = 0; available < extra.size(); ++available) {
+        if (zip::member(header + extra.left(available), 0, member))
+            qFatal("Accepted an incomplete ZIP64 size field");
+    }
+    if (!zip::member(header + extra, 0, member) || member.size != (quint64(1) << 32) + 17
+        || member.packed != 0 || member.local != 0)
+        qFatal("Failed to read a complete ZIP64 size field");
+
+    replace16(extra, 2, 7);
+    if (zip::member(header + extra, 0, member))
+        qFatal("Read a ZIP64 size past its declared field boundary");
+}
+
+QByteArray makeZip(const QByteArray &source, bool deflated, bool badCrc = false,
+                   bool truncated = false)
 {
     QByteArray packed = source;
     if (deflated) {
@@ -105,7 +132,7 @@ QByteArray manyEntries(int count)
 {
     QByteArray bytes, directory;
     for (int i = 0; i < count; ++i) {
-        auto entry = zip(QByteArray::number(i), false);
+        auto entry = makeZip(QByteArray::number(i), false);
         const int end = entry.size() - 22 - 46 - 9;
         auto central = entry.mid(end, 46 + 9);
         const auto name = QString("%1.bin").arg(i, 5, 10, QChar('0')).toUtf8();
@@ -211,9 +238,10 @@ int main(int argc, char **argv)
     const auto path = dir.path() + "/book.zip";
     ZipResourceIndex index;
     checkDirectoryReuse();
+    checkZip64MemberSize();
     // The low byte is the version; the high byte names the writer's system.
     for (const quint16 version : { 46, 0x032e }) {
-        auto unsupported = zip("chapter", false);
+        auto unsupported = makeZip("chapter", false);
         replace16(unsupported, 4, version);
         const auto unsupportedPath = dir.path() + QString("/version-%1.zip").arg(version);
         save(unsupportedPath, unsupported);
@@ -222,7 +250,7 @@ int main(int argc, char **argv)
             qFatal("Unsupported OCF extraction version");
     }
     for (const quint16 version : { 0, 14, 0x0314 }) {
-        auto supported = zip("chapter", false);
+        auto supported = makeZip("chapter", false);
         replace16(supported, 4, version);
         const auto supportedPath = dir.path() + QString("/version-%1.zip").arg(version);
         save(supportedPath, supported);
@@ -242,7 +270,7 @@ int main(int argc, char **argv)
             // The second pattern covers very small compressed input producing many blocks.
             for (bool compressible : { false, true }) {
                 const auto input = compressible ? QByteArray(length, 'a') : original;
-                save(path, zip(input, deflated));
+                save(path, makeZip(input, deflated));
                 ZipResource first, second;
                 if (!first.open(path, "image.png", index) || !second.open(path, "image.png", index)
                     || first.size() != length)
@@ -262,7 +290,7 @@ int main(int argc, char **argv)
             for (bool truncated : { false, true }) {
                 if (!length && truncated)
                     continue;
-                save(path, zip(original, deflated, !truncated, truncated));
+                save(path, makeZip(original, deflated, !truncated, truncated));
                 ZipResource stream;
                 if (stream.open(path, "image.png", index)) {
                     qint64 received = 0;
@@ -275,7 +303,7 @@ int main(int argc, char **argv)
         }
     for (bool deflated : { false, true }) {
         QBuffer borrowed;
-        borrowed.setData(zip("borrowed payload", deflated));
+        borrowed.setData(makeZip("borrowed payload", deflated));
         if (!borrowed.open(QIODevice::ReadOnly))
             qFatal("open borrowed input");
         {
@@ -291,7 +319,7 @@ int main(int argc, char **argv)
         if (!borrowed.isOpen() || !borrowed.seek(0) || borrowed.read(4) != QByteArray("PK\3\4", 4))
             qFatal("resource destroyed or closed borrowed input");
         borrowed.close();
-        borrowed.setData(zip("corrupt", deflated, true));
+        borrowed.setData(makeZip("corrupt", deflated, true));
         if (!borrowed.open(QIODevice::ReadOnly))
             qFatal("reopen borrowed input");
         ZipResource corrupt;
@@ -302,12 +330,12 @@ int main(int argc, char **argv)
         if (corrupt.valid())
             qFatal("borrowed input bypassed CRC validation");
     }
-    save(path, zip("payload", false));
+    save(path, makeZip("payload", false));
     ZipResource stream;
     if (stream.open(path, "absent.png", index))
         qFatal("missing entry accepted");
     {
-        const auto original = zip("payload", false);
+        const auto original = makeZip("payload", false);
         const int directory = original.size() - 22 - 46 - QByteArray("image.png").size();
         auto reject = [&](QByteArray bytes, const char *reason) {
             save(path, original);
@@ -358,19 +386,19 @@ int main(int argc, char **argv)
         if (!stream.open(path, "image.png", index, 7) || stream.next() != "payload"
             || !stream.finished() || !stream.valid())
             qFatal("Resource at its exact limit rejected");
-        save(path, zip({}, false));
+        save(path, makeZip({}, false));
         if (!stream.open(path, "image.png", index, 0) || !stream.next().isEmpty()
             || !stream.finished() || !stream.valid())
             qFatal("Empty resource at a zero limit rejected");
     }
     // A stream can finish its original file after its path is replaced. The
     // next stream must use the replacement's directory, even at the same size.
-    save(path, zip("before", false));
+    save(path, makeZip("before", false));
     ZipResource previous, replacement;
     if (!previous.open(path, "image.png", index) || !QFile::rename(path, path + ".old")) {
         qFatal("open original before replacement");
     }
-    save(path, zip("after!", false));
+    save(path, makeZip("after!", false));
     if (!replacement.open(path, "image.png", index) || replacement.next() != "after!"
         || !replacement.valid() || previous.next() != "before" || !previous.valid()) {
         qFatal("File replacement reused stale directory metadata or changed an existing stream");

@@ -28,6 +28,9 @@ data       The default style sheets of the engine, and the list of names
 CMakeLists.txt builds the library. Kobalt calls it from
 dependencies/local-engine.cmake. Do not build it on its own.
 
+UPSTREAM.md explains the Blaze changes to the inherited CREngine
+code, for CREngine maintainers.
+
 License
 -------
 

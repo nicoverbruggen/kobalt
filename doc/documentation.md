@@ -16,7 +16,7 @@ These rules keep Kobalt's Markdown accurate and easy to scan, and stop docs from
 | `doc/engines.md` and `doc/engines/` | Blaze architecture and Hybrid performance rules. Mark plans from before Blaze as historical. |
 | `doc/release-evaluation.md`, `doc/screen-review.md`, `doc/device-benchmarks.md` | The evaluation harness, the screen review tool and real-device benchmarks. |
 
-All Markdown stays in `doc/`, except the root `README.md` and `AGENTS.md`.
+All Markdown stays in `doc/`, except the root `README.md`, `AGENTS.md` and `src/engine/blaze/UPSTREAM.md`. `UPSTREAM.md` explains Blaze's changes to CREngine maintainers, who read it without the rest of Kobalt's docs. It stays with the engine source so that it is part of the fork.
 
 When most tasks need only one part of a large doc, split it: `doc/<topic>.md` keeps the index and the core rules, and `doc/<topic>/<area>.md` holds each area.
 

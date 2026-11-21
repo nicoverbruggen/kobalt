@@ -4863,7 +4863,8 @@ private slots:
         const auto status = chargeState == 2 ? reader::SleepStatus::Charged
                 : chargeState == 1           ? reader::SleepStatus::Charging
                                              : reader::SleepStatus::Sleeping;
-        const int percent = pageProgressPercent(host.session()->page(), host.session()->pages());
+        // Hybrid can still be paging within one chapter. Use the reader's default statistics scope.
+        const int percent = host.session()->statsPercent(!host.session()->hasMainTextBoundary());
         // This profile has no native reading pace and has not made forward turns.
         const auto expected = reader::sleepScreenImage(
                 background, strings::get("sleep.percent_read").arg(percent), {}, dark, 67, status,
@@ -5288,7 +5289,7 @@ private slots:
         QVERIFY(awake.design != sleep::Design::Stock && awake.design != sleep::Design::Custom);
         QVERIFY(awake.privateBook);
         QCOMPARE(awake.percent,
-                 pageProgressPercent(host.session()->page(), host.session()->pages()));
+                 host.session()->statsPercent(!host.session()->hasMainTextBoundary()));
         QVERIFY(awake.coverPath.isEmpty() && awake.coverArea.isEmpty());
         QVERIFY(awake.details.title.isEmpty() && awake.details.author.isEmpty()
                 && awake.details.chapter.isEmpty() && awake.details.greeting.isEmpty());

@@ -1,10 +1,12 @@
 #include "scenario/player.h"
 #include "support/diagnostics.h"
 #include <QApplication>
+#include <QCheckBox>
 #include <QCloseEvent>
 #include <QWidget>
 #include <QElapsedTimer>
 #include <QJsonArray>
+#include <QLineEdit>
 #include <QTimer>
 #include <QVector>
 #include <cstdio>
@@ -614,5 +616,74 @@ int main(int argc, char **argv)
                 "settle accepted a host that cannot report work in flight");
     } catch (const std::bad_function_call &) {
         require(false, "scenario player called an absent host callback");
+    }
+
+    // A check passes or fails on its comparisons and takes no sample. After a
+    // failure it still runs its teardown, and a blocked main thread fails it.
+    {
+        QWidget window;
+        auto *option = new QCheckBox(&window);
+        option->setObjectName("checkOption");
+        option->setChecked(true);
+        auto *field = new QLineEdit(&window);
+        field->setObjectName("checkField");
+        window.show();
+        kobalt::scenario::Host checking;
+        checking.reader = [&]() -> QWidget * { return &window; };
+        const auto check = [](const QJsonArray &steps, const QJsonArray &teardown = {}) {
+            return QJsonObject{ { "scenarios",
+                                  QJsonArray{ QJsonObject{ { "id", "check.option" },
+                                                           { "kind", "check" },
+                                                           { "opt_in", true },
+                                                           { "steps", steps },
+                                                           { "teardown", teardown } } } } };
+        };
+        kobalt::scenario::Options checks;
+        checks.filter = "check.";
+        require(kobalt::scenario::run(check({}), checking).isEmpty(), "checks are opt-in");
+        results = kobalt::scenario::run(
+                check({ QJsonObject{ { "remember", "start" }, { "widget", "checkOption" } },
+                        QJsonObject{ { "widget", "checkOption" },
+                                     { "same_as", "start" },
+                                     { "check", "Option stays" } },
+                        QJsonObject{ { "widget", "checkOption" },
+                                     { "property", "enabled" },
+                                     { "is", true } } }),
+                checking, checks);
+        const auto passed = results.value(0).value("checks").toArray();
+        require(results.size() == 1 && results[0].value("status") == "completed"
+                        && results[0].value("samples").toArray().isEmpty() && passed.size() == 2
+                        && passed[0].toObject().value("check") == "Option stays"
+                        && passed[0].toObject().value("pass").toBool(),
+                "a check that holds passes without a sample");
+        results = kobalt::scenario::run(
+                check({ QJsonObject{ { "widget", "checkOption" },
+                                     { "is", false },
+                                     { "timeout", 0 },
+                                     { "check", "Option is off" } },
+                        QJsonObject{ { "type", "never" }, { "into", "checkField" } } },
+                      { QJsonObject{ { "type", "undone" }, { "into", "checkField" } } }),
+                checking, checks);
+        const auto missed = results.value(0).value("checks").toArray();
+        require(results[0].value("status") == "failed"
+                        && results[0].value("reason").toString().contains("Option is off")
+                        && missed.size() == 1 && !missed[0].toObject().value("pass").toBool()
+                        && missed[0].toObject().value("actual") == true,
+                "a check that does not hold fails with its name and value");
+        require(field->text() == "undone", "a failed check still runs its teardown");
+        results = kobalt::scenario::run(
+                check({ QJsonObject{
+                        { "expect", "font_pixels" }, { "is", 1 }, { "timeout", 0 } } }),
+                checking, checks);
+        require(results[0].value("status") == "failed"
+                        && results[0].value("reason").toString().contains("no book is open"),
+                "a state check needs an open reader");
+        QTimer::singleShot(0, [] { kobalt::observer({ { "event", "main-thread-blocked" } }); });
+        results = kobalt::scenario::run(check({ QJsonObject{ { "wait_ms", 20 } } }), checking,
+                                        checks);
+        require(results[0].value("status") == "failed"
+                        && results[0].value("reason").toString().contains(
+                                "main thread was blocked"),
+                "a blocked main thread fails the check");
     }
 }

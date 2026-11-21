@@ -4,6 +4,7 @@
 #
 #   cmake [-DSUBJECT=worktree|<revision>] [-DPROFILE=quick|release] [-DPARTS=tests;screenshots;perf;device]
 #         [-DRUNS=n] [-DPATCH=<file>] [-DDEVICE_RUNNER=<program>] [-DDEVICE_TARGETS=qt5] [-DKEEP_DEVICE=<name>]
+#         [-DDEVICE_FILTER=check.]
 #         [-DRECORD_BASELINE=ON] -P platforms/eval/run.cmake
 cmake_minimum_required(VERSION 3.22)
 get_filename_component(root "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
@@ -26,6 +27,9 @@ if(NOT DEFINED DEVICE_RUNNER AND DEFINED ENV{KOBALT_DEVICE_RUNNER})
 endif()
 if(NOT DEFINED DEVICE_TARGETS)
     set(DEVICE_TARGETS qt5)
+endif()
+if(DEFINED DEVICE_FILTER AND NOT DEVICE_FILTER MATCHES "^[a-z0-9.-]+$")
+    message(FATAL_ERROR "DEVICE_FILTER must be a scenario identifier or prefix")
 endif()
 # The quick profile keeps an iteration within a few minutes. The release
 # profile runs everything the release checks require.
@@ -352,14 +356,19 @@ endif()
 if("device" IN_LIST PARTS)
     foreach(target IN LISTS DEVICE_TARGETS)
         step("device ${target}")
-        set(keep "")
+        set(runner_options "")
         if(KEEP_DEVICE)
-            set(keep --keep-device "${KEEP_DEVICE}")
+            list(APPEND runner_options --keep-device "${KEEP_DEVICE}")
+        endif()
+        # The runner installs the package with this filter, as install-eval.cmake
+        # does with SCENARIO_FILTER.
+        if(DEVICE_FILTER)
+            list(APPEND runner_options --filter "${DEVICE_FILTER}")
         endif()
         # The evaluation package carries its scenarios, books and diagnostics switch.
         execute_process(COMMAND "${DEVICE_RUNNER}" run
             --package "${source}/build/kobo-${target}-eval/Kobalt-${target}-eval.zip" --target ${target}
-            --output "${partial}/device-${target}" ${keep} RESULT_VARIABLE result)
+            --output "${partial}/device-${target}" ${runner_options} RESULT_VARIABLE result)
         if(NOT result STREQUAL "0")
             list(APPEND device_failures ${target})
         endif()
@@ -373,7 +382,7 @@ function(json_text output value)
     string(REPLACE "\"" "\\\"" value "${value}")
     set(${output} "\"${value}\"" PARENT_SCOPE)
 endfunction()
-foreach(name PATCH QT_PREFIX model cpu os load)
+foreach(name PATCH QT_PREFIX DEVICE_FILTER model cpu os load)
     json_text(${name}_json "${${name}}")
 endforeach()
 string(REPLACE ";" "\",\"" parts_json "${PARTS}")
@@ -389,7 +398,8 @@ file(WRITE "${partial}/meta.json" "{
                \"diff_sha256\": \"${diff_hash}\", \"patch\": ${PATCH_json}, \"patch_sha256\": \"${patch_hash}\"},
   \"profile\": \"${PROFILE}\", \"parts\": [\"${parts_json}\"], \"runs\": ${RUNS},
   \"tests_exit\": \"${tests_exit}\", \"screenshots_exit\": \"${screenshots_exit}\",
-  \"perf_failures\": ${perf_failures}, \"device_failures\": [${device_failures_json}], \"qt\": ${QT_PREFIX_json},
+  \"perf_failures\": ${perf_failures}, \"device_failures\": [${device_failures_json}],
+  \"device_filter\": ${DEVICE_FILTER_json}, \"qt\": ${QT_PREFIX_json},
   \"host\": {\"hw_model\": ${model_json}, \"cpu\": ${cpu_json}, \"cores\": \"${cores}\", \"os\": ${os_json},
             \"power\": \"${power}\", \"low_power_mode\": ${low_power}, \"load_start\": ${load_json}},
   \"durations_s\": {${durations}}

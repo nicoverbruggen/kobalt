@@ -11,6 +11,9 @@
 #include "engine/engine_worker.h"
 #include "support/qt_compat.h"
 #include "ui/style/fonts.h"
+#ifdef KOBALT_SCENARIO_PLAYER
+#  include "scenario/files.h"
+#endif
 #include <QCoreApplication>
 #include <QPointer>
 #include <atomic>
@@ -44,6 +47,11 @@ struct ReaderEnvironment
             paths.stateReport.clear();
             paths.sessionReport.clear();
         }
+#endif
+#ifdef KOBALT_SCENARIO_PLAYER
+        const auto checks = scenario::checkProfile(paths.directory);
+        if (!checks.isEmpty())
+            paths.directory = checks;
 #endif
     }
 

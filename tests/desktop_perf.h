@@ -260,12 +260,23 @@ private:
                 : QJsonObject();
         if (!require(!file.isEmpty(), "the scenario file could not be read"))
             return;
-        Fixture fixture(false, false, false, true, false, false, [](ReaderHostServices &services) {
-            services.downloadableDictionaries = false;
-            services.dictionary = [] {
-                return std::unique_ptr<kobalt::DictionaryService>(new Dictionary);
-            };
-        });
+        // Device checks also cover the light panel. Only they get a front
+        // light, so the reader menu of the timed scenarios stays as it was.
+        const bool checks = filter.startsWith(QLatin1String("check."));
+        auto light = std::make_shared<GestureLightState>();
+        Fixture fixture(false, false, false, true, false, false,
+                        [checks, light](ReaderHostServices &services) {
+                            services.downloadableDictionaries = false;
+                            services.dictionary = [] {
+                                return std::unique_ptr<kobalt::DictionaryService>(new Dictionary);
+                            };
+                            if (checks) {
+                                services.lightAvailable = [] { return true; };
+                                services.light = [light](QWidget *) {
+                                    return std::make_unique<GestureLight>(light);
+                                };
+                            }
+                        });
         const auto books = file.value("books").toObject();
         QMap<QString, QString> generatedBooks;
         kobalt::scenario::Host host;
@@ -295,6 +306,7 @@ private:
             return reader && reader->busy();
         };
         host.idle = [&] { return fixture.window.idle(); };
+        host.light = [checks] { return checks; };
         // Parsed books and layouts are disposable caches.
         kobalt::storage::RecordWriter scenarioWriter;
         host.forget = [&](const QString &) {
@@ -322,6 +334,11 @@ private:
             };
         for (const auto &result : kobalt::scenario::run(file, host, options)) {
             const auto id = result.value("id").toString();
+            for (const auto &value : result.value("checks").toArray()) {
+                const auto check = value.toObject();
+                qInfo().noquote() << (check.value("pass").toBool() ? "PASS" : "FAIL") << id + ":"
+                                  << check.value("check").toString();
+            }
             if (result.value("status").toString() == "skipped") {
                 qInfo().noquote() << "Skipped" << id + ":" << result.value("reason").toString();
                 continue;

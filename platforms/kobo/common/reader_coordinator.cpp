@@ -435,7 +435,7 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     // A device set up for scenarios must not sync the benchmark book, also
     // not when a person opens it to start the run.
     if (!NativeLifecycle::stockStorageBlocked()
-        && QFile::exists(environment_.paths.directory + "/scenarios/scenarios.json"))
+        && QFile::exists(QString::fromLatin1(configDir) + "/scenarios/scenarios.json"))
         kobalt::kosync::pauseAutomatic(true);
 #endif
 }
@@ -1548,7 +1548,7 @@ void ReaderCoordinator::cancelPreload()
 #ifdef KOBALT_SCENARIO_PLAYER
 void ReaderCoordinator::startScenarios()
 {
-    const auto path = environment_.paths.directory + "/scenarios/scenarios.json";
+    const auto path = QString::fromLatin1(configDir) + "/scenarios/scenarios.json";
     if (scenariosStarted || !kobalt::diagnosticsActive() || !QFile::exists(path))
         return;
     scenariosStarted = true;
@@ -1713,6 +1713,11 @@ void ReaderCoordinator::runScenarios(const QString &path)
         const auto dictionary = services.dictionary ? services.dictionary() : nullptr;
         return dictionary && !dictionary->choices().isEmpty();
     };
+    host.light = [] {
+        const auto services = readerHostServices();
+        return services.lightAvailable && services.lightAvailable();
+    };
+    host.rotation = [] { return true; };
     host.locate = [](QWidget *widget, const QPoint &point) -> QPair<QWindow *, QPointF> {
         auto *window = widget->window();
         return { window->windowHandle(), QPointF(widget->mapTo(window, point)) };
@@ -1769,7 +1774,7 @@ void ReaderCoordinator::runScenarios(const QString &path)
             header[it.key()] = it.value();
     }
     // One line per scenario, kept apart from the rotating event log.
-    const auto folder = environment_.paths.directory + "/diagnostics";
+    const auto folder = QString::fromLatin1(configDir) + "/diagnostics";
     QPointer<ReaderCoordinator> guard(this);
     kobalt::scenario::saveResults(
             scenarioWriter, folder + "/scenarios.jsonl", header, results,

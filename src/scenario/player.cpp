@@ -7,13 +7,16 @@
 #include "support/qt_compat.h"
 #include "support/qt_input.h"
 #include "ui/style/metrics.h"
+#include <QAbstractButton>
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QMap>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QSet>
 #include <QTimer>
 #include <QVector>
 #include <QWidget>
@@ -273,6 +276,31 @@ bool pointIn(QWidget *target, const QJsonValue &at, QPoint &point)
     return false;
 }
 
+// The value at a dotted path, such as `display_settings.dark_mode`.
+QJsonValue lookup(const QJsonObject &object, const QString &path)
+{
+    QJsonValue value = object;
+    for (const auto &key : path.split('.'))
+        value = value.toObject().value(key);
+    return value;
+}
+
+// A value as a report shows it.
+QString text(const QJsonValue &value)
+{
+    if (value.isString())
+        return '"' + value.toString() + '"';
+    if (value.isBool())
+        return QString::fromLatin1(value.toBool() ? "true" : "false");
+    if (value.isDouble())
+        return QString::number(value.toDouble());
+    if (value.isArray())
+        return QString::fromUtf8(QJsonDocument(value.toArray()).toJson(QJsonDocument::Compact));
+    if (value.isObject())
+        return QString::fromUtf8(QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact));
+    return QString::fromLatin1(value.isNull() ? "null" : "missing");
+}
+
 class Runner
 {
 public:
@@ -284,6 +312,11 @@ public:
     // Runs one step for the given repetition. Returns an empty string or the reason it failed.
     QString step(const QJsonObject &step, int repetition)
     {
+        // Any step runs only `if` a widget shows, or `unless` it shows.
+        if (step.contains("unless") && visible(host, step.value("unless").toString()))
+            return {};
+        if (step.contains("if") && !visible(host, step.value("if").toString()))
+            return {};
         if (step.contains("sleep_persistence")) {
             if (!host.sleepPersistence) {
                 unsupported = true;
@@ -294,24 +327,8 @@ public:
             return result.value("error").toString();
         }
         if (step.contains("press")) {
-            if (step.contains("unless") && visible(host, step.value("unless").toString()))
-                return {};
             const auto name = pick(step.value("press"), repetition).toString();
-            auto *target = find(host, name);
-            if (!target || !target->isVisible() || !target->isEnabled())
-                return name + " is not visible";
-            QPoint point;
-            if (!pointIn(target, pick(step.value("at"), repetition), point))
-                return name + " is covered";
-            // Tap no faster than a person after a close, so the close guard
-            // does not swallow the press. The wait comes before the sample.
-            auto *reader = dynamic_cast<ReaderWindow *>(host.reader ? host.reader() : nullptr);
-            if (reader
-                && !waitUntil([reader] { return !reader->closeGuardActive(); },
-                              2 * ui::metrics::contents::closeGuardMilliseconds))
-                return name + " stayed behind the close guard";
-            events.skip();
-            return click(target, point, 0) ? QString() : name + " has no window";
+            return press(find(host, name), name, pick(step.value("at"), repetition));
         }
         if (!host.busy && (step.contains("hold") || step.contains("settle"))) {
             unsupported = true;
@@ -474,7 +491,239 @@ public:
                 return "Wi-Fi stayed on";
             return {};
         }
+        // Keeps the reader's state, or one widget property, under a name, so
+        // a later `expect` can compare with it.
+        if (step.contains("remember")) {
+            const auto name = step.value("remember").toString();
+            QJsonValue value;
+            QJsonObject state;
+            const auto failure = step.contains("widget") ? property(step, value) : inspect(state);
+            if (!failure.isEmpty())
+                return failure;
+            remembered[name] = step.contains("widget") ? qt::object({ { "value", value } }) : state;
+            if (step.contains("widget"))
+                widgetValues.insert(name);
+            else
+                widgetValues.remove(name);
+            return {};
+        }
+        if (step.contains("expect") || step.contains("widget"))
+            return expect(step);
+        if (step.contains("reveal"))
+            return reveal(step.value("reveal").toString(),
+                          step.value("next").toString("rrSettingsOptionsNext"),
+                          step.value("previous").toString("rrSettingsOptionsPrevious"));
+        // Puts text into a field, as a person types it on the keyboard.
+        if (step.contains("type")) {
+            const auto name = step.value("into").toString();
+            auto *field = find(host, name);
+            if (!field || !field->isVisible())
+                return name + " is not visible";
+            if (field->metaObject()->indexOfProperty("text") < 0)
+                return name + " takes no text";
+            field->setProperty("text", step.value("type").toString());
+            return {};
+        }
+        if (step.contains("choose"))
+            return choose(step);
         return "unknown step";
+    }
+
+    // The reader's state as its state report would hold it now.
+    QString inspect(QJsonObject &state)
+    {
+        auto *reader = dynamic_cast<ReaderWindow *>(host.reader ? host.reader() : nullptr);
+        if (!reader)
+            return "no book is open";
+        state = reader->inspect();
+        return state.isEmpty() ? QStringLiteral("the reader reported no state") : QString();
+    }
+
+    // A widget's property, `checked` unless the step names another.
+    QString property(const QJsonObject &step, QJsonValue &value)
+    {
+        const auto name = step.value("widget").toString();
+        const auto *widget = find(host, name);
+        if (!widget)
+            return name + " does not exist";
+        const auto key = step.value("property").toString("checked");
+        const auto variant = widget->property(key.toLatin1().constData());
+        if (!variant.isValid())
+            return name + " has no property " + key;
+        value = QJsonValue::fromVariant(variant);
+        return {};
+    }
+
+    // Compares a value of the reader's state, or a widget property, with a
+    // literal (`is`, `is_not`) or with a remembered value (`same_as`, `not_as`,
+    // `above`, `below`, optionally `by` an exact amount). It waits until the
+    // comparison holds or the time runs out, and records the outcome as a check.
+    QString expect(const QJsonObject &step)
+    {
+        const bool widget = step.contains("widget");
+        const auto path = step.value("expect").toString();
+        QString relation;
+        for (const auto *name : { "is", "is_not", "same_as", "not_as", "above", "below" })
+            if (relation.isEmpty() && step.contains(QLatin1String(name)))
+                relation = QLatin1String(name);
+        if (relation.isEmpty())
+            return "the check has no comparison";
+        const bool literal = relation.startsWith(QLatin1String("is"));
+        const auto reference = step.value(relation).toString();
+        if (!literal && !remembered.contains(reference))
+            return "nothing was remembered as " + reference;
+        QJsonValue actual, wanted = literal ? step.value(relation) : QJsonValue();
+        QString failure;
+        const auto holds = [&] {
+            QJsonObject state;
+            failure = widget ? property(step, actual) : inspect(state);
+            if (!failure.isEmpty())
+                return false;
+            if (!widget)
+                actual = lookup(state, path);
+            if (!literal) {
+                const auto &snapshot = remembered[reference];
+                wanted = widgetValues.contains(reference)
+                        ? snapshot.value("value")
+                        : lookup(snapshot, step.value("field").toString(path));
+            }
+            if (relation == "is" || relation == "same_as")
+                return actual == wanted;
+            if (relation == "is_not" || relation == "not_as")
+                return actual != wanted;
+            if (!actual.isDouble() || !wanted.isDouble())
+                return false;
+            const double change =
+                    (actual.toDouble() - wanted.toDouble()) * (relation == "above" ? 1 : -1);
+            return step.contains("by") ? qAbs(change - step.value("by").toDouble()) < 1e-9
+                                       : change > 0;
+        };
+        // Reading the state lays nothing out, but polls slower than other waits.
+        QElapsedTimer waited;
+        waited.start();
+        bool passed = holds();
+        while (!passed && waited.elapsed() < step.value("timeout").toInt(5000)) {
+            WaitLoop().wait(100);
+            passed = holds();
+        }
+        const auto subject = widget
+                ? step.value("widget").toString() + '.' + step.value("property").toString("checked")
+                : path;
+        const QString word = relation == "is" || relation == "same_as" ? QString()
+                : relation == "is_not" || relation == "not_as"         ? QStringLiteral("not ")
+                                                                       : relation + ' ';
+        const auto name = step.value("check").toString(
+                subject + " is " + word + (literal ? text(wanted) : "as " + reference));
+        checks.append(qt::object({ { "check", name },
+                                   { "pass", passed },
+                                   { "actual", actual },
+                                   { "expected", wanted } }));
+        if (passed)
+            return {};
+        if (!failure.isEmpty())
+            return name + ": " + failure;
+        return name + ": " + subject + " is " + text(actual) + ", expected " + word + text(wanted)
+                + (step.contains("by") ? " by " + text(step.value("by")) : QString());
+    }
+
+    // Pages a list until `name` can be pressed. Settings options sit on
+    // pages of their own.
+    QString reveal(const QString &name, const QString &next, const QString &previous)
+    {
+        const auto shown = [&] {
+            auto *target = find(host, name);
+            QPoint point;
+            return target && target->isVisible() && pointIn(target, {}, point);
+        };
+        QString failure;
+        if (page(next, previous, [&] { return waitUntil(shown, 500); }, failure))
+            return {};
+        return failure.isEmpty() ? name + " is not on any page" : failure;
+    }
+
+    // Goes back to the first page of a list with `previous`, then forward
+    // with `next` until `found` holds. Returns whether it held; `failure` is
+    // set when a press failed.
+    bool page(const QString &next, const QString &previous, const std::function<bool()> &found,
+              QString &failure)
+    {
+        const auto turn = [&](const QString &name) {
+            auto *button = name.isEmpty() ? nullptr : find(host, name);
+            if (!button || !button->isVisible() || !button->isEnabled())
+                return false;
+            failure = press(button, name, {});
+            WaitLoop().wait(50);
+            return failure.isEmpty();
+        };
+        int back = 0;
+        while (back < 20 && turn(previous))
+            ++back;
+        if (!failure.isEmpty())
+            return false;
+        if (back == 20) {
+            failure = previous + " did not reach the first page";
+            return false;
+        }
+        for (int forward = 0; forward < 20; ++forward) {
+            if (found())
+                return true;
+            if (!turn(next))
+                return false;
+        }
+        return false;
+    }
+
+    // Presses the option labelled `choose` in the list `in`, paging with
+    // `next` and `previous`. With `keep`, it first keeps the label of the
+    // checked option, so a later `choose` of "@<keep>" returns to it.
+    QString choose(const QJsonObject &step)
+    {
+        const auto list = step.value("in").toString(), next = step.value("next").toString(),
+                   previous = step.value("previous").toString();
+        auto label = step.value("choose").toString();
+        if (label.startsWith('@')) {
+            label = labels.value(label.mid(1));
+            if (label.isEmpty())
+                return "no label was kept as " + step.value("choose").toString().mid(1);
+        }
+        const auto options = [&] {
+            QList<QAbstractButton *> shown;
+            if (auto *parent = find(host, list))
+                for (auto *option : parent->findChildren<QAbstractButton *>())
+                    if (option->isVisible())
+                        shown.append(option);
+            return shown;
+        };
+        if (!waitUntil([&] { return !options().isEmpty(); }, 5000))
+            return list + " shows no options";
+        QString failure;
+        if (step.contains("keep")) {
+            QString checked;
+            page(
+                    next, previous,
+                    [&] {
+                        for (auto *option : options())
+                            if (option->isChecked())
+                                checked = option->text();
+                        return !checked.isEmpty();
+                    },
+                    failure);
+            if (checked.isEmpty())
+                return failure.isEmpty() ? list + " has no checked option to keep" : failure;
+            labels[step.value("keep").toString()] = checked;
+        }
+        QAbstractButton *target = nullptr;
+        if (!page(
+                    next, previous,
+                    [&] {
+                        for (auto *option : options())
+                            if (option->text() == label)
+                                target = option;
+                        return target != nullptr;
+                    },
+                    failure))
+            return failure.isEmpty() ? list + " has no option " + label : failure;
+        return press(target, label, {});
     }
 
     QString steps(const QJsonArray &list, int repetition)
@@ -539,6 +788,25 @@ public:
                     current.clear();
                 },
                 [this] { return !host.reader() && (!host.idle || host.idle()); }, 60000);
+    }
+
+    // Presses `target` at `at`, a fraction of its size, or at its centre.
+    QString press(QWidget *target, const QString &name, const QJsonValue &at)
+    {
+        if (!target || !target->isVisible() || !target->isEnabled())
+            return name + " is not visible";
+        QPoint point;
+        if (!pointIn(target, at, point))
+            return name + " is covered";
+        // Tap no faster than a person after a close, so the close guard
+        // does not swallow the press. The wait comes before the sample.
+        auto *reader = dynamic_cast<ReaderWindow *>(host.reader ? host.reader() : nullptr);
+        if (reader
+            && !waitUntil([reader] { return !reader->closeGuardActive(); },
+                          2 * ui::metrics::contents::closeGuardMilliseconds))
+            return name + " stayed behind the close guard";
+        events.skip();
+        return click(target, point, 0) ? QString() : name + " has no window";
     }
 
     // Holds a word or a link, as a lookup or a link selection starts.
@@ -659,8 +927,24 @@ public:
 
     // Set when a step needed a book the host cannot open.
     bool unsupported = false;
+    // The outcome of each `expect` of the current scenario.
+    QJsonArray checks;
+
+    // Starts a scenario: forgets the values and labels of the one before.
+    void start()
+    {
+        checks = {};
+        remembered.clear();
+        widgetValues.clear();
+        labels.clear();
+    }
 
 private:
+    QMap<QString, QJsonObject> remembered;
+    // Names of values in `remembered` that are one widget property.
+    QSet<QString> widgetValues;
+    // Option labels kept by `choose`.
+    QMap<QString, QString> labels;
     const Host &host;
     Events &events;
     QMap<QString, QJsonObject> matched;
@@ -756,20 +1040,24 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
         // counters and event counts, and which counts must stay at a limit.
         const auto sampleSpec = scenario.value("sample").toObject();
         const bool resources = sampleSpec.value("resources").toBool();
+
         struct RestoreLogging
         {
             bool active;
             bool previous;
+
             ~RestoreLogging()
             {
                 if (active)
                     setDiagnosticFileWrites(previous);
             }
         } logging{ resources, resources && setDiagnosticFileWrites(false) };
+
         if (resources) {
             if (!waitUntil(diagnosticWriterIdle, 30000)) {
                 result["status"] = QStringLiteral("failed");
-                result["reason"] = QStringLiteral("Diagnostic writer did not drain before sampling");
+                result["reason"] =
+                        QStringLiteral("Diagnostic writer did not drain before sampling");
                 results.append(result);
                 continue;
             }
@@ -859,7 +1147,29 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
             const auto mode = scenario.value("rendering").toString();
             renderingMode::setOverride(mode == "hybrid" ? 2 : mode == "fast" ? 1 : 0);
         }
+        if (needs(scenario, "light") && !(host.light && host.light())) {
+            result["status"] = QStringLiteral("skipped");
+            result["reason"] = QStringLiteral("the device has no front light");
+            result["samples"] = samples;
+            result["stages"] = stages;
+            results.append(result);
+            continue;
+        }
+        if (needs(scenario, "rotation") && !(host.rotation && host.rotation())) {
+            result["status"] = QStringLiteral("skipped");
+            result["reason"] = QStringLiteral("the host cannot turn the screen");
+            result["samples"] = samples;
+            result["stages"] = stages;
+            results.append(result);
+            continue;
+        }
+
+        // A check passes or fails on its `expect` steps and takes no sample.
+        // A wait of the main thread during a check fails it too.
+        const bool check = scenario.value("kind").toString() == QLatin1String("check");
+        const int blocked = events.counts().value("main-thread-blocked");
         runner.unsupported = false;
+        runner.start();
         QString failure = runner.book(scenario.value("book").toString(),
                                       scenario.value("rendering").toString());
         if (failure.isEmpty()) {
@@ -867,12 +1177,15 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
             failure = runner.steps(scenario.value("setup").toArray(), 0);
         }
         const int warmup = scenario.value("warmup").toInt();
-        const int repeat = qMax(1, qRound(scenario.value("repeat").toInt(5) * options.repeatScale));
+        const int repeat = qMax(
+                1, qRound(scenario.value("repeat").toInt(check ? 1 : 5) * options.repeatScale));
         for (int index = 0; failure.isEmpty() && index < warmup + repeat; ++index) {
             runner.reset();
             failure = runner.steps(scenario.value("steps").toArray(), index);
             double sample = 0;
             QJsonObject parts;
+            if (check)
+                continue;
             if (failure.isEmpty()
                 && !runner.sample(scenario.value("sample").toObject(), sample, parts))
                 failure = "no sample";
@@ -899,9 +1212,17 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
                 stages[it.key()] = list;
             }
         }
-        // Leave the reader as the next scenario expects it.
+        // Leave the reader as the next scenario expects it. A check undoes
+        // its changes also after a failure, so the next check starts clean.
         if (failure.isEmpty())
             failure = runner.steps(scenario.value("teardown").toArray(), 0);
+        else if (check && !runner.unsupported) {
+            const auto cleanup = runner.steps(scenario.value("teardown").toArray(), 0);
+            if (!cleanup.isEmpty())
+                result["cleanup"] = cleanup;
+        }
+        if (check && failure.isEmpty() && events.counts().value("main-thread-blocked") > blocked)
+            failure = QStringLiteral("the main thread was blocked during the check");
         result["status"] = QString(failure.isEmpty()            ? "completed"
                                            : runner.unsupported ? "skipped"
                                                                 : "failed");
@@ -909,6 +1230,8 @@ QVector<QJsonObject> run(const QJsonObject &file, const Host &host, const Option
             result["reason"] = failure;
         result["samples"] = samples;
         result["stages"] = stages;
+        if (check)
+            result["checks"] = runner.checks;
         if (!details.isEmpty())
             result["details"] = details;
         results.append(result);

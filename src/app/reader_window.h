@@ -113,6 +113,10 @@ public:
 
     virtual bool benchmarkCommand(int, int) { return false; }
 
+    // For the scenario player: what the state report would hold now, built in
+    // memory, so a check can read it without waiting for a file.
+    virtual QJsonObject inspect() { return {}; }
+
     // When the opening began and the host's stages before and around the
     // window's construction. The window adds its own build, theme and show
     // stages and writes "reader-shown" once its page has painted.

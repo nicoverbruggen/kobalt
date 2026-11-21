@@ -162,6 +162,7 @@ public:
     void physicalPageButton(int key, int direction) override;
     void scriptedPageButton(int direction) override;
     QJsonObject benchmarkState() const override;
+    QJsonObject inspect() override;
     bool benchmarkCommand(int command, int argument) override;
 
     bool closeGuardActive() const override { return closeGuarded; }
@@ -1269,6 +1270,7 @@ private:
     storage::RecordWriter preferencesWriter{ storage::RecordWriter::Delivery::All };
     void saveSoon();
     bool save(bool snapshot = false, bool background = false, bool persist = true);
+    void describe(QJsonObject &state);
     // True while a tap can turn the page. The main thread then must not write
     // storage or wait for another thread; see support/main_thread.h.
     bool takesInput() const;

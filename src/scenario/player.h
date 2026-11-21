@@ -35,6 +35,12 @@ struct Host
     // Whether a dictionary is installed. Optional; without it the player
     // assumes one is.
     std::function<bool()> dictionary;
+    // Whether the device has a front light. Optional; scenarios that need it
+    // are skipped without it.
+    std::function<bool()> light;
+    // Whether the reader's rotation choices turn the screen. Optional;
+    // scenarios that need it are skipped without it.
+    std::function<bool()> rotation;
     // The window that receives input for `point` in `widget`, and the point in
     // that window. Input goes through the window system, as real input does.
     std::function<QPair<QWindow *, QPointF>(QWidget *widget, const QPoint &point)> locate;

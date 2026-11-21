@@ -1,7 +1,8 @@
 # Copies an evaluation package onto a Kobo connected over USB.
 #   cmake -DPACKAGE=build/kobo-qt5-eval/Kobalt-qt5-eval.zip -DDEVICE=/Volumes/KOBOeReader
 #       -P platforms/kobo/install-eval.cmake
-# Optional: -DSCENARIO_FILTER=kosync. runs only matching scenarios, and
+# Optional: -DSCENARIO_FILTER=kosync. runs only matching scenarios
+# (check. selects the device checks, on a scratch profile), and
 # -DREPEAT_SCALE=0.2 runs one repetition in five (at least one each).
 # -DCHAPTER_VARIANTS=ON runs every scenario twice, with the book opened as a
 # whole and in chapter mode.
@@ -40,6 +41,14 @@ if(CHAPTER_VARIANTS)
 endif()
 # Results from an earlier run must not pass for this one.
 file(REMOVE "${DEVICE}/.adds/kobalt/diagnostics/scenarios.jsonl")
+# Device checks change settings, bookmarks and highlights. While the filter
+# selects them, Kobalt reads and writes this scratch profile instead of the
+# reader's own, so each run starts from an empty one.
+set(check_profile "${DEVICE}/.adds/kobalt/scenarios/profile")
+file(REMOVE_RECURSE "${check_profile}")
+if(DEFINED SCENARIO_FILTER AND SCENARIO_FILTER MATCHES "^check\\.")
+    file(MAKE_DIRECTORY "${check_profile}")
+endif()
 file(GLOB dictionaries "${DEVICE}/.kobo/dict/dicthtml*.zip")
 if(NOT dictionaries)
     message(WARNING "No dictionary is installed on the Kobo. The dictionary scenarios will be skipped.")

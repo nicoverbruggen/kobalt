@@ -4,6 +4,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QEventLoop>
+#include <QFile>
 #include <QPointer>
 #include <QJsonDocument>
 #include <QSaveFile>
@@ -72,5 +73,17 @@ void saveResults(storage::RecordWriter &writer, const QString &path, const QJson
     postFileWork(
             writer, [path, header, results] { return writeResults(path, header, results); },
             std::move(done));
+}
+
+QString checkProfile(const QString &directory)
+{
+    QFile source(directory + QStringLiteral("/scenarios/scenarios.json"));
+    if (!source.open(QIODevice::ReadOnly))
+        return {};
+    const auto filter =
+            QJsonDocument::fromJson(source.readAll()).object().value("filter").toString();
+    if (!filter.startsWith(QLatin1String("check.")))
+        return {};
+    return directory + QStringLiteral("/scenarios/profile");
 }
 } // namespace kobalt::scenario

@@ -736,6 +736,356 @@
     {"kind": "e2e", "paths": ["src/reading/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"], "book": "opened", "opt_in": true, "repeat": 3, "id": "reading.open", "steps": [{"close": true}, {"event": "book-close"}, {"open": "opened", "fresh": true}, {"event": "reader-shown"}], "sample": {"event": "reader-shown", "field": "total_ms", "stages": true}},
     {"kind": "e2e", "paths": ["src/reading/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"], "book": "opened", "opt_in": true, "repeat": 120, "id": "reading.turn.paced", "steps": [{"key": "PageDown"}, {"event": "page-turn-painted"}], "after": [{"settle": true}], "sample": {"event": "page-turn-painted", "field": "elapsed_ms", "stages": true}},
     {"kind": "e2e", "paths": ["src/reading/", "src/engine/", "src/publication/", "src/app/reader/window/", "dependencies/"], "book": "opened", "opt_in": true, "repeat": 120, "id": "reading.turn.fast", "steps": [{"key": "PageDown"}, {"event": "page-turn-painted"}], "sample": {"event": "page-turn-painted", "field": "elapsed_ms", "stages": true}},
-    {"kind": "memory", "unit": "KiB", "paths": ["src/", "dependencies/"], "book": "opened", "opt_in": true, "repeat": 1, "id": "reading.memory", "steps": [{"settle": true}], "sample": {"memory": "rss_kib"}}
+    {"kind": "memory", "unit": "KiB", "paths": ["src/", "dependencies/"], "book": "opened", "opt_in": true, "repeat": 1, "id": "reading.memory", "steps": [{"settle": true}], "sample": {"memory": "rss_kib"}},
+    {
+      "id": "check.settings.sections",
+      "kind": "check",
+      "opt_in": true,
+      "paths": ["src/app/reader/settings/", "src/app/reader/window/reader_settings.cpp"],
+      "book": "benchmark",
+      "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
+      "steps": [
+        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"}, {"visible": "rrSettingsPages"},
+        {"press": "rrSettingsDisplay"},
+        {"widget": "rrSettingsDisplay", "is": true, "check": "Display opens"},
+        {"reveal": "rrDarkMode"},
+        {"widget": "rrDarkMode", "property": "visible", "is": true, "check": "Display shows Dark mode"},
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
+        {"press": "rrSettingsControls"},
+        {"widget": "rrSettingsControls", "is": true, "check": "Controls opens"},
+        {"reveal": "rrAnnotationInteraction"},
+        {"widget": "rrAnnotationInteraction", "property": "visible", "is": true, "check": "Controls shows the highlight interaction"},
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
+        {"press": "rrSettingsDefaults"},
+        {"widget": "rrSettingsDefaults", "is": true, "check": "Defaults opens"},
+        {"reveal": "rrRestoreBookDefaults"},
+        {"widget": "rrRestoreBookDefaults", "property": "visible", "is": true, "check": "Defaults shows Restore book defaults"},
+        {"reveal": "rrRestoreDefaults"},
+        {"widget": "rrRestoreDefaults", "property": "visible", "is": true, "check": "Defaults shows Restore appearance defaults"},
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
+        {"press": "rrSettingsStyling"},
+        {"widget": "rrSettingsStyling", "is": true, "check": "Styling opens"},
+        {"reveal": "rrWordSpacing"},
+        {"widget": "rrWordSpacing", "property": "visible", "is": true, "check": "Styling shows Word spacing"},
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
+        {"press": "rrSettingsSystem"},
+        {"widget": "rrSettingsSystem", "is": true, "check": "System opens"},
+        {"reveal": "rrTheming"},
+        {"widget": "rrTheming", "property": "visible", "is": true, "check": "System shows Theming"},
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
+        {"press": "rrSettingsKosync"},
+        {"widget": "rrSettingsKosync", "is": true, "check": "KOSync opens"},
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
+        {"press": "rrSettingsAbout"},
+        {"widget": "rrSettingsAbout", "is": true, "check": "About opens"},
+        {"widget": "rrAboutVersion", "property": "visible", "is": true, "check": "About shows the version"}
+      ],
+      "teardown": [
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose", "if": "rrSettingsClose"}, {"hidden": "rrSettingsPages"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+      ]
+    },
+    {
+      "id": "check.restore.book-defaults",
+      "kind": "check",
+      "opt_in": true,
+      "paths": ["src/app/reader/settings/", "src/app/reader/window/", "src/reading/appearance_settings.cpp"],
+      "book": "benchmark",
+      "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
+      "steps": [
+        {"remember": "start"},
+        {"press": "rrPage", "unless": "rrNavText"}, {"visible": "rrNavText"}, {"press": "rrNavText"}, {"visible": "rrLarger"},
+        {"press": "rrLarger"}, {"press": "rrHeavier"},
+        {"press": "rrNavLayout"}, {"visible": "rrWider"}, {"press": "rrWider"},
+        {"press": "rrPage"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"expect": "font_pixels", "above": "start", "timeout": 30000, "check": "Larger raises the text size"},
+        {"expect": "weight_steps", "above": "start", "check": "Heavier raises the weight"},
+        {"expect": "margin_pixels", "above": "start", "check": "Wider raises the margins"},
+        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"}, {"visible": "rrSettingsPages"},
+        {"press": "rrSettingsDefaults"}, {"reveal": "rrRestoreBookDefaults"}, {"press": "rrRestoreBookDefaults"},
+        {"visible": "rrRestoreBookConfirmation"}, {"press": "rrConfirmBookDefaults"}, {"hidden": "rrRestoreBookConfirmation"},
+        {"widget": "rrRestoreBookDefaults", "property": "enabled", "is": false, "check": "Restore book defaults shows the defaults as chosen"},
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose"}, {"hidden": "rrSettingsPages"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"expect": "font_pixels", "same_as": "start", "timeout": 30000, "check": "The text size returns to the default"},
+        {"expect": "weight_steps", "same_as": "start", "check": "The weight returns to the default"},
+        {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
+        {"expect": "font_pixels", "same_as": "start", "check": "The restored text size is saved"}
+      ],
+      "teardown": [
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose", "if": "rrSettingsClose"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+      ]
+    },
+    {
+      "id": "check.restore.appearance-defaults",
+      "kind": "check",
+      "opt_in": true,
+      "paths": ["src/app/reader/settings/", "src/app/reader/window/reader_settings.cpp", "src/reading/appearance_settings.cpp"],
+      "book": "benchmark",
+      "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
+      "steps": [
+        {"remember": "start"},
+        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"}, {"visible": "rrSettingsPages"},
+        {"press": "rrSettingsStyling"}, {"reveal": "rrInpageFootnotes"},
+        {"remember": "footnotes", "widget": "rrInpageFootnotes"},
+        {"press": "rrInpageFootnotes"},
+        {"widget": "rrInpageFootnotes", "not_as": "footnotes", "check": "In-page footnotes changes"},
+        {"remember": "changed", "widget": "rrInpageFootnotes"},
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"},
+        {"press": "rrSettingsDefaults"}, {"reveal": "rrRestoreDefaults"}, {"press": "rrRestoreDefaults"},
+        {"visible": "rrRestoreConfirmation"}, {"press": "rrKeepDefaults"}, {"hidden": "rrRestoreConfirmation"},
+        {"widget": "rrInpageFootnotes", "same_as": "changed", "check": "Keep leaves the change"},
+        {"press": "rrRestoreDefaults"}, {"visible": "rrRestoreConfirmation"}, {"press": "rrConfirmDefaults"}, {"hidden": "rrRestoreConfirmation"},
+        {"widget": "rrInpageFootnotes", "same_as": "footnotes", "check": "Restore returns In-page footnotes to the default"},
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose"}, {"hidden": "rrSettingsPages"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"expect": "inpage_footnotes", "same_as": "start", "timeout": 30000, "check": "The book shows the default footnotes"},
+        {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
+        {"expect": "inpage_footnotes", "same_as": "start", "check": "The restored defaults are saved"}
+      ],
+      "teardown": [
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose", "if": "rrSettingsClose"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+      ]
+    },
+    {
+      "id": "check.theme.typeface",
+      "kind": "check",
+      "opt_in": true,
+      "paths": ["src/app/reader/settings/", "src/app/reader/window/", "src/ui/style/"],
+      "book": "benchmark",
+      "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
+      "steps": [
+        {"remember": "start"},
+        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"}, {"visible": "rrSettingsPages"},
+        {"press": "rrSettingsSystem"}, {"reveal": "rrTheming"}, {"press": "rrTheming"},
+        {"reveal": "rrUiFont"}, {"press": "rrUiFont"}, {"visible": "rrSettingsFontPopup"},
+        {"choose": "Kalam", "in": "rrSettingsFontChoices", "next": "rrSettingsFontNext", "previous": "rrSettingsFontPrevious", "keep": "interface"},
+        {"hidden": "rrSettingsFontPopup", "timeout": 30000},
+        {"expect": "ui_font_substitute", "is": "Kalam", "timeout": 30000, "check": "The interface uses the chosen typeface"},
+        {"widget": "rrApplyingProgress", "property": "visible", "is": false, "timeout": 30000, "check": "The Applying theme notice closes"},
+        {"reveal": "rrUiFont"}, {"press": "rrUiFont"}, {"visible": "rrSettingsFontPopup"},
+        {"choose": "@interface", "in": "rrSettingsFontChoices", "next": "rrSettingsFontNext", "previous": "rrSettingsFontPrevious"},
+        {"hidden": "rrSettingsFontPopup", "timeout": 30000},
+        {"expect": "ui_font_substitute", "same_as": "start", "timeout": 30000, "check": "The interface returns to its typeface"},
+        {"widget": "rrApplyingProgress", "property": "visible", "is": false, "timeout": 30000, "check": "The Applying theme notice closes again"}
+      ],
+      "teardown": [
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsBack", "if": "rrSettingsBack"},
+        {"press": "rrSettingsClose", "if": "rrSettingsClose"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+      ]
+    },
+    {
+      "id": "check.light.panel",
+      "kind": "check",
+      "opt_in": true,
+      "needs": ["light"],
+      "paths": ["src/app/reader/panels/light_panel.cpp", "src/ui/controls/", "src/app/reader/window/"],
+      "book": "benchmark",
+      "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
+      "steps": [
+        {"remember": "start"},
+        {"press": "rrPage", "unless": "rrNavLight"}, {"visible": "rrNavLight"}, {"press": "rrNavLight"}, {"visible": "rrLightPanel"},
+        {"remember": "brightness", "widget": "rrAutomaticBrightness", "if": "rrAutomaticBrightness"},
+        {"press": "rrAutomaticBrightness", "if": "rrAutomaticBrightness"},
+        {"widget": "rrAutomaticBrightness", "not_as": "brightness", "if": "rrAutomaticBrightness", "check": "Automatic brightness turns over"},
+        {"press": "rrAutomaticBrightness", "if": "rrAutomaticBrightness"},
+        {"widget": "rrAutomaticBrightness", "same_as": "brightness", "if": "rrAutomaticBrightness", "check": "Automatic brightness turns back"},
+        {"remember": "warmth", "widget": "rrAutomaticWarmth", "if": "rrAutomaticWarmth"},
+        {"press": "rrAutomaticWarmth", "if": "rrAutomaticWarmth"},
+        {"widget": "rrAutomaticWarmth", "not_as": "warmth", "if": "rrAutomaticWarmth", "check": "Automatic warmth turns over"},
+        {"press": "rrAutomaticWarmth", "if": "rrAutomaticWarmth"},
+        {"widget": "rrAutomaticWarmth", "same_as": "warmth", "if": "rrAutomaticWarmth", "check": "Automatic warmth turns back"},
+        {"remember": "dark", "widget": "rrLightDarkMode"},
+        {"press": "rrLightDarkMode"},
+        {"widget": "rrLightDarkMode", "not_as": "dark", "check": "Dark mode turns over in the light panel"},
+        {"expect": "dark_mode", "not_as": "start", "timeout": 10000, "check": "The page follows dark mode"},
+        {"press": "rrLightDarkMode"},
+        {"widget": "rrLightDarkMode", "same_as": "dark", "check": "Dark mode turns back in the light panel"},
+        {"expect": "dark_mode", "same_as": "start", "timeout": 10000, "check": "The page returns from dark mode"}
+      ],
+      "teardown": [
+        {"press": "rrPage", "if": "rrLightPanel"}, {"hidden": "rrLightPanel"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+      ]
+    },
+    {
+      "id": "check.dark-mode",
+      "kind": "check",
+      "opt_in": true,
+      "paths": ["src/app/reader/settings/", "src/app/reader/window/", "src/render/"],
+      "book": "benchmark",
+      "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
+      "steps": [
+        {"remember": "start"},
+        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"}, {"visible": "rrSettingsPages"},
+        {"press": "rrSettingsDisplay"}, {"reveal": "rrDarkMode"},
+        {"remember": "option", "widget": "rrDarkMode"},
+        {"press": "rrDarkMode"},
+        {"widget": "rrDarkMode", "not_as": "option", "check": "Dark mode turns over in Settings"},
+        {"widget": "rrDarkMode", "property": "enabled", "is": true, "timeout": 30000, "check": "Dark mode finishes applying"},
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose"}, {"hidden": "rrSettingsPages", "timeout": 30000},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"expect": "dark_mode", "not_as": "start", "timeout": 10000, "check": "The page follows dark mode"},
+        {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
+        {"expect": "dark_mode", "not_as": "start", "check": "Dark mode is saved"},
+        {"press": "rrPage", "unless": "rrSettings"}, {"visible": "rrSettings"}, {"press": "rrSettings"}, {"visible": "rrSettingsPages"},
+        {"press": "rrSettingsDisplay"}, {"reveal": "rrDarkMode"}, {"press": "rrDarkMode"},
+        {"widget": "rrDarkMode", "same_as": "option", "check": "Dark mode turns back in Settings"},
+        {"widget": "rrDarkMode", "property": "enabled", "is": true, "timeout": 30000, "check": "Dark mode finishes applying again"},
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose"}, {"hidden": "rrSettingsPages"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"expect": "dark_mode", "same_as": "start", "timeout": 10000, "check": "The page returns from dark mode"}
+      ],
+      "teardown": [
+        {"press": "rrSettingsBack", "if": "rrSettingsBack"}, {"press": "rrSettingsClose", "if": "rrSettingsClose"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+      ]
+    },
+    {
+      "id": "check.rotation",
+      "kind": "check",
+      "opt_in": true,
+      "needs": ["rotation"],
+      "paths": ["src/app/reader/settings/appearance_panel.cpp", "src/app/reader/window/", "src/platform/", "platforms/kobo/common/orientation.cpp"],
+      "book": "benchmark",
+      "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
+      "steps": [
+        {"remember": "start"},
+        {"press": "rrPage", "unless": "rrNavLayout"}, {"visible": "rrNavLayout"}, {"press": "rrNavLayout"},
+        {"reveal": "rrOrientation2", "next": "rrAppearanceNext", "previous": "rrAppearancePrevious"},
+        {"press": "rrOrientation2"},
+        {"expect": "viewport_width", "same_as": "start", "field": "viewport_height", "timeout": 10000, "check": "Landscape swaps the width and the height"},
+        {"expect": "screen_orientation", "not_as": "start", "check": "Landscape turns the screen"},
+        {"settle": true},
+        {"press": "rrNavLayout"}, {"hidden": "rrOrientation2"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"remember": "turned"},
+        {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true},
+        {"expect": "position", "not_as": "turned", "check": "A page turns in landscape"},
+        {"press": "rrPage", "unless": "rrNavLayout"}, {"visible": "rrNavLayout"}, {"press": "rrNavLayout"},
+        {"reveal": "rrOrientation1", "next": "rrAppearanceNext", "previous": "rrAppearancePrevious"},
+        {"press": "rrOrientation1"},
+        {"expect": "viewport_width", "same_as": "start", "timeout": 10000, "check": "Portrait restores the width"},
+        {"expect": "screen_orientation", "same_as": "start", "check": "Portrait turns the screen back"}
+      ],
+      "teardown": [
+        {"press": "rrPage", "unless": "rrNavLayout"}, {"visible": "rrNavLayout"},
+        {"press": "rrNavLayout", "unless": "rrOrientation1"},
+        {"reveal": "rrOrientation1", "next": "rrAppearanceNext", "previous": "rrAppearancePrevious"},
+        {"press": "rrOrientation1"}, {"settle": true},
+        {"press": "rrNavLayout"}, {"hidden": "rrOrientation1"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+      ]
+    },
+    {
+      "id": "check.bookmarks",
+      "kind": "check",
+      "opt_in": true,
+      "paths": ["src/reading/bookmark_session.cpp", "src/app/reader/", "src/storage/"],
+      "book": "benchmark",
+      "setup": [
+        {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
+        {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true}
+      ],
+      "steps": [
+        {"remember": "start"},
+        {"press": "rrPage", "unless": "rrBookmarks"}, {"visible": "rrBookmarks"}, {"press": "rrBookmarks"},
+        {"visible": "rrAnnotationMore"}, {"press": "rrAnnotationMore"}, {"visible": "rrBookmarkAddCurrent"}, {"press": "rrBookmarkAddCurrent"},
+        {"expect": "bookmark_count", "above": "start", "by": 1, "check": "Add bookmark adds one bookmark"},
+        {"expect": "bookmarked", "is": true, "check": "The page shows its bookmark"},
+        {"event": "bookmarks-saved", "where": {"failed": false}, "earlier": true},
+        {"press": "rrBookmarkListClose"}, {"hidden": "rrBookmarkListClose"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true},
+        {"key": "PageDown"}, {"event": "page-turn-painted"}, {"settle": true},
+        {"expect": "bookmarked", "is": false, "check": "The next page has no bookmark"},
+        {"key": "PageUp"}, {"event": "page-turn-painted"}, {"settle": true},
+        {"expect": "bookmarked", "is": true, "check": "The bookmark is there after turning back"},
+        {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
+        {"expect": "bookmark_count", "above": "start", "by": 1, "check": "The bookmark is saved"},
+        {"press": "rrPage", "unless": "rrBookmarks"}, {"visible": "rrBookmarks"}, {"press": "rrBookmarks"},
+        {"visible": "rrAnnotationMore"}, {"press": "rrAnnotationMore"}, {"visible": "rrBookmarkRemoveCurrent"}, {"press": "rrBookmarkRemoveCurrent"},
+        {"expect": "bookmark_count", "same_as": "start", "check": "Remove bookmark removes it"},
+        {"event": "bookmarks-saved", "where": {"failed": false}, "earlier": true}
+      ],
+      "teardown": [
+        {"press": "rrBookmarkListClose", "if": "rrBookmarkListClose"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+      ]
+    },
+    {
+      "id": "check.highlights",
+      "kind": "check",
+      "opt_in": true,
+      "paths": ["src/reading/highlight_session.cpp", "src/app/reader/", "src/render/", "src/storage/"],
+      "book": "benchmark",
+      "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
+      "steps": [
+        {"remember": "start"},
+        {"press": "rrPage", "unless": "rrAnnotate"}, {"visible": "rrAnnotate"}, {"press": "rrAnnotate"}, {"hidden": "rrControlsTop"},
+        {"hold": {"text": "discourtesy"}, "ms": 1000},
+        {"visible": "rrAnnotationSave"}, {"press": "rrAnnotationSave"},
+        {"expect": "highlight_count", "above": "start", "by": 1, "check": "Highlight adds one highlight"},
+        {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
+        {"expect": "highlight_count", "above": "start", "by": 1, "timeout": 10000, "check": "The highlight is saved"},
+        {"press": "rrPage", "unless": "rrAnnotate"}, {"visible": "rrAnnotate"}, {"press": "rrAnnotate"}, {"hidden": "rrControlsTop"},
+        {"hold": {"text": "discourtesy"}, "ms": 1000},
+        {"visible": "rrAnnotationRemove"}, {"press": "rrAnnotationRemove"},
+        {"visible": "rrConfirmRemoveAnnotation"}, {"press": "rrConfirmRemoveAnnotation"}, {"hidden": "rrConfirmRemoveAnnotation"},
+        {"expect": "highlight_count", "same_as": "start", "check": "Remove deletes the highlight"},
+        {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
+        {"expect": "highlight_count", "same_as": "start", "timeout": 10000, "check": "The removal is saved"}
+      ],
+      "teardown": [
+        {"press": "rrAnnotationCancel", "if": "rrAnnotationCancel"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+      ]
+    },
+    {
+      "id": "check.search",
+      "kind": "check",
+      "opt_in": true,
+      "paths": ["src/app/reader/panels/search_panel.cpp", "src/engine/", "src/app/reader/window/"],
+      "book": "benchmark",
+      "setup": [
+        {"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true},
+        {"press": "rrPage", "unless": "rrNavChapters"}, {"visible": "rrNavChapters"}, {"press": "rrNavChapters"},
+        {"visible": "rrChapter0"}, {"press": "rrChapter0"}, {"hidden": "rrContents"}, {"settle": true}
+      ],
+      "steps": [
+        {"remember": "start"},
+        {"press": "rrPage", "unless": "rrSearchOpen"}, {"visible": "rrSearchOpen"}, {"press": "rrSearchOpen"}, {"visible": "rrSearchQuery"},
+        {"type": "discourtesy", "into": "rrSearchQuery"}, {"press": "rrSearchSubmit"},
+        {"widget": "rrSearchResult0", "property": "visible", "is": true, "timeout": 30000, "check": "Search finds the word"},
+        {"widget": "rrSearchResult0", "property": "enabled", "is": true, "timeout": 30000, "check": "The result can be opened"},
+        {"press": "rrSearchResult0"}, {"hidden": "rrSearchQuery"}, {"settle": true},
+        {"expect": "position", "not_as": "start", "check": "The result turns to its page"}
+      ],
+      "teardown": [
+        {"press": "rrSearchBack", "if": "rrSearchBack"},
+        {"press": "rrPage", "if": "rrControlsTop"}, {"hidden": "rrControlsTop"}, {"settle": true}
+      ]
+    },
+    {
+      "id": "check.dictionary",
+      "kind": "check",
+      "opt_in": true,
+      "needs": ["dictionary"],
+      "paths": ["src/app/reader/panels/dictionary_panel.cpp", "src/dictionaries/", "src/app/reader/window/"],
+      "book": "benchmark",
+      "setup": [{"close": true}, {"event": "book-close"}, {"open": "benchmark"}, {"settle": true}],
+      "steps": [
+        {"hold": {"text": "discourtesy"}},
+        {"widget": "rrDictionary", "property": "visible", "is": true, "check": "Holding a word opens the dictionary"},
+        {"widget": "rrDictionaryWord", "property": "text", "is_not": "", "timeout": 10000, "check": "The dictionary shows an entry"},
+        {"press": "rrDictionaryClose"},
+        {"widget": "rrDictionary", "property": "visible", "is": false, "check": "Close dismisses the dictionary"}
+      ],
+      "teardown": [
+        {"press": "rrDictionaryClose", "if": "rrDictionaryClose"}, {"settle": true}
+      ]
+    }
   ]
 }

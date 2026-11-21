@@ -3920,6 +3920,20 @@ bool Reader::save(bool snapshot, bool background, bool persist)
         return saved;
     if (book->paths().stateReport.isEmpty())
         return saved;
+    describe(state);
+    // Inspection reports never write or wait on the GUI thread. Pending
+    // storage saves include this queue at sleep, USB and close.
+    if (!reportWriter)
+        reportWriter = std::make_unique<storage::RecordWriter>();
+    reportWriter->post([path = book->paths().stateReport, state] { return writeJson(path, state); },
+                       {});
+    return saved;
+}
+
+// What the state report holds besides the checkpoint: the page, the
+// layout, the open panel and the bookmarks.
+void Reader::describe(QJsonObject &state)
+{
     state["page"] = session->page();
     state["pages"] = session->pages();
     if (services.development.detailedStateReports) {
@@ -4029,15 +4043,15 @@ bool Reader::save(bool snapshot, bool background, bool persist)
             pages.append(p);
         return pages;
     }();
-    // Inspection reports never write or wait on the GUI thread. Pending
-    // storage saves include this queue at sleep, USB and close.
-    if (!reportWriter)
-        reportWriter = std::make_unique<storage::RecordWriter>();
-    reportWriter->post([path = book->paths().stateReport, state] { return writeJson(path, state); },
-                       {});
-    return saved;
+    state["highlight_count"] = highlights ? int(highlights->highlights().size()) : -1;
 }
 
+QJsonObject Reader::inspect()
+{
+    auto state = book->checkpointState();
+    describe(state);
+    return state;
+}
 } // namespace kobalt::reader
 
 namespace kobalt {

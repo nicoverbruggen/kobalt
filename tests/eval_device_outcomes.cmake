@@ -1,4 +1,4 @@
-# Checks failed, skipped and missing device scenarios in both result formats, and a run without a device part.
+# Checks failed, skipped and missing device scenarios in both result formats, device checks, and a run without a device part.
 cmake_minimum_required(VERSION 3.22)
 set(root "${CMAKE_CURRENT_BINARY_DIR}/device-outcomes")
 set(base "${root}/base")
@@ -51,6 +51,32 @@ endfunction()
 
 compare(jsonl)
 check_outcomes(jsonl)
+# Device checks list each check scenario and the saves that collection read
+# from the event log. A failed save is a failed part.
+set(passing [=[{"id":"check.passing","kind":"check","status":"completed","samples":[],"checks":[{"check":"Opens","pass":true}]}]=])
+set(failing [=[{"id":"check.failing","kind":"check","status":"failed","samples":[],"reason":"step 4: Restores | defaults","checks":[{"check":"Restores defaults","pass":false}]}]=])
+file(WRITE "${target}/device-qt5/scenarios.jsonl" "${header}${healthy}\n${passing}\n${failing}\n")
+file(WRITE "${target}/device-qt5/manual-checks.json" [=[{"usb_save": "passed", "power_off_save": "failed"}]=])
+compare(checks)
+file(READ "${root}/checks/report.json" report)
+file(READ "${root}/checks/report.md" markdown)
+string(JSON passing_status GET "${report}" device_checks device.qt5.check.passing status)
+string(JSON missed GET "${report}" device_checks device.qt5.check.failing failed_checks 0)
+string(JSON usb GET "${report}" device_checks device.qt5.usb_save status)
+string(JSON parts GET "${report}" failed_parts)
+if(NOT passing_status STREQUAL "completed" OR NOT missed STREQUAL "Restores defaults"
+   OR NOT usb STREQUAL "passed" OR NOT parts MATCHES "device.qt5.power_off_save failed")
+    message(FATAL_ERROR "Device checks were lost: ${report}")
+endif()
+foreach(text "## Device checks" "| `device.qt5.check.passing` | pass | 1 check |"
+             "| `device.qt5.check.failing` | fail | step 4: Restores / defaults |"
+             "| `device.qt5.power_off_save` | failed |")
+    string(FIND "${markdown}" "${text}" found)
+    if(found LESS 0)
+        message(FATAL_ERROR "Report omitted ${text}: ${markdown}")
+    endif()
+endforeach()
+file(REMOVE "${target}/device-qt5/manual-checks.json")
 # The older runner format must retain the same outcomes.
 file(REMOVE "${target}/device-qt5/scenarios.jsonl")
 string(REPLACE "\"samples\":" "\"samples_ms\":" legacy

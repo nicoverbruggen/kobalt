@@ -363,6 +363,16 @@ if(BUILD_TESTING)
         -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake")
     set_tests_properties(desktop.kosyncChoice PROPERTIES ENVIRONMENT "${headless_environment}"
         LABELS "desktop;integration" TIMEOUT 125)
+    # The device checks of the scenario file, through the same player that
+    # runs them on a Kobo. A failed check fails the test.
+    add_test(NAME desktop.deviceChecks COMMAND "${CMAKE_COMMAND}"
+        "-DTEST_EXECUTABLE=$<TARGET_FILE:kobalt-desktop-tests>"
+        "-DTEST_ARGUMENTS=--perf;${CMAKE_CURRENT_BINARY_DIR}/test-tmp/device-checks.json"
+        "-DTEST_TIMEOUT=300" "-DTEST_TMP_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/run-test.cmake")
+    set_tests_properties(desktop.deviceChecks PROPERTIES
+        ENVIRONMENT "${headless_environment};KOBALT_PERF_FILTER=check.;KOBALT_PERF_REPETITIONS=5"
+        LABELS "desktop;integration" TIMEOUT 305)
     foreach(check startup reading errors storageDiagnostics galleryIntegrity galleryWorkerFailure)
         set_property(TEST desktop.${check} APPEND PROPERTY LABELS light)
     endforeach()
@@ -830,7 +840,7 @@ if(BUILD_TESTING)
     # presets filter on them.
     set(kobalt_test_areas
         "gallery:^(build\\.screenshotBooks|desktop\\.(gallery.*|phoneFrame|primaryViews))$"
-        "evaluation:^(build\\.(loadLock|eval-device-outcomes)|desktop\\.(scenarioCacheRemoval|scenarioResultFile|timingEvents|fastLocateText)|platform\\.scenario-sleep|lifecycle\\.benchmarkNoticeAfterRun)$"
+        "evaluation:^(build\\.(loadLock|eval-device-outcomes)|desktop\\.(scenarioCacheRemoval|scenarioResultFile|timingEvents|fastLocateText|deviceChecks)|platform\\.scenario-sleep|lifecycle\\.benchmarkNoticeAfterRun)$"
         "kosync:^(lifecycle\\.(kosync.*|wifi.*)|desktop\\.(fastKosyncChoice|kosyncChoice|syncChoiceView)|model\\.(kosync|sync-coordinator)|component\\.kosync-ui|platform\\.native-sync-network)$"
         "keyboard:^ui\\.widgetKeyboard.*$"
         "brightness:^(desktop\\.lightGesture.*|lifecycle\\.lightReplacesDefaultMenu|model\\.(brightness-gesture|android-light))$"

@@ -10818,6 +10818,88 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(page->shownTicks()[i] > page->shownTicks()[i - 1]);
     }
 
+    // Ticks follow the main text chosen in Chapters: only chapters that
+    // start inside it, on the same scale as the fill.
+    void headerFooterTicksMainText()
+    {
+        using namespace headerfooter;
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QByteArray body, navigation;
+        for (int i = 1; i <= 8; ++i) {
+            const auto number = QByteArray::number(i);
+            body += "<h2 id='c" + number + "'>Chapter " + number + "</h2>"
+                    + QByteArray("<p>The river ran past the mill and on to the sea.</p>")
+                              .repeated(40);
+            navigation +=
+                    "<li><a href='text.xhtml#c" + number + "'>Chapter " + number + "</a></li>";
+        }
+        const QMap<QString, QByteArray> files{
+            { "mimetype", "application/epub+zip" },
+            { "META-INF/container.xml",
+              "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container' version='1.0'><rootfiles><rootfile full-path='book.opf' media-type='application/oebps-package+xml'/></rootfiles></container>" },
+            { "book.opf",
+              "<package xmlns='http://www.idpf.org/2007/opf' version='3.0' unique-identifier='id'><metadata xmlns:dc='http://purl.org/dc/elements/1.1/'><dc:identifier id='id'>marked</dc:identifier><dc:title>Marked</dc:title><dc:language>en</dc:language></metadata><manifest><item id='nav' href='nav.xhtml' media-type='application/xhtml+xml' properties='nav'/><item id='text' href='text.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='text'/></spine></package>" },
+            { "text.xhtml",
+              "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Text</title></head><body>"
+                      + body + "</body></html>" },
+            { "nav.xhtml",
+              "<html xmlns='http://www.w3.org/1999/xhtml' xmlns:epub='http://www.idpf.org/2007/ops'><head><title>Contents</title></head><body><nav epub:type='toc'><ol>"
+                      + navigation + "</ol></nav></body></html>" }
+        };
+        QVERIFY(test::writeBook(fixture.directory.path(), "marked.epub", files));
+        const auto path = fixture.directory.filePath("marked.epub");
+        auto layout = presetLayout(Preset::Default);
+        layout.progressBar = layout.progressTicks = true;
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences[customKey] = toJson(layout);
+        preferences[presetKey] = presetValue(Preset::Custom);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(path);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 20000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 20000);
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        // The whole book: every chapter after the first has a tick.
+        QTRY_COMPARE_WITH_TIMEOUT(page->shownTicks().size(), 7, 20000);
+        const auto whole = page->shownTicks();
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavChapters"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrContents"));
+        const auto mark = [&](const char *row, const char *action) {
+            auto *button = fixture.widget(row);
+            QVERIFY(button && button->isVisible());
+            QTest::mousePress(button, Qt::LeftButton);
+            QTRY_VERIFY(fixture.visible("rrChapterActions"));
+            QTest::mouseRelease(button, Qt::LeftButton);
+            QVERIFY(fixture.press(action));
+            QTRY_VERIFY(!fixture.visible("rrChapterActions")
+                        && !fixture.state().value("busy").toBool());
+        };
+        // The main text runs from chapter 2 through chapter 6: chapters 3 to
+        // 6 start inside it.
+        mark("rrChapter1", "rrMarkStart");
+        mark("rrChapter5", "rrMarkEnd");
+        QTRY_COMPARE(page->shownTicks().size(), 4);
+        const auto marked = page->shownTicks();
+        for (int i = 0; i < marked.size(); ++i) {
+            QVERIFY(marked[i] > 0 && marked[i] < 1);
+            if (i > 0)
+                QVERIFY(marked[i] > marked[i - 1]);
+        }
+        // Rescaled to the shorter main text, not the whole book's places.
+        QVERIFY(marked.first() < whole[1]);
+        // The book opens again with the same ticks.
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.window.idle(), 30000);
+        fixture.window.openBook(path);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 20000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 20000);
+        page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QTRY_COMPARE(page->shownTicks(), marked);
+    }
+
     // Hybrid draws chapter ticks once the whole book is prepared, with no
     // turn, keeps them when it adopts that book, and shows the saved ticks
     // at once when the book opens again.

@@ -90,6 +90,9 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent)
         presentation.indicatorSize = { metrics::chrome::checkSize, metrics::chrome::checkSize };
         presentation.leadingIndicator = true;
         presentation.minimumRowHeight = metrics::control::stepSize;
+        // The box flipping is the feedback. A gray fill over the whole row
+        // would add a large update before the release.
+        presentation.pressedFill = false;
         // This compact panel must fit between the toolbar and navigation.
         presentation.descriptionPadding = 0;
         option->setPresentation(presentation);

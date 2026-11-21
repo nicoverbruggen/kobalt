@@ -827,7 +827,7 @@
 "settings.opening_cover" = "Do not show book cover while opening";
 "settings.opening_cover_description" = "Always show the Kobalt logo when opening a book.";
 "settings.rendering" = "Rendering engine";
-"settings.rendering_summary" = "Hybrid opens books fast and prepares the whole book while you read.";
+"settings.rendering_summary" = "Hybrid opens books fast and prepares the whole book while you read. Once the whole book is prepared, it works the same as More accurate.";
 "settings.rendering_description" = "A change reloads the book at your position when you close Settings.";
 "settings.rendering_hybrid" = "Hybrid";
 "settings.rendering_fast" = "Faster";

@@ -1115,23 +1115,6 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
     sessionTimeoutButton = listAction(systemPage, nullptr, "rrSessionTimeout",
                                       strings::get("settings.session_timeout"), [] { });
     systemRows->addWidget(sessionTimeoutButton);
-    if (inputs.readerStandbySupported) {
-        disableStandbyOption =
-                settingsOption(systemPage, "rrDisableReaderStandby",
-                               strings::get("settings.disable_reader_standby"),
-                               strings::get("settings.disable_reader_standby_description"));
-        disableStandbyOption->setLeadingIcon(ui::ControlIcon::Coffee);
-        systemRows->addWidget(disableStandbyOption);
-        connect(disableStandbyOption, &QCheckBox::clicked, this, [this](bool checked) {
-            if (!checked)
-                return;
-            // An unanswered confirmation must never enable the preference.
-            disableStandbyOption->setChecked(false);
-            auto *dialog = standbyConfirmation();
-            showConfirmation(dialog);
-            dialog->secondaryButton()->setFocus();
-        });
-    }
     if (inputs.wifiPowerSaverSupported) {
         wifiPowerSaverOption = settingsOption(
                 systemPage, "rrWifiPowerSaver", strings::get("settings.wifi_power_saver"),
@@ -1192,6 +1175,23 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
     debugModeOption->setLeadingIcon(ui::ControlIcon::Debug);
     systemRows->addWidget(debugModeOption);
     connect(debugModeOption, &QCheckBox::toggled, this, [this](bool on) { showDebug(on); });
+    if (inputs.readerStandbySupported) {
+        disableStandbyOption =
+                settingsOption(systemPage, "rrDisableReaderStandby",
+                               strings::get("settings.disable_reader_standby"),
+                               strings::get("settings.disable_reader_standby_description"));
+        disableStandbyOption->setLeadingIcon(ui::ControlIcon::Coffee);
+        systemRows->addWidget(disableStandbyOption);
+        connect(disableStandbyOption, &QCheckBox::clicked, this, [this](bool checked) {
+            if (!checked)
+                return;
+            // An unanswered confirmation must never enable the preference.
+            disableStandbyOption->setChecked(false);
+            auto *dialog = standbyConfirmation();
+            showConfirmation(dialog);
+            dialog->secondaryButton()->setFocus();
+        });
+    }
     for (const auto &[button, icon] :
          { std::pair{ disabledFeaturesButton, ui::ControlIcon::Hidden },
            std::pair{ sleepScreenButton, ui::ControlIcon::MoonStars },

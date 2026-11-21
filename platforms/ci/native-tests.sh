@@ -27,7 +27,7 @@ case "$sanitize" in
         ;;
     *) echo 'KOBALT_NATIVE_SANITIZE must be 0 or 1' >&2; exit 2 ;;
 esac
-root=$(cd "$(dirname "$0")/../.." && pwd)
+root=$(cd "$(dirname "$0")/../.." && pwd -P)
 cd "$root"
 # Tags require every variant, including manual runs on a tag. Branch CI
 # keeps representative variants; local runs may select either mode.
@@ -49,11 +49,19 @@ cache=$("${CMAKE_COMMAND:-cmake}" -P dependencies/cache.cmake)
 mkdir -p "$cache"
 jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN)}
 [[ "$jobs" =~ ^[1-9][0-9]*$ ]] || { echo 'JOBS must be positive' >&2; exit 2; }
+work=/work
+mounts=(--volume "$cache:/dependency-cache")
+if [[ -f $root/.git ]]; then
+    # Keep absolute and relative worktree pointers valid without exposing sibling checkouts.
+    work=$root
+    common=$(git rev-parse --path-format=absolute --git-common-dir)
+    mounts+=(--volume "$common:$common:ro" -e GIT_OPTIONAL_LOCKS=0)
+fi
 "$engine" run --rm --pull=never --user "$(id -u):$(id -g)" -e HOME=/tmp -e KOBALT_TEST_ALL_VARIANTS="$variants" \
     -e KOBALT_BENCHMARK_LINKERS="${KOBALT_BENCHMARK_LINKERS:-0}" \
-    -e CCACHE_DIR=/work/build/ccache -e CCACHE_MAXSIZE=500M -e CCACHE_COMPILERCHECK=content \
-    --volume "$root:/work" --volume "$cache:/dependency-cache" \
-    --workdir /work/platforms/desktop "$image" bash -euc '
+    -e "CCACHE_DIR=$work/build/ccache" -e CCACHE_MAXSIZE=500M -e CCACHE_COMPILERCHECK=content \
+    --volume "$root:$work" "${mounts[@]}" \
+    --workdir "$work/platforms/desktop" "$image" bash -euc '
         jobs=$1; sdk_id=$2; mode=$3; compiler_cache=$4; linker=$5; autogen=$6; shard=$7; shards=$8
         configure=$9; build=${10}
         if [[ "$mode" != test ]]; then
@@ -86,7 +94,7 @@ jobs=${JOBS:-$(getconf _NPROCESSORS_ONLN)}
                     cmake --build --preset linux-tests --parallel "$jobs"
                     echo "Native relink ($probe): $((SECONDS - started)) seconds"
                 done
-                readelf --string-dump=.comment /work/build/desktop-linux/kobalt-desktop-tests
+                readelf --string-dump=.comment ../../build/desktop-linux/kobalt-desktop-tests
                 cmake --preset linux -DCMAKE_EXE_LINKER_FLAGS="$flags" -DCMAKE_SHARED_LINKER_FLAGS="$flags"
                 cmake --build --preset linux-tests --parallel "$jobs"
             fi

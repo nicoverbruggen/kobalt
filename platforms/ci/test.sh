@@ -105,6 +105,7 @@ set -eu
 if [[ $1 == image && $2 == inspect ]]; then printf 'fixture-sdk\n'; exit 0; fi
 [[ $1 == run ]]
 shift
+printf '%s\n' "$@" > "$KOBALT_NATIVE_FIXTURE/container-args"
 environment=()
 while [[ $1 != bash ]]; do
     if [[ $1 == -e ]]; then environment+=("$2"); shift; fi
@@ -144,6 +145,23 @@ KOBALT_NATIVE_SANITIZE=1 JOBS=2 \
 [[ $(cat "$scratch/native/configure-preset") == linux-sanitize ]]
 [[ $(cat "$scratch/native/build-preset") == linux-sanitize ]]
 [[ $(cat "$scratch/native/ctest-args") == '--preset linux-sanitize' ]]
+# The linked checkout's .git file must resolve inside the Linux container.
+git -C "$scratch/native" init -q
+git -C "$scratch/native" add platforms dependencies
+git -C "$scratch/native" -c user.name=Test -c user.email=test@localhost -c commit.gpgsign=false \
+    -c core.hooksPath=/dev/null commit -qm fixture
+git -C "$scratch/native" -c core.hooksPath=/dev/null worktree add --quiet --detach "$scratch/linked native"
+for checkout in "$scratch/native" "$scratch/linked native"; do
+    CONTAINER_ENGINE="$scratch/native-bin/docker" CMAKE_COMMAND="$scratch/native-bin/cmake" \
+        PATH="$scratch/native-bin:$PATH" bash "$checkout/platforms/ci/native-tests.sh" test
+    if [[ $checkout == "$scratch/native" ]]; then
+        grep -Fxq "$checkout:/work" "$scratch/native/container-args"
+    else
+        grep -Fxq "$checkout:$checkout" "$scratch/native/container-args"
+        grep -Fxq "$scratch/native/.git:$scratch/native/.git:ro" "$scratch/native/container-args"
+        grep -Fxq "$checkout/platforms/desktop" "$scratch/native/container-args"
+    fi
+done
 if KOBALT_TEST_SHARD=3 KOBALT_TEST_SHARDS=2 bash platforms/ci/native-tests.sh test; then
     echo 'Native CI accepted an invalid shard' >&2; exit 1
 fi

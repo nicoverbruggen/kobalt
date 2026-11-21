@@ -7700,8 +7700,16 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             renderingMode::setBuildQuietMilliseconds(0);
             QVERIFY(fixture.turnPage(1));
             QTRY_VERIFY_WITH_TIMEOUT(ready.load(), 15000);
-            for (int turn = 0; turn < 3 && fixture.state().contains("book_fraction"); ++turn)
-                QVERIFY(fixture.turnPage(-1));
+            // The worker reports the prepared book before the reader offers
+            // the switch, and a turn that comes too early stays in the
+            // chapter. Turn back and forth until a turn adopts it; a slow
+            // machine can need more turns than a fast one.
+            QElapsedTimer adoption;
+            adoption.start();
+            for (int direction = -1;
+                 fixture.state().contains("book_fraction") && adoption.elapsed() < 30000;
+                 direction = -direction)
+                QVERIFY(fixture.turnPage(direction));
             QVERIFY(!fixture.state().contains("book_fraction"));
         } else {
             // Destroy all engine documents. Reopening in the distant

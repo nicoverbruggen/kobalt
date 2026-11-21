@@ -2261,9 +2261,48 @@ private slots:
                                  10000);
         const auto anchor = host.session()->state().value("position").toString();
         QVERIFY(!anchor.isEmpty());
+        auto *toolbar = host.window()->findChild<QWidget *>("rrControlsTop");
+        QVERIFY(toolbar);
         const auto menu = [&] {
-            if (!host.window()->findChild<QWidget *>("rrControlsTop")->isVisible())
-                QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
+            if (!QTest::qWaitFor(
+                        [&] { return host.window()->readyForPresentation() && !notice->isVisible(); },
+                        30000))
+                return false;
+            if (!toolbar->isVisible()
+                && !clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())))
+                return false;
+            return QTest::qWaitFor([&] { return toolbar->isVisible(); }, 30000);
+        };
+        const auto settings = [&] {
+            if (!menu())
+                return false;
+            auto *button = host.window()->findChild<QPushButton *>("rrSettings");
+            return button && QTest::qWaitFor(
+                                      [&] { return button->isVisible() && button->isEnabled(); },
+                                      30000)
+                    && click(canvas, button)
+                    && QTest::qWaitFor(
+                            [&] {
+                                auto *general =
+                                        host.window()->findChild<QWidget *>("rrGeneralSettings");
+                                return general && general->isVisible() && general->isEnabled();
+                            },
+                            30000);
+        };
+        const auto closeSettings = [&] {
+            auto *button = host.window()->findChild<QPushButton *>("rrSettingsClose");
+            return button && QTest::qWaitFor(
+                                      [&] { return button->isVisible() && button->isEnabled(); },
+                                      30000)
+                    && click(canvas, button)
+                    && QTest::qWaitFor(
+                            [&] {
+                                auto *general =
+                                        host.window()->findChild<QWidget *>("rrGeneralSettings");
+                                return (!general || !general->isVisible())
+                                        && !host.session()->busy();
+                            },
+                            30000);
         };
         const auto preserved = [&] {
             QTRY_VERIFY_WITH_TIMEOUT(!host.session()->busy(), 30000);
@@ -2271,8 +2310,7 @@ private slots:
             QCOMPARE(host.session()->state().value("position").toString(), anchor);
         };
         const auto settingsToggle = [&](const char *name, const char *key) {
-            menu();
-            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettings")));
+            QVERIFY(settings());
             auto *option = host.window()->findChild<QCheckBox *>(name);
             QVERIFY(option);
             const bool before = option->isChecked();
@@ -2283,23 +2321,17 @@ private slots:
                                              && host.session()->state().value(key).toBool()
                                                      == !before,
                                      30000);
-            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsClose")));
-            QTRY_VERIFY_WITH_TIMEOUT(
-                    !host.window()->findChild<QWidget *>("rrGeneralSettings")->isVisible()
-                            && !host.session()->busy()
-                            && host.session()->state().value(key).toBool() == !before,
-                    30000);
+            QVERIFY(closeSettings());
             preserved();
             QCOMPARE(host.session()->state().value(key).toBool(), !before);
         };
         // Weight controls are disabled while Bionic Reading is active.
         if (host.session()->state().value("bold_reading").toString() != "off") {
-            menu();
-            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettings")));
+            QVERIFY(settings());
             auto *option = host.window()->findChild<QCheckBox *>("rrBionicReading");
             QVERIFY(option && option->isChecked());
             QVERIFY(click(canvas, option));
-            QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsClose")));
+            QVERIFY(closeSettings());
             QTRY_VERIFY_WITH_TIMEOUT(
                     !host.session()->busy()
                             && host.session()->state().value("bold_reading").toString() == "off",
@@ -2308,7 +2340,7 @@ private slots:
             QCOMPARE(host.session()->state().value("bold_reading").toString(), QString("off"));
         }
         const auto openText = [&] {
-            menu();
+            QVERIFY(menu());
             QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrNavText")));
             QVERIFY(!host.session()->busy());
         };
@@ -2366,7 +2398,7 @@ private slots:
                               weight->value() == weight->maximum() ? "rrLighter" : "rrHeavier")));
         apply();
         QVERIFY(host.session()->state().value("weight_steps") != oldWeight);
-        menu();
+        QVERIFY(menu());
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrNavLayout")));
         QVERIFY(!host.session()->busy());
         auto *margin = host.window()->findChild<QSlider *>("rrMargins");
@@ -2377,8 +2409,7 @@ private slots:
                               margin->value() == margin->maximum() ? "rrNarrower" : "rrWider")));
         apply();
         QVERIFY(host.session()->state().value("margin_pixels") != oldMargin);
-        menu();
-        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettings")));
+        QVERIFY(settings());
         auto *bionic = host.window()->findChild<QCheckBox *>("rrBionicReading");
         QVERIFY(bionic && !bionic->isChecked());
         QVERIFY(click(canvas, bionic));
@@ -2386,7 +2417,7 @@ private slots:
                                          && host.session()->state().value("bold_reading").toString()
                                                  == "bold",
                                  30000);
-        QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrSettingsClose")));
+        QVERIFY(closeSettings());
         preserved();
         QCOMPARE(host.session()->state().value("bold_reading").toString(), QString("bold"));
         settingsToggle("rrDarkMode", "dark_mode");

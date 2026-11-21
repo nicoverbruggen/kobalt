@@ -40,7 +40,7 @@ Bookmarks and annotations stay saved. Existing highlighted text stays visible, b
 
 ## Light
 
-The Light panel always includes a Dark mode checkbox on devices with frontlight support. It changes the same dark-mode setting as Settings > Display > Dark mode. Hosts without Light keep the Settings entry. A failed save keeps the previous mode. On short screens, Light omits its swipe hint so the controls fit.
+The Light panel always includes a Dark mode checkbox on devices with frontlight support. It changes the same dark-mode setting as Settings > Display > Dark mode. Hosts without Light keep the Settings entry. Dark mode, Reading stats, the dense Stats chart and the page button actions apply at once and save afterwards on the profile writer thread, so no control waits or dims while it saves. A failed save is rare: the change stays for the session and Settings shows that it could not be saved. On short screens, Light omits its swipe hint so the controls fit.
 
 Closing Light through its tab or a tap on the visible page restores the default menu view. Switching to another panel keeps that panel open. Dismissing the reading menu keeps all its panels closed until the menu opens again.
 

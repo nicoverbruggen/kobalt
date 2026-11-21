@@ -31,7 +31,6 @@ public:
     void setDense(bool value);
     void setWordScopeAvailable(bool available);
 
-    void setModeEnabled(bool enabled) { mode->setEnabled(enabled); }
 
     // The row under the cells that opens Activity, with today's reading and
     // the streak. Hidden without a handler.

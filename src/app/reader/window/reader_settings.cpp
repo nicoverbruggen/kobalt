@@ -904,33 +904,33 @@ pageButtons::Buttons Reader::buttonControls() const
 
 void Reader::saveButtonControls(const QJsonObject &actions)
 {
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph)
-        return;
-    const auto before = qt::object(
-            { { pageButtons::preferenceKey, preferences.value(pageButtons::preferenceKey) } });
-    const auto next = qt::object({ { pageButtons::preferenceKey, actions } });
-    logSettingChanges(qt::object({ { pageButtons::preferenceKey,
-                                     preferences.value(pageButtons::preferenceKey).toObject() } }),
-                      qt::object({ { pageButtons::preferenceKey, actions } }));
-    savingButtonControls = true;
-    static_cast<SettingsPanel *>(general)->buttonControlsButton->setEnabled(false);
+    persistAppliedSetting(qt::object({ { pageButtons::preferenceKey,
+                                         preferences.value(pageButtons::preferenceKey) } }),
+                          qt::object({ { pageButtons::preferenceKey, actions } }));
+    refresh();
+}
+
+// The change applies before this runs. A failed write is rare: the change
+// stays for this session and Settings shows the error.
+void Reader::persistAppliedSetting(const QJsonObject &before, const QJsonObject &next)
+{
+    logSettingChanges(before, next);
+    for (auto it = next.begin(); it != next.end(); ++it)
+        preferences[it.key()] = it.value();
+    ++appliedSettingWrites;
     QPointer<Reader> guard(this);
     preferencesWriter.post([path = book->paths().preferences(), before,
                             next] { return storage::updatePreferences(path, before, next); },
-                           [guard, actions](bool saved) {
+                           [guard](bool saved) {
                                qt::invoke(
                                        QCoreApplication::instance(),
-                                       [guard, actions, saved] {
+                                       [guard, saved] {
                                            if (!guard)
                                                return;
-                                           guard->savingButtonControls = false;
+                                           --guard->appliedSettingWrites;
                                            saves::settled();
-                                           if (saved)
-                                               guard->preferences[pageButtons::preferenceKey] =
-                                                       actions;
-                                           else
+                                           if (!saved)
                                                guard->showSettingsWriteError();
-                                           guard->refresh();
                                        },
                                        Qt::QueuedConnection);
                            });
@@ -975,12 +975,6 @@ void Reader::recordPreferenceChanges(const QJsonObject &next)
 
 void Reader::writePreferences(const QJsonObject &next, PreferencesWritten done)
 {
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
-        done(next, false);
-        return;
-    }
-    if (next.value("zen_stats") != preferences.value("zen_stats"))
-        ++zenStatsWrite;
     auto write = preferenceWrite(next);
     if (!write) {
         recordPreferenceChanges(next);
@@ -1004,8 +998,7 @@ void Reader::writePreferences(const QJsonObject &next, PreferencesWritten done)
 void Reader::applySettings()
 {
     // Settings applies the choices in its own controls.
-    if (!general || savingButtonControls || savingDarkMode >= 0
-        || savingDenseGraph || session->temporaryTypography())
+    if (!general || session->temporaryTypography())
         return;
     // Leaving an unanswered confirmation must not select or save defaults.
     static_cast<SettingsPanel *>(general)->dismissRestore();
@@ -1217,128 +1210,40 @@ void Reader::finishSettingsWrite(const QJsonObject &next, bool saved)
 
 void Reader::setDenseGraph(bool dense)
 {
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
-        chapterGraph->setDense(preferences.value("dense_stats_chart").toBool(false));
-        refresh();
-        return;
-    }
-    const auto before =
-            qt::object({ { "dense_stats_chart", preferences.value("dense_stats_chart") } });
-    const auto next = qt::object({ { "dense_stats_chart", dense } });
-    logSettingChanges(qt::object({ { "dense_stats_chart",
-                                     preferences.value("dense_stats_chart").toBool(false) } }),
-                      qt::object({ { "dense_stats_chart", dense } }));
-    savingDenseGraph = true;
-    QPointer<Reader> guard(this);
-    preferencesWriter.post([path = book->paths().preferences(), before,
-                            next] { return storage::updatePreferences(path, before, next); },
-                           [guard, dense](bool saved) {
-                               qt::invoke(
-                                       QCoreApplication::instance(),
-                                       [guard, dense, saved] {
-                                           if (!guard)
-                                               return;
-                                           guard->savingDenseGraph = false;
-                                           saves::settled();
-                                           if (saved) {
-                                               guard->preferences["dense_stats_chart"] = dense;
-                                           } else {
-                                               guard->chapterGraph->setDense(
-                                                       guard->preferences.value("dense_stats_chart")
-                                                               .toBool(false));
-                                               guard->showSettingsWriteError();
-                                           }
-                                           guard->refresh();
-                                       },
-                                       Qt::QueuedConnection);
-                           });
+    persistAppliedSetting(
+            qt::object({ { "dense_stats_chart", preferences.value("dense_stats_chart") } }),
+            qt::object({ { "dense_stats_chart", dense } }));
     refresh();
 }
 
 void Reader::toggleZenStats()
 {
-    // Do not overtake a pending dark mode or button save, as writePreferences
-    // does. The button already toggled itself, so put it back.
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph) {
-        syncNavigation();
-        return;
-    }
-    // The panel changes at once. The choice is saved on the writer thread,
-    // so the main thread never waits for storage while the menu is open.
+    // The panel changes at once; the choice saves on the writer thread.
     const bool shown = !preferences.value("zen_stats").toBool(false);
-    logSettingChanges(qt::object({ { "zen_stats", !shown } }),
-                      qt::object({ { "zen_stats", shown } }));
-    const auto before = qt::object({ { "zen_stats", !shown } });
-    const auto next = qt::object({ { "zen_stats", shown } });
-    preferences["zen_stats"] = shown;
-    const auto write = ++zenStatsWrite;
-    QPointer<Reader> guard(this);
-    preferencesWriter.post(
-            [path = book->paths().preferences(), before, next] {
-                return kobalt::storage::updatePreferences(path, before, next);
-            },
-            [guard, shown, write](bool saved) {
-                if (saved)
-                    return;
-                qt::invoke(
-                        QCoreApplication::instance(),
-                        [guard, shown, write] {
-                            if (!guard || guard->zenStatsWrite != write)
-                                return;
-                            // A failed save undoes the toggle, as the
-                            // other settings do.
-                            guard->preferences["zen_stats"] = !shown;
-                            guard->showSettingsWriteError();
-                            guard->syncNavigation();
-                        },
-                        Qt::QueuedConnection);
-            });
+    persistAppliedSetting(qt::object({ { "zen_stats", !shown } }),
+                          qt::object({ { "zen_stats", shown } }));
     syncNavigation();
 }
 
 void Reader::applyDarkMode(bool enabled)
 {
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph
-        || pendingDarkMode >= 0 || session->busy() || session->temporaryTypography()) {
+    // A page that is still rendering keeps its mode; the next refresh puts
+    // the box back.
+    if (pendingDarkMode >= 0 || session->busy() || session->temporaryTypography()) {
         refresh();
         return;
     }
-    const auto before = qt::object({ { "dark_mode", preferences.value("dark_mode") } });
-    const auto next = qt::object({ { "dark_mode", enabled } });
-    logSettingChanges(qt::object({ { "dark_mode", preferences.value("dark_mode").toBool(false) } }),
-                      qt::object({ { "dark_mode", enabled } }));
-    savingDarkMode = enabled;
-    QPointer<Reader> guard(this);
-    preferencesWriter.post(
-            [path = book->paths().preferences(), before, next] {
-                return kobalt::storage::updatePreferences(path, before, next);
-            },
-            [guard, enabled](bool saved) {
-                qt::invoke(
-                        QCoreApplication::instance(),
-                        [guard, enabled, saved] {
-                            if (!guard)
-                                return;
-                            auto *reader = guard.data();
-                            reader->savingDarkMode = -1;
-                            if (!saved) {
-                                reader->showSettingsWriteError();
-                                reader->refresh();
-                                return;
-                            }
-                            reader->preferences["dark_mode"] = enabled;
-                            if (reader->settingsError) {
-                                reader->settingsError->clear();
-                                reader->settingsError->hide();
-                            }
-                            reader->pendingDarkMode = enabled;
-                            reader->session->setDarkMode(enabled);
-                            if (reader->appearanceEdit.preview())
-                                reader->appearanceEdit.preview()->setDarkMode(enabled);
-                            reader->refresh();
-                        },
-                        Qt::QueuedConnection);
-            });
+    if (settingsError) {
+        settingsError->clear();
+        settingsError->hide();
+    }
+    // Apply at once and save afterwards, so the screen never waits for storage.
+    persistAppliedSetting(qt::object({ { "dark_mode", preferences.value("dark_mode") } }),
+                          qt::object({ { "dark_mode", enabled } }));
+    pendingDarkMode = enabled;
+    session->setDarkMode(enabled);
+    if (appearanceEdit.preview())
+        appearanceEdit.preview()->setDarkMode(enabled);
     refresh();
 }
 

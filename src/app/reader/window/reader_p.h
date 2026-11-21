@@ -669,7 +669,7 @@ private:
     bool lightCommandPending = false, lightGestureActive = false;
     int brightnessInitial = 0, warmthInitial = 0;
     bool gestureWarmth = false, warmthAutomatic = false, warmthSupported = false;
-    int pendingDarkMode = -1, savingDarkMode = -1;
+    int pendingDarkMode = -1;
     bool applyingText = false, closing = false;
     kobalt::ChoiceScreen *choices = nullptr;
     kobalt::ChapterGraph *chapterGraph = nullptr;
@@ -1070,12 +1070,15 @@ private:
     void finishPreviewWrite(const QJsonObject &next, bool saved);
     pageButtons::Buttons buttonControls() const;
     void saveButtonControls(const QJsonObject &actions);
+    // Records settings that already apply and saves them on the writer
+    // thread. The UI never waits for the write.
+    void persistAppliedSetting(const QJsonObject &before, const QJsonObject &next);
     void saveMarksSort(const QString &order);
-    bool savingButtonControls = false, savingDenseGraph = false;
+    // Writes of settings that already apply, still on the writer thread.
+    int appliedSettingWrites = 0;
     // Counts preferences writes. An asynchronous save that fails undoes its
     // change only when no later write started: a later write already carries
     // the change, and its own result decides.
-    quint64 zenStatsWrite = 0;
 
     void showSettingsWriteError();
     void selectPanel(int index);

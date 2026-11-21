@@ -64,14 +64,13 @@ void Reader::refresh()
     const bool darkReady = publishPendingDarkMode();
     auto *settings = static_cast<SettingsPanel *>(general);
     if (settingsVisible() && settings->buttonControlsButton)
-        settings->updateButtonControls(buttonControls(), preferences,
-                                       savingButtonControls || savingDarkMode >= 0
-                                               || savingDenseGraph);
-    const bool dark = savingDarkMode >= 0 ? bool(savingDarkMode)
-            : pendingDarkMode >= 0        ? bool(pendingDarkMode)
-                                          : session->state().value("dark_mode").toBool(false);
-    const bool darkEnabled = savingDarkMode < 0 && pendingDarkMode < 0 && !session->busy()
-            && !session->temporaryTypography();
+        settings->updateButtonControls(buttonControls(), preferences);
+    const bool dark = pendingDarkMode >= 0 ? bool(pendingDarkMode)
+                                           : session->state().value("dark_mode").toBool(false);
+    // The rows stay enabled while a dark mode change renders: a disabled row
+    // draws dimmed, which reads as a gray flash on e-ink. applyDarkMode
+    // ignores a tap in that time and the next refresh restores the box.
+    const bool darkEnabled = !session->temporaryTypography();
     if (!restoringDefaults)
         darkOption.set(dark);
     if (darkOption.widget)
@@ -786,7 +785,6 @@ void Reader::syncReadingControls()
     toolbarButtons.graph->setChecked(chapterGraph->isVisible()
                                      || appearanceEdit.destination()
                                              == AppearanceDestination::Stats);
-    chapterGraph->setModeEnabled(!savingButtonControls && savingDarkMode < 0 && !savingDenseGraph);
     if (chapterGraph->isVisible())
         updateGraph();
     updateOrientationBlock();

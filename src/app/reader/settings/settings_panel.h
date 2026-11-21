@@ -131,8 +131,7 @@ public:
         ParagraphSpacing
     };
     static QString paragraphSpacingLabel(int percent);
-    void updateButtonControls(const pageButtons::Buttons &buttons, const QJsonObject &preferences,
-                              bool saving);
+    void updateButtonControls(const pageButtons::Buttons &buttons, const QJsonObject &preferences);
     void showButtonControls(const pageButtons::Buttons &buttons, const QJsonObject &current,
                             std::function<void(QJsonObject)> chosen);
     void showBeautifier(const QJsonObject &current, std::function<void(QJsonObject)> chosen);

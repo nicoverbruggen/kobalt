@@ -1721,7 +1721,7 @@ void Reader::connectSettingsPage(SettingsPage section)
                 [this] { openNavigationBarButtons(); });
         connect(pageNavigationButton, &QPushButton::clicked, this,
                 [this] { openPageNavigation(); });
-        settings->updateButtonControls(buttonControls(), preferences, false);
+        settings->updateButtonControls(buttonControls(), preferences);
         connect(settings->buttonControlsButton, &QPushButton::clicked, this, [this, settings] {
             const auto buttons = buttonControls();
             if (buttons.isEmpty())

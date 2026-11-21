@@ -212,11 +212,7 @@ void Reader::showActivityWelcome()
     notice->raise();
     notice->primaryButton()->setFocus();
     preferences[QStringLiteral("activity_welcome_seen")] = true;
-    // Do not overtake a pending dark mode, button or graph save, as the other
-    // settings do; the welcome then shows once more on the next opening. The
-    // save edits only this field.
-    if (savingButtonControls || savingDarkMode >= 0 || savingDenseGraph)
-        return;
+    // The save edits only this field, after any earlier setting writes.
     preferencesWriter.post(
             [path = book->paths().preferences()] {
                 return kobalt::storage::updatePreferences(

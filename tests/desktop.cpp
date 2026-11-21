@@ -2833,7 +2833,7 @@ void toggleTheme(Fixture &fixture)
     QVERIFY(revealSettingsOption(fixture, "rrDarkMode"));
     QVERIFY(fixture.press("rrDarkMode"));
     QTRY_COMPARE(fixture.state().value("dark_mode").toBool(), !dark);
-    QTRY_VERIFY(fixture.widget("rrDarkMode")->isEnabled());
+    QTRY_VERIFY(!fixture.state().value("busy").toBool());
     QVERIFY(fixture.press("rrSettingsClose"));
     QTRY_VERIFY(!fixture.visible("rrControlsTop"));
 }
@@ -4289,7 +4289,7 @@ void checkCustomPinnedBookmarks(int preset, bool dark)
         QVERIFY(revealSettingsOption(fixture, "rrDarkMode"));
         QVERIFY(fixture.press("rrDarkMode"));
         QTRY_COMPARE(fixture.state().value("dark_mode").toBool(), toggle == 0 ? !dark : dark);
-        QTRY_VERIFY(fixture.widget("rrDarkMode")->isEnabled());
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrControlsTop"));
         QVERIFY(fixture.press("rrPage"));
@@ -4518,7 +4518,7 @@ void checkPinnedBookmarks(int preset, bool dark)
                 QVERIFY(fixture.press("rrDarkMode"));
                 const bool nextDark = toggle == 0 ? !dark : dark;
                 QTRY_COMPARE(fixture.state().value("dark_mode").toBool(), nextDark);
-                QTRY_VERIFY(fixture.widget("rrDarkMode")->isEnabled());
+                QTRY_VERIFY(!fixture.state().value("busy").toBool());
                 QVERIFY(fixture.press("rrSettingsClose"));
                 QTRY_VERIFY(!fixture.visible("rrControlsTop"));
                 QVERIFY(fixture.press("rrPage"));
@@ -6446,7 +6446,7 @@ private slots:
             QTRY_VERIFY(fixture.visible("rrLightDarkMode"));
             QVERIFY(fixture.press("rrLightDarkMode"));
             QTRY_COMPARE(fixture.state().value("dark_mode").toBool(), dark);
-            QTRY_VERIFY(fixture.widget("rrLightDarkMode")->isEnabled());
+            QTRY_VERIFY(!fixture.state().value("busy").toBool());
             QVERIFY(fixture.press("rrPage"));
             turn(true, dark);
             if (support != PageAnimationSupport::Unavailable) {
@@ -14722,7 +14722,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(fixture.press("rrGraphMode"));
             QVERIFY2(elapsed.elapsed() < 1000, "Graph mode blocked input on a preference write");
             QVERIFY((mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
-            QVERIFY(!mode->isEnabled());
+            // The chart changes at once and stays usable while it saves.
+            QVERIFY(mode->isEnabled());
             QCOMPARE(graph->graphPage(), 0);
             QCOMPARE(graph->graphPages(), 1);
             bool delivered = false;
@@ -14757,14 +14758,20 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 QVERIFY(blocked.active());
                 QVERIFY(fixture.press("rrGraphMode"));
                 QTRY_VERIFY(fixture.visible("rrSettingsWriteError"));
-                QVERIFY(!(mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
+                // A failed save keeps the change for this session.
+                QVERIFY((mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
                 QVERIFY(mode->isEnabled());
                 QVERIFY(blocked.restore());
             }
             QVERIFY(fixture.press("rrSettingsWriteErrorConfirm"));
+            // Two more changes save again and end on the same chart.
             QVERIFY(fixture.press("rrGraphMode"));
-            QTRY_VERIFY(mode->isEnabled());
+            QVERIFY(!(mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
+            QVERIFY(fixture.press("rrGraphMode"));
             QVERIFY((mode->accessibleName() == strings::get("chapter_graph.show_wider_bars")));
+            QTRY_VERIFY(storage::readJson(fixture.paths.preferences())
+                                .value("dense_stats_chart")
+                                .toBool());
             fixture.window.readerWindow()->close();
             QTRY_VERIFY(!fixture.window.readerWindow());
             fixture.window.openBook(path);
@@ -15576,29 +15583,38 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                     QVERIFY2(clickTime.elapsed() < 1000,
                              "Dark mode waited for the profile writer on the GUI thread");
                     QVERIFY(!fixture.state().value("dark_mode").toBool());
-                    QVERIFY(!toggle->isEnabled());
+                    // The row stays enabled and shows the choice while it
+                    // saves. A second tap in that time is ignored.
+                    QVERIFY(toggle->isEnabled() && toggle->isChecked());
+                    QVERIFY(fixture.press("rrLightDarkMode"));
+                    QTRY_VERIFY(toggle->isChecked());
                     bool eventDelivered = false;
                     QTimer::singleShot(0, [&] { eventDelivered = true; });
                     QTRY_VERIFY(eventDelivered);
                     gate->release.release();
                     QTRY_VERIFY(fixture.state().value("dark_mode").toBool());
-                    QTRY_VERIFY(toggle->isEnabled());
+                    QTRY_VERIFY(!fixture.state().value("busy").toBool());
                     QVERIFY(toggle->isChecked());
                     QVERIFY(dark->isChecked());
                     QVERIFY(fixture.window.readerWindow()->property("reader_dark").toBool());
                     QVERIFY(fixture.press("rrLightDarkMode"));
                     QTRY_VERIFY(!fixture.state().value("dark_mode").toBool());
-                    QTRY_VERIFY(toggle->isEnabled());
+                    QTRY_VERIFY(!fixture.state().value("busy").toBool());
                     {
                         BlockedFile blocked(fixture.paths.preferences());
                         QVERIFY(blocked.active());
                         QVERIFY(fixture.press("rrLightDarkMode"));
                         QTRY_VERIFY(fixture.visible("rrSettingsWriteError"));
-                        QVERIFY(!toggle->isChecked());
-                        QVERIFY(!fixture.state().value("dark_mode").toBool());
+                        // A failed save keeps dark mode for this session.
+                        QTRY_VERIFY(fixture.state().value("dark_mode").toBool());
+                        QVERIFY(toggle->isChecked());
                         QVERIFY(blocked.restore());
                     }
                     QVERIFY(fixture.press("rrSettingsWriteErrorConfirm"));
+                    QTRY_VERIFY(!fixture.state().value("busy").toBool());
+                    QVERIFY(fixture.press("rrLightDarkMode"));
+                    QTRY_VERIFY(!fixture.state().value("dark_mode").toBool());
+                    QTRY_VERIFY(!fixture.state().value("busy").toBool());
                 }
                 QVERIFY(fixture.press("rrNavLight"));
                 QTRY_VERIFY(!fixture.visible("rrLightPanel"));

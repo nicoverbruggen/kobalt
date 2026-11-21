@@ -94,10 +94,10 @@ private:
 } // namespace
 
 void SettingsPanel::updateButtonControls(const pageButtons::Buttons &buttons,
-                                         const QJsonObject &preferences, bool saving)
+                                         const QJsonObject &preferences)
 {
     buttonControlsButton->setVisible(!buttons.isEmpty());
-    buttonControlsButton->setEnabled(!saving && !buttons.isEmpty());
+    buttonControlsButton->setEnabled(!buttons.isEmpty());
     QStringList actions;
     for (const auto &button : buttons)
         actions.append(actionLabel(

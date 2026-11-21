@@ -56,11 +56,18 @@ public:
 
     virtual bool openingSaveParked() const { return false; }
 
-    // Abandon queued saves and release after active storage users have finished.
-    virtual void prepareUsb(std::function<void()> finished) = 0;
+    // With save, try the final save for at most usbSaveMilliseconds. Then
+    // abandon queued saves and release after active storage users have finished.
+    static constexpr int usbSaveMilliseconds = 3000;
+    virtual void prepareUsb(std::function<void()> finished, bool save = false) = 0;
+
+    // Covers the page while a power-off or reboot saves the book.
+    virtual void showShutdownNotice(bool restarting) { (void)restarting; }
+
     virtual void prepareShutdown(std::function<void()> finished, bool allowFailedSave = false) = 0;
 
     virtual sleep::Snapshot powerScreenSnapshot() { return {}; }
+
     virtual sleep::Snapshot presentedSleepSnapshot() const { return {}; }
 
     virtual void sleepReader(bool externalScreenVisible = false) = 0;

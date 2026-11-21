@@ -59,8 +59,12 @@ public:
     // it, even when storage returns before the worker reports its result.
     // Zero means USB or shutdown currently owns storage.
     static quint64 stockStorageGeneration();
-    // GUI-thread permission for progress writes, including the sleep handoff.
+    // GUI-thread permission for progress writes, including the sleep handoff
+    // and a held USB or shutdown save behind a native dialog or sleep screen.
     static bool nativeProgressSaveAllowed();
+    // How long power-off, low-battery power-off and reboot wait for the reader
+    // to save before Nickel continues. Nickel must be able to shut down.
+    static constexpr int shutdownSaveMilliseconds = 10000;
 
     bool connected() const { return connected_; }
 
@@ -89,6 +93,9 @@ public:
     static void finishSleepView();
     std::function<void(std::function<void()>)> prepareUsb;
     std::function<void()> storageReleased, storageRestored;
+    // Saves the reader before Nickel shuts down. Nickel continues when the
+    // continuation runs or after shutdownSaveMilliseconds, whichever is first.
+    std::function<void(Shutdown, std::function<void()>)> prepareShutdown;
     // False keeps the device awake while pending reader saves are started.
     std::function<bool()> beforeStandby;
     std::function<void()> afterStandby;
@@ -103,6 +110,8 @@ public:
     static bool interceptUsb(QObject *manager);
     static bool interceptUsbWorkflow(QObject *manager);
     static bool interceptShutdown(QObject *manager, Shutdown mode);
+    // The held USB workflow may still write the reader's final save.
+    static bool usbSaveAllowed();
 #ifndef KOBALT_READER_HARDWARE
     void testCommand();
     bool testUsb = false;

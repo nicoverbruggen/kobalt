@@ -637,6 +637,9 @@
 "closing.quit_warning" = "Quitting now may lose unsaved progress or annotations.";
 "closing.close_now" = "Close without waiting";
 "closing.close_now_detail" = "Your place in this book is saved. If you close now, Kobo’s reading time and progress might not be updated.";
+"shutdown.shutting_down" = "Shutting down";
+"shutdown.restarting" = "Restarting";
+"shutdown.saving" = "Saving your progress first...";
 "closing.sync_title" = "Your Kobo is syncing";
 "closing.wait_for_sync" = "Wait for sync to complete";
 "closing.waiting_for_sync" = "Waiting for sync to complete…";

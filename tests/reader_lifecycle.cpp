@@ -4732,6 +4732,60 @@ private slots:
         QCOMPARE(state->savedCount, 0);
     }
 
+    void usbSavesBeforeReleaseWithinDeadline_data()
+    {
+        QTest::addColumn<bool>("stalled");
+        QTest::newRow("saved") << false;
+        QTest::newRow("deadline") << true;
+    }
+
+    void usbSavesBeforeReleaseWithinDeadline()
+    {
+        QFETCH(bool, stalled);
+        QTemporaryDir root;
+        auto paths = testPaths();
+        paths.directory = root.path();
+        ReaderFixture host(paths, testFonts, testPlaceholder);
+        CloseHost cleanup{ host };
+        const auto identity =
+                QUrl::fromLocalFile(QFileInfo(textBook).absoluteFilePath()).toString();
+        host.progress = std::make_shared<test::HostProgress>();
+        host.progress->current = { identity, "OEBPS/c1.xhtml", 100, 1, true };
+        host.positions = nickel::positionCodec();
+        host.positions.encode = shutdownPosition;
+        QSignalSpy opened(&host, &ReaderFixture::opened);
+        host.open(textBook, nativeSize);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!host.session()->busy());
+        // Holding the finish keeps Nickel's reading session open after the
+        // progress write, so the save cannot end.
+        host.progress->holdFinish = stalled;
+        const auto releaseNative = qScopeGuard([&] { host.progress->completeFinish(true); });
+        const int writes = host.progress->writeAttempts;
+        bool released = false;
+        host.window()->prepareUsb([&] { released = true; }, true);
+        auto *deadline = host.window()->findChild<QTimer *>("rrUsbSaveDeadline");
+        QVERIFY(deadline && deadline->isActive());
+        QCOMPARE(deadline->interval(), ReaderWindow::usbSaveMilliseconds);
+        if (stalled) {
+            // The native session never ends. The deadline still releases.
+            QTRY_VERIFY(host.progress->writeAttempts > writes);
+            QVERIFY(!released);
+            deadline->start(0);
+            QTRY_VERIFY_WITH_TIMEOUT(released, 5000);
+            const int afterRelease = host.progress->writeAttempts;
+            host.progress->completeFinish(true);
+            QCoreApplication::processEvents();
+            QCOMPARE(host.progress->writeAttempts, afterRelease);
+        } else {
+            QTRY_VERIFY_WITH_TIMEOUT(released, 5000);
+            QVERIFY2(host.progress->writeAttempts > writes,
+                     "USB released the book without saving native progress");
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            QVERIFY(!host.window()->findChild<QTimer *>("rrUsbSaveDeadline"));
+        }
+    }
+
     void persistedSleepScreenRejectsStaleAndDamagedFrames()
     {
         QTemporaryDir directory;

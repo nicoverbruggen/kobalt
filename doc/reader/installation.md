@@ -38,7 +38,7 @@ A previously installed temporary build writes `.adds/kobalt/uninstall-now` befor
 Kobalt uses two session markers:
 
 - `startup-session` exists during a synchronous initialization attempt. A crash during that attempt leaves the marker. Waiting for Nickel or a usable screen, or deferring a completed attempt, does not leave it.
-- `active-session.json` exists while a book is open or opening. A clean exit, a cancelled opening, a fallback to Nickel and a completed power-off cleanup remove it. A reboot can leave this diagnostic marker in place.
+- `active-session.json` exists while a book is open or opening. A clean exit, a cancelled opening, a fallback to Nickel and a completed power-off or reboot cleanup remove it. A power-off or reboot that reaches its ten-second limit can leave this diagnostic marker in place.
 
 The startup marker records an unfinished Kobalt initialization attempt. One interrupted attempt permits a retry. After two consecutive interrupted attempts, NickelHook removes Kobalt before loading Nickel libraries or installing hooks. A completed or deferred initialization breaks the streak. Power-off and reboot can leave the marker in place if initialization is still in progress. A crash in the stock reader after Kobalt initialized does not count. The streak does not expire while the user waits or forces a restart after a hang. This is a narrow startup safeguard, not detection of every possible reboot loop.
 

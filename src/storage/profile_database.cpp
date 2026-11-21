@@ -636,6 +636,22 @@ void closeProfile(bool keepClosed)
     }
 }
 
+void closeProfileLater(std::function<void()> closed)
+{
+    // One writer for the process: a later request replaces one that has not started.
+    static RecordWriter closer;
+    closer.post(
+            [] {
+                Profile::instance().close();
+                profileBlocked = true;
+                return true;
+            },
+            [closed = std::move(closed)](bool) {
+                if (closed)
+                    closed();
+            });
+}
+
 void blockProfile()
 {
     profileBlocked = true;

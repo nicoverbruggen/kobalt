@@ -390,6 +390,29 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         else
             homeSleep->clear();
     };
+    lifecycle->prepareShutdown = [this](NativeLifecycle::Shutdown mode,
+                                        std::function<void()> ready) {
+        homeAfterClose = false;
+        authorization->setBlocked(true);
+        timer.stop();
+        // Revocation can dispose the reader while its bookmark is being
+        // exported. Keep the shutdown continuation with the shared drain.
+        cleanupCallbacks.append(std::move(ready));
+        if (disposingForUsb)
+            return; // The USB drain already owns the files and the continuation.
+        if (sleepingOpening) {
+            // The original disposal already owns the reader and its completion.
+            sleepingOpening->setOpeningSaveState(mode == NativeLifecycle::Shutdown::BatteryLow
+                                                         ? OpeningSaveState::LowBatteryShutdown
+                                                         : OpeningSaveState::Required);
+        } else if (run.reader && !busy) {
+            run.reader->showShutdownNotice(mode == NativeLifecycle::Shutdown::Reboot);
+            // The lifecycle deadline ends the wait, so a failed save never
+            // asks the reader to choose between Retry and Quit here.
+            run.reader->prepareShutdown([this] { disposeForTransition([] { }); }, true);
+        } else
+            disposeForTransition([] { });
+    };
     if (bindings_.installInput)
         bindings_.installInput(this);
     connect(&timer, &QTimer::timeout, this, [this] { poll(); });
@@ -864,11 +887,13 @@ void ReaderCoordinator::disposeForTransition(std::function<void()> finished, boo
     if (lifecycle->draining) {
         if (usb && !disposingForUsb && run.reader) {
             disposingForUsb = true;
+            saveBeforeUsb = false;
             finishDisposal(busy ? "cancelled" : "closed", false);
         }
         return;
     }
     disposingForUsb = usb;
+    saveBeforeUsb = usb && !busy;
     lifecycle->draining = true;
     if (busy && run.reader && nativeAllowed && !lifecycle->storageBlocked()
         && !lifecycle->shuttingDown()
@@ -907,7 +932,7 @@ void ReaderCoordinator::finishDisposal(const QString &finalStatus, bool nativeAl
                 guard->finishDisposal(finalStatus, nativeAllowed);
         };
         if (usb)
-            reader->prepareUsb([released] { released(false); });
+            reader->prepareUsb([released] { released(false); }, saveBeforeUsb);
         else
             reader->finishStorageSave(released, nativeAllowed);
         return;
@@ -925,7 +950,7 @@ void ReaderCoordinator::finishDisposal(const QString &finalStatus, bool nativeAl
         QFile::remove(activePath);
         status(finalStatus);
         kobalt::releaseResourceConnections([this] {
-            disposingForUsb = false;
+            disposingForUsb = saveBeforeUsb = false;
             lifecycle->draining = false;
             if (lifecycle->blocked() && !lifecycle->storageBlocked())
                 kobalt::engineActivity().pause(true);

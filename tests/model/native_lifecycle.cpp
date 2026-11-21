@@ -11,6 +11,7 @@
 extern "C" void kobalt_power_off(void *, bool);
 #include "support/diagnostics.h"
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QDateTime>
 #include <QEvent>
 #include <QEventLoop>
@@ -561,12 +562,14 @@ int main(int argc, char **argv)
             kobalt::NativeLifecycle::interceptUsbWorkflow(usb);
         else
             kobalt::NativeLifecycle::interceptUsb(usb);
-        require(!available(), "Pending USB allowed a new profile operation");
-        require(!kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
-                "Pending USB allowed a new native save");
+        // The reader's bounded final save still needs storage here.
+        require(available(), "Pending USB blocked storage before the reader saved");
+        require(kobalt::NativeLifecycle::nativeSessionSaveAllowed(),
+                "Pending USB blocked the reader's native final save");
         const auto finish = drains.takeLast();
         finish();
-        require(!available() && assetReleases == releasesBefore, "USB released storage while a snapshot was pending");
+        require(assetReleases == releasesBefore,
+                "USB released storage while a snapshot was pending");
         QEventLoop delivered;
         kobalt::storage::afterSleepSnapshotWork([&] { delivered.quit(); });
         QTimer::singleShot(5000, &delivered, &QEventLoop::quit);
@@ -602,7 +605,7 @@ int main(int argc, char **argv)
         kobalt::NativeLifecycle::interceptUsbWorkflow(usb);
         const auto current = drains.takeLast();
         cancelled();
-        require(!available() && lifecycle.storageBlocked(),
+        require(available() && lifecycle.storageBlocked(),
                 "A stale completion affected the newer USB request");
         require(assetReleases == releases && assetRestores == restores,
                 "A stale USB completion changed the asset gate");
@@ -638,25 +641,35 @@ int main(int argc, char **argv)
     // release the shutdown's storage barrier.
     QSemaphore enteredSnapshot, releaseSnapshot;
     std::atomic_bool snapshotTimedOut{ false };
-    kobalt::storage::queueSleepSnapshotWork(
-            "power-off", [&] { enteredSnapshot.release(); snapshotTimedOut = !releaseSnapshot.tryAcquire(1, 5000); });
+    kobalt::storage::queueSleepSnapshotWork("power-off", [&] {
+        enteredSnapshot.release();
+        snapshotTimedOut = !releaseSnapshot.tryAcquire(1, 5000);
+    });
     require(enteredSnapshot.tryAcquire(1, 5000), "Snapshot did not start");
     kobalt::NativeLifecycle::interceptUsb(usb);
     const auto abandoned = drains.takeLast();
+    lifecycle.prepareShutdown = [](kobalt::NativeLifecycle::Shutdown, std::function<void()> ready) {
+        ready();
+    };
     power->asleep = true;
     emit power->aboutToSleep();
     power->visible = true;
     kobalt_power_off(power, false);
-    require(shutdowns == 1, "Power-off waited for an active snapshot");
+    require(!shutdowns, "Power-off interrupted snapshot storage");
     kobalt::NativeLifecycle::disconnected();
     abandoned();
-    require(shutdowns == 1, "An abandoned USB completion repeated power-off");
+    require(!shutdowns, "An abandoned USB completion continued power-off");
     QEventLoop delivered;
     kobalt::storage::afterSleepSnapshotWork([&] { delivered.quit(); });
     QTimer::singleShot(5000, &delivered, &QEventLoop::quit);
     releaseSnapshot.release();
     delivered.exec();
     require(!snapshotTimedOut, "Power-off waited for the snapshot on the event thread");
+    // The profile closes on its writer, then Nickel continues.
+    QElapsedTimer closing;
+    closing.start();
+    while (!shutdowns && closing.elapsed() < 5000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
     require(sleepHandoffs == 3, "A queued sleep handoff crossed power-off");
     require(shutdowns == 1 && !available(), "USB cancellation reopened storage during shutdown");
     require(!kobalt::NativeLifecycle::nativeSessionSaveAllowed(),

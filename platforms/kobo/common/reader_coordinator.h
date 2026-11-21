@@ -139,6 +139,9 @@ private:
 
     // A cancelled opening can retain its reader and failed checkpoint until unlock.
     bool disposingForUsb = false;
+    // A shown book saves for a bounded time before USB. An opening book or a
+    // drain that was already closing the book releases at once.
+    bool saveBeforeUsb = false;
     QPointer<kobalt::ReaderWindow> sleepingOpening;
 
     void updateOpening(kobalt::OpeningStage stage, int percent);

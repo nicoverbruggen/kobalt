@@ -154,7 +154,7 @@ void N3PowerWorkflowManager::powerOff(bool low)
     ::powerOff(this, low);
 }
 
-// Checks direct Nickel handoff, the storage gate and the Screensaver chain.
+// Checks the held shutdown save, its deadline, the storage gate and the Screensaver chain.
 class ShutdownTests : public QObject
 {
     Q_OBJECT
@@ -294,49 +294,101 @@ private slots:
         QCOMPARE(pendingSingleShots(lifecycle).size(), 1);
     }
 
-    void rebootPassesThroughWithoutWaitingForReader()
+    void completion_data()
     {
-        QTemporaryDir profile;
-        profilePath = profile.path();
-        kobalt::NativeLifecycle lifecycle(nullptr);
-        QVERIFY(lifecycle.connected());
-        QSemaphore started, release;
-        std::atomic_bool timedOut{ false };
-        kobalt::storage::RecordWriter writer;
-        QVERIFY(writer.tryPost([&] {
-            started.release();
-            timedOut = !release.tryAcquire(1, 5000);
-            return true;
-        }));
-        QVERIFY(started.tryAcquire(1, 5000));
-        kobalt_reboot(N3PowerWorkflowManager::sharedInstance());
-        release.release();
-        QVERIFY(writer.flush(5000));
-        QVERIFY(!timedOut);
-        QCOMPARE(reboots, 1);
-        QVERIFY(!kobalt::storage::profileTransaction(profilePath,
-                                                     [](QSqlDatabase &) { return true; }));
+        QTest::addColumn<int>("mode");
+        QTest::addColumn<bool>("deadline");
+        for (int mode = 0; mode < 3; ++mode) {
+            const auto name = QByteArray::number(mode);
+            QTest::newRow((name + "-saved").constData()) << mode << false;
+            QTest::newRow((name + "-deadline").constData()) << mode << true;
+        }
     }
 
-    void powerOffDoesNotWaitForWriter_data()
+    void completion()
     {
-        QTest::addColumn<bool>("low");
-        QTest::newRow("manual") << false;
-        QTest::newRow("battery-low") << true;
-    }
-
-    void powerOffDoesNotWaitForWriter()
-    {
-        QFETCH(bool, low);
+        using kobalt::NativeLifecycle;
+        QFETCH(int, mode);
+        QFETCH(bool, deadline);
+        const auto shutdown = NativeLifecycle::Shutdown(mode);
         QTemporaryDir profile;
         profilePath = profile.path();
-        kobalt::NativeLifecycle lifecycle(nullptr);
+        const auto available = [&] {
+            return kobalt::storage::profileTransaction(profile.path(),
+                                                       [](QSqlDatabase &) { return true; });
+        };
+        QVERIFY(available());
+        NativeLifecycle lifecycle(nullptr);
         QVERIFY(lifecycle.connected());
         int screens = 0;
-        lifecycle.preparePowerScreen = [&](kobalt::NativeLifecycle::Shutdown mode) {
-            QCOMPARE(mode == kobalt::NativeLifecycle::Shutdown::BatteryLow, low);
-            QVERIFY(!kobalt::NativeLifecycle::nativeSessionSaveAllowed());
+        lifecycle.preparePowerScreen = [&](NativeLifecycle::Shutdown action) {
+            QCOMPARE(action, shutdown);
+            QVERIFY2(NativeLifecycle::nativeSessionSaveAllowed(),
+                     "The power screen was prepared after storage closed");
             ++screens;
+        };
+        std::function<void()> drained;
+        int requests = 0;
+        lifecycle.prepareShutdown = [&](NativeLifecycle::Shutdown action,
+                                        std::function<void()> ready) {
+            QCOMPARE(action, shutdown);
+            ++requests;
+            drained = std::move(ready);
+        };
+        auto *power = N3PowerWorkflowManager::sharedInstance();
+        if (shutdown == NativeLifecycle::Shutdown::Reboot)
+            kobalt_reboot(power);
+        else
+            kobalt_power_off(power, shutdown == NativeLifecycle::Shutdown::BatteryLow);
+        QVERIFY(drained);
+        QCOMPARE(screens, shutdown == NativeLifecycle::Shutdown::Reboot ? 0 : 1);
+        QCOMPARE(powerOffs + reboots, 0);
+        // The reader can still save, also behind a native sleep or PIN screen.
+        QVERIFY(NativeLifecycle::nativeSessionSaveAllowed());
+        QVERIFY(NativeLifecycle::nativeProgressSaveAllowed());
+        QVERIFY2(available(), "A held shutdown closed the profile before the reader saved");
+        QVERIFY2(!NativeLifecycle::canSuspend(), "A held shutdown allowed CPU suspension");
+        // A repeated request joins the held shutdown.
+        kobalt_power_off(power, true);
+        QCOMPARE(requests, 1);
+        QCOMPARE(powerOffs + reboots, 0);
+        auto *timer = lifecycle.findChild<QTimer *>("shutdownSaveDeadline");
+        QVERIFY(timer && timer->isActive());
+        QCOMPARE(timer->interval(), NativeLifecycle::shutdownSaveMilliseconds);
+        if (deadline) {
+            // A save that never ends must not keep the device on.
+            timer->start(0);
+            QTRY_COMPARE_WITH_TIMEOUT(powerOffs + reboots, 1, 5000);
+        } else {
+            drained();
+            // The profile closes on its writer without blocking this thread.
+            QTRY_COMPARE_WITH_TIMEOUT(powerOffs + reboots, 1, 5000);
+            processQueuedEvents();
+            QVERIFY(!lifecycle.findChild<QTimer *>("shutdownSaveDeadline"));
+        }
+        QCOMPARE(reboots, shutdown == NativeLifecycle::Shutdown::Reboot ? 1 : 0);
+        QCOMPARE(batteryLow, shutdown == NativeLifecycle::Shutdown::BatteryLow);
+        // The reboot double checks the session gates; the power-off double
+        // also tries a profile transaction at the moment Nickel continues.
+        if (shutdown != NativeLifecycle::Shutdown::Reboot)
+            QVERIFY2(profileClosedAtHandoff, "Nickel continued before the profile was blocked");
+        QVERIFY2(!available(), "Shutdown left the shared profile writable");
+        NativeLifecycle::disconnected();
+        QVERIFY2(!available(), "USB disconnect reopened the profile during shutdown");
+        // A late save completion or a second request cannot call Nickel again.
+        drained();
+        kobalt_power_off(power, false);
+        processQueuedEvents();
+        QCOMPARE(powerOffs + reboots, 1);
+    }
+
+    void deadlineDoesNotWaitForWriter()
+    {
+        QTemporaryDir profile;
+        profilePath = profile.path();
+        kobalt::NativeLifecycle lifecycle(nullptr);
+        QVERIFY(lifecycle.connected());
+        lifecycle.prepareShutdown = [](kobalt::NativeLifecycle::Shutdown, std::function<void()>) {
         };
         QSemaphore started, release;
         std::atomic_bool timedOut{ false };
@@ -354,29 +406,25 @@ private slots:
             ++powerOffs;
             batteryLow = critical;
         };
-        auto *power = N3PowerWorkflowManager::sharedInstance();
-        kobalt_power_off(power, low);
-        const int immediateCalls = powerOffs;
+        kobalt_power_off(N3PowerWorkflowManager::sharedInstance(), false);
+        auto *timer = lifecycle.findChild<QTimer *>("shutdownSaveDeadline");
+        QVERIFY(timer);
+        timer->start(0);
+        QTRY_COMPARE_WITH_TIMEOUT(powerOffs, 1, 5000);
         const bool workStillActive = !writer.idle();
         release.release();
         QVERIFY(writer.flush(5000));
         QVERIFY(!timedOut);
-        QCOMPARE(immediateCalls, 1);
-        QVERIFY(workStillActive);
-        QCOMPARE(screens, 1);
-        QCOMPARE(batteryLow, low);
-        kobalt_power_off(power, !low);
-        kobalt::NativeLifecycle::disconnected();
-        QCOMPARE(powerOffs, 1);
+        QVERIFY2(workStillActive, "The deadline waited for the running write");
         QVERIFY(!kobalt::storage::profileTransaction(profilePath,
-                                                      [](QSqlDatabase &) { return true; }));
+                                                     [](QSqlDatabase &) { return true; }));
     }
 
     void sleepingShutdown_data()
     {
         QTest::addColumn<int>("mode");
         QTest::addColumn<int>("screen");
-        for (int mode = 0; mode < 2; ++mode)
+        for (int mode = 0; mode < 3; ++mode)
             for (int screen = 0; screen < 3; ++screen)
                 QTest::newRow(
                         (QByteArray::number(mode) + "-" + QByteArray::number(screen)).constData())
@@ -385,6 +433,7 @@ private slots:
 
     void sleepingShutdown()
     {
+        using kobalt::NativeLifecycle;
         QFETCH(int, mode);
         QFETCH(int, screen);
         QTemporaryDir profile;
@@ -395,23 +444,64 @@ private slots:
         power->asleep = screen == 0;
         power->sleepVisible = screen == 1;
         power->pinVisible = screen == 2;
+        NativeLifecycle lifecycle(nullptr);
+        QVERIFY(lifecycle.connected());
+        QVERIFY(NativeLifecycle::suspended());
+        QVERIFY(!NativeLifecycle::nativeProgressSaveAllowed());
+        std::function<void()> drained;
+        lifecycle.prepareShutdown = [&](NativeLifecycle::Shutdown, std::function<void()> ready) {
+            QVERIFY2(NativeLifecycle::nativeProgressSaveAllowed(),
+                     "A held shutdown could not write progress behind the sleep or PIN screen");
+            drained = std::move(ready);
+        };
+        QObject manager;
+        QVERIFY(NativeLifecycle::interceptShutdown(&manager, NativeLifecycle::Shutdown(mode)));
+        QVERIFY(drained);
+        QCOMPARE(powerOffs + reboots, 0);
+        drained();
+        QTRY_COMPARE_WITH_TIMEOUT(powerOffs + reboots, 1, 5000);
+        QVERIFY(profileClosedAtHandoff || mode == 2);
+        QVERIFY(!NativeLifecycle::nativeProgressSaveAllowed());
+        power->asleep = power->sleepVisible = power->pinVisible = false;
+        QVERIFY2(!NativeLifecycle::nativeProgressSaveAllowed(),
+                 "An awake screen bypassed the final storage gate");
+    }
+
+    void destroyedLifecycleIgnoresCompletion()
+    {
+        std::function<void()> drained;
+        {
+            kobalt::NativeLifecycle lifecycle(nullptr);
+            lifecycle.prepareShutdown = [&](kobalt::NativeLifecycle::Shutdown,
+                                            std::function<void()> ready) {
+                drained = std::move(ready);
+            };
+            kobalt_power_off(N3PowerWorkflowManager::sharedInstance(), false);
+        }
+        drained();
+        processQueuedEvents();
+        QCOMPARE(powerOffs + reboots, 0);
+    }
+
+    void destroyedManagerIgnoresCompletion()
+    {
         kobalt::NativeLifecycle lifecycle(nullptr);
         QVERIFY(lifecycle.connected());
-        QVERIFY(kobalt::NativeLifecycle::suspended());
-        QVERIFY(!kobalt::NativeLifecycle::nativeProgressSaveAllowed());
-        int prepared = 0;
-        lifecycle.preparePowerScreen = [&](kobalt::NativeLifecycle::Shutdown action) {
-            QCOMPARE(action, kobalt::NativeLifecycle::Shutdown(mode));
-            ++prepared;
+        std::function<void()> drained;
+        lifecycle.prepareShutdown = [&](kobalt::NativeLifecycle::Shutdown,
+                                        std::function<void()> ready) {
+            drained = std::move(ready);
         };
-        kobalt_power_off(power, mode == 1);
-        QCOMPARE(prepared, 1);
-        QCOMPARE(powerOffs, 1);
-        QVERIFY(profileClosedAtHandoff);
-        QVERIFY(!kobalt::NativeLifecycle::nativeProgressSaveAllowed());
-        power->asleep = power->sleepVisible = power->pinVisible = false;
-        QVERIFY2(!kobalt::NativeLifecycle::nativeProgressSaveAllowed(),
-                 "An awake screen bypassed the final storage gate");
+        auto *manager = new QObject;
+        QVERIFY(kobalt::NativeLifecycle::interceptShutdown(
+                manager, kobalt::NativeLifecycle::Shutdown::PowerOff));
+        delete manager;
+        drained();
+        auto *timer = lifecycle.findChild<QTimer *>("shutdownSaveDeadline");
+        if (timer)
+            timer->start(0);
+        processQueuedEvents();
+        QCOMPARE(powerOffs + reboots, 0);
     }
 
     void exportedStorageStaysBlocked()
@@ -422,6 +512,9 @@ private slots:
         QVERIFY(lifecycle.connected());
         kobalt::nativeUsbConnect = usbConnect;
         lifecycle.prepareUsb = [](std::function<void()> ready) { ready(); };
+        lifecycle.prepareShutdown = [](kobalt::NativeLifecycle::Shutdown, std::function<void()>) {
+            QFAIL("Shutdown tried to reclaim exported storage");
+        };
         QObject manager;
         QVERIFY(kobalt::NativeLifecycle::interceptUsb(&manager));
         QCOMPARE(usbHandoffs, 1);

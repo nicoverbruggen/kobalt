@@ -205,10 +205,72 @@ void Reader::prepareShutdown(std::function<void()> finished, bool allowFailedSav
     prepareTransition(std::move(finished), false);
 }
 
-void Reader::prepareUsb(std::function<void()> finished)
+void Reader::prepareUsb(std::function<void()> finished, bool save)
 {
-    allowFailedTransition = false;
-    prepareTransition(std::move(finished), true);
+    // A bounded save never asks the reader to Retry.
+    allowFailedTransition = save;
+    if (!save) {
+        prepareTransition(std::move(finished), true);
+        return;
+    }
+    // Save as an ordinary close would, but release on time even when storage
+    // is slow.
+    auto *deadline = new QTimer(this);
+    deadline->setObjectName("rrUsbSaveDeadline");
+    deadline->setSingleShot(true);
+    deadline->setTimerType(Qt::PreciseTimer);
+    const auto released = std::make_shared<bool>(false);
+    const auto release = [this, finished, released, timer = QPointer<QTimer>(deadline)](bool late) {
+        if (std::exchange(*released, true))
+            return;
+        if (timer) {
+            timer->stop();
+            timer->deleteLater();
+        }
+        if (late)
+            kobalt::diagnostic("usb-save-deadline", {}, kobalt::DiagnosticSeverity::Warning);
+        releaseForUsb(finished);
+    };
+    connect(deadline, &QTimer::timeout, this, [release] { release(true); });
+    deadline->start(usbSaveMilliseconds);
+    prepareTransition([release] { release(false); }, false);
+}
+
+void Reader::releaseForUsb(std::function<void()> finished)
+{
+    // End the remaining steps of a save that ran out of time. Its running
+    // writes still finish before the files are released.
+    ++closeRequest;
+    releasingForUsb = closeWithoutSaving = true;
+    retryDisposal = {};
+    if (closeSaveError) {
+        closeSaveError->hide();
+        closeSaveError->deleteLater();
+        closeSaveError.clear();
+    }
+    book->releaseNative(false);
+    releaseUsbWrites(std::move(finished));
+}
+
+void Reader::showShutdownNotice(bool restarting)
+{
+    if (!isVisible() || lifecycleHidden || closing || services.suspended())
+        return;
+    if (shutdownNotice)
+        shutdownNotice->deleteLater();
+    shutdownNotice = new kobalt::ui::ModalOverlay(this);
+    shutdownNotice->setObjectName("rrShutdownNotice");
+    shutdownNotice->setDimmed(true);
+    auto *card = shutdownNotice->card();
+    card->title(strings::get(restarting ? "shutdown.restarting" : "shutdown.shutting_down"),
+                "rrShutdownTitle");
+    card->message(strings::get("shutdown.saving"), "rrShutdownMessage");
+    shutdownNotice->setGeometry(rect());
+    card->fitToWidth(
+            qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance));
+    shutdownNotice->centerCard();
+    shutdownNotice->show();
+    shutdownNotice->raise();
 }
 
 void Reader::prepareTransition(std::function<void()> finished, bool usb)

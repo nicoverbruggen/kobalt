@@ -19274,6 +19274,27 @@ private slots:
         QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-viewport-transition"));
     }
 
+    void shutdownNotice_data() { screenshotVariants(); }
+
+    void shutdownNotice()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        Fixture fixture(dark);
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        openPrologueBody(fixture);
+        auto *reader = fixture.window.readerWindow();
+        QVERIFY(reader);
+        reader->showShutdownNotice(false);
+        QTRY_VERIFY(fixture.visible("rrShutdownNotice"));
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-shutdown-notice"));
+    }
+
     void androidPageAnimations_data() { screenshotVariants(); }
 
     void androidPageAnimations()

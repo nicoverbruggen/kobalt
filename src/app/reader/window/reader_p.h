@@ -136,7 +136,8 @@ public:
     void finishStorageSave(std::function<void(bool)> finished, bool nativeAllowed = true) override;
     void setOpeningSaveState(OpeningSaveState state) override;
     bool openingSaveParked() const override;
-    void prepareUsb(std::function<void()> finished) override;
+    void prepareUsb(std::function<void()> finished, bool save = false) override;
+    void showShutdownNotice(bool restarting) override;
     void prepareShutdown(std::function<void()> finished, bool allowFailedSave = false) override;
     sleep::Snapshot powerScreenSnapshot() override;
     sleep::Snapshot presentedSleepSnapshot() const override;
@@ -202,6 +203,7 @@ private:
     void observeReading();
     void prepareTransition(std::function<void()> finished, bool usb);
     void releaseUsbWrites(std::function<void()> finished);
+    void releaseForUsb(std::function<void()> finished);
     // Construction, in this order. Each step builds one group of widgets and
     // connects its signals.
     void saveNativeProgress();
@@ -647,6 +649,7 @@ private:
     QJsonObject preferences;
     QLabel *settingsError = nullptr;
     kobalt::ui::ModalOverlay *busyNotice = nullptr;
+    QPointer<kobalt::ui::ModalOverlay> shutdownNotice;
     QTimer renderNoticeTimer, resizeTimer;
     kobalt::ui::LightSwipeNotice *brightnessNotice = nullptr;
     kobalt::ui::AnnotationModeNotice *annotationModeNotice = nullptr;

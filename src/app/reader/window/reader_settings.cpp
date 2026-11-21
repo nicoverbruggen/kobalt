@@ -225,8 +225,12 @@ void Reader::syncStatusTimer()
                 && (bookStatusShown() || menuShowsPagination());
     };
     if (!needed()) {
-        if (statusTimer)
+        if (statusTimer && statusTimer->isActive()) {
             statusTimer->stop();
+            // The timer may stop before its last tick clears the page count.
+            if (takesInput() && topControls->isVisible())
+                updateMenuSession();
+        }
         return;
     }
     if (!statusTimer) {

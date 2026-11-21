@@ -7395,6 +7395,17 @@ private slots:
     {
         QFETCH(bool, hidden);
         QFETCH(QSize, size);
+        const auto capture = qEnvironmentVariable("KOBALT_STATS_VISIBILITY_CAPTURE_DIR");
+        // This case needs a real chapter count, with no substantial layout work.
+        // The review captures retain their original book.
+        QTemporaryDir bookDirectory;
+        QString source = fixture();
+        if (capture.isEmpty()) {
+            QVERIFY(bookDirectory.isValid());
+            QVERIFY(test::writeBook(bookDirectory.path(), "reading-clock.epub",
+                                    test::engineBook(false, 2, 1)));
+            source = bookDirectory.filePath("reading-clock.epub");
+        }
         const auto paths = testPaths();
         QVERIFY(storage::writeJson(paths.preferences(), { { "disable_stats", hidden } }));
         qint64 now = 0;
@@ -7402,7 +7413,7 @@ private slots:
         host.readingClock = [&] { return now; };
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);
-        host.open(fixture(), size);
+        host.open(source, size);
         QTRY_COMPARE(opened.count(), 1);
         Canvas canvas(host.window(), size);
         canvas.resize(900, 900);
@@ -7424,9 +7435,17 @@ private slots:
                     && clock->isVisible() && battery->isVisible()
                     && host.book()->sessionReadingMilliseconds() == 12 * 60000;
         };
-        // Hybrid uses this label for the page count until its status timer refreshes it.
-        QTRY_VERIFY_WITH_TIMEOUT(check(), 30000);
-        const auto capture = qEnvironmentVariable("KOBALT_STATS_VISIBILITY_CAPTURE_DIR");
+        // Hybrid temporarily uses the label for pagination. Refresh the
+        // real status strip as soon as the menu-triggered count completes.
+        const auto refreshAfterPagination = [&host] {
+            if (host.session()->paginationPending())
+                return false;
+            auto *status = host.window()->findChild<QTimer *>("rrBookStatusTimer");
+            return !status || !status->isActive()
+                    || QMetaObject::invokeMethod(status, "timeout", Qt::DirectConnection);
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(refreshAfterPagination(), 30000);
+        QVERIFY2(check(), "The settled menu must show reading time only when Stats is visible");
         if (!capture.isEmpty()) {
             QVERIFY(QDir().mkpath(capture));
             QCoreApplication::processEvents();
@@ -7489,20 +7508,21 @@ private slots:
         QCOMPARE(host.book()->sessionReadingMilliseconds(), qint64(13 * 60000));
         host.shutdown();
         QTRY_VERIFY(host.idle());
-        host.open(fixture(), size);
+        host.open(source, size);
         QTRY_COMPARE(opened.count(), 2);
         Canvas reopened(host.window(), size);
         reopened.resize(900, 900);
         reopened.show();
         QVERIFY(QTest::qWaitForWindowExposed(&reopened));
+        QTRY_VERIFY(!host.session()->busy());
         QTRY_VERIFY(host.book()->readingActive());
         now += 12 * 60000;
         QVERIFY(clickAt(reopened, QPoint(size.width() / 2, size.height() / 2)));
+        QTRY_VERIFY(host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
         message = host.window()->findChild<QLabel *>("rrMenuSession");
         QVERIFY(message);
-        QTRY_COMPARE_WITH_TIMEOUT(message->text(),
-                                  hidden ? QString() : strings::get("reader.session_minutes").arg(12),
-                                  30000);
+        QTRY_VERIFY_WITH_TIMEOUT(refreshAfterPagination(), 30000);
+        QCOMPARE(message->text(), hidden ? QString() : strings::get("reader.session_minutes").arg(12));
         QCOMPARE(message->isVisible(), !hidden);
         QCOMPARE(host.book()->sessionReadingMilliseconds(), qint64(12 * 60000));
     }

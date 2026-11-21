@@ -942,6 +942,19 @@ void SettingsPanel::buildDefaults(QWidget *defaultsPage)
                                 strings::get("settings.mono_font"), [] { });
     section(defaultsPage, defaultsRows, "rrDefaultsRestoreSection",
             strings::get("reader.restore_defaults"));
+    // Only this book's text, as a new book would start now.
+    auto *bookRow = kobalt::ui::horizontalRow();
+    defaultsRows->addLayout(bookRow);
+    bookRow->addStretch(1);
+    resetBook = listAction(defaultsPage, bookRow, "rrRestoreBookDefaults",
+                           strings::get("reader.restore_book_defaults"), [this] {
+                               settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
+                               auto *dialog = restoreBookConfirmation();
+                               showConfirmation(dialog);
+                               dialog->setFocus();
+                           });
+    resetBook->setCaption(strings::get("settings.asks_first"));
+    bookRow->addStretch(1);
     auto *resetRow = kobalt::ui::horizontalRow();
     defaultsRows->addLayout(resetRow);
     resetRow->addStretch(1);
@@ -969,7 +982,7 @@ void SettingsPanel::buildDefaults(QWidget *defaultsPage)
     resetPresets->setCaption(strings::get("settings.asks_first"));
     presetsRow->addStretch(1);
     defaultsRows->addStretch(1);
-    for (auto *row : { resetRow, presetsRow }) {
+    for (auto *row : { bookRow, resetRow, presetsRow }) {
         row->setStretch(0, 0);
         row->setStretch(1, 1);
         row->setStretch(2, 0);
@@ -1824,6 +1837,7 @@ SettingsPanel::~SettingsPanel()
 {
     delete restoreDialog;
     delete restorePresetsDialog;
+    delete restoreBookDialog;
     delete standbyDialog;
     delete automaticOpeningDialog;
     delete sheet;
@@ -3016,6 +3030,30 @@ ui::ChoiceModal *SettingsPanel::restoreConfirmation()
     return restoreDialog;
 }
 
+ui::ChoiceModal *SettingsPanel::restoreBookConfirmation()
+{
+    if (restoreBookDialog)
+        return restoreBookDialog;
+    restoreBookDialog = new ui::ChoiceModal(
+            parentWidget(),
+            { strings::get("reader.restore_book_defaults_detail"),
+              strings::get("reader.restore_book_defaults_prompt"),
+              {} },
+            { strings::get("common.cancel"), "rrKeepBookDefaults" },
+            { strings::get("reader.restore_defaults"), "rrConfirmBookDefaults" });
+    restoreBookDialog->setObjectName("rrRestoreBookConfirmation");
+    connect(restoreBookDialog->secondaryButton(), &QPushButton::clicked, this,
+            [this] { dismissRestore(); });
+    connect(restoreBookDialog->primaryButton(), &QPushButton::clicked, this, [this] {
+        dismissRestore();
+        if (restoreBookConfirmed)
+            restoreBookConfirmed();
+    });
+    restoreBookDialog->dismissed = [this] { dismissRestore(); };
+    dialogCreated(restoreBookDialog);
+    return restoreBookDialog;
+}
+
 ui::ChoiceModal *SettingsPanel::restorePresetsConfirmation()
 {
     if (restorePresetsDialog)
@@ -3099,6 +3137,10 @@ void SettingsPanel::dismissRestore()
     if (restorePresetsDialog && !restorePresetsDialog->isHidden()) {
         restorePresetsDialog->hide();
         resetPresets->setFocus();
+    }
+    if (restoreBookDialog && !restoreBookDialog->isHidden()) {
+        restoreBookDialog->hide();
+        resetBook->setFocus();
     }
 }
 

@@ -480,6 +480,7 @@ void Reader::openSettings()
     appearanceEdit.clearContinuation();
     restoringDefaults = false;
     restoringPresets = false;
+    restoringBook = false;
     for (const auto *key : appearance::fallbackFontKeys) {
         const auto family = preferences.value(key).toString();
         settingsFontFaces[key] = session->fontFaces().contains(family) ? family : QString();
@@ -607,6 +608,9 @@ void Reader::showSettingsPage(SettingsPage section)
         auto *resetPresets = static_cast<SettingsPanel *>(general)->resetPresets;
         resetPresets->setText(strings::get("text_presets.restore"));
         resetPresets->setEnabled(true);
+        auto *resetBook = static_cast<SettingsPanel *>(general)->resetBook;
+        resetBook->setText(strings::get("reader.restore_book_defaults"));
+        resetBook->setEnabled(true);
         showTextPresetSettings();
         showSettingsFonts(section);
         break;
@@ -1176,6 +1180,14 @@ void Reader::finishSettingsWrite(const QJsonObject &next, bool saved)
     settings["widows_orphans"] = settingsWidowsOrphans;
     settings["bold_reading"] =
             bionicOption.checked() ? QStringLiteral("bold") : QStringLiteral("off");
+    if (restoringBook) {
+        // The text a new book starts with now: Text for new books and the
+        // default font decide it. Margins and Styling are global.
+        const auto defaults = kobalt::appearance::bookDefaults(preferences);
+        for (const auto *key : kobalt::appearance::typographyKeys)
+            if (defaults.contains(key))
+                settings[key] = defaults.value(key);
+    }
     if (restoringDefaults) {
         const auto defaults = kobalt::appearance::typographyDefaults();
         for (auto it = defaults.begin(); it != defaults.end(); ++it)

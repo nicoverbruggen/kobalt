@@ -15904,6 +15904,59 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     // Checks Settings > Defaults > Restore default presets: Cancel keeps the list, and a
     // confirmed restore applies when Settings closes. Deleted and changed examples come back
     // first, the user's own preset stays, and the appearance defaults are left alone.
+    // Restore book defaults returns only this book's text to what a new book
+    // starts with. The global margins stay.
+    void settingsRestoreBook()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences["new_book_text"] = "book";
+        preferences["inherit_text_layout"] = false;
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto original = fixture.state();
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavText"));
+        QTRY_VERIFY(fixture.visible("rrLarger"));
+        QVERIFY(fixture.press("rrLarger"));
+        QVERIFY(fixture.press("rrHeavier"));
+        QVERIFY(fixture.press("rrNavLayout"));
+        QTRY_VERIFY(fixture.visible("rrWider"));
+        QVERIFY(fixture.press("rrWider"));
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        QTRY_VERIFY(!fixture.visible("rrMenu"));
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("font_pixels").toInt()
+                                         > original.value("font_pixels").toInt(),
+                                 30000);
+        const int margin = fixture.state().value("margin_pixels").toInt();
+        QVERIFY(margin > original.value("margin_pixels").toInt());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsDefaults"));
+        QVERIFY(revealSettingsOption(fixture, "rrRestoreBookDefaults"));
+        QVERIFY(fixture.press("rrRestoreBookDefaults"));
+        QTRY_VERIFY(fixture.visible("rrRestoreBookConfirmation"));
+        QVERIFY(fixture.press("rrConfirmBookDefaults"));
+        QTRY_VERIFY(!fixture.visible("rrRestoreBookConfirmation"));
+        auto *restore = dynamic_cast<ui::CaptionButton *>(fixture.widget("rrRestoreBookDefaults"));
+        QVERIFY(restore && !restore->isEnabled());
+        QCOMPARE(restore->text(), strings::get("reader.book_defaults_selected"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+        const auto expected =
+                appearance::bookDefaults(storage::readJson(fixture.paths.preferences()));
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.state().value("font_pixels"),
+                                  expected.value("font_pixels"), 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QCOMPARE(fixture.state().value("weight_steps"), expected.value("weight_steps"));
+        QCOMPARE(fixture.state().value("margin_pixels").toInt(), margin);
+    }
+
     void settingsRestorePresets()
     {
         Fixture fixture;

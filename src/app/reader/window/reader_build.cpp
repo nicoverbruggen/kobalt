@@ -1782,6 +1782,12 @@ void Reader::connectSettingsPage(SettingsPage section)
             resetDefaults->setEnabled(false);
             settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
         };
+        settings->restoreBookConfirmed = [this, settings] {
+            restoringBook = true;
+            settings->resetBook->setText(strings::get("reader.book_defaults_selected"));
+            settings->resetBook->setEnabled(false);
+            settingsPages->setCurrentIndex(int(SettingsPage::Defaults));
+        };
         settings->restorePresetsConfirmed = [this, settings] {
             restoringPresets = true;
             settings->resetPresets->setText(strings::get("text_presets.restore_selected"));

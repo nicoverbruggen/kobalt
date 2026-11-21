@@ -93,7 +93,7 @@ public:
     std::function<void(bool)> automaticOpeningChosen;
     // A confirmed restore of the appearance defaults or of the text presets,
     // after its dialog closed.
-    std::function<void()> restoreDefaultsConfirmed, restorePresetsConfirmed;
+    std::function<void()> restoreBookConfirmed, restoreDefaultsConfirmed, restorePresetsConfirmed;
     // Prepares widgets outside a section, such as a dialog or the Zen heading.
     std::function<void(QWidget *)> widgetCreated;
     // With `interfaceFonts`, a family too large for the interface shows
@@ -237,7 +237,8 @@ public:
                       *navigationBarButton = nullptr, *tappableLinksButton = nullptr,
                       *annotationInteractionButton = nullptr, *chapterGroupsButton = nullptr;
     ui::DescribedOption *bionicOption = nullptr;
-    ui::CaptionButton *refreshButton = nullptr, *resetDefaults = nullptr, *resetPresets = nullptr;
+    ui::CaptionButton *refreshButton = nullptr, *resetDefaults = nullptr, *resetPresets = nullptr,
+                      *resetBook = nullptr;
     QPushButton *openAcknowledgments = nullptr, *debugProgress = nullptr;
     DictionariesPage *dictionaries = nullptr;
     KosyncPage *kosync = nullptr;
@@ -313,12 +314,13 @@ private:
     void showOptionsPage(int page);
     void fitRail(int availableHeight = 0);
     AboutPage *aboutPage = nullptr;
-    QPointer<ui::ChoiceModal> restoreDialog, restorePresetsDialog;
+    QPointer<ui::ChoiceModal> restoreDialog, restorePresetsDialog, restoreBookDialog;
 
     QPointer<ui::ChoiceModal> standbyDialog;
     QPointer<ui::ChoiceModal> automaticOpeningDialog;
     ui::ChoiceModal *restoreConfirmation();
     ui::ChoiceModal *restorePresetsConfirmation();
+    ui::ChoiceModal *restoreBookConfirmation();
     ui::ChoiceModal *standbyConfirmation();
     ui::ChoiceModal *automaticOpeningConfirmation();
     void dialogCreated(ui::ChoiceModal *dialog);

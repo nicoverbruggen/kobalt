@@ -759,6 +759,10 @@
 "reader.restore_appearance_defaults" = "Restore appearance defaults";
 "reader.restore_appearance_defaults_prompt" = "Restore appearance defaults?";
 "reader.restore_defaults" = "Restore defaults";
+"reader.restore_book_defaults" = "Restore book defaults";
+"reader.restore_book_defaults_prompt" = "Restore book defaults?";
+"reader.restore_book_defaults_detail" = "The font, size, line spacing, alignment, weight and hyphenation of this book return to what a new book starts with. Other books and other settings do not change. The defaults apply when you close Settings.";
+"reader.book_defaults_selected" = "Book defaults selected";
 "reader.return_to_passage" = "Return to passage";
 "reader.follow_link" = "Follow link";
 "reader.dismiss_link" = "Dismiss";
@@ -786,7 +790,7 @@
 "reader.warmth" = "Warmth %1";
 /* Arguments: %1 */
 "reader.weight_value" = "+%1";
-"reader.your_reading_position_stays_the_same_the_defaults_apply_when_you_c" = "Font, layout, and display preferences will be reset to their defaults. Your reading position will not change. The defaults apply when you close Settings.";
+"reader.your_reading_position_stays_the_same_the_defaults_apply_when_you_c" = "Theme, interface fonts, display preferences and the text of this book return to their defaults. Other books keep their text. Your reading position does not change. The defaults apply when you close Settings.";
 
 /* reader_controller */
 "reader_controller.native_authorization_is_unavailable" = "Native authorization is unavailable";

@@ -698,7 +698,7 @@ private:
     bool restoringDefaults = false, themeReady = false, darkTheme = false;
     // Settings > Defaults > Restore default presets was confirmed. It applies
     // when Settings closes.
-    bool restoringPresets = false;
+    bool restoringPresets = false, restoringBook = false;
     // openSettings() selects the first page itself and fits once at its end,
     // so a page change while it runs needs no fit of its own.
     bool openingSettings = false;

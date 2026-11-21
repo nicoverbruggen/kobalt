@@ -116,11 +116,13 @@ void StockStorageHandoff::begin(State next)
     // Native workflow and gadget hooks can call each other. Only the first
     // handoff drains asset verification and the stock opening's queued invalidation.
     if (state == State::Available) {
-        mainthread::AllowBlocking allow("host checkpoint");
         sessionStorageAvailable.store(false);
         ++stockGeneration;
-        nickel::ReaderEnvironment::finishStockAssetWork();
-        storage::finishSleepSnapshotWork();
+        if (next != State::Shutdown) {
+            mainthread::AllowBlocking allow("host checkpoint");
+            nickel::ReaderEnvironment::finishStockAssetWork();
+            storage::finishSleepSnapshotWork();
+        }
     }
     if (state != State::Shutdown && (state == State::Available || next != State::Preparing))
         state = next;
@@ -315,9 +317,6 @@ extern "C" __attribute__((visibility("default"))) void kobalt_power_off(void *ma
 
 extern "C" __attribute__((visibility("default"))) void kobalt_reboot(void *manager)
 {
-#ifdef KOBALT_READER_HARDWARE
-    kobalt_startup_complete(nickel::startupPath);
-#endif
     if (!NativeLifecycle::interceptShutdown(static_cast<QObject *>(manager),
                                             NativeLifecycle::Shutdown::Reboot))
         nativeReboot(manager);
@@ -534,6 +533,20 @@ bool NativeLifecycle::canSuspend()
 
 bool NativeLifecycle::interceptShutdown(QObject *manager, Shutdown mode)
 {
+    if (mode == Shutdown::Reboot) {
+        sessionStorageAvailable.store(false);
+        storage::blockProfile();
+        if (!active || stockStorageBlocked()) {
+            stockHandoff().begin(StockStorageHandoff::State::Shutdown);
+        } else {
+            active->poweringOff = true;
+            ++active->generation;
+            active->usbPending = false;
+            active->pendingWorkflow.clear();
+            active->pendingGadget.clear();
+        }
+        return false;
+    }
     if (!active || !active->prepareShutdown || stockStorageBlocked()) {
         stockHandoff().begin(StockStorageHandoff::State::Shutdown);
         return false;
@@ -567,7 +580,7 @@ bool NativeLifecycle::interceptShutdown(QObject *manager, Shutdown mode)
     const auto completed = std::make_shared<bool>(false);
     const auto lifecycle = active;
     const auto finish = [guard, lifecycle, mode, completed] {
-        if (!guard || !lifecycle || lifecycle != active || *completed)
+        if (!guard || !lifecycle || lifecycle != active || *completed || !nativeSessionSaveAllowed())
             return;
         *completed = true;
         // Nickel stops EventEngine and closes its databases in powerOff().

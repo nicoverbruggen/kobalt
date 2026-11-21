@@ -3,6 +3,7 @@
 #include "support/font_fixtures.h"
 #include "platforms/kobo/common/screensaver_compatibility.h"
 #include "storage/profile_database.h"
+#include "storage/record_writer.h"
 #include <QAbstractEventDispatcher>
 #include <QCoreApplication>
 #include <QTemporaryDir>
@@ -15,6 +16,7 @@
 #include <dlfcn.h>
 
 extern "C" void kobalt_power_off(void *, bool);
+extern "C" void kobalt_reboot(void *);
 
 // Export the native entry points and signals used by the real lifecycle adapter.
 class N3PowerWorkflowManager : public QObject
@@ -107,7 +109,8 @@ void powerOff(void *, bool low)
 
 void reboot(void *)
 {
-    recordHandoff();
+    QVERIFY(!kobalt::NativeLifecycle::nativeSessionSaveAllowed());
+    QVERIFY(!kobalt::NativeLifecycle::nativeProgressSaveAllowed());
     ++reboots;
 }
 
@@ -291,11 +294,38 @@ private slots:
         QCOMPARE(pendingSingleShots(lifecycle).size(), 1);
     }
 
+    void rebootPassesThroughWithoutWaitingForReader()
+    {
+        QTemporaryDir profile;
+        profilePath = profile.path();
+        kobalt::NativeLifecycle lifecycle(nullptr);
+        QVERIFY(lifecycle.connected());
+        lifecycle.prepareShutdown = [](std::function<void()>) {
+            QFAIL("Reboot requested a reader save before calling Nickel");
+        };
+        QSemaphore started, release;
+        std::atomic_bool timedOut{ false };
+        kobalt::storage::RecordWriter writer;
+        QVERIFY(writer.tryPost([&] {
+            started.release();
+            timedOut = !release.tryAcquire(1, 5000);
+            return true;
+        }));
+        QVERIFY(started.tryAcquire(1, 5000));
+        kobalt_reboot(N3PowerWorkflowManager::sharedInstance());
+        release.release();
+        QVERIFY(writer.flush(5000));
+        QVERIFY(!timedOut);
+        QCOMPARE(reboots, 1);
+        QVERIFY(!kobalt::storage::profileTransaction(profilePath,
+                                                     [](QSqlDatabase &) { return true; }));
+    }
+
     void completion_data()
     {
         QTest::addColumn<int>("mode");
         QTest::addColumn<bool>("stalled");
-        for (int mode = 0; mode < 3; ++mode) {
+        for (int mode = 0; mode < 2; ++mode) {
             const auto name = QByteArray::number(mode);
             QTest::newRow((name + "-drained").constData()) << mode << false;
             QTest::newRow((name + "-stalled").constData()) << mode << true;
@@ -393,7 +423,7 @@ private slots:
     {
         QTest::addColumn<int>("mode");
         QTest::addColumn<int>("screen");
-        for (int mode = 0; mode < 3; ++mode)
+        for (int mode = 0; mode < 2; ++mode)
             for (int screen = 0; screen < 3; ++screen)
                 QTest::newRow(
                         (QByteArray::number(mode) + "-" + QByteArray::number(screen)).constData())

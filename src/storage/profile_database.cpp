@@ -634,6 +634,11 @@ void closeProfile(bool keepClosed)
     }
 }
 
+void blockProfile()
+{
+    profileBlocked = true;
+}
+
 void reopenProfile()
 {
     profileBlocked = false;

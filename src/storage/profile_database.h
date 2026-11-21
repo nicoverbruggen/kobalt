@@ -22,6 +22,8 @@ bool profileTransaction(const QString &directory,
 // the device powers off. An unused profile can be blocked before its first
 // database operation without starting the writer thread.
 void closeProfile(bool keepClosed = false);
+// Reject new transactions immediately. In-flight transactions may finish on the writer.
+void blockProfile();
 void reopenProfile();
 // Whether the profile database in `directory` opens. Incompatible is a Kobalt
 // database of a version this build does not know. Corrupt is a damaged, empty

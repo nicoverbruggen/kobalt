@@ -1192,16 +1192,47 @@ int main(int argc, char **argv)
                          std::make_unique<Bridge>(calls), calls.current, calls.current);
         require(book.session()->savedStateMatched() && book.session()->mainTextMarks() == marks,
                 "A native unread reset lost the matching chapter marks");
-        require(book.textPreset() == (newlyUnread ? "modern" : "classic"),
-                "A native unread reset must select the new-book preset even with chapter marks");
+        require(book.textPreset() == "classic",
+                "A native unread reset replaced the book's own text preset");
         QJsonObject snapshot;
         require(book.checkpoint(&snapshot), "Cannot checkpoint native unread state");
         const auto saved = storage::readBookState(paths, identity).object;
         require(saved.value(textpresets::bookKey).toString() == book.textPreset(),
                 "The first checkpoint lost the selected preset");
-        require(saved.contains("future_optional") == !newlyUnread
-                        && saved.contains("dictionary_id") == !newlyUnread,
-                "Checkpoint ignored or repeated Nickel's explicit unread reset");
+        require(saved.value("future_optional") == "keep"
+                        && saved.value("dictionary_id") == "old-dictionary",
+                "A native unread reset dropped the book's settings");
+    }
+    {
+        // A reset removes reading progress and nothing else.
+        const ReadingProgress unread{ "unread-fields", {}, 0, 0, true };
+        ReadingProgress read = unread;
+        read.status = 1;
+        read.location = "old-position";
+        auto record = qt::object({ { "book", "unread-fields" },
+                                   { "position", "/body/DocFragment[3]/p[2]/text().0" },
+                                   { "percent", 42 },
+                                   { "stats_main_percent", 40 },
+                                   { "finished_position", "/end" },
+                                   { "suppress_finish_prompt", true },
+                                   { "nickel_progress", read.json() },
+                                   { "font_face", "NV Jost" },
+                                   { "font_pixels", 31 },
+                                   { "margin_pixels", 24 },
+                                   { textpresets::bookKey, "classic" },
+                                   { "dictionary_id", "dictionary" },
+                                   { "page_estimate", qt::object({ { "pages", 12 } }) } });
+        require(resetNativeUnread(record, unread), "A read book was not reset");
+        for (const auto *key : { "position", "percent", "stats_main_percent", "finished_position",
+                                 "suppress_finish_prompt", "nickel_progress" })
+            require(!record.contains(QLatin1String(key)),
+                    qPrintable(QStringLiteral("A reset kept %1").arg(key)));
+        require(record.value("font_face") == "NV Jost" && record.value("font_pixels") == 31
+                        && record.value("margin_pixels") == 24
+                        && record.value(textpresets::bookKey) == "classic"
+                        && record.value("dictionary_id") == "dictionary"
+                        && record.contains("page_estimate"),
+                "A reset removed a book setting");
     }
     {
         auto session = open();

@@ -144,19 +144,20 @@ bool resetNativeUnread(QJsonObject &checkpoint, const ReadingProgress &current)
             && (saved.book != current.book
                 || (saved.status == 0 && !preferNativeProgress(current, saved)))))
         return false;
-    const bool hideBook = checkpoint.value("hide_book_on_sleep_screen").toBool(false);
-    const auto fingerprint = checkpoint.value("fingerprint");
-    const auto marks = checkpoint.value("main_text_marks").toObject();
-    const auto positions = checkpoint.value("sleep_positions").toObject();
-    checkpoint = qt::object({ { "book", current.book } });
-    if (!marks.isEmpty()) {
-        checkpoint["main_text_marks"] = marks;
-        checkpoint["fingerprint"] = fingerprint;
-    }
-    if (hideBook)
-        checkpoint["hide_book_on_sleep_screen"] = true;
-    if (!positions.isEmpty())
-        checkpoint["sleep_positions"] = positions;
+    // Marking a book as unread resets where the reader is, not how the book
+    // is set up. Remove only reading progress; text settings, the text
+    // preset, the dictionary and every other choice stay.
+    for (const auto *key :
+         { "position", "imported_native_location", "percent", "stats_main_percent",
+           "stats_volume_percent", "finished_position", "suppress_finish_prompt",
+           "nickel_progress", "sync_pending", "native_writeback", "native_writeback_error",
+           "native_writeback_failure", "page", "pages", "next_page", "chapter_page",
+           "chapter_pages", "chapter_title", "book_fraction", "slice_start", "rough_page",
+           "rough_pages", "rough_item_page", "rough_item_pages", "rough_pages_estimated",
+           "rough_item_pages_estimated", "cached_pages", "continues_before", "continues_after",
+           "whole_book_ready" })
+        checkpoint.remove(QLatin1String(key));
+    checkpoint["book"] = current.book;
     return true;
 }
 } // namespace kobalt

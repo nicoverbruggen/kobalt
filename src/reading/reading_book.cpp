@@ -85,7 +85,8 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
         sleepPositions_ = saved.value("sleep_positions").toObject();
     // The native opener resets its snapshot before the database record is
     // replaced. Apply the same reset before retaining fields or preferences.
-    const bool unreadReset = this->bridge && resetNativeUnread(saved, reconciliation.baseline());
+    if (this->bridge)
+        resetNativeUnread(saved, reconciliation.baseline());
     preservedState = saved;
     nativeFailure = saved.value("native_writeback_failure").toObject();
     if (saved.value("book").toString() == identity_) {
@@ -104,8 +105,7 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
             layoutPreferences_[key] = preferences.value(key);
     if (saved.value("book").toString() == identity_)
         dictionaryChoice_ = saved.value("dictionary_id").toString();
-    if (!unreadReset && session_->savedStateMatched()
-        && saved.value("book").toString() == identity_) {
+    if (session_->savedStateMatched() && saved.value("book").toString() == identity_) {
         textPreset_ = saved.value(textpresets::bookKey).toString().left(64);
     } else {
         const auto choice = textpresets::newBookChoice(preferences);

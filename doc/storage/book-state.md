@@ -21,8 +21,8 @@ Each book has one record in `kobalt.sqlite`: `book_state(identity, format, revis
 ## Mark as unread and reopening
 
 - When Nickel marks a book as unread, Kobalt keeps the book identity and the fields listed below.
-- It clears the reading position, book-specific text preferences, `page_estimate` and `suppress_finish_prompt`.
-- It keeps annotations, `hide_book_on_sleep_screen`, `sleep_positions` and `main_text_marks` (with `fingerprint`). When a named preset is selected for new books, the reopened book uses that preset even if it has saved main-text marks.
+- It removes only reading progress: the position and imported native location, page and chapter fields, percentages, `finished_position`, `suppress_finish_prompt`, `nickel_progress`, `sync_pending` and the native write-back fields.
+- It keeps everything else: book-specific text preferences and `text_preset`, `dictionary_id`, `image_views`, annotations, `hide_book_on_sleep_screen`, `sleep_positions`, `main_text_marks` (with `fingerprint`) and `page_estimate`. The reopened book keeps its own settings.
 - Reopening a finished book resets only the reading position and the finished status. Book-specific preferences and annotations stay.
 
 ## Optional fields

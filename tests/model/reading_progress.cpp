@@ -178,8 +178,10 @@ int main(int argc, char **argv)
     // Mark unread can clear the date instead of supplying a newer timestamp.
     unread.modified = 0;
     auto reset = checkpoint;
-    require(resetNativeUnread(reset, unread) && reset == QJsonObject({ { "book", first.book } }),
-            "Nickel's unread status did not reset book settings and position");
+    // Unread resets the position and keeps the book's settings.
+    require(resetNativeUnread(reset, unread)
+                    && reset == QJsonObject({ { "book", first.book }, { "font_pixels", 42 } }),
+            "Nickel's unread status did not reset the position, or reset book settings");
     reset = {};
     auto unreadWithBookmark = unread;
     unreadWithBookmark.location = first.location;

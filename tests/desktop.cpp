@@ -3470,6 +3470,12 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
         QVERIFY(scene("settings-restore-presets"));
         QVERIFY(fixture.press("rrKeepPresets"));
         QTRY_VERIFY(!fixture.visible("rrRestorePresetsConfirmation"));
+        QVERIFY(revealSettingsOption(fixture, "rrRestoreBookDefaults"));
+        QVERIFY(fixture.press("rrRestoreBookDefaults"));
+        QTRY_VERIFY(fixture.visible("rrRestoreBookConfirmation"));
+        QVERIFY(scene("settings-restore-book"));
+        QVERIFY(fixture.press("rrKeepBookDefaults"));
+        QTRY_VERIFY(!fixture.visible("rrRestoreBookConfirmation"));
         QVERIFY(fixture.press("rrSettingsSystem"));
         QVERIFY(revealSettingsOption(fixture, "rrTimeRemainingFormat"));
         QVERIFY(fixture.press("rrTimeRemainingFormat"));

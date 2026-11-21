@@ -315,6 +315,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "settings-controls", "Controls settings" },
         { "settings-defaults", "Default settings" },
         { "settings-restore-presets", "Restore default presets" },
+        { "settings-restore-book", "Restore book defaults" },
         { "settings-display", "Display settings" },
         { "settings-columns", "Column settings" },
         { "settings-animations-supported", "Page animations on MTK" },

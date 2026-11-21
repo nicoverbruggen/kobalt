@@ -2321,6 +2321,7 @@ void chapterGroups(Fixture &fixture, const QString &name = {})
     QVERIFY(fixture.press("rrChapterGroups"));
     QTRY_VERIFY(fixture.visible("rrChapterGroupsPopup"));
     QVERIFY(fixture.press("rrChapterGroups_current"));
+    QTRY_VERIFY(!fixture.visible("rrChapterGroupsPopup"));
     QVERIFY(fixture.press("rrSettingsClose"));
     QTRY_VERIFY(!fixture.visible("rrControlsTop"));
     QVERIFY(fixture.press("rrPage"));
@@ -2333,6 +2334,7 @@ void chapterGroups(Fixture &fixture, const QString &name = {})
     QVERIFY(fixture.press("rrChapterGroups"));
     QTRY_VERIFY(fixture.visible("rrChapterGroupsPopup"));
     QVERIFY(fixture.press("rrChapterGroups_off"));
+    QTRY_VERIFY(!fixture.visible("rrChapterGroupsPopup"));
     QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("chapter_groups").toString(),
                  QString("off"));
     QVERIFY(fixture.press("rrSettingsClose"));
@@ -5648,6 +5650,8 @@ private slots:
         QVERIFY(fixture.press("rrNavigation_taps_only"));
         QTRY_VERIFY(!fixture.widget("rrPageNavigationPopup"));
         QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings")
+                    && !fixture.state().value("busy").toBool());
         if (fixture.visible("rrControlsTop"))
             QVERIFY(fixture.press("rrPage"));
         swipe(true, 0);
@@ -5656,10 +5660,13 @@ private slots:
         QVERIFY(fixture.press("rrSettingsControls"));
         QVERIFY(fixture.press("rrPageNavigation"));
         QVERIFY(fixture.press("rrReverseSwipeDirection"));
+        QTRY_VERIFY(fixture.widget("rrGeneralSettings")->isEnabled());
         QVERIFY(fixture.widget("rrNavigation_taps_only")->property("checked").toBool());
         QVERIFY(fixture.press("rrNavigation_swipes_only"));
         QTRY_VERIFY(!fixture.widget("rrPageNavigationPopup"));
         QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings")
+                    && !fixture.state().value("busy").toBool());
         if (fixture.visible("rrControlsTop"))
             QVERIFY(fixture.press("rrPage"));
         swipe(true, rtl != !reversed ? -1 : 1);
@@ -12711,6 +12718,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(fixture.press("rrPageNavigation"));
             QTRY_VERIFY(fixture.visible("rrNavigation_swipes_only"));
             QVERIFY(fixture.press("rrNavigation_swipes_only"));
+            QTRY_VERIFY(!fixture.visible("rrPageNavigationPopup"));
             QVERIFY(fixture.press("rrSettingsClose"));
             QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
             QTRY_COMPARE(storage::readJson(fixture.paths.preferences())
@@ -12785,6 +12793,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrPageNavigation"));
         QTRY_VERIFY(fixture.visible("rrNavigation_taps_and_swipes"));
         QVERIFY(fixture.press("rrNavigation_taps_and_swipes"));
+        QTRY_VERIFY(!fixture.visible("rrPageNavigationPopup"));
         QVERIFY(fixture.press("rrSettingsClose"));
         QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
         if (fixture.visible("rrControlsTop"))
@@ -14339,7 +14348,11 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrNavLayout"));
         QTRY_VERIFY(fixture.visible("rrHeaderFooter"));
         QVERIFY(fixture.press("rrNavLayout"));
-        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(!fixture.visible("rrHeaderFooter")
+                    && !fixture.state().value("busy").toBool());
+        if (fixture.visible("rrControlsTop"))
+            QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(!fixture.visible("rrControlsTop"));
         QVERIFY(fixture.turnPage(1));
     }
 
@@ -17209,7 +17222,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(fixture.press("rrPageAnimations"));
             QCOMPARE(row->isChecked(), style == pageTurn::Style::Sweep);
             QVERIFY(fixture.press("rrSettingsClose"));
-            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            QTRY_VERIFY(!fixture.visible("rrGeneralSettings")
+                        && !fixture.state().value("busy").toBool());
             QTRY_COMPARE(storage::readJson(fixture.paths.preferences())
                                  .value(pageTurn::preferenceKey)
                                  .toString(),
@@ -19974,6 +19988,8 @@ private slots:
             return;
         QVERIFY(scene("rrSettings", "rrGeneralSettings", "settings"));
         QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings")
+                    && !fixture.state().value("busy").toBool());
         if (!fixture.visible("rrBookmarks"))
             QVERIFY(fixture.press("rrPage"));
         QVERIFY(scene("rrBookmarks", "rrBookmarkList", "bookmarks"));

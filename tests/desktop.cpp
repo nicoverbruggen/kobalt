@@ -9101,14 +9101,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             }
         };
 
+        SwitchingDictionary *provider = nullptr;
         Fixture fixture(dark, false, false, true, false, false,
-                        [switchDictionary](ReaderHostServices &services) {
-                            if (switchDictionary)
-                                services.dictionary = [] {
-                                    return std::make_unique<SwitchingDictionary>();
+                        [switchDictionary, &provider](ReaderHostServices &services) {
+                            if (switchDictionary) {
+                                services.dictionary = [&provider] {
+                                    auto result = std::make_unique<SwitchingDictionary>();
+                                    provider = result.get();
+                                    return result;
                                 };
-                            else
+                            } else {
                                 defineEveryWord(services);
+                            }
                         });
         QVERIFY(fixture.prepared);
         if (switchDictionary) {
@@ -9138,9 +9142,48 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         if (!disabled)
             QTRY_COMPARE(save->isChecked(), !switchDictionary);
         if (switchDictionary) {
+            QVERIFY(provider);
+            auto *selector = fixture.widget("rrDictionarySelect");
+            QVERIFY(selector);
+            QCOMPARE(selector->toolTip(), QString("fixture"));
+            const auto database = fixture.paths.database();
+            const auto permissions = QFile::permissions(database);
+            QTRY_VERIFY(!fixture.window.readerWindow()->pendingStorageSave());
+            storage::closeProfile();
+            QVERIFY(QFile::setPermissions(database, QFileDevice::ReadOwner));
+            {
+                auto restore = qScopeGuard([&] {
+                    storage::closeProfile();
+                    QFile::setPermissions(database, permissions);
+                });
+                QVERIFY(fixture.press("rrDictionarySelect"));
+                QTRY_VERIFY(fixture.visible("rrDictionaryChoice1"));
+                QVERIFY(fixture.press("rrDictionaryChoice1"));
+                QTRY_VERIFY(fixture.visible("rrSettingsWriteErrorConfirm"));
+                QCOMPARE(provider->selected, QString("fixture"));
+                QCOMPARE(selector->toolTip(), QString("fixture"));
+                QVERIFY(fixture.press("rrSettingsWriteErrorConfirm"));
+                QTRY_VERIFY(!fixture.visible("rrSettingsWriteErrorConfirm"));
+            }
             QVERIFY(fixture.press("rrDictionarySelect"));
             QTRY_VERIFY(fixture.visible("rrDictionaryChoice1"));
+            QSemaphore entered, release;
+            std::atomic_bool writerTimedOut{ false };
+            storage::RecordWriter blocker;
+            const auto unblock = qScopeGuard([&] { release.release(); });
+            blocker.post(
+                    [&] {
+                        entered.release();
+                        writerTimedOut = !release.tryAcquire(1, 3000);
+                        return true;
+                    },
+                    {});
+            QVERIFY(entered.tryAcquire(1, 3000));
             QVERIFY(fixture.press("rrDictionaryChoice1"));
+            QVERIFY2(!writerTimedOut, "Selecting a dictionary waited for the profile writer");
+            QCOMPARE(selector->toolTip(), QString("fixture"));
+            release.release();
+            QTRY_COMPARE(selector->toolTip(), QString("alternate"));
             QTRY_VERIFY(!fixture.visible("rrDictionaryChoices"));
             QVERIFY(fixture.press("rrDictionarySave"));
             QTRY_VERIFY(fixture.visible("rrWordNotice"));

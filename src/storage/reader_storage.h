@@ -56,6 +56,14 @@ bool writeRecord(const QString &directory, const QString &name, const QString &l
 JsonRead readBookState(const Paths &, const QString &identity, const QString &legacy = {});
 bool writeBookState(const Paths &, const QString &identity, const QJsonObject &,
                     const QString &legacy = {});
+// Reading checkpoints preserve the stored dictionary choice, even when a
+// snapshot was taken before that choice was saved.
+bool writeBookCheckpoint(const Paths &, const QString &identity, const QJsonObject &,
+                         const QString &legacy = {});
+// Update only the dictionary field if a book already has saved state. On the
+// first save, the supplied checkpoint establishes the book's initial state.
+bool writeBookDictionaryChoice(const Paths &, const QString &identity, const QJsonObject &,
+                               const QString &legacy = {});
 // Commit one immutable reading snapshot. Roll back all members and legacy
 // imports together if any member fails.
 bool writeReadingActivity(const Paths &, const QString &identity, const QJsonObject &book,

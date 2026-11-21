@@ -520,18 +520,34 @@ void Reader::buildReadingPage()
     dictionaryPanel->chosen = [this](const QString &id) {
         if (lifecycleHidden || services.suspended() || closing)
             return;
-        kobalt::DictionaryResult result;
+        const auto previous = dictionaryPanel->shownDictionary();
         QString error;
-        if (dictionary->select(book->identity(), id, &error)) {
-            result = dictionary->lookup(book->identity(), lookupText);
-            if (!book->saveDictionaryChoice(id))
-                result.error = strings::get("reader.could_not_save_reader_settings");
-        } else
+        if (!dictionary->select(book->identity(), id, &error)) {
+            kobalt::DictionaryResult result;
             result.error = error;
-        dictionaryPanel->setChoices(dictionary->choices());
-        dictionaryPanel->setBookFont(bookFace());
-        dictionaryPanel->open(lookupText, result, lookupBounds);
-        recordLookup(lookupText, result);
+            dictionaryPanel->setChoices(dictionary->choices());
+            dictionaryPanel->open(lookupText, result, lookupBounds);
+            return;
+        }
+        dictionaryPanel->setEnabled(false);
+        book->saveDictionaryChoice(id, [this, previous](bool saved) {
+            dictionaryPanel->setEnabled(true);
+            if (!saved) {
+                if (!previous.isEmpty()) {
+                    QString ignored;
+                    dictionary->select(book->identity(), previous, &ignored);
+                }
+                showSettingsWriteError();
+                return;
+            }
+            if (!dictionaryPanel->isVisible() || lifecycleHidden || closing)
+                return;
+            const auto result = dictionary->lookup(book->identity(), lookupText);
+            dictionaryPanel->setChoices(dictionary->choices());
+            dictionaryPanel->setBookFont(bookFace());
+            dictionaryPanel->open(lookupText, result, lookupBounds);
+            recordLookup(lookupText, result);
+        });
     };
     linkPanel = new kobalt::LinkPanel(this);
     linkPanel->dismissed = [this] {

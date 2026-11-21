@@ -233,6 +233,24 @@ int main(int argc, char **argv)
     write(paths.bookState(identity), original);
     require(storage::readBookState(paths, identity).object == edited,
             "Stale JSON replaced a newer checkpoint");
+    auto choice = edited;
+    choice["position"] = "/stale";
+    choice["dictionary_id"] = "chosen";
+    require(storage::writeBookDictionaryChoice(paths, identity, choice),
+            "Save a dictionary choice");
+    auto selected = edited;
+    selected["dictionary_id"] = "chosen";
+    require(storage::readBookState(paths, identity).object == selected,
+            "Dictionary choice replaced the reading position");
+    require(storage::writeBookCheckpoint(paths, identity, edited)
+                    && storage::writeReadingActivity(paths, identity, edited, {}, {}),
+            "Save reading snapshots that predate the dictionary choice");
+    require(storage::readBookState(paths, identity).object == selected,
+            "A stale position snapshot replaced the selected dictionary");
+    require(storage::writeBookDictionaryChoice(paths, identity, edited)
+                    && storage::writeBookCheckpoint(paths, identity, selected)
+                    && storage::readBookState(paths, identity).object == edited,
+            "A stale position snapshot restored a cleared dictionary choice");
     require(storage::writeBookState(paths, identity, qt::object({ { "book", identity } }))
                     && storage::readBookState(paths, identity).object
                             == qt::object({ { "book", identity } }),

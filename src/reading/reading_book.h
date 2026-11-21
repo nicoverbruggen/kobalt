@@ -200,7 +200,7 @@ public:
 
     void setTextPreset(const QString &id) { textPreset_ = id; }
 
-    bool saveDictionaryChoice(const QString &id);
+    void saveDictionaryChoice(const QString &id, std::function<void(bool)> done);
     QJsonObject imageView(const QString &id) const;
     // Memory only. The caller can queue the existing background checkpoint.
     bool rememberImageView(const QString &id, const QJsonObject &view);
@@ -280,11 +280,12 @@ private:
     // A writer holds one waiting write, so each record has its own: a speed
     // record must not replace a waiting position. The destructor resets both
     // after their last writes have finished.
-    std::unique_ptr<storage::RecordWriter> writer, speedWriter;
+    std::unique_ptr<storage::RecordWriter> writer, speedWriter, dictionaryWriter;
     std::shared_ptr<ReadingBook *> alive = std::make_shared<ReadingBook *>(this);
     // Waits for the reading history's write when a close checkpoint ends.
     SaveWait saveWait;
     QString dictionaryChoice_;
+    bool dictionaryChoicePending = false;
     QString textPreset_;
 };
 } // namespace kobalt

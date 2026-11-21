@@ -150,6 +150,7 @@ ReadingBook::~ReadingBook()
     appearanceWriter.reset();
     writer.reset();
     speedWriter.reset();
+    dictionaryWriter.reset();
 }
 
 bool ReadingBook::discardQueuedWrites()
@@ -158,7 +159,8 @@ bool ReadingBook::discardQueuedWrites()
     deferredCheckpointEpoch = 0;
     deferredCloses.clear();
     bool idle = !history || history->discardQueuedWrites();
-    for (const auto *slot : { &writer, &activityWriter, &appearanceWriter, &speedWriter }) {
+    for (const auto *slot : { &writer, &activityWriter, &appearanceWriter, &speedWriter,
+                              &dictionaryWriter }) {
         if (*slot && !(*slot)->discardQueued())
             idle = false;
     }
@@ -167,7 +169,8 @@ bool ReadingBook::discardQueuedWrites()
 
 bool ReadingBook::savesPending() const
 {
-    return activityPending || appearancePending || deferredCheckpointEpoch
+    return activityPending || appearancePending || dictionaryChoicePending
+            || deferredCheckpointEpoch
             || !deferredCloses.isEmpty() || (activityWriter && !activityWriter->idle())
             || (appearanceWriter && !appearanceWriter->idle()) || closeCheckpointPending
             || !pendingCheckpoint.isEmpty() || (writer && !writer->idle())
@@ -885,17 +888,51 @@ NativeSaveResult ReadingBook::nativeSaveResult() const
     return nativeWriteback;
 }
 
-bool ReadingBook::saveDictionaryChoice(const QString &id)
+void ReadingBook::saveDictionaryChoice(const QString &id, std::function<void(bool)> done)
 {
-    // Known exception: like a settings change, the choice waits for its write.
-    mainthread::AllowBlocking allow("settings write");
-    const auto previous = dictionaryChoice_;
-    dictionaryChoice_ = id;
-    QJsonObject snapshot;
-    if (checkpoint(&snapshot))
-        return true;
-    dictionaryChoice_ = previous;
-    return false;
+    if (discardSaves || dictionaryChoicePending) {
+        done(false);
+        return;
+    }
+    if (id == dictionaryChoice_) {
+        done(true);
+        return;
+    }
+    auto checkpoint = persistedCheckpoint(checkpointState());
+    for (const auto *key : appearance::layoutKeys)
+        checkpoint.remove(key);
+    for (const auto *key : appearance::marginKeys)
+        checkpoint.remove(key);
+    if (id.isEmpty())
+        checkpoint.remove("dictionary_id");
+    else
+        checkpoint["dictionary_id"] = id;
+    if (!dictionaryWriter)
+        dictionaryWriter = std::make_unique<storage::RecordWriter>();
+    dictionaryChoicePending = true;
+    std::weak_ptr<ReadingBook *> guard = alive;
+    dictionaryWriter->post(
+            [paths = paths_, identity = identity_, checkpoint, path = statePath] {
+                return storage::writeBookDictionaryChoice(paths, identity, checkpoint, path);
+            },
+            [guard, id, done = std::move(done)](bool saved) {
+                qt::invoke(
+                        QCoreApplication::instance(),
+                        [guard, id, done, saved] {
+                            const auto owner = guard.lock();
+                            if (!owner)
+                                return;
+                            auto *book = *owner;
+                            book->dictionaryChoicePending = false;
+                            saves::settled();
+                            if (book->discardSaves)
+                                return;
+                            if (saved)
+                                book->dictionaryChoice_ = id;
+                            done(saved);
+                        },
+                        Qt::QueuedConnection);
+            });
 }
 
 QJsonObject ReadingBook::imageView(const QString &id) const
@@ -1104,7 +1141,7 @@ bool ReadingBook::checkpoint(QJsonObject *snapshot, bool background, quint64 epo
                     // The next synced commit or lifecycle checkpoint makes this
                     // explicit progress choice durable.
                     storage::RoutineWrites routine;
-                    return storage::writeBookState(paths, identity, persisted, path);
+                    return storage::writeBookCheckpoint(paths, identity, persisted, path);
                 },
                 [guard, request, epoch](bool saved) {
                     kobalt::qt::invoke(

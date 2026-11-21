@@ -14,7 +14,7 @@ Each book has one record in `kobalt.sqlite`: `book_state(identity, format, revis
 - Saves go through the background checkpoint writer.
 - An unchanged checkpoint does not write its row.
 - A changed checkpoint replaces only that book's object and increments `revision` in the same transaction. The revision counts changes. It is not a stale-writer check in the current checkpoint API.
-- A changed checkpoint keeps extra fields of the supported record loaded at opening and replaces the fields the reader owns. Clearing a dictionary choice removes its field.
+- A changed checkpoint keeps extra fields of the supported record loaded at opening and replaces the fields the reader owns. It keeps the dictionary choice already in storage, even if the snapshot was taken before a later choice was saved. Changing a dictionary choice updates only its field in an existing record. Clearing the choice removes the field, as does a native unread reset.
 - Display and session values are not saved: chapter titles, page counts, current and next page numbers, the resolved display font, cached-page counts, Fast source-word counts, estimated bookmark and highlight page labels, and the loaded slice start. The next save removes them from older records. Diagnostic snapshots still include them.
 - Older annotations without a chapter label get a display label from their position. The record is not rewritten.
 

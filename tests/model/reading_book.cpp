@@ -1051,7 +1051,12 @@ int main(int argc, char **argv)
                     "Beautifier must default off");
             require(book.session()->setBookBeautifier(true), "Cannot enable beautifier");
             waitUntil([&] { return !book.session()->busy(); });
-            require(book.saveDictionaryChoice({}), "Cannot clear an imported dictionary choice");
+            bool dictionarySaved = false;
+            book.saveDictionaryChoice({}, [&](bool saved) {
+                require(saved, "Cannot clear an imported dictionary choice");
+                dictionarySaved = true;
+            });
+            waitUntil([&] { return dictionarySaved; });
             QJsonObject snapshot;
             require(book.checkpoint(&snapshot), "Cannot save imported checkpoint fields");
             auto saved = storage::readBookState(paths, identity).object;
@@ -1202,7 +1207,21 @@ int main(int argc, char **argv)
                                   QThread::msleep(10);
                               return QDateTime::currentMSecsSinceEpoch();
                           });
-        require(local.saveDictionaryChoice("test-dictionary"), "Cannot save dictionary choice");
+        bool dictionarySaved = false;
+        local.saveDictionaryChoice("test-dictionary", [&](bool saved) {
+            require(saved, "Cannot save dictionary choice");
+            dictionarySaved = true;
+        });
+        // A snapshot can capture the old choice before the writer replies.
+        QJsonObject pendingDictionarySnapshot;
+        require(local.checkpoint(&pendingDictionarySnapshot, true),
+                "Cannot queue a checkpoint behind the dictionary write");
+        require(!pendingDictionarySnapshot.contains("dictionary_id"),
+                "An unacknowledged dictionary choice entered the checkpoint");
+        waitUntil([&] { return dictionarySaved && !local.savesPending(); });
+        require(storage::readBookState(paths, "local-id").object.value("dictionary_id")
+                        == "test-dictionary",
+                "A queued checkpoint replaced a later dictionary choice");
         QJsonObject layoutSnapshot;
         require(local.checkpoint(&layoutSnapshot), "Cannot checkpoint book layout");
         const auto savedLayout = storage::readBookState(paths, "local-id").object;

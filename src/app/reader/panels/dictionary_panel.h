@@ -28,6 +28,7 @@ public:
     QWidget *saveActionButton() const;
     std::function<void(bool)> saveToggled;
     void setChoices(QVector<DictionaryChoice> values);
+    const QString &shownDictionary() const { return currentId; }
     void setLanguage(const QString &language);
     // The resolved book face supplies the header and default definition text.
     void setBookFont(const QString &family);

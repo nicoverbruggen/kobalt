@@ -6,6 +6,7 @@
 #include "preview_store.h"
 #include "bookmark_store.h"
 #include "reading/appearance_settings.h"
+#include "reading/reading_progress.h"
 #include "reading/sleep_screen.h"
 #include "support/diagnostics.h"
 #include <QDir>
@@ -222,9 +223,12 @@ void archiveSource(const QString &directory, const QString &source, const QByteA
     }
 }
 
+enum class BookStateEdit { Replace, KeepDictionary, DictionaryChoice };
+
 bool recordTransaction(const QString &directory, const QString &name, const QString &legacy,
                        qint64 maxBytes, JsonRead *read, const QJsonObject *replacement,
-                       QSqlDatabase *database = nullptr)
+                       QSqlDatabase *database = nullptr,
+                       BookStateEdit edit = BookStateEdit::Replace)
 {
     if (directory.isEmpty() || name.isEmpty() || maxBytes < 0) {
         read->status = ReadStatus::Invalid;
@@ -321,10 +325,32 @@ bool recordTransaction(const QString &directory, const QString &name, const QStr
                     return false;
             }
         }
-        if (replacement && (!exists || *replacement != object)
-            && !putDocument(db, name, *replacement, exists))
-            return false;
-        read->object = replacement ? *replacement : object;
+        if (replacement) {
+            auto reset = object;
+            const bool keepExisting = exists && edit != BookStateEdit::Replace
+                    && !resetNativeUnread(reset, ReadingProgress::fromJson(
+                                                       replacement->value("nickel_progress").toObject()));
+            // An explicit unread reset replaces the old record. A dictionary
+            // selection after that reset can establish the first new checkpoint.
+            auto next = edit == BookStateEdit::DictionaryChoice && keepExisting ? object
+                                                                                 : *replacement;
+            if (keepExisting) {
+                const auto &source = edit == BookStateEdit::KeepDictionary ? object : *replacement;
+                const auto choice = source.value("dictionary_id");
+                if (choice != next.value("dictionary_id")) {
+                    if (choice.isUndefined())
+                        next.remove("dictionary_id");
+                    else
+                        next["dictionary_id"] = choice;
+                    if (QJsonDocument(next).toJson(QJsonDocument::Compact).size() > maxBytes)
+                        return false;
+                }
+            }
+            if ((!exists || next != object) && !putDocument(db, name, next, exists))
+                return false;
+            object = std::move(next);
+        }
+        read->object = std::move(object);
         read->status = exists || replacement || !importedDigest.isEmpty() ? ReadStatus::Ok
                                                                           : ReadStatus::Missing;
         return true;
@@ -395,6 +421,33 @@ bool writeBookState(const Paths &paths, const QString &identity, const QJsonObje
                            legacy.isEmpty() ? paths.bookState(identity) : legacy, value);
 }
 
+namespace {
+bool writeBookEdit(const Paths &paths, const QString &identity, const QJsonObject &book,
+                   const QString &legacy, BookStateEdit edit)
+{
+    if (book.value("book").toString() != identity
+        || (book.contains("schema") && book.value("schema").toDouble(-1) != 1)
+        || QJsonDocument(book).toJson(QJsonDocument::Compact).size() > maxJsonBytes)
+        return false;
+    JsonRead result;
+    return recordTransaction(paths.directory, "book:" + identity,
+                             legacy.isEmpty() ? paths.bookState(identity) : legacy, maxJsonBytes,
+                             &result, &book, nullptr, edit);
+}
+} // namespace
+
+bool writeBookCheckpoint(const Paths &paths, const QString &identity, const QJsonObject &book,
+                         const QString &legacy)
+{
+    return writeBookEdit(paths, identity, book, legacy, BookStateEdit::KeepDictionary);
+}
+
+bool writeBookDictionaryChoice(const Paths &paths, const QString &identity, const QJsonObject &book,
+                               const QString &legacy)
+{
+    return writeBookEdit(paths, identity, book, legacy, BookStateEdit::DictionaryChoice);
+}
+
 bool writeReadingActivity(const Paths &paths, const QString &identity, const QJsonObject &book,
                           const QJsonObject &speed,
                           const std::function<bool(QSqlDatabase &)> &history, const QString &legacy)
@@ -409,7 +462,7 @@ bool writeReadingActivity(const Paths &paths, const QString &identity, const QJs
         JsonRead result;
         if (!recordTransaction(paths.directory, "book:" + identity,
                                legacy.isEmpty() ? paths.bookState(identity) : legacy, maxJsonBytes,
-                               &result, &book, &db))
+                               &result, &book, &db, BookStateEdit::KeepDictionary))
             return false;
         if (!speed.isEmpty()
             && !recordTransaction(paths.directory, "reading-speed", paths.readingSpeed(),

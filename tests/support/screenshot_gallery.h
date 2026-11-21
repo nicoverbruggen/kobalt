@@ -90,6 +90,7 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "about", "About Kobalt" },
         { "viewport-transition", "Page layout placeholders" },
         { "shutdown-notice", "Shutting down" },
+        { "interface-font-limit", "Main typeface: font too large" },
         { "kosync-login-feedback", "Sync sign in: idle" },
         { "kosync-login-feedback-pressed", "Sync sign in: pressed" },
         { "kosync-login-feedback-released", "Sync sign in: released" },

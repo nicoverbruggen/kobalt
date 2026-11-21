@@ -19269,6 +19269,52 @@ private slots:
         QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-viewport-transition"));
     }
 
+    void interfaceFontLimit_data() { screenshotVariants(); }
+
+    void interfaceFontLimit()
+    {
+        QFETCH(int, preset);
+        QFETCH(bool, dark);
+        QTemporaryDir fonts;
+        QVERIFY(fonts.isValid());
+        const auto source = assets->file("fonts/ebook-core/NV_Bitter-Regular.ttf");
+        const auto large = fonts.filePath("KF_Bigger.ttf");
+        QVERIFY(test::renamedFontFixture(source, large, "NV Bitter", "KF Bigger"));
+        QFile file(large);
+        QVERIFY(file.open(QIODevice::Append));
+        QCOMPARE(file.write(QByteArray(int(interfaceFontByteLimit), '\0')),
+                 qint64(interfaceFontByteLimit));
+        file.close();
+        Fixture fixture(dark, false, false, true, false, false, {}, fonts.path());
+        QVERIFY(fixture.prepared);
+        selectPreview(fixture, preset);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrTheming"));
+        QVERIFY(fixture.press("rrTheming"));
+        QVERIFY(fixture.press("rrThemePreset"));
+        QVERIFY(fixture.press("rrTheme_custom"));
+        QVERIFY(revealSettingsOption(fixture, "rrUiFont"));
+        QVERIFY(fixture.press("rrUiFont"));
+        QTRY_VERIFY(fixture.visible("rrSettingsFontPopup"));
+        // Page to the disabled custom font, so the capture shows its reason.
+        for (int page = 0; page < 10; ++page) {
+            bool shown = false;
+            for (auto *option : static_cast<ui::RadioList *>(fixture.widget("rrSettingsFontChoices"))
+                                        ->options())
+                shown |= option->isVisible() && !option->isEnabled();
+            if (shown || !fixture.visible("rrSettingsFontNext")
+                || !fixture.press("rrSettingsFontNext"))
+                break;
+        }
+        QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-interface-font-limit"));
+    }
+
     void shutdownNotice_data() { screenshotVariants(); }
 
     void shutdownNotice()

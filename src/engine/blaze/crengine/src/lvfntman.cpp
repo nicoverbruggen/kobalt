@@ -6038,7 +6038,10 @@ public:
 };
 
 /// Synthesises small-caps by routing lowercase characters to uppercase glyphs
-/// in a smaller font instance (~75% of the normal size).
+/// in a smaller font instance (~75% of the normal size). For all-small-caps in
+/// a font with 'smcp' but no 'c2sc', uppercase characters are routed to their
+/// lowercase counterparts in the same font, whose native 'smcp' then turns them
+/// into small caps.
 class LVFontSmallCapsTransform : public LVFontProxy
 {
     LVFontRef  _smallRef;  // keeps the small font alive
@@ -6048,6 +6051,9 @@ class LVFontSmallCapsTransform : public LVFontProxy
 
     static lChar32 toUppercase(lChar32 ch) {
         lChar32 buf[1] = { ch }; lStr_uppercase(buf, 1); return buf[0];
+    }
+    static lChar32 toLowercase(lChar32 ch) {
+        lChar32 buf[1] = { ch }; lStr_lowercase(buf, 1); return buf[0];
     }
     static bool isLowercase(lChar32 ch) {
         return (lGetCharProps(ch) & CH_PROP_LOWER) != 0;
@@ -6063,6 +6069,16 @@ class LVFontSmallCapsTransform : public LVFontProxy
             if (_nativeCaps && _nativeCaps->hasNativeCaps(ch, lang,
                     lower ? LFNT_OT_FEATURES_P_SMCP : LFNT_OT_FEATURES_P_C2SC))
                 return;
+            // Blaze: the same idea as upstream's FOLD_UPPER mode, checked for each
+            // character's script and language: a capital without 'c2sc' becomes its
+            // lowercase letter when 'smcp' covers that letter.
+            if (!lower && _nativeCaps) {
+                const auto folded = toLowercase(ch);
+                if (folded != ch && _nativeCaps->hasNativeCaps(folded, lang, LFNT_OT_FEATURES_P_SMCP)) {
+                    mapped = folded;
+                    return;
+                }
+            }
             const auto upper = lower ? toUppercase(ch) : ch;
             // Blaze: Leave missing characters to normal fallback at their original size and case.
             // Upstream always mapped lowercase to uppercase in the small font.
@@ -6086,8 +6102,8 @@ class LVFontSmallCapsTransform : public LVFontProxy
               widths(new lUInt16[len]), flags(new lUInt8[len]) {}
         ~MappedRun() { delete[] font; delete[] mapped; delete[] widths; delete[] flags; }
     };
-    // Blaze: returns false when no character uses the small font. The callers then
-    // measure or draw the whole run with the normal font.
+    // Blaze: returns false when no character uses the small font or a folded
+    // capital. The callers then measure or draw the whole run with the normal font.
     bool fillMappedRun(const lChar32 * text, int len, MappedRun & run, TextLangCfg *lang) const {
         bool synthetic = false;
         for (int i = 0; i < len; i++) {
@@ -6104,7 +6120,7 @@ class LVFontSmallCapsTransform : public LVFontProxy
                 }
             }
 #endif
-            synthetic |= run.font[i] == _smallFont;
+            synthetic |= run.font[i] == _smallFont || run.mapped[i] != text[i];
         }
         return synthetic;
     }

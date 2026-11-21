@@ -2,8 +2,10 @@
 #include "reader_inputs.h"
 #include "engine/blaze/adapter/engine_document.h"
 
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QTemporaryDir>
 
 #include <lvfntman.h>
 #include <lvdrawbuf.h>
@@ -24,6 +26,26 @@ std::vector<lUInt32> shapedPixels(LVFontRef font, const lString32 &text)
         for (int x = 0; x < buffer.GetWidth(); ++x)
             pixels.push_back(buffer.GetPixel(x, y));
     return pixels;
+}
+
+// Renames a feature in the GSUB feature list, so that a test can remove one feature from a font.
+QByteArray renameGsubFeature(QByteArray font, const QByteArray &from, const QByteArray &to)
+{
+    const auto u16 = [&font](int at) { return (quint8(font[at]) << 8) | quint8(font[at + 1]); };
+    const auto u32 = [&u16](int at) { return (quint32(u16(at)) << 16) | quint32(u16(at + 2)); };
+    for (int table = 0; table < u16(4); ++table) {
+        const int record = 12 + 16 * table;
+        if (font.mid(record, 4) != "GSUB")
+            continue;
+        const int gsub = int(u32(record + 8));
+        const int features = gsub + u16(gsub + 6);
+        for (int index = 0; index < u16(features); ++index) {
+            const int tag = features + 2 + 6 * index;
+            if (font.mid(tag, 4) == from)
+                font.replace(tag, 4, to);
+        }
+    }
+    return font;
 }
 
 void embeddedSmallCaps()
@@ -85,6 +107,37 @@ void embeddedSmallCaps()
             "A combining accent lost its synthetic small-cap base");
     require(shapedPixels(mixed, lString32(U"book")) != shapedPixels(reduced, lString32(U"BOOK")),
             "Latin small caps were synthesized in a font with native Latin substitutions");
+
+    // All small caps in a font with 'smcp' but no 'c2sc' use the font's own small caps.
+    QTemporaryDir patched;
+    require(patched.isValid(), "Cannot create the patched font folder");
+    QFile source(kobalt::test::readerAssets().file("fonts/NotoSerif-Regular.ttf"));
+    require(source.open(QIODevice::ReadOnly), "Cannot read the native small-caps font");
+    const auto withoutC2sc = renameGsubFeature(source.readAll(), "c2sc", "c2sx");
+    QFile target(patched.filePath("NoC2sc.ttf"));
+    require(target.open(QIODevice::WriteOnly) && target.write(withoutC2sc) == withoutC2sc.size(),
+            "Cannot write the patched font");
+    target.close();
+    const auto patchedFonts = LVOpenDirectory(lString8(patched.path().toUtf8().constData()));
+    const lString8 smcpOnlyFamily("Small caps without c2sc");
+    require(fontMan->RegisterDocumentFont(document, patchedFonts, lString32(U"NoC2sc.ttf"),
+                                          smcpOnlyFamily, 400, css_fwd_normal, false, fragment),
+            "Cannot register the font without c2sc");
+    const auto allCaps =
+            fontMan->GetFont(64, 400, false, css_ff_serif, smcpOnlyFamily, LFNT_OT_FEATURES_P_C2SC,
+                             document, false, nullptr, fragment);
+    const auto smcpOnly =
+            fontMan->GetFont(64, 400, false, css_ff_serif, smcpOnlyFamily, LFNT_OT_FEATURES_P_SMCP,
+                             document, false, nullptr, fragment);
+    const auto smcpPlain = fontMan->GetFont(64, 400, false, css_ff_serif, smcpOnlyFamily, 0,
+                                            document, false, nullptr, fragment);
+    require(!allCaps.isNull() && !smcpOnly.isNull() && !smcpPlain.isNull(),
+            "Cannot load the font without c2sc");
+    const auto folded = shapedPixels(allCaps, lString32(U"BOOK"));
+    require(folded != shapedPixels(smcpPlain, lString32(U"BOOK")),
+            "All small caps left capitals at full size");
+    require(folded == shapedPixels(smcpOnly, lString32(U"book")),
+            "All small caps did not use the font's own small caps");
     fontMan->UnregisterDocumentFonts(document);
 }
 } // namespace

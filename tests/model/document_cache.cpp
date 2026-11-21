@@ -268,7 +268,10 @@ int main(int argc, char **argv)
                         != kobalt::documentCacheChecksum(policy, 1, 16),
                 "A cache created before landmark and printed-page parsing still matches");
         require(kobalt::documentCacheChecksum(policy, 1)
-                        == kobalt::documentCacheChecksum(policy, 1, 17),
+                        != kobalt::documentCacheChecksum(policy, 1, 17),
+                "A cache created before the raw style and script parsing fix still matches");
+        require(kobalt::documentCacheChecksum(policy, 1)
+                        == kobalt::documentCacheChecksum(policy, 1, 18),
                 "The document cache did not use its declared format version");
         require(kobalt::documentCacheChecksum(policy, 1, 16)
                         != kobalt::documentCacheChecksum(policy, 1, 15),

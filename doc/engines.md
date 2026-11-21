@@ -64,6 +64,6 @@ Nickel's event thread runs with idle priority (`SCHED_IDLE`). While Kobalt keeps
 
 ## Engines and revisions
 
-Blaze was imported from the local `koblaze` revision `6d3946edf08ef69afe19a3c457b88af126ae64aa`. Its upstream base is `koreader/crengine` at `4ce1aed17e9d7852e047e0b9b0bf6a637486fd97`. Changes since the import are in Kobalt’s Git history.
+Blaze was imported from the local `koblaze` revision `6d3946edf08ef69afe19a3c457b88af126ae64aa`. Its upstream base is `koreader/crengine` at `4ce1aed17e9d7852e047e0b9b0bf6a637486fd97`. It also includes later upstream changes, up to the revision that [Bringing in upstream changes](engines/blaze.md#bringing-in-upstream-changes) records. Changes since the import are in Kobalt’s Git history.
 
 The original audit also examined Crosspoint at `0333cbbe4649f80afafe83061bf1afe9fd372fcf`. The [dependency inventory](engines/inventory.md), [compatibility comparison](engines/compatibility.md), [proposed contract](engines/contract.md) and [migration plan](engines/migration.md) record the design work that preceded Blaze. Kobalt ships Blaze as its only engine.

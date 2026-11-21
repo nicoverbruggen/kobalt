@@ -57,7 +57,7 @@ inline QString documentCacheName(const QByteArray &fingerprint)
 }
 
 inline lUInt32 documentCacheChecksum(const QByteArray &policy, int domVersion,
-                                     int formatVersion = 17)
+                                     int formatVersion = 18)
 {
     // Bump when the cached book's contents change for a reason the policy
     // does not cover.

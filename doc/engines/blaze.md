@@ -18,7 +18,16 @@ A forward column stacks its children with a row gap and can align them horizonta
 
 ## Bringing in upstream changes
 
-Compare the upstream change with the recorded KOReader base. In `crengine/`, keep upstream file names, indentation and declaration style. Kobalt’s [.clang-format-ignore](../../.clang-format-ignore) excludes these files. Format the adapter under `adapter/` with Kobalt’s Qt style.
+Blaze includes the upstream changes up to `koreader/crengine` commit `a459d926862ca92ce4701d2c1ecfb7244d2a2a68`. This is the recorded upstream revision. Compare Blaze with this revision, not with upstream `master`, which moves on. Check it out in the worktree's `build/` and only read it:
+
+```bash
+git clone https://github.com/koreader/crengine.git build/upstream/crengine
+git -C build/upstream/crengine checkout a459d926862ca92ce4701d2c1ecfb7244d2a2a68
+```
+
+To bring in newer upstream changes, apply each upstream commit after the recorded revision to `src/engine/blaze` with `git apply -p1 --directory=src/engine/blaze`. Merge a commit that touches a Blaze change by hand, and review cache compatibility ([Cache compatibility](#cache-compatibility)). In the same change, move the recorded revision here and in [UPSTREAM.md](../../src/engine/blaze/UPSTREAM.md), and check the **Upstream:** line of every entry in UPSTREAM.md against the new revision.
+
+In `crengine/`, keep upstream file names, indentation and declaration style. Kobalt’s [.clang-format-ignore](../../.clang-format-ignore) excludes these files. Format the adapter under `adapter/` with Kobalt’s Qt style.
 
 In inherited files, `Blaze:` marks a difference from the recorded KOReader revision. This includes changes carried over from earlier forks. Place the comment beside the code and explain what an upstream update must preserve. Find these comments with `rg -n 'Blaze:' src/engine/blaze/crengine`. Compare against the recorded revision for the full diff.
 
@@ -42,7 +51,7 @@ Blaze uses libwebp for still images and for the first composited frame of an ani
 
 ## Cache compatibility
 
-Parsed-book format 16 added DTBook chapters, manifest fallbacks and illustrated labels. Format 17 rebuilds earlier caches so printed pages have publication paths and EPUB landmarks are available.
+Parsed-book format 16 added DTBook chapters, manifest fallbacks and illustrated labels. Format 17 rebuilds earlier caches so printed pages have publication paths and EPUB landmarks are available. Format 18 comes with the upstream fix for raw `style` and `script` elements, which changes the parsed DOM of some books.
 
 Moving the same source into this repository does not change parsed-book or rendering cache formats. Later parser, preprocessing, shaping or layout changes must follow [Storage compatibility](../storage.md).
 

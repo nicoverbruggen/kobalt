@@ -4,16 +4,16 @@ Hi there, KOReader/CREngine maintainers. Thank you so much for making an awesome
 
 This is Blaze. It is a hard fork of KOReader's CREngine. This file lists what Blaze changed in the code it inherited, so that CREngine maintainers can decide what, if anything, they want to take. Please take what you find useful.
 
-Blaze starts from `koreader/crengine` commit `4ce1aed17e9d7852e047e0b9b0bf6a637486fd97`. Links go to the Blaze source. In inherited files, a `Blaze:` comment marks most changes.
+Blaze started from `koreader/crengine` commit `4ce1aed17e9d7852e047e0b9b0bf6a637486fd97` and includes the upstream changes up to `a459d926862ca92ce4701d2c1ecfb7244d2a2a68` (2026-11-21). This file compares Blaze with that upstream revision. Links go to the Blaze source. In inherited files, a `Blaze:` comment marks most changes.
 
 Each entry says how we know about the problem. "Reproduced" means that we took the Blaze change out again, ran a small input through Blaze with AddressSanitizer, and saw the failure go away with the change. "Reproduced in stock KOReader" means that a control EPUB failed in KOReader v2026.07.1. Otherwise we found the problem by reading the code.
 
-Each entry starts with a short summary and then gives the details. **Code:** names the Blaze source to read. **Upstream:** gives the state of upstream `master` at `a459d926` (2026-11-21):
+Each entry starts with a short summary and then gives the details. **Code:** names the Blaze source to read. **Upstream:** gives the state of upstream at `a459d926`:
 
-- "Present in `master`" means that master still has the behavior that Blaze changed.
-- "Partly in `master`" means that master changed the same code after Blaze's base.
-- "Not in `master`" means that master has no such feature or interface.
-- An entry that we did not compare with master says so.
+- "Present upstream" means that upstream still has the behavior that Blaze changed.
+- "Partly upstream" means that upstream has part of the change.
+- "Not upstream" means that upstream has no such feature or interface.
+- An entry that we did not compare with upstream says so.
 
 Speed figures are single trials of one operation on one device, a Kobo Clara BW, unless the entry names another machine. They do not add up to a gain for a whole book.
 
@@ -40,7 +40,7 @@ It helps only images that are drawn at half their size or less. Covers and photo
 
 **Code:** [lvimg.h](crengine/include/lvimg.h), `LVJpegImageSource::Decode` in [lvimg.cpp](crengine/src/lvimg.cpp), the decoder callback in [lvdrawbuf.cpp](crengine/src/lvdrawbuf.cpp), and `SmoothRowScaler` in [qimagescale_p.h](crengine/qimagescale/qimagescale_p.h).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### PNG images decode one row at a time
 
@@ -54,7 +54,7 @@ Two behaviors change. Without smooth scaling, a PNG that fails halfway has alrea
 
 **Code:** `LVPngImageSource::Decode` in [lvimg.cpp](crengine/src/lvimg.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Packed hyphenation patterns
 
@@ -66,7 +66,7 @@ In Kobalt the host supplies the packed files. Upstream could build them with its
 
 **Code:** [packed_hyphenation.inc](extensions/packed_hyphenation.inc) and [hyphman.cpp](crengine/src/hyphman.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Selector matching skips rules that cannot match
 
@@ -80,7 +80,7 @@ The gain depends on the stylesheet. On a fixture with many class rules, opening 
 
 **Code:** [css_ancestors.cpp](extensions/css_ancestors.cpp), [css_class_index.cpp](extensions/css_class_index.cpp), and `quickAncestorCheck` and the merge in [lvstsheet.cpp](crengine/src/lvstsheet.cpp). The index updates in `detachScope` follow Blaze's stylesheet scopes, described in the next entry.
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Stylesheet scopes copy selectors only when needed
 
@@ -90,7 +90,7 @@ Upstream `LVStyleSheet::push()` copies every selector chain with `dup()`, and `p
 
 **Code:** `SavedScope`, `push` and `pop` in [lvstsheet.h](crengine/include/lvstsheet.h), and `detachScope` in [lvstsheet.cpp](crengine/src/lvstsheet.cpp). `ScopedPush` belongs to Blaze's cancellation support and is not needed upstream.
 
-**Upstream:** present in `master`. We did not measure this change on its own.
+**Upstream:** present upstream. We did not measure this change on its own.
 
 ### Sibling walks find the next child fast
 
@@ -100,7 +100,7 @@ Looking up the index of a child scans the child list from the start. Blaze first
 
 **Code:** `findChildIndex` in [lvtinydom.cpp](crengine/src/lvtinydom.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Line breaks are kept when a paragraph reflows
 
@@ -110,7 +110,7 @@ The document keeps the break decisions of recent paragraphs, keyed by text, lang
 
 **Code:** `paragraphBreaks` in [lvtextfm.cpp](crengine/src/lvtextfm.cpp), declared on `ldomDocument` in [lvtinydom.h](crengine/include/lvtinydom.h).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### List items are numbered once
 
@@ -120,7 +120,7 @@ Each list item finds its number by counting its previous siblings, so a list of 
 
 **Code:** `getListItemCounters` in [lvtinydom.cpp](crengine/src/lvtinydom.cpp) and its use in [lvrend.cpp](crengine/src/lvrend.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Hyphenation patterns load on first use
 
@@ -130,7 +130,7 @@ Upstream's `TextLangCfg` constructor resolves the hyphenation method, which load
 
 **Code:** `TextLangCfg::getDefaultHyphMethod` in [textlang.cpp](crengine/src/textlang.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Script lookup for ASCII
 
@@ -140,7 +140,7 @@ Upstream's `TextLangCfg` constructor resolves the hyphenation method, which load
 
 **Code:** `koblazeUnicodeScript` in [lvtextfm.cpp](crengine/src/lvtextfm.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Cache of shaped words
 
@@ -154,7 +154,7 @@ The cache must fill before it saves time, so it only pays off in large books. On
 
 **Code:** [word_cache.cpp](extensions/word_cache.cpp), [fast_shaping.inc](extensions/fast_shaping.inc) and [shaping_options.cpp](extensions/shaping_options.cpp), compiled into [lvfntman.cpp](crengine/src/lvfntman.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ## Features
 
@@ -168,7 +168,7 @@ Vertical runs use fallback fonts at their nominal size, without x-height matchin
 
 **Code:** [extensions/vertical/](extensions/vertical/), `GetNominalFallbackFont` in [lvfntman.cpp](crengine/src/lvfntman.cpp), and the `Blaze:` comments in [lvrend.cpp](crengine/src/lvrend.cpp), [lvtextfm.cpp](crengine/src/lvtextfm.cpp), [lvfntman.cpp](crengine/src/lvfntman.cpp), [lvpagesplitter.cpp](crengine/src/lvpagesplitter.cpp) and [lvdocview.cpp](crengine/src/lvdocview.cpp).
 
-**Upstream:** not in `master`. It has no `writing-mode` support.
+**Upstream:** not upstream. Upstream has no `writing-mode` support.
 
 ### Flexbox
 
@@ -178,7 +178,7 @@ Horizontal rows support wrapping, grow and shrink factors, `flex-basis`, percent
 
 **Code:** [flex_rows.inc](extensions/flex_rows.inc), `css_d_flex` in [cssdef.h](crengine/include/cssdef.h), and the `Blaze:` comments in [lvrend.cpp](crengine/src/lvrend.cpp) and [lvstsheet.cpp](crengine/src/lvstsheet.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### EPUB manifest fallbacks
 
@@ -188,7 +188,7 @@ The importer follows `fallback` chains in the manifest until it finds a supporte
 
 **Code:** [spine_fallback.h](extensions/spine_fallback.h) and `ImportEpubDocument` in [epubfmt.cpp](crengine/src/epubfmt.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Thai line breaks without a dictionary
 
@@ -198,24 +198,24 @@ When a Thai line has no legal break, Blaze breaks between letter groups, not ins
 
 **Code:** `insideThaiLetterGroup` and the wrapping code in [lvtextfm.cpp](crengine/src/lvtextfm.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Small caps by script
 
 **Summary:** native small caps are used for each character's own script, and synthesized small caps keep the selected face.
 
-Upstream master added `c2sc` from `scmp` in `8d29401c` after our base, which covers part of this. Blaze still adds these points:
+Upstream's `8d29401c` covers part of this. For all small caps in a font with `smcp` but no `c2sc`, it maps capitals to lowercase, so that the font's own `smcp` turns them into small caps. Blaze does the same, but decides for each character. On top of that, Blaze adds these points:
 
-- A character uses native `smcp` or `c2sc` only when the font has the feature for that character's script and language.
+- A character uses native `smcp` or `c2sc` only when the font has the feature for that character's script and language. Upstream decides once for each face, for any script.
 - A capital that the font does not have falls back at its original size.
 - Combining marks stay in the small caps run with their base.
 - Synthesized small caps use the face that is already selected, with all its variations, so an embedded face is not lost.
 
-For all small caps with `smcp` but no `c2sc`, master folds capitals to lowercase and uses native glyphs, where Blaze synthesizes smaller capitals. Master's way is better, so this change must be rebased on master's code first.
+A test removes `c2sc` from a copy of Noto Serif and checks that all small caps then draw the font's own small caps (`embeddedSmallCaps` in [fallback_styles.cpp](../../../tests/model/fallback_styles.cpp)).
 
-**Code:** `hasNativeCaps`, `hasOwnGlyph` and the small caps code in [lvfntman.cpp](crengine/src/lvfntman.cpp).
+**Code:** `hasNativeCaps`, `hasOwnGlyph` and `LVFontSmallCapsTransform` in [lvfntman.cpp](crengine/src/lvfntman.cpp).
 
-**Upstream:** partly in `master`, through `8d29401c`, as described above.
+**Upstream:** partly upstream, through `8d29401c`, as described above.
 
 ### Images in navigation labels
 
@@ -225,7 +225,7 @@ A navigation link that holds only an image takes its label from the image's `alt
 
 **Code:** [nav_labels.h](extensions/nav_labels.h), `_labelImage` in [lvtinydom.h](crengine/include/lvtinydom.h), and [epubfmt.cpp](crengine/src/epubfmt.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### DTBook chapters in EPUB 2
 
@@ -233,7 +233,7 @@ A navigation link that holds only an image takes its label from the image's `alt
 
 **Code:** [dtbook.h](extensions/dtbook.h) and `ImportEpubDocument` in [epubfmt.cpp](crengine/src/epubfmt.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Reader defaults for paragraphs
 
@@ -243,7 +243,7 @@ A navigation link that holds only an image takes its label from the image's `alt
 
 **Code:** `DEFAULT_TEXT_INDENT` and `avoid_normal_block` in [cssdef.h](crengine/include/cssdef.h), [lvstsheet.cpp](crengine/src/lvstsheet.cpp) and [lvrend.cpp](crengine/src/lvrend.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Optical size setting
 
@@ -253,7 +253,7 @@ Zero follows CSS. Ordinary text and Bold Reading use the same width and optical 
 
 **Code:** `LVRendSetFontOpticalSize` in [lvrend.h](crengine/include/lvrend.h) and [font_selection.cpp](extensions/font_selection.cpp).
 
-**Upstream:** not in `master`. It follows the CSS `font-optical-sizing` property and has no reader setting.
+**Upstream:** not upstream. Upstream follows the CSS `font-optical-sizing` property and has no reader setting.
 
 ## Bug fixes
 
@@ -267,7 +267,7 @@ Reproduced in stock KOReader: a minimal EPUB showed plain letters and logged a f
 
 **Code:** `setIdpfManglingKey` in [epubfmt.cpp](crengine/src/epubfmt.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### External SVG files resolve their own references wrongly
 
@@ -279,7 +279,7 @@ Reproduced in stock KOReader with two control EPUBs. In the first, the image are
 
 **Code:** the `Blaze:` comment near `lunasvgGetImageSource` in [lvimg.cpp](crengine/src/lvimg.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### An inherited odd-pixel text-indent becomes hanging
 
@@ -291,7 +291,7 @@ Reproduced with that example: with upstream's bit test, the first line started a
 
 **Code:** `setNodeStyle` and `renderFinalBlock` in [lvrend.cpp](crengine/src/lvrend.cpp), `css_val_screen_px_hanging` in [cssdef.h](crengine/include/cssdef.h), and the indent setup in [lvtextfm.cpp](crengine/src/lvtextfm.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Use after free when parsing fails
 
@@ -303,7 +303,7 @@ Reproduced: `LVParseXMLStream` on a stream that is not XML gives a heap-use-afte
 
 **Code:** `KoblazeStoppedDocument`, `LVParseXMLStream` and `LVParseHTMLStream` in [lvtinydom.cpp](crengine/src/lvtinydom.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### PNG decoding leaks the bitmap on error
 
@@ -315,7 +315,7 @@ Reproduced: decoding a 512 × 512 PNG cut in half leaked about 1 MB on each atte
 
 **Code:** `LVPngImageSource::Decode` in [lvimg.cpp](crengine/src/lvimg.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### The cache index is rewritten only when its length changes
 
@@ -329,7 +329,7 @@ Reproduced: create caches for A and then B, close, open A again, close. Upstream
 
 **Code:** `writeIndex` and `readIndex` in [lvtinydom.cpp](crengine/src/lvtinydom.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Images with a width and a height are stretched when a maximum applies
 
@@ -343,7 +343,7 @@ Kobalt's regression is [tests/model/image_proportions.cpp](../../../tests/model/
 
 **Code:** the `Kobalt:` comment in `getStyledImageSize` in [lvrend.cpp](crengine/src/lvrend.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Collapsed table borders lose the right and bottom edges of inner cells
 
@@ -353,7 +353,7 @@ Upstream compares each cell edge only with the row, the row group and the table.
 
 **Code:** `collapse_border` and the cell pass after it in [lvrend.cpp](crengine/src/lvrend.cpp).
 
-**Upstream:** present in `master`. We found this by reading the code and did not render a table in upstream.
+**Upstream:** present upstream. We found this by reading the code and did not render a table in upstream.
 
 ### Navigation documents with several epub:type values are missed
 
@@ -363,7 +363,7 @@ Upstream compares each cell edge only with the row, the row group and the table.
 
 **Code:** the navigation document code in `ImportEpubDocument` in [epubfmt.cpp](crengine/src/epubfmt.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### linear="no" is stored on the manifest item, not on the spine slot
 
@@ -373,7 +373,7 @@ Upstream stores `nonlinear` on the shared `EpubItem`, so the last spine referenc
 
 **Code:** `linearFlags` in [epubfmt.cpp](crengine/src/epubfmt.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Zero-width no-break space shows as a question mark
 
@@ -383,7 +383,7 @@ Upstream stores `nonlinear` on the shared `EpubItem`, so the last spine referenc
 
 **Code:** `getReplacementChar` and `getCharIndex` in [lvfntman.cpp](crengine/src/lvfntman.cpp), and the `Blaze:` comment on U+FEFF in [lvtextfm.cpp](crengine/src/lvtextfm.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Resize gives the old screen size to device media queries
 
@@ -393,7 +393,7 @@ Upstream stores `nonlinear` on the shared `EpubItem`, so the last spine referenc
 
 **Code:** `LVDocView::Resize` in [lvdocview.cpp](crengine/src/lvdocview.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Page text can take the first line of the next page
 
@@ -407,7 +407,7 @@ Reproduced in Blaze: with upstream's scan, two tests fail, and with Blaze's scan
 
 **Code:** `getPageDocumentRange` in [lvdocview.cpp](crengine/src/lvdocview.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### In-page footnotes miss links with percent-encoded ids
 
@@ -417,7 +417,7 @@ When the renderer records footnote links for the page splitter, it takes the tex
 
 **Code:** the `addLink` calls in [lvrend.cpp](crengine/src/lvrend.cpp).
 
-**Upstream:** present in `master`. We found this by reading the code and did not reproduce it.
+**Upstream:** present upstream. We found this by reading the code and did not reproduce it.
 
 ### Saved positions add unknown element names to the document
 
@@ -427,7 +427,7 @@ When the renderer records footnote links for the page splitter, it takes the tex
 
 **Code:** `createXPointerV1`, `createXPointerV2` and `findElementNameIndex` in [lvtinydom.cpp](crengine/src/lvtinydom.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Drawing reads an unset word index
 
@@ -437,7 +437,7 @@ When the first word of a line is hidden or has `color: transparent`, the loop sk
 
 **Code:** `LFormattedText::Draw` in [lvtextfm.cpp](crengine/src/lvtextfm.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Fonts that fall back to themselves are never freed
 
@@ -449,7 +449,7 @@ We checked that `GetFallbackFont` returns the main font object itself when the m
 
 **Code:** `~LVFreeTypeFontManager` in [lvfntman.cpp](crengine/src/lvfntman.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ## Hardening
 
@@ -463,7 +463,7 @@ Reproduced: an EPUB whose `a.svg` draws `a.svg` overflowed the stack without the
 
 **Code:** `SVGRenderScope` in [lvimg.cpp](crengine/src/lvimg.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### A full disk ends the process
 
@@ -473,7 +473,7 @@ Reproduced: an EPUB whose `a.svg` draws `a.svg` overflowed the stack without the
 
 **Code:** `saveNodeData`, `compact` and `swapToCache` in [lvtinydom.cpp](crengine/src/lvtinydom.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Reading a damaged page list can allocate billions of entries
 
@@ -487,7 +487,7 @@ Reproduced at a smaller scale: a count of 5 million in a 76-byte buffer took 746
 
 **Code:** `LVRendPageList::deserialize` and `LVRendPageInfo::deserialize` in [lvpagesplitter.cpp](crengine/src/lvpagesplitter.cpp). Blaze's page record has extra fields, so take the checks, not the record layout.
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Mutable nodes leak when a document is destroyed
 
@@ -499,7 +499,7 @@ This matters less than it looks. The parser persists each element when it closes
 
 **Code:** `ldomDocument::~ldomDocument` and `destroyNodes` in [lvtinydom.cpp](crengine/src/lvtinydom.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### The formatter can loop on a character that it cannot measure
 
@@ -509,7 +509,7 @@ The loop measures each text run against a width of `0x7FFF`. When the first char
 
 **Code:** the `Blaze:` comment in `LVFormatter` in [lvtextfm.cpp](crengine/src/lvtextfm.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### GIF decoding reads uninitialized bytes
 
@@ -519,7 +519,7 @@ The loop measures each text run against a width of `0x7FFF`. When the first char
 
 **Code:** `LVGifFrame::DecodeFromBuffer` in [lvimg.cpp](crengine/src/lvimg.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### The JPEG error path depends on an indeterminate pointer
 
@@ -529,7 +529,7 @@ The loop measures each text run against a width of `0x7FFF`. When the first char
 
 **Code:** `LVJpegImageSource::Decode` in [lvimg.cpp](crengine/src/lvimg.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Drawing an image at zero size
 
@@ -539,7 +539,7 @@ The loop measures each text run against a width of `0x7FFF`. When the first char
 
 **Code:** `LVColorDrawBuf::Draw` in [lvdrawbuf.cpp](crengine/src/lvdrawbuf.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Draw buffers start with undefined colors
 
@@ -549,7 +549,7 @@ The loop measures each text run against a width of `0x7FFF`. When the first char
 
 **Code:** the `LVBaseDrawBuf` constructor in [lvdrawbuf.h](crengine/include/lvdrawbuf.h).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Cache file name buffer
 
@@ -559,7 +559,7 @@ The suffix `.%08x.%d.cr3` is written with `sprintf` into `char s[16]`. `getPersi
 
 **Code:** the cache file name code in [lvtinydom.cpp](crengine/src/lvtinydom.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Node chunks on the stack
 
@@ -569,7 +569,7 @@ The array holds `TNC_PART_LEN` nodes, which is 4096. Variable-length arrays are 
 
 **Code:** `tinyNodeCollection::saveNodeData` in [lvtinydom.cpp](crengine/src/lvtinydom.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Document fonts of a document without an index
 
@@ -579,7 +579,7 @@ A document that got no index has `_docIndex` -1, which is also the index of the 
 
 **Code:** `ldomDocument::~ldomDocument` in [lvtinydom.cpp](crengine/src/lvtinydom.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Integer overflow in the smooth scale buffer
 
@@ -589,7 +589,7 @@ A document that got no index has `_docIndex` -1, which is also the index of the 
 
 **Code:** the decoder callback in [lvdrawbuf.cpp](crengine/src/lvdrawbuf.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Embedded font size check
 
@@ -599,7 +599,7 @@ Blaze reads the size from the container entry first, keeps it as `lvsize_t`, and
 
 **Code:** `RegisterDocumentFont` in [lvfntman.cpp](crengine/src/lvfntman.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Nowrap check on a text node
 
@@ -609,7 +609,7 @@ When two source fragments share one text node, `getNearestCommonParent()` return
 
 **Code:** the nowrap check in [lvtextfm.cpp](crengine/src/lvtextfm.cpp).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ### Compiler checks
 
@@ -619,7 +619,7 @@ The font classes mark their overrides with `override`, so a changed virtual sign
 
 **Code:** [lvfntman.cpp](crengine/src/lvfntman.cpp) and [lvstyles.h](crengine/include/lvstyles.h).
 
-**Upstream:** present in `master`.
+**Upstream:** present upstream.
 
 ## How Blaze opens a book in parts
 
@@ -700,7 +700,7 @@ The host selects a character range of each spine item. The block renderer calls 
 
 **Code:** [chapter_layout.cpp](extensions/chapter_layout.cpp), [spine_window.cpp](extensions/spine_window.cpp), [koblaze.h](crengine/include/koblaze.h), and the `Blaze:` comments in [lvrend.cpp](crengine/src/lvrend.cpp), [lvpagesplitter.cpp](crengine/src/lvpagesplitter.cpp) and [epubfmt.cpp](crengine/src/epubfmt.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Saved and swapped layouts
 
@@ -710,7 +710,7 @@ The host selects a character range of each spine item. The block renderer calls 
 
 **Code:** `koblazeSaveLayout`, `koblazeRestoreLayout` and `LayoutSnapshot` in [lvtinydom.h](crengine/include/lvtinydom.h), and [chapter_layout.cpp](extensions/chapter_layout.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Stopping and pausing work
 
@@ -722,7 +722,7 @@ Parsing, the style pass and layout check a host callback at regular steps and th
 
 Note for upstream: in `saveChanges`, `_mapSavingStage` is set at the start of each stage, and `setCacheFileStale(true)` does not reset it. A time-limited save after a complete save would then skip everything. KOReader saves without a time limit, so it does not reach this today.
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Document slots
 
@@ -732,7 +732,7 @@ The 4-bit document index wraps after 15 documents, and a new document then share
 
 **Code:** `koblazeFreeDocumentSlots` in [lvtinydom.h](crengine/include/lvtinydom.h), and the `Blaze:` comments in [lvtinydom.cpp](crengine/src/lvtinydom.cpp) and [chmfmt.cpp](crengine/src/chmfmt.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Page spacing
 
@@ -742,7 +742,7 @@ Each block is classified before its lines are tagged. After page breaks are fina
 
 **Code:** [page_spacing.cpp](extensions/page_spacing.cpp) and the `Blaze:` comments in [lvrend.cpp](crengine/src/lvrend.cpp) and [lvpagesplitter.cpp](crengine/src/lvpagesplitter.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Bold Reading
 
@@ -750,7 +750,7 @@ Each block is classified before its lines are tagged. After page breaks are fina
 
 **Code:** [font_selection.cpp](extensions/font_selection.cpp), [lvbionic.h](extensions/lvbionic.h), and `m_readingTexts` in [lvtextfm.h](crengine/include/lvtextfm.h).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Document fonts
 
@@ -760,7 +760,7 @@ The document lists its embedded fonts without reading them. `koblazeReadFontsFor
 
 **Code:** `koblazeReadFontsFor` in [lvtinydom.h](crengine/include/lvtinydom.h), [document_fonts.cpp](extensions/document_fonts.cpp) and [embedded_font_cache.h](extensions/embedded_font_cache.h).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Reports to the host
 
@@ -770,7 +770,7 @@ The draw buffer reports when an image puts visible ink on the page, and when cli
 
 **Code:** [lvdrawbuf.h](crengine/include/lvdrawbuf.h), [lvdrawbuf.cpp](crengine/src/lvdrawbuf.cpp), `CreateImageSource` in [lvstream.h](crengine/include/lvstream.h), and [lvimg.cpp](crengine/src/lvimg.cpp).
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ### Smaller host changes
 
@@ -782,7 +782,7 @@ The draw buffer reports when an image puts visible ink on the page, and when cli
 - Cached page lists keep the writing mode and the page spacing fields.
 - `crsetup.h` comes from the build directory.
 
-**Upstream:** not in `master`.
+**Upstream:** not upstream.
 
 ## Keeping this file current
 

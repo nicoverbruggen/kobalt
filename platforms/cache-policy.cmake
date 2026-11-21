@@ -22,7 +22,8 @@ set(layout_policy "849b421de582bf6b89f84263eab8e27dabd97cc0a8cfc807504f170a6ac35
 # Version 19: repaginate block flex rows with percentage item width limits.
 # Version 20: repaginate flex rows with horizontal auto margins.
 # Version 21: repaginate emergency Thai line wraps around attached vowels and marks.
-set(rendering_version 21)
+# Version 22: native small caps for all-small-caps without c2sc, and Croatian hyphen line breaks.
+set(rendering_version 22)
 file(GLOB cache_patterns CONFIGURE_DEPENDS
     "${KOBALT_ROOT}/assets/hyph/*.pattern" "${KOBALT_ROOT}/assets/hyph/*.khg")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${cache_patterns})

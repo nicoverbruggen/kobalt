@@ -6,10 +6,11 @@ CREngine. Kobalt builds and maintains Blaze in this repository.
 
 CREngine is the e-book rendering library of CoolReader 3. Blaze starts from
 the CREngine that KOReader maintains (https://github.com/koreader/crengine,
-commit 4ce1aed17e9d7852e047e0b9b0bf6a637486fd97) and adds the changes that
-Kobalt needs. Most of them serve one goal: open books and turn pages fast on
-slow e-ink devices, by laying out one chapter at a time. See doc/engines.md
-and doc/engines/blaze.md in this repository.
+commit 4ce1aed17e9d7852e047e0b9b0bf6a637486fd97), includes later upstream
+changes up to the revision recorded in doc/engines/blaze.md, and adds the
+changes that Kobalt needs. Most of them serve one goal: open books and turn
+pages fast on slow e-ink devices, by laying out one chapter at a time. See
+doc/engines.md and doc/engines/blaze.md in this repository.
 
 Folders
 -------

@@ -490,7 +490,7 @@ public:
         environment().reportSession({ { "status", "ready" } });
         kobalt::diagnostic(
                 "ready", { { "startup_ms", double(elapsed.elapsed()) }, { "opener", fromOpener } });
-        candidate->finishPreviewMigration();
+        candidate->finishStartup();
         // Nickel has finished its startup. Get the book shown last ready, so
         // tapping it opens at once.
         candidate->preloadLastBook();

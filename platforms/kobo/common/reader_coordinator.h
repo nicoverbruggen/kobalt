@@ -69,7 +69,7 @@ public:
                       QObject *parent);
     ~ReaderCoordinator() override;
     bool available() const;
-    void finishPreviewMigration();
+    void finishStartup();
     bool idleForBenchmark() const;
 #if defined(KOBALT_BENCHMARK_API) || defined(KOBALT_SCENARIO_PLAYER)
     QJsonObject benchmarkState(const QString &identity) const;
@@ -96,6 +96,9 @@ private:
     storage::RecordWriter scenarioWriter;
     // A copy of the first opening, so scenarios can open the same book again.
     std::unique_ptr<NativeOpening> scenarioOpening;
+#endif
+#ifdef KOBALT_READER_HARDWARE
+    bool startupReady = false;
 #endif
     ReaderEnvironment &environment_;
     CoordinatorBindings bindings_;

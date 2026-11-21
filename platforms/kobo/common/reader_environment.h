@@ -2,6 +2,8 @@
 #include "assets/assets.h"
 #include "assets/bundled_fonts.h"
 #include "assets/system_fonts.h"
+#include "diagnostics.h"
+#include "last_boot.h"
 #include "storage/reader_storage.h"
 #include "storage/record_writer.h"
 #include "support/diagnostics.h"
@@ -54,6 +56,26 @@ struct ReaderEnvironment
             diagnostic("session-report-worker-unavailable", {}, DiagnosticSeverity::Warning);
     }
 
+    void recordSuccessfulLaunch(quint64 (*storageGeneration)())
+    {
+        if (!lastBoot.tryPost([this, directory = paths.directory, storageGeneration] {
+                // USB revokes storage before draining this same lock.
+                std::lock_guard<std::mutex> storage(stockStorageWork());
+                if (lastBootRecorded || !storageGeneration())
+                    return true;
+                QFile version(QStringLiteral("/mnt/onboard/.kobo/version"));
+                const auto firmware = version.open(QIODevice::ReadOnly)
+                        ? diagnosticDeviceFields(version.read(512)).value("firmware").toString()
+                        : QString();
+                lastBootRecorded =
+                        recordLastBoot(directory, QStringLiteral(KOBALT_VERSION), firmware);
+                if (!lastBootRecorded)
+                    diagnostic("last-boot-write-failed", {}, DiagnosticSeverity::Warning);
+                return lastBootRecorded;
+            }))
+            diagnostic("last-boot-worker-unavailable", {}, DiagnosticSeverity::Warning);
+    }
+
     AssetBundle assets;
     std::function<void()> assetsChanged;
 
@@ -67,12 +89,12 @@ struct ReaderEnvironment
         return (!stockStorage || verificationForStorage(stockStorage())) && assets.available();
     }
 
-    // Called after the stock workflow revokes its permit. A queued worker
-    // checks the permit under the same lock before it can touch a file.
-    static void finishStockAssetWork()
+    // Called after the stock workflow revokes storage. Workers check availability
+    // under the same lock before touching files.
+    static void finishStockStorageWork()
     {
-        mainthread::blocking("stock asset verification");
-        std::lock_guard<std::mutex> finished(assetWork());
+        mainthread::blocking("stock storage work");
+        std::lock_guard<std::mutex> finished(stockStorageWork());
     }
 
     // USB calls this only after draining the engine and releasing storage.
@@ -137,7 +159,7 @@ struct ReaderEnvironment
                 [this, guard, generation, reason, finished, current, storageGeneration, permit] {
                     // Holding this lock never waits for a GUI callback. The queued
                     // result runs separately, after the last asset file is closed.
-                    std::lock_guard<std::mutex> reading(assetWork());
+                    std::lock_guard<std::mutex> reading(stockStorageWork());
                     if (generation != assetGeneration.load())
                         return;
                     DiagnosticOperation operation("asset-verification");
@@ -220,7 +242,7 @@ struct ReaderEnvironment
     }
 
 private:
-    static std::mutex &assetWork()
+    static std::mutex &stockStorageWork()
     {
         static std::mutex mutex;
         return mutex;
@@ -243,7 +265,7 @@ private:
                 engineWorker(),
                 [this, generation, current, storageGeneration, permit] {
                     // The same lock as verification, so that USB waits for this read.
-                    std::lock_guard<std::mutex> reading(assetWork());
+                    std::lock_guard<std::mutex> reading(stockStorageWork());
                     if (generation != assetGeneration.load())
                         return;
                     auto fonts =
@@ -297,6 +319,9 @@ private:
     }
 
     mutable storage::RecordWriter sessionReports;
+    // Accessed on the writer thread while the stock storage lock is held.
+    bool lastBootRecorded = false;
+    storage::RecordWriter lastBoot;
     QString placeholder;
     QStringList systemFonts;
     bool systemFontsReady = false;

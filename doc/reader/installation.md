@@ -70,6 +70,7 @@ Support files are in `.adds/kobalt/`. Annotation exports are in `Kobalt/Annotati
 | `diagnostics/events.jsonl`, `diagnostics/events.jsonl.previous` | Event log, two files of at most 128 KiB each. With verbose diagnostics, the current file and five older files of at most 16 MiB each, and `session-context.json`. See [Page-turn diagnostics](../validation/diagnostics.md#page-turn-diagnostics) |
 | `scenarios/scenarios.json`, `scenarios.jsonl` | Evaluation packages only: the performance scenarios that Kobalt runs after the first book opens, and their results. See [Release evaluation](../release-evaluation.md#device-scenarios) |
 | `diagnostics/state.json`, `diagnostics/session.json` | Only when a `diagnostics-enabled` file exists or the build has verbose diagnostics: reader state from the last close, sleep or shutdown, and session status. Create `live-state` to write `state.json` on every save instead |
+| `last-boot.json` | The last successful Kobalt startup records `kobalt_version` and `kobo_firmware_version`. The firmware field is empty if Kobalt could not read it. A failed startup keeps the previous record. |
 | `startup-session`, `startup-removed.txt`, `active-session.json` | Recovery markers, see above |
 | `uninstall`, `uninstall-now` | Removal control, see above |
 | `doc` | Short user instructions |

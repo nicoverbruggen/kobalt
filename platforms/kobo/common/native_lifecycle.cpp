@@ -105,13 +105,13 @@ bool NativeLifecycle::suspended()
 void StockStorageHandoff::begin(State next)
 {
     // Native workflow and gadget hooks can call each other. Only the first
-    // handoff drains asset verification and the stock opening's queued invalidation.
+    // handoff drains work using stock storage and the stock opening's queued invalidation.
     if (state == State::Available) {
         sessionStorageAvailable.store(false);
         ++stockGeneration;
         if (next != State::Shutdown) {
             mainthread::AllowBlocking allow("host checkpoint");
-            nickel::ReaderEnvironment::finishStockAssetWork();
+            nickel::ReaderEnvironment::finishStockStorageWork();
             storage::finishSleepSnapshotWork();
         }
     }

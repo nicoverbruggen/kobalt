@@ -1,3 +1,5 @@
+#include "platforms/kobo/common/last_boot.h"
+#include "platforms/kobo/common/startup_recovery.h"
 #include "platforms/kobo/common/native_lifecycle.h"
 #include "engine/engine_activity.h"
 #include "storage/profile_database.h"
@@ -9,8 +11,11 @@
 extern "C" void kobalt_power_off(void *, bool);
 #include "support/diagnostics.h"
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QEvent>
 #include <QEventLoop>
+#include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QSemaphore>
 #include <QSqlQuery>
@@ -147,9 +152,63 @@ void poweredOff(void *, bool)
 } // namespace
 
 // Checks the Kobo lifecycle adapter with controlled Nickel signals: standby during an opening, sleep-view handoff, PIN rotation, USB entry and power-off.
+static void lastSuccessfulBoot()
+{
+    using namespace kobalt::nickel;
+    using kobalt::storage::ReadStatus;
+    QTemporaryDir root;
+    require(root.isValid(), "Cannot create last boot fixture");
+    const auto directory = root.path();
+    require(readLastBoot(directory).status == ReadStatus::Missing,
+            "An older install without a marker has a known version");
+    const auto record = [&](const QString &version, const QString &firmware) {
+        kobalt::storage::runOnWriterThread([&] {
+            require(recordLastBoot(directory, version, firmware),
+                    "Cannot record successful launch");
+        });
+    };
+    const auto previous = [&] {
+        const auto state = readLastBoot(directory);
+        require(state.status == ReadStatus::Ok, "Cannot read previous successful launch");
+        return state.object;
+    };
+
+    record("1.3", "4.41.23145");
+    const auto first = previous();
+    require(first.size() == 2 && first.value("kobalt_version").toString() == "1.3"
+                    && first.value("kobo_firmware_version").toString() == "4.41.23145",
+            "The first boot did not record exactly the two versions");
+    // The startup guard can arm before an attempted launch, but the last
+    // successful boot belongs to the earlier process until startup is ready.
+    const auto guard = QFile::encodeName(root.filePath("startup-session"));
+    require(kobalt_startup_begin(guard.constData()) && previous() == first,
+            "An attempted launch replaced the previous successful boot");
+
+    const auto old = QDateTime::fromSecsSinceEpoch(946684800);
+    const auto path = lastBootPath(directory);
+    QFile marker(path);
+    require(marker.open(QIODevice::ReadWrite)
+                    && marker.setFileTime(old, QFileDevice::FileModificationTime),
+            "Cannot date the existing last boot file");
+    marker.close();
+    record("1.3", "4.41.23145");
+    require(QFileInfo(path).lastModified() == old, "An unchanged launch rewrote last-boot.json");
+
+    require(kobalt_startup_complete(guard.constData()), "Cannot clear the attempted startup");
+    record("1.3", "4.42.23296");
+    require(previous().value("kobo_firmware_version").toString() == "4.42.23296",
+            "A firmware-only change did not update the last boot");
+    record("1.2", {});
+    const auto downgrade = previous();
+    require(downgrade.value("kobalt_version").toString() == "1.2"
+                    && downgrade.value("kobo_firmware_version").toString().isEmpty(),
+            "A downgrade with unavailable firmware was not recorded");
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
+    lastSuccessfulBoot();
     QTemporaryDir root;
     profile = root.path();
     require(available(), "Cannot initialize lifecycle profile");

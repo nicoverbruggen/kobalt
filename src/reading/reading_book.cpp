@@ -130,6 +130,11 @@ ReadingBook::ReadingBook(std::unique_ptr<ReaderSession> session, QString statePa
                                .object);
     }
     if (session_->recoveredOpeningPosition()) {
+        // The saved position is replaced for good, so record what it was.
+        diagnostic("position-recovered",
+                   { { "previous", preservedState.value("position").toString() },
+                     { "position", session_->state().value("position").toString() } },
+                   DiagnosticSeverity::Warning);
         QJsonObject snapshot;
         checkpoint(&snapshot, true);
     }

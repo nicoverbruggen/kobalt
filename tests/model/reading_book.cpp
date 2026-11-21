@@ -316,8 +316,20 @@ int main(int argc, char **argv)
             require(!position.isEmpty() && position != saved.value("position").toString()
                             && session->image() == expected,
                     "Lost position did not open at the start of its chapter or book");
+            QTemporaryDir logs;
+            require(logs.isValid(), "Cannot create recovery diagnostics");
+            initializeDiagnostics(logs.path());
+            QJsonObject recovered;
+            setDiagnosticObserver([&](const QJsonObject &event) {
+                if (event.value("event") == QStringLiteral("position-recovered"))
+                    recovered = event;
+            });
             ReadingBook book(std::move(session), paths.bookState(identity), paths, identity, hash,
                              nullptr, {}, {});
+            setDiagnosticObserver({});
+            require(recovered.value("previous") == saved.value("position")
+                            && recovered.value("position") == position,
+                    "The recovered position was not logged with the previous one");
             waitUntil([&] { return !book.savesPending(); });
             require(storage::readBookState(paths, identity).object.value("position") == position,
                     "Recovered position was not saved immediately after opening");

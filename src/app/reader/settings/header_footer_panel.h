@@ -27,6 +27,8 @@ class SlotMap final : public QWidget
 public:
     SlotMap(QWidget *parent, bool editable);
     void setSlots(const headerfooter::Layout &layout, const SlotContents &contents);
+    // The bar's fill and chapter ticks follow the book, as on the page.
+    void setProgress(qreal fraction, const QVector<double> &ticks);
     void updateBattery(const headerfooter::Values &values);
     QPushButton *cell(int slot) const;
     std::function<void(int)> chosen;
@@ -43,6 +45,8 @@ private:
     void setSlot(int slot, const headerfooter::Content &content);
     std::array<Cell *, headerfooter::slotCount> cells{};
     headerfooter::Layout layout;
+    qreal progress = 0;
+    QVector<double> ticks;
 };
 
 // A preset as a miniature page with its name below. A selected card has a

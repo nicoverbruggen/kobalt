@@ -166,7 +166,8 @@ bool Layout::operator==(const Layout &other) const
     return slotFields == other.slotFields && headerSize == other.headerSize
             && footerSize == other.footerSize && headerEnabled == other.headerEnabled
             && footerEnabled == other.footerEnabled && uppercase == other.uppercase
-            && progressBar == other.progressBar && progressBarTop == other.progressBarTop;
+            && progressBar == other.progressBar && progressBarTop == other.progressBarTop
+            && progressTicks == other.progressTicks;
 }
 
 Layout presetLayout(Preset preset)
@@ -303,6 +304,8 @@ QJsonObject toJson(const Layout &layout)
     object["progress_bar"] = layout.progressBar;
     // Optional. Older builds ignore it and draw the bar at the bottom.
     object["progress_bar_position"] = QString::fromLatin1(layout.progressBarTop ? "top" : "bottom");
+    // Optional. Older builds ignore it and draw no ticks.
+    object["progress_bar_ticks"] = layout.progressTicks;
     return object;
 }
 
@@ -328,6 +331,7 @@ Layout fromJson(const QJsonObject &object, const Layout &fallback)
     const auto position = object.value("progress_bar_position").toString();
     if (position == "top" || position == "bottom")
         layout.progressBarTop = position == "top";
+    layout.progressTicks = object.value("progress_bar_ticks").toBool(fallback.progressTicks);
     return layout;
 }
 

@@ -577,6 +577,24 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout,
         button->setProperty("bar_edge", int(choice.edge));
         progressBarButtons.append(button);
     }
+    // Ticks for chapter starts, a toggle beside the edges, as the rotation
+    // lock sits beside the orientations.
+    auto *ticks = new ui::Button({}, custom);
+    progressTicksButton = ticks;
+    ticks->setObjectName("rrHeaderFooterProgressTicks");
+    ticks->setCheckable(true);
+    ticks->setFocusPolicy(Qt::NoFocus);
+    ticks->setProperty("segment_first", true);
+    readerStyle(ticks, styles::segment());
+    const auto ticksLabel = strings::get("header_footer.progress_ticks");
+    ticks->setAccessibleName(ticksLabel);
+    ticks->setToolTip(ticksLabel);
+    buttonIcon(ticks, ControlIcon::Ruler);
+    ticks->setIconSize(QSize(metrics::control::chapterIconSize + ui::px(6),
+                             metrics::control::chapterIconSize + ui::px(6)));
+    ticks->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    ticks->setFixedWidth(rowHeight + ui::px(16));
+    barRow.append(ticks);
     customRows->addSpacing(metrics::spacing::row);
     auto *divider = new ui::Panel(custom);
     divider->setObjectName("rrHeaderFooterSizeDivider");

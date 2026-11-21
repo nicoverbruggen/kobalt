@@ -351,6 +351,10 @@
       "sha256": "746ea88f9c58e378af7d4ce442d7e79f2d994e26aa72889d6d2d81c08c8edecc"
     },
     {
+      "file": "ruler.svg",
+      "sha256": "97570b977963d6f86ec87df5b89e1778d2f5d9bc2c2fade4fb0f98de022df210"
+    },
+    {
       "file": "scroll.svg",
       "sha256": "e8e1f6aa3ca71259fe81b9bb9d6b697c69cd614b2126fabcdbc21390857a2ac7"
     },

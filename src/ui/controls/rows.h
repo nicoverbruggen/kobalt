@@ -244,6 +244,8 @@ public:
                  const QString &detail = {});
     QPushButton *add(const QString &name, const QString &text = {});
     void prepend(QWidget *control);
+    // A control after the segments, such as a toggle that belongs to them.
+    void append(QWidget *control);
 
 private:
     QHBoxLayout *row;

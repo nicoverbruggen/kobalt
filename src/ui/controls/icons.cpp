@@ -252,6 +252,10 @@ Geometry geometry(ControlIcon icon, bool sideButtons)
         result.canvas = 256;
         result.filled = true;
         phosphorGeometry(QStringLiteral("door-open"), path);
+    } else if (icon == ControlIcon::Ruler) {
+        result.canvas = 256;
+        result.filled = true;
+        phosphorGeometry(QStringLiteral("ruler"), path);
     } else if (icon == ControlIcon::LockOpen) {
         result.canvas = 256;
         result.filled = true;
@@ -932,12 +936,13 @@ QIcon controlIcon(ControlIcon icon, QColor color, bool sideButtons)
             && icon != ControlIcon::FitImage && icon != ControlIcon::Door
             && icon != ControlIcon::PreviousChapter && icon != ControlIcon::NextChapter
             && icon != ControlIcon::BookStart && icon != ControlIcon::BookEnd
-            && icon != ControlIcon::Hourglass && icon != ControlIcon::Sync
-            && icon != ControlIcon::Sort && icon != ControlIcon::ArrowDownRight
-            && icon != ControlIcon::EditHighlight && icon != ControlIcon::Bold
-            && icon != ControlIcon::WordsAdd && icon != ControlIcon::WordsSaved
-            && icon != ControlIcon::DeviceRotate && icon != ControlIcon::ZoomIn
-            && icon != ControlIcon::ZoomOut && icon != ControlIcon::LockOpen
+            && icon != ControlIcon::Hourglass && icon != ControlIcon::Ruler
+            && icon != ControlIcon::Sync && icon != ControlIcon::Sort
+            && icon != ControlIcon::ArrowDownRight && icon != ControlIcon::EditHighlight
+            && icon != ControlIcon::Bold && icon != ControlIcon::WordsAdd
+            && icon != ControlIcon::WordsSaved && icon != ControlIcon::DeviceRotate
+            && icon != ControlIcon::ZoomIn && icon != ControlIcon::ZoomOut
+            && icon != ControlIcon::LockOpen
             && (icon < ControlIcon::Lotus || icon > ControlIcon::Gauge)
             && (icon < ControlIcon::SearchChapter || icon > ControlIcon::SearchAfter)
             && (icon < ControlIcon::ClockCountdown || icon > ControlIcon::TextTSlash)

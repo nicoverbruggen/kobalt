@@ -125,6 +125,11 @@ struct ReaderSource
         quint64 recordGeneration = 0;
         QString recordKey;
         int recordItem = -1;
+        // Where top-level chapters start on the progress bar, measured in a
+        // layout of the whole book for the estimateKey() `ticksKey` and the
+        // main text marks `ticksRange`. Saved with the record.
+        QVector<double> ticks;
+        QString ticksKey, ticksRange;
     } pageEstimate;
 };
 

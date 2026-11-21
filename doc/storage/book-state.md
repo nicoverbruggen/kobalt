@@ -70,6 +70,8 @@ All fields keep record format 1, legacy JSON schema 1 and database schema 4. Mis
 - `whole_book`: true when a whole-book layout saved the record, as Hybrid and More accurate do. Then `read` holds every spine item and `place` counts from the start of the spine item. The book opens in chapter mode with whole-book page numbers.
 - `kept`: the estimated pages of each spine item as first shown, to two decimals, so the numbers do not move on reopening. Left out above 500 spine items, and once every item has real pages.
 - `whole_spreads`: in two-column mode, the total screens of the completed whole-book layout. A chapter saves the page of its first column, so a backward turn after reopening keeps the same number. At the end of the book the number is the whole-book total.
-- `place`, `read`, `parts`, `kept` and `whole_spreads` apply only when `layout` and `spine_items` match.
+- `chapter_ticks`: where chapters start on the progress bar, as fractions of the main text from 0 to 1, rounded to six decimals. A whole-book layout measures them, so a book that opens again in chapter mode shows them at once, where the whole book puts them. An empty list means the book has none, so it is not measured again. Optional; older builds ignore it.
+- `chapter_ticks_range`: the main text marks that `chapter_ticks` were measured for. The ticks apply only for the same marks.
+- `place`, `read`, `parts`, `kept`, `whole_spreads` and `chapter_ticks` apply only when `layout` and `spine_items` match.
 - When a checkpoint goes over 16 KiB, `read` goes first, then the whole record, then image views.
 - Older builds ignore the record. Whether they keep it depends on their book-state handling.

@@ -814,6 +814,11 @@ void SegmentedRow::prepend(QWidget *control)
     row->insertWidget(0, control);
 }
 
+void SegmentedRow::append(QWidget *control)
+{
+    row->addWidget(control);
+}
+
 QPushButton *SegmentedRow::add(const QString &name, const QString &text)
 {
     auto *button = new Button(text, frame);

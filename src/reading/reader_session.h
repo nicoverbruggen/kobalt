@@ -84,6 +84,9 @@ struct ReaderFrame
     QStringList fonts;
     QVector<ReadingFont> fontCatalog;
     QVector<ChapterLink> chapters, chapterGraph, printedPages, landmarks;
+    // Where chapters start on the progress bar, from a layout of
+    // the whole book only, so they never move. See captureChapters().
+    QVector<double> chapterTicks;
     QVector<PageLink> links;
     ChapterSelection contentsSelection, graphSelection;
 };
@@ -449,6 +452,9 @@ public:
     int mainPage() const { return bookPage() - firstMainPage(); }
 
     double mainProgress() const;
+    // Where chapters start on the progress bar, on the same scale
+    // as mainProgress(). Empty until the pages are counted exactly.
+    QVector<double> chapterTicks() const;
     int mainPercent() const;
 
     // statsPercent in tenths of a percent, for one-decimal percentages.

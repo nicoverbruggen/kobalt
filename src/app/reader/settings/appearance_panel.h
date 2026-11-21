@@ -82,6 +82,7 @@ public:
     QVector<PresetCard *> presetCards;
     StripSizeControl *headerSizeControl = nullptr, *footerSizeControl = nullptr;
     QVector<QPushButton *> progressBarButtons;
+    QPushButton *progressTicksButton = nullptr;
     QLabel *slotHint = nullptr;
 };
 } // namespace kobalt::reader

@@ -116,11 +116,13 @@ public:
     // properties, so reflow and cached reopening do not scan text again.
     virtual DocumentWordCounts wordCounts(std::function<bool()> current = {}) = 0;
     virtual qint64 totalWords() const = 0;
+
     virtual qint64 wordsInMainText(const QString &first, const QString &after,
                                    const std::function<bool()> &)
     {
         return first.isEmpty() && after.isEmpty() ? totalWords() : -1;
     }
+
     virtual QString resourceError() const = 0;
     virtual QJsonObject resourceStats() const = 0;
     virtual bool openPreview(Engine &source, QSize size, QString *error) = 0;
@@ -331,6 +333,46 @@ public:
     virtual QVector<int> bookPages(const QStringList &positions,
                                    const std::function<bool()> &current = {},
                                    bool rangeEndpoints = false) const = 0;
+
+    // The same pages from a layout of the whole book only: the shown one, or
+    // a prepared one that waits to be shown. Empty when there is none, so
+    // a caller never gets an estimate. Never lays out text.
+    virtual QVector<int> wholeBookPages(const QStringList &positions,
+                                        const std::function<bool()> &current = {},
+                                        bool rangeEndpoints = false) const
+    {
+        return partOfBook() ? QVector<int>{} : bookPages(positions, current, rangeEndpoints);
+    }
+
+    // The page count of that layout, or 0 when there is none.
+    virtual int wholeBookPageCount() const { return partOfBook() ? 0 : pages(); }
+
+    // The contents of that layout, whose positions resolve in it. A part of
+    // the book has placeholders for the entries of spine items it has not
+    // laid out.
+    virtual QVector<ChapterLink> wholeBookChapters() const
+    {
+        return partOfBook() ? QVector<ChapterLink>{} : chapters();
+    }
+
+    // Chapter ticks measured in a layout of the whole book, kept with the
+    // saved page estimate so that a book that opens again shows them before
+    // it has that layout. `range` names the main text they were measured
+    // for. True when ticks, possibly none, were measured for the same range
+    // and layout; `ticks` then holds them.
+    virtual void rememberWholeBookTicks(const QVector<double> &ticks, const QString &range)
+    {
+        Q_UNUSED(ticks);
+        Q_UNUSED(range);
+    }
+
+    virtual bool savedWholeBookTicks(const QString &range, QVector<double> *ticks) const
+    {
+        Q_UNUSED(range);
+        Q_UNUSED(ticks);
+        return false;
+    }
+
     // Goes to about `fraction` of the whole book, from 0 to 1. An engine
     // with the text of only a part of the book lays out the text there
     // first.

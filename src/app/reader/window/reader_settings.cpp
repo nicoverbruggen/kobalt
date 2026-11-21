@@ -184,7 +184,8 @@ bool Reader::customModified() const
     return saved.isObject()
             && (custom.slotFields != standard.slotFields || custom.uppercase != standard.uppercase
                 || custom.progressBar != standard.progressBar
-                || custom.progressBarTop != standard.progressBarTop);
+                || custom.progressBarTop != standard.progressBarTop
+                || custom.progressTicks != standard.progressTicks);
 }
 
 bool Reader::chromeTicks() const
@@ -332,6 +333,7 @@ void Reader::syncChromeControls()
         for (int slot = 0; slot < slotCount; ++slot)
             contents[slot] = content(current.slotFields[slot], values, current.uppercase[slot]);
         slotMap->setSlots(current, contents);
+        slotMap->setProgress(page->progressFraction, session->chapterTicks());
         if (view == fieldChooser) {
             fieldChooser->debug = features::debugMode(preferences);
             const int slot = fieldChooser->slot();
@@ -356,6 +358,11 @@ void Reader::syncChromeControls()
     for (auto *button : progressBarButtons)
         button->setChecked(button->property("bar_edge").toInt()
                            == int(kobalt::headerfooter::progressEdge(current)));
+    if (progressTicksButton) {
+        progressTicksButton->setChecked(current.progressTicks);
+        // Ticks need a bar to sit on.
+        progressTicksButton->setEnabled(current.progressBar);
+    }
     // A modified Custom layout carries a star, as on its card.
     const bool starred = chromePreset == Preset::Custom && modified;
     headerFooterRow->setText(

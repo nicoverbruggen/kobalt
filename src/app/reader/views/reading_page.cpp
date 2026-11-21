@@ -252,11 +252,9 @@ QRect ReadingPage::headerTextRect() const
 {
     if (!showHeader())
         return {};
-    // A bar at the top keeps the text as far below its fill as a bar at the
-    // bottom keeps the footer above it.
-    const int top = progressAtTop()
-            ? int(metrics::reading::progressBottom) + int(metrics::reading::progressFillHeight)
-            : 0;
+    // A bar at the top keeps the text progressTextInset below the top edge,
+    // as a bar at the bottom keeps the footer above the bottom edge.
+    const int top = progressAtTop() ? int(metrics::reading::progressTextInset) : 0;
     return { 0, top, width(), metrics::reading::textBandHeight(chrome.headerSize) };
 }
 
@@ -264,11 +262,10 @@ QRect ReadingPage::footerTextRect() const
 {
     if (!showFooter())
         return {};
-    // Keep the same edge gap above the progress fill as below the top
-    // of the header. The progress strip adds space below the text.
+    // The text keeps progressTextInset from the bottom edge, past the bar.
+    // The progress strip adds that space below the text.
     const int offset = progressAtBottom()
-            ? int(metrics::reading::progressHeight) - int(metrics::reading::progressBottom)
-                    - int(metrics::reading::progressFillHeight)
+            ? int(metrics::reading::progressHeight) - int(metrics::reading::progressTextInset)
             : 0;
     const int band = metrics::reading::textBandHeight(chrome.footerSize);
     const int bottom =
@@ -817,18 +814,25 @@ QRegion ReadingPage::renderStrips(bool geometryChanged, qint64 paletteKey)
                                   showHeader(),
                                   progressAtTop(),
                                   progressAtTop() ? progressFraction : 0,
+                                  progressAtTop() ? shownTicks() : QVector<double>{},
                                   panelBelowHeader,
                                   width(),
                                   headerTextPixels(),
                                   paletteKey,
                                   weight,
                                   font().family() };
-    const FooterState nextFooter{
-        stripSlots(true), stripFields(true),  notice,
-        showFooter(),     progressAtBottom(), progressAtBottom() ? progressFraction : 0,
-        width(),          footerTextPixels(), paletteKey,
-        weight,           font().family()
-    };
+    const FooterState nextFooter{ stripSlots(true),
+                                  stripFields(true),
+                                  notice,
+                                  showFooter(),
+                                  progressAtBottom(),
+                                  progressAtBottom() ? progressFraction : 0,
+                                  progressAtBottom() ? shownTicks() : QVector<double>{},
+                                  width(),
+                                  footerTextPixels(),
+                                  paletteKey,
+                                  weight,
+                                  font().family() };
     QRegion dirty;
     if (geometryChanged || nextHeader != headerState) {
         auto next = renderStrip(topHeight(), [this](QPainter &p) { paintHeader(p); });
@@ -1498,18 +1502,8 @@ void ReadingPage::paintHeader(QPainter &painter, bool sleeping) const
     painter.setFont(font);
     if (showHeader())
         paintSlots(painter, headerTextRect(), false, sleeping);
-    if (progressAtTop()) {
-        // The bottom bar turned over: its rule along the edge, the fill
-        // on the side of the text.
-        const auto ink = palette().color(QPalette::WindowText);
-        painter.fillRect(QRect(0, metrics::reading::progressBottom - metrics::control::border,
-                               width(), metrics::control::border),
-                         ink);
-        painter.fillRect(QRect(0, metrics::reading::progressBottom,
-                               qRound(width() * progressFraction),
-                               metrics::reading::progressFillHeight),
-                         ink);
-    }
+    if (progressAtTop())
+        paintBar(painter, metrics::reading::progressBottom, true);
     if (panelBelowHeader)
         painter.fillRect(0, topHeight() - metrics::control::border, width(),
                          metrics::control::border, ui::dividerColor(this));
@@ -1529,18 +1523,39 @@ void ReadingPage::paintFooter(QPainter &painter, bool sleeping) const
         } else
             paintSlots(painter, bounds, true, sleeping);
     }
-    if (progressAtBottom()) {
-        const auto ink = palette().color(QPalette::WindowText);
-        painter.fillRect(QRect(0, bottomHeight() - metrics::reading::progressBottom, width(),
-                               metrics::control::border),
-                         ink);
-        painter.fillRect(QRect(0,
-                               bottomHeight() - metrics::reading::progressBottom
-                                       - metrics::reading::progressFillHeight,
-                               qRound(width() * progressFraction),
-                               metrics::reading::progressFillHeight),
-                         ink);
+    if (progressAtBottom())
+        paintBar(painter, bottomHeight() - metrics::reading::progressBottom, false);
+}
+
+QVector<double> ReadingPage::shownTicks() const
+{
+    return chrome.progressTicks ? progressTicks : QVector<double>{};
+}
+
+void paintProgressBar(QPainter &painter, int left, int span, int edge, bool atTop, qreal fraction,
+                      const QVector<double> &ticks, const ProgressBarColors &colors)
+{
+    const int rule = metrics::reading::progressRuleHeight;
+    const int fill = metrics::reading::progressFillHeight;
+    const int gap = 2 * metrics::control::border;
+    const int filled = qRound(span * fraction);
+    const int ruleTop = atTop ? edge - rule : edge;
+    const int fillTop = atTop ? edge : edge - fill;
+    painter.fillRect(QRect(left + filled, ruleTop, span - filled, rule), colors.rest);
+    painter.fillRect(QRect(left, ruleTop, filled, rule), colors.ink);
+    painter.fillRect(QRect(left, fillTop, filled, fill), colors.ink);
+    const int top = qMin(ruleTop, fillTop);
+    for (const double tick : ticks) {
+        const int x = left + qRound(span * tick) - gap / 2;
+        painter.fillRect(QRect(x, top, gap, rule + fill), colors.paper);
     }
+}
+
+void ReadingPage::paintBar(QPainter &painter, int edge, bool atTop) const
+{
+    paintProgressBar(
+            painter, 0, width(), edge, atTop, progressFraction, shownTicks(),
+            { palette().color(QPalette::WindowText), ui::themeColors(this).outline, pagePaper() });
 }
 
 void ReadingPage::updatePointer()

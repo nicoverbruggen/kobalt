@@ -62,6 +62,13 @@ void Reader::refresh()
     if (syncCoordinator && isVisible() && !services.suspended())
         syncCoordinator->resume();
     const bool darkReady = publishPendingDarkMode();
+    // An exact page count can arrive without a turn; draw its ticks then.
+    if (auto ticks = session->chapterTicks(); ticks != page->progressTicks) {
+        page->progressTicks = std::move(ticks);
+        page->refreshStrips();
+        if (chromeView())
+            slotMap->setProgress(page->progressFraction, page->progressTicks);
+    }
     auto *settings = static_cast<SettingsPanel *>(general);
     if (settingsVisible() && settings->buttonControlsButton)
         settings->updateButtonControls(buttonControls(), preferences);
@@ -527,6 +534,7 @@ void Reader::paintTurn()
     if (turnStarted.isValid())
         painting.start();
     page->progressFraction = session->mainProgress();
+    page->progressTicks = session->chapterTicks();
     page->preparedDamage = session->damage();
     page->preparedFrom = session->damageFrom();
     // The Refresh the screen setting decides which turns flash.
@@ -682,6 +690,7 @@ void Reader::syncReadingState()
             pageScrubber->cancel();
     }
     page->progressFraction = session->mainProgress();
+    page->progressTicks = session->chapterTicks();
     if (!session->busy())
         applyingText = false;
     refreshRenderNotice();
@@ -732,6 +741,7 @@ void Reader::syncReadingControls()
     chapterButton->setText(chapter);
     chapterButton->setAccessibleName(strings::get("reader.contents_detail").arg(chapter));
     page->progressFraction = session->mainProgress();
+    page->progressTicks = session->chapterTicks();
     if (!session->busy())
         applyingText = false;
     refreshRenderNotice();

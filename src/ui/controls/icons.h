@@ -165,7 +165,8 @@ enum class ControlIcon {
     TextTSlash,
     BookStart,
     BookEnd,
-    Hourglass
+    Hourglass,
+    Ruler
 };
 enum class IconStyle { Monochrome, Color, Pastel, Rings };
 QString iconStyleId(IconStyle style);

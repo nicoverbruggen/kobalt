@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <QCryptographicHash>
 #include <QElapsedTimer>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <climits>
@@ -317,6 +318,23 @@ QString EngineDocument::fullDocumentKey(const QJsonObject &settings) const
             + QString::fromUtf8(QJsonDocument(pixels).toJson(QJsonDocument::Compact));
 }
 
+namespace {
+// The optional record fields of chapter ticks, for the record's layout only.
+// Measured ticks are saved even when there are none, so the book does not
+// measure them again when it opens.
+void writeTicks(QJsonObject &record, const QVector<double> &ticks, const QString &key,
+                const QString &range)
+{
+    if (key.isEmpty() || record.value("layout").toString() != key)
+        return;
+    QJsonArray values;
+    for (const double tick : ticks)
+        values.append(std::round(tick * 1000000) / 1000000);
+    record["chapter_ticks"] = values;
+    record["chapter_ticks_range"] = range;
+}
+} // namespace
+
 QJsonObject EngineDocument::pageEstimateRecord(const QJsonObject &settings) const
 {
     if (windowFirst_ < 0)
@@ -378,6 +396,8 @@ QJsonObject EngineDocument::pageEstimateRecord(const QJsonObject &settings) cons
     place.itemShown = rough.itemPage;
     auto result = estimate.record;
     place.writePlace(result);
+    const auto &ticks = source_->pageEstimate;
+    writeTicks(result, ticks.ticks, ticks.ticksKey, ticks.ticksRange);
     return result;
 }
 
@@ -451,6 +471,8 @@ QJsonObject EngineDocument::wholeBookEstimateRecord(const QJsonObject &settings)
         record.itemShown = pageInItem + 1;
         record.writePlace(result);
     }
+    const auto &ticks = source_->pageEstimate;
+    writeTicks(result, ticks.ticks, ticks.ticksKey, ticks.ticksRange);
     return result;
 }
 
@@ -469,6 +491,17 @@ void EngineDocument::restorePageEstimate(const QJsonValue &saved)
     map.restoreKept(record.kept);
     auto &estimate = source_->pageEstimate;
     estimate.key = record.layout;
+    // Chapter ticks of the same layout, from a session that had the whole book.
+    estimate.ticks.clear();
+    estimate.ticksKey.clear();
+    estimate.ticksRange.clear();
+    if (const auto values = saved.toObject().value("chapter_ticks"); values.isArray()) {
+        for (const auto &tick : values.toArray())
+            if (tick.isDouble() && tick.toDouble() > 0 && tick.toDouble() < 1)
+                estimate.ticks.append(tick.toDouble());
+        estimate.ticksKey = record.layout;
+        estimate.ticksRange = saved.toObject().value("chapter_ticks_range").toString();
+    }
     if (record.item < 0)
         return;
     // The whole book and the chapter can pair their columns differently.
@@ -1298,6 +1331,57 @@ QVector<int> EngineDocument::bookPages(const QStringList &positions,
         return chapterBookPages(positions, current, rangeEndpoints, std::move(exact));
     }
     return chapterBookPages(positions, current, rangeEndpoints);
+}
+
+QVector<int> EngineDocument::wholeBookPages(const QStringList &positions,
+                                            const std::function<bool()> &current,
+                                            bool rangeEndpoints) const
+{
+    if (windowFirst_ < 0)
+        return bookPages(positions, current, rangeEndpoints);
+    if (fullDocumentReady())
+        return full_->bookPages(positions, current, rangeEndpoints);
+    return {};
+}
+
+int EngineDocument::wholeBookPageCount() const
+{
+    if (windowFirst_ < 0)
+        return pages();
+    return fullDocumentReady() ? full_->pages() : 0;
+}
+
+QVector<ChapterLink> EngineDocument::wholeBookChapters() const
+{
+    if (windowFirst_ < 0)
+        return chapters();
+    return fullDocumentReady() ? full_->chapters() : QVector<ChapterLink>{};
+}
+
+void EngineDocument::rememberWholeBookTicks(const QVector<double> &ticks, const QString &range)
+{
+    if (!source_)
+        return;
+    auto &estimate = source_->pageEstimate;
+    estimate.ticks = ticks;
+    estimate.ticksKey = ticksKey();
+    estimate.ticksRange = range;
+}
+
+bool EngineDocument::savedWholeBookTicks(const QString &range, QVector<double> *ticks) const
+{
+    if (!source_)
+        return false;
+    const auto &estimate = source_->pageEstimate;
+    if (estimate.ticksRange != range || estimate.ticksKey != ticksKey())
+        return false;
+    *ticks = estimate.ticks;
+    return true;
+}
+
+QString EngineDocument::ticksKey() const
+{
+    return estimateKey(settingsState(), slicePages_ > 0 ? slicePages_ : chapterSlicePages());
 }
 
 QVector<int> EngineDocument::chapterBookPages(const QStringList &positions,

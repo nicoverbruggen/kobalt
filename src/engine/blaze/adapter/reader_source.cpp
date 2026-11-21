@@ -990,6 +990,13 @@ void EngineDocument::carryTextKnowledge(EngineDocument &next) const
         map.setPrior(from.pageEstimate.map.model());
         map.takeMeasurements(from.pageEstimate.map);
     }
+    // Chapter ticks come from the whole book: the next document keeps them
+    // until it measures its own, so the record that it saves has them.
+    if (to.pageEstimate.ticks.isEmpty() && !from.pageEstimate.ticks.isEmpty()) {
+        to.pageEstimate.ticks = from.pageEstimate.ticks;
+        to.pageEstimate.ticksKey = from.pageEstimate.ticksKey;
+        to.pageEstimate.ticksRange = from.pageEstimate.ticksRange;
+    }
     // A new document usually knows nothing yet: it shares the tables then,
     // so that the turn that adopts the whole book copies nothing.
     const auto merge = [](auto &into, const auto &known) {

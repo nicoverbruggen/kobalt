@@ -21,6 +21,7 @@
 #include <QFile>
 #include "reading/rendering_mode.h"
 #include <QFileInfo>
+#include <QJsonDocument>
 #include <QFontInfo>
 #include <QCryptographicHash>
 #include <QCoreApplication>
@@ -44,6 +45,73 @@ struct DocumentDeleter
     }
 };
 
+} // namespace
+
+namespace {
+// Ticks on the same scale as ReaderSession::mainProgress(), measured in a
+// layout of the whole book so they match the page that the reader adopts.
+// An estimate would put several chapters of one spine item on its first
+// page and move them later.
+QVector<double> wholeBookTicks(Engine &engine, const QString &first, const QString &after,
+                               bool deferred, const std::function<bool()> &current)
+{
+    // The main text marks, not their resolved positions: those differ
+    // between a chapter and the whole book.
+    const auto range =
+            QString::fromUtf8(QJsonDocument(engine.mainTextMarks).toJson(QJsonDocument::Compact));
+    const int total = engine.wholeBookPageCount();
+    // Ticks measured for this layout and these marks do not change. While
+    // the marks wait for their source, `first` and `after` are not theirs.
+    QVector<double> saved;
+    if (engine.savedWholeBookTicks(range, &saved) || total <= 0 || deferred)
+        return saved;
+    int firstPage = 0, lastPage = total - 1;
+    if (!first.isEmpty() || !after.isEmpty()) {
+        const auto bounds = engine.wholeBookPages({ first, after }, current, true);
+        if (!first.isEmpty() && bounds.value(0) > 0)
+            firstPage = qBound(0, bounds.value(0) - 1, total - 1);
+        if (!after.isEmpty() && bounds.value(1) > 0)
+            lastPage = qBound(firstPage, qMax(bounds.value(0), bounds.value(1)) - 1, total - 1);
+    }
+    const int mainPages = lastPage - firstPage + 1;
+    // The shallowest level of the contents with three chapter starts inside
+    // the main text, between its first and last page, or else the level with
+    // the most, up to 100. Some books put their chapters
+    // under a part or a half-title, beside front and back matter.
+    const auto chapters = engine.wholeBookChapters();
+    int deepest = 0;
+    for (const auto &chapter : chapters)
+        deepest = qMax(deepest, chapter.depth);
+    QVector<double> ticks;
+    for (int depth = 0; depth <= deepest && ticks.size() < 3; ++depth) {
+        QStringList positions;
+        for (const auto &chapter : chapters)
+            if (chapter.depth == depth && !chapter.position.isEmpty())
+                positions.append(chapter.position);
+        const auto pages = engine.wholeBookPages(positions, current);
+        if (pages.size() != positions.size())
+            return {};
+        QVector<double> level;
+        for (const int page : pages) {
+            const int main = page - 1 - firstPage;
+            // The bar's ends need no tick. Rounded as the saved record keeps
+            // them, so a measured tick equals the saved one and nothing
+            // repaints.
+            if (page > 0 && main > 0 && main < mainPages - 1)
+                level.append(std::round(pageProgressFraction(main, mainPages) * 1000000) / 1000000);
+        }
+        // More ticks than this would cut the bar away, and every save of
+        // the book would carry them. Deeper levels would only show part of
+        // the book, so the search ends here.
+        constexpr int maxTicks = 100;
+        if (level.size() > maxTicks)
+            break;
+        if (level.size() > ticks.size())
+            ticks = level;
+    }
+    engine.rememberWholeBookTicks(ticks, range);
+    return ticks;
+}
 } // namespace
 
 void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bool()> &current)
@@ -91,8 +159,9 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
                 continue;
             // An unloaded spine item can have one placeholder for several TOC entries.
             // Resolve the selected entry against the source before retaining its anchor.
-            const auto anchor = start ? engine.chapterBoundaryPosition(result.chapters, i, &deferred)
-                                      : engine.afterChapter(result.chapters, i, &deferred);
+            const auto anchor = start
+                    ? engine.chapterBoundaryPosition(result.chapters, i, &deferred)
+                    : engine.afterChapter(result.chapters, i, &deferred);
             if (anchor.isNull() || (start && anchor.isEmpty())) {
                 marks.remove(key);
                 continue;
@@ -132,10 +201,12 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
     // A short interval can round to a single estimated page. Keep its source anchors.
     if (lastPage > 0)
         lastPage = qMax(firstPage, lastPage);
-    result.state["main_text_bounded"] = !first.isEmpty() || !after.isEmpty() || !engine.mainTextMarks.isEmpty();
+    result.state["main_text_bounded"] =
+            !first.isEmpty() || !after.isEmpty() || !engine.mainTextMarks.isEmpty();
     result.mainWords = engine.wordsInMainText(first, after, current);
     result.state["main_text_first"] = firstPage;
     result.state["main_text_last"] = lastPage;
+    result.chapterTicks = wholeBookTicks(engine, first, after, deferred, current);
     if (const double fraction = engine.bookFraction(); fraction >= 0) {
         result.state["book_fraction"] = fraction;
         result.state["whole_book_failed"] = engine.fullDocumentFailed();
@@ -358,7 +429,9 @@ bool ReaderSession::publishPageEstimate(Engine &engine, const std::function<bool
                 // Most rounds of a long measurement change nothing that the
                 // reader shows. Those do not refresh it. The record of the
                 // estimate goes with the next save.
-                bool changed = frame.chapters != estimate.chapters
+                // Ticks come once, from the prepared whole book: show them then.
+                const bool newTicks = frame.chapterTicks != estimate.chapterTicks;
+                bool changed = frame.chapters != estimate.chapters || newTicks
                         || frame.chapterGraph != estimate.chapterGraph
                         || frame.totalWords != estimate.totalWords
                         || frame.mainWords != estimate.mainWords
@@ -371,6 +444,7 @@ bool ReaderSession::publishPageEstimate(Engine &engine, const std::function<bool
                     frame.state[it.key()] = it.value();
                 }
                 frame.chapters = estimate.chapters;
+                frame.chapterTicks = estimate.chapterTicks;
                 frame.chapterGraph = estimate.chapterGraph;
                 frame.totalWords = estimate.totalWords;
                 frame.mainWords = estimate.mainWords;
@@ -392,7 +466,8 @@ bool ReaderSession::publishPageEstimate(Engine &engine, const std::function<bool
                 if (estimate.state.value("whole_book_ready").toBool())
                     guard->showFullDocument(job);
                 // Saved locations can move to another spread even if both totals are the same.
-                if (changed && (shownCounts == 0 || step || newBookPages) && guard->updated)
+                if (changed && (shownCounts == 0 || step || newBookPages || newTicks)
+                    && guard->updated)
                     guard->updated();
             },
             Qt::QueuedConnection);
@@ -540,8 +615,7 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
                     auto state = background->hybridTurn.load(std::memory_order_relaxed);
                     if (state == HybridTurnPreparation::Paused)
                         paused = background->hybridTurn.compare_exchange_strong(
-                                state, HybridTurnPreparation::Deferred,
-                                std::memory_order_relaxed);
+                                state, HybridTurnPreparation::Deferred, std::memory_order_relaxed);
                     paused = paused || state == HybridTurnPreparation::Deferred;
                 }
                 return !paused && wanted();
@@ -2775,6 +2849,11 @@ double ReaderSession::mainProgress() const
     return mainPage() < 0 ? 0 : pageProgressFraction(mainPage(), mainPages());
 }
 
+QVector<double> ReaderSession::chapterTicks() const
+{
+    return frame.chapterTicks;
+}
+
 int ReaderSession::mainPercent() const
 {
     if (firstMainPage() == 0 && lastMainPage() == bookPages() - 1)
@@ -2838,11 +2917,12 @@ void ReaderSession::chapterBoundaryActions(
                                     engine->chapterBoundaryPosition(links, index, &deferred);
                             if (entryStart.isEmpty() || deferred)
                                 continue;
-                            const auto anchor = start ? entryStart
-                                                      : engine->afterChapter(links, index, &deferred);
+                            const auto anchor = start
+                                    ? entryStart
+                                    : engine->afterChapter(links, index, &deferred);
                             if (anchor.isNull() || deferred
-                                || (!start && !engine->validMainTextRange(entryStart, anchor,
-                                                                          &deferred)))
+                                || (!start
+                                    && !engine->validMainTextRange(entryStart, anchor, &deferred)))
                                 continue;
                             marks[key] = qt::object({ { "index", index },
                                                       { "title", link.title },
@@ -2862,15 +2942,15 @@ void ReaderSession::chapterBoundaryActions(
                             const bool startsLater = !oldStart.isEmpty()
                                     && engine->validMainTextRange(oldStart, first, &deferred);
                             const bool fits = startsLater || deferred
-                                    || engine->validMainTextRange(first, anchor("end", hints.second),
-                                                                  &deferred);
+                                    || engine->validMainTextRange(
+                                            first, anchor("end", hints.second), &deferred);
                             if (deferred)
                                 continue;
                             if (startsLater || !fits)
                                 marks.remove("end");
                         }
                         if (!engine->validMainTextRange(first, anchor("end", hints.second),
-                                                       &deferred))
+                                                        &deferred))
                             continue;
                         actions.append({ start, reset, [guard, job, original, marks] {
                                             if (!guard || !guard->currentSourceFrame(job)
@@ -3092,7 +3172,8 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                             // After the neighbour pages: the documents that
                             // the last turn replaced.
                             engine->releaseRetired();
-                            refinePageEstimate(engine, current, guard, job, lease, queued, background);
+                            refinePageEstimate(engine, current, guard, job, lease, queued,
+                                               background);
                         },
                         Qt::QueuedConnection);
             },

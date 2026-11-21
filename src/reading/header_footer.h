@@ -102,6 +102,8 @@ struct Layout
     bool progressBar = true;
     // The bar sits along the bottom edge, or along the top edge when this is set.
     bool progressBarTop = false;
+    // Ticks on the bar where chapters start.
+    bool progressTicks = false;
     // A strip is drawn when enabled and one of its slots shows something.
     bool header() const;
     bool footer() const;

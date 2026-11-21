@@ -2100,6 +2100,44 @@ static bool phosphorGeometry(const QString &name, QPainterPath &path) {
         path.closeSubpath();
         return true;
     }
+    if (name == QStringLiteral("ruler")) {
+        path.setFillRule(Qt::WindingFill);
+        path.moveTo(235.32, 73.37);
+        path.lineTo(182.63, 20.69);
+        path.cubicTo(179.629313, 17.688628, 175.559097, 16.002417, 171.315, 16.002417);
+        path.cubicTo(167.070903, 16.002417, 163.000687, 17.688628, 160, 20.69);
+        path.lineTo(20.68, 160);
+        path.cubicTo(17.678628, 163.000687, 15.992417, 167.070903, 15.992417, 171.315);
+        path.cubicTo(15.992417, 175.559097, 17.678628, 179.629313, 20.68, 182.63);
+        path.lineTo(73.37, 235.31);
+        path.cubicTo(76.370687, 238.311372, 80.440903, 239.997583, 84.685, 239.997583);
+        path.cubicTo(88.929097, 239.997583, 92.999313, 238.311372, 96, 235.31);
+        path.lineTo(235.32, 96);
+        path.cubicTo(238.321372, 92.999313, 240.007583, 88.929097, 240.007583, 84.685);
+        path.cubicTo(240.007583, 80.440903, 238.321372, 76.370687, 235.32, 73.37);
+        path.closeSubpath();
+        path.moveTo(84.68, 224);
+        path.lineTo(32, 171.31);
+        path.lineTo(64, 139.31);
+        path.lineTo(90.34, 165.66);
+        path.cubicTo(93.465932, 168.785932, 98.534068, 168.785932, 101.66, 165.66);
+        path.cubicTo(104.785932, 162.534068, 104.785932, 157.465932, 101.66, 154.34);
+        path.lineTo(75.31, 128);
+        path.lineTo(96, 107.31);
+        path.lineTo(122.34, 133.66);
+        path.cubicTo(125.465932, 136.785932, 130.534068, 136.785932, 133.66, 133.66);
+        path.cubicTo(136.785932, 130.534068, 136.785932, 125.465932, 133.66, 122.34);
+        path.lineTo(107.31, 96);
+        path.lineTo(128, 75.31);
+        path.lineTo(154.34, 101.66);
+        path.cubicTo(157.465932, 104.785932, 162.534068, 104.785932, 165.66, 101.66);
+        path.cubicTo(168.785932, 98.534068, 168.785932, 93.465932, 165.66, 90.34);
+        path.lineTo(139.31, 64);
+        path.lineTo(171.31, 32);
+        path.lineTo(224, 84.69);
+        path.closeSubpath();
+        return true;
+    }
     if (name == QStringLiteral("lock")) {
         path.setFillRule(Qt::WindingFill);
         path.moveTo(208, 80);

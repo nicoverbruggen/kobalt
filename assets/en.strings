@@ -497,7 +497,7 @@
 "header_footer.customize_title" = "Customize Header and Footer";
 /* Arguments: %1 */
 "header_footer.customize_slot" = "Customize slot: %1";
-"header_footer.custom_hint" = "You may customize six slots: tap one to customize it. Keep in mind that these changes are saved in the Custom preset, and are applied to all books that use it!";
+"header_footer.custom_hint" = "Tap a slot to change it. Changes apply to every book that uses Custom.";
 /* Arguments: %1, %2 */
 "header_footer.slot_value" = "%1: %2";
 "header_footer.close" = "Close header and footer";
@@ -513,6 +513,7 @@
 "header_footer.progress_bar_detail" = "% of book";
 "header_footer.progress_bar_bottom" = "Bottom";
 "header_footer.progress_bar_top" = "Top";
+"header_footer.progress_ticks" = "Chapter ticks";
 /* Arguments: %1 */
 "header_footer.time_left" = "%1 left";
 "header_footer.learning_pace" = "Learning reading speed";

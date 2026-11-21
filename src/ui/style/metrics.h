@@ -308,7 +308,13 @@ inline int textBandHeight(int size)
 
 inline constexpr Px progressHeight{ 24 };
 inline constexpr Px headerSide{ 28 }, headerTextGap{ 24 }, batteryGap{ 8 };
-inline constexpr Px progressBottom{ 14 }, progressFillHeight{ 4 };
+// The bar's rule, progressRuleHeight tall, ends progressBottom from its edge
+// of the screen, and the fill, progressFillHeight tall, lies against it on
+// the side of the text. The rule is 3 pixels at 300 PPI and 2 on the Nia.
+// The strip's text keeps progressTextInset from that edge, whatever the bar's
+// own place.
+inline constexpr Px progressBottom{ 8 }, progressRuleHeight{ 3 }, progressFillHeight{ 4 },
+        progressTextInset{ 18 };
 } // namespace reading
 
 namespace headerFooter {

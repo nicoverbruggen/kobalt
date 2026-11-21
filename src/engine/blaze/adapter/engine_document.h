@@ -227,6 +227,13 @@ public:
     bool partOfBook() const override { return windowFirst_ >= 0 && spineItemCount_ > 0; }
 
     RoughPages roughPages() const override;
+    QVector<int> wholeBookPages(const QStringList &positions,
+                                const std::function<bool()> &current = {},
+                                bool rangeEndpoints = false) const override;
+    int wholeBookPageCount() const override;
+    QVector<ChapterLink> wholeBookChapters() const override;
+    void rememberWholeBookTicks(const QVector<double> &ticks, const QString &range) override;
+    bool savedWholeBookTicks(const QString &range, QVector<double> *ticks) const override;
     QVector<int> bookPages(const QStringList &positions, const std::function<bool()> &current = {},
                            bool rangeEndpoints = false) const override;
     bool goToFraction(double fraction) override;
@@ -633,6 +640,9 @@ private:
     QString estimateKey(const QJsonObject &settings) const;
     // The same for slices of `slicePages` pages.
     QString estimateKey(const QJsonObject &settings, int slicePages) const;
+    // The key of chapter ticks: the one of chapter mode, which the saved
+    // record has, also in a document of the whole book.
+    QString ticksKey() const;
     // The key of a prepared document of the whole book. Unlike estimateKey()
     // it also holds the settings that change pixels only: a document made
     // before dark mode changed must not be shown after it.

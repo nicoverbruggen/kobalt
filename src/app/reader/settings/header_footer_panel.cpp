@@ -1,4 +1,5 @@
 #include "header_footer_panel.h"
+#include "app/reader/views/reading_page.h"
 #include "ui/controls/icons.h"
 #include "ui/controls/options.h"
 #include "ui/controls/paging.h"
@@ -101,10 +102,10 @@ int dashWidth(Field field)
 } // namespace
 
 namespace {
-// The page's progress bar: its fill and the gap under it.
+// What the page's progress bar keeps between its edge and the strip's text.
 int progressSpace()
 {
-    return metrics::reading::progressFillHeight + metrics::reading::progressBottom;
+    return metrics::reading::progressTextInset;
 }
 
 // A slot's box: its strip's line of text and the padding around it.
@@ -255,6 +256,17 @@ void SlotMap::setSlots(const Layout &next, const SlotContents &contents)
         update();
 }
 
+void SlotMap::setProgress(qreal fraction, const QVector<double> &chapterTicks)
+{
+    fraction = qBound(0.0, fraction, 1.0);
+    if (qFuzzyCompare(1 + progress, 1 + fraction) && ticks == chapterTicks)
+        return;
+    progress = fraction;
+    ticks = chapterTicks;
+    if (layout.progressBar)
+        update();
+}
+
 void SlotMap::setSlot(int slot, const Content &content)
 {
     const bool footer = headerfooter::footerSlot(slot);
@@ -336,12 +348,13 @@ void SlotMap::paintEvent(QPaintEvent *)
                          headerFooterMetrics::mapLineHeight, lines);
     }
     if (bar != headerfooter::BarEdge::None) {
-        // Where the page draws it: inside the top or bottom edge, across the width.
-        const int y = bar == headerfooter::BarEdge::Top
-                ? border + int(metrics::reading::progressBottom)
-                : height() - border - progressSpace();
-        painter.fillRect(border, y, inner, metrics::reading::progressFillHeight, lines);
-        painter.fillRect(border, y, inner / 30, metrics::reading::progressFillHeight, ink);
+        // Where the page draws it, inside the top or bottom edge.
+        const bool atTop = bar == headerfooter::BarEdge::Top;
+        const int edge = atTop ? border + int(metrics::reading::progressBottom)
+                               : height() - border - int(metrics::reading::progressBottom);
+        paintProgressBar(painter, border, inner, edge, atTop, progress,
+                         layout.progressTicks ? ticks : QVector<double>{},
+                         { ink, ui::themeColors(this).outline, palette().color(QPalette::Window) });
     }
 }
 

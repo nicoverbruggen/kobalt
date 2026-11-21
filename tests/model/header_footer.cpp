@@ -563,6 +563,11 @@ int main()
             "An unknown bar position was used");
     require(progressEdge(topBar) == BarEdge::Top && progressEdge(standard) == BarEdge::None,
             "The bar edge does not follow the layout");
+    // Ticks are optional too: a layout without them draws none.
+    require(!fromJson(old, standard).progressTicks, "A layout without ticks gained them");
+    auto ticked = topBar;
+    ticked.progressTicks = true;
+    require(fromJson(toJson(ticked), standard) == ticked, "Ticks did not load back");
     for (int slot = 0; slot < slotCount; ++slot)
         require(!slotLabel(slot).isEmpty(), "A slot has no name");
     for (const auto field : fields)

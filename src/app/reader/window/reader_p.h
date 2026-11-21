@@ -715,6 +715,7 @@ private:
     QVector<kobalt::reader::PresetCard *> presetCards;
     kobalt::reader::StripSizeControl *headerSizeControl = nullptr, *footerSizeControl = nullptr;
     QVector<QPushButton *> progressBarButtons;
+    QPushButton *progressTicksButton = nullptr;
     // Header and footer and the field list fill the reading area like
     // Chapters, over the Layout panel, which stays open beneath them.
     kobalt::reader::HeaderFooterView *headerFooterView = nullptr;

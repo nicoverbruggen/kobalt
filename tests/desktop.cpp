@@ -5816,7 +5816,8 @@ private slots:
             QVERIFY(fixture.press("rrPage"));
             QVERIFY(fixture.press("rrNavStats"));
             // The two anchors enclose 35 paragraphs of 3 x 30 words and one two-word heading.
-            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Main text · 3,152 words"));
+            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"),
+                         QString("Main text · 3,152 words"));
             const auto mainPagesLeft = initial.value("main_last_page").toInt()
                     - initial.value("main_first_page").toInt() + 1;
             QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), mainPagesLeft);
@@ -5824,7 +5825,8 @@ private slots:
             QCOMPARE(labelText(fixture, "rrStatsWordScopeTitle"), QString("Book Stats For"));
             QVERIFY(fixture.press("rrStatsWordVolume"));
             QTRY_VERIFY(!fixture.widget("rrStatsWordScopePopup"));
-            QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), initial.value("pages").toInt());
+            QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(),
+                     initial.value("pages").toInt());
             QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Volume · 8,106 words"));
             QCOMPARE(storage::readJson(fixture.paths.preferences())
                              .value("stats_word_scope")
@@ -5835,7 +5837,8 @@ private slots:
             QVERIFY(fixture.press("rrStatsWordMain"));
             QTRY_VERIFY(!fixture.widget("rrStatsWordScopePopup"));
             QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), mainPagesLeft);
-            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Main text · 3,152 words"));
+            QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"),
+                         QString("Main text · 3,152 words"));
             QVERIFY(fixture.press("rrPage"));
         }
         const auto chapters = [&] {
@@ -5859,7 +5862,8 @@ private slots:
             QVERIFY(fixture.press("rrNavStats"));
             QTRY_VERIFY(fixture.visible("rrChapterGraph"));
             QCOMPARE(fixture.visible("rrGraphWordScope"), expected);
-            QVERIFY(labelText(fixture, "rrGraphBookWords").startsWith(expected ? "Main text" : "Volume"));
+            QVERIFY(labelText(fixture, "rrGraphBookWords")
+                            .startsWith(expected ? "Main text" : "Volume"));
             QVERIFY(fixture.press("rrNavChapters"));
             QTRY_VERIFY(fixture.visible("rrContents"));
         };
@@ -8394,8 +8398,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrNavStats"));
         QTRY_VERIFY(fixture.visible("rrGraphBookFigure"));
         QTRY_COMPARE(fixture.widget("rrGraphBookFigure")->property("text").toString().toInt(),
-                     qMax(0,
-                          last + 2 - fixture.state().value("rough_page").toInt()));
+                     qMax(0, last + 2 - fixture.state().value("rough_page").toInt()));
         QVERIFY(fixture.press("rrNavSeek"));
         QTRY_VERIFY(fixture.visible("rrBookPositionIndicator"));
         QTRY_VERIFY(navigator->previewReady());
@@ -10762,6 +10765,119 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         checkPercentageFormat(preset, dark, false);
     }
 
+    // A book that nests its chapters under one part, with only front and
+    // back matter beside it at the top, gets ticks for those chapters.
+    void headerFooterTicksNested()
+    {
+        using namespace headerfooter;
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QByteArray body, navigation;
+        for (int i = 1; i <= 6; ++i) {
+            const auto number = QByteArray::number(i);
+            body += "<h2 id='c" + number + "'>Chapter " + number + "</h2>"
+                    + QByteArray("<p>The river ran past the mill and on to the sea.</p>")
+                              .repeated(40);
+            navigation +=
+                    "<li><a href='text.xhtml#c" + number + "'>Chapter " + number + "</a></li>";
+        }
+        const QMap<QString, QByteArray> files{
+            { "mimetype", "application/epub+zip" },
+            { "META-INF/container.xml",
+              "<container xmlns='urn:oasis:names:tc:opendocument:xmlns:container' version='1.0'><rootfiles><rootfile full-path='book.opf' media-type='application/oebps-package+xml'/></rootfiles></container>" },
+            { "book.opf",
+              "<package xmlns='http://www.idpf.org/2007/opf' version='3.0' unique-identifier='id'><metadata xmlns:dc='http://purl.org/dc/elements/1.1/'><dc:identifier id='id'>nested</dc:identifier><dc:title>Nested</dc:title><dc:language>en</dc:language></metadata><manifest><item id='nav' href='nav.xhtml' media-type='application/xhtml+xml' properties='nav'/><item id='title' href='title.xhtml' media-type='application/xhtml+xml'/><item id='text' href='text.xhtml' media-type='application/xhtml+xml'/><item id='end' href='end.xhtml' media-type='application/xhtml+xml'/></manifest><spine><itemref idref='title'/><itemref idref='text'/><itemref idref='end'/></spine></package>" },
+            { "title.xhtml",
+              "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Title</title></head><body><h1>Nested</h1></body></html>" },
+            { "text.xhtml",
+              "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>Text</title></head><body>"
+                      + body + "</body></html>" },
+            { "end.xhtml",
+              "<html xmlns='http://www.w3.org/1999/xhtml'><head><title>End</title></head><body><p>Colophon.</p></body></html>" },
+            { "nav.xhtml",
+              "<html xmlns='http://www.w3.org/1999/xhtml' xmlns:epub='http://www.idpf.org/2007/ops'><head><title>Contents</title></head><body><nav epub:type='toc'><ol><li><a href='title.xhtml'>Title</a></li><li><a href='text.xhtml#c1'>The Story</a><ol>"
+                      + navigation
+                      + "</ol></li><li><a href='end.xhtml'>Colophon</a></li></ol></nav></body></html>" }
+        };
+        QVERIFY(test::writeBook(fixture.directory.path(), "nested.epub", files));
+        auto layout = presetLayout(Preset::Default);
+        layout.progressBar = layout.progressTicks = true;
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences[customKey] = toJson(layout);
+        preferences[presetKey] = presetValue(Preset::Custom);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(fixture.directory.filePath("nested.epub"));
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 20000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 20000);
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        // Without landmarks the main text starts at the title page, so each
+        // of the six chapters has a tick; the part above them would give one.
+        QTRY_COMPARE_WITH_TIMEOUT(page->shownTicks().size(), 6, 20000);
+        for (int i = 1; i < 6; ++i)
+            QVERIFY(page->shownTicks()[i] > page->shownTicks()[i - 1]);
+    }
+
+    // Hybrid draws chapter ticks once the whole book is prepared, with no
+    // turn, keeps them when it adopts that book, and shows the saved ticks
+    // at once when the book opens again.
+    void headerFooterTicksHybrid()
+    {
+        using namespace headerfooter;
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QVERIFY(test::writeBook(fixture.directory.path(), "songs.epub", test::songbook(60)));
+        const auto path = fixture.directory.filePath("songs.epub");
+        auto layout = presetLayout(Preset::Default);
+        layout.progressBar = layout.progressTicks = true;
+        auto preferences = storage::readJson(fixture.paths.preferences());
+        preferences[customKey] = toJson(layout);
+        preferences[presetKey] = presetValue(Preset::Custom);
+        QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
+        renderingMode::setOverride(2);
+        const int quiet = renderingMode::buildQuietMilliseconds();
+        renderingMode::setBuildQuietMilliseconds(0);
+        const auto restore = qScopeGuard([quiet] {
+            renderingMode::setOverride(-1);
+            renderingMode::setBuildQuietMilliseconds(quiet);
+        });
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(path);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 20000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 20000);
+        auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(page && page->chrome.progressTicks);
+        // Hybrid prepares the whole book once the reader has turned a few
+        // pages. The ticks then come without another turn, still in the
+        // chapter.
+        for (int turn = 0; turn < 3; ++turn)
+            QVERIFY(fixture.turnPage(1));
+        QTRY_VERIFY_WITH_TIMEOUT(!page->shownTicks().isEmpty(), 30000);
+        QVERIFY(fixture.state().contains("book_fraction"));
+        const auto ticks = page->shownTicks();
+        QCOMPARE(ticks.size(), 5);
+        for (int turn = 0; turn < 40 && fixture.state().contains("book_fraction"); ++turn)
+            QVERIFY(fixture.turnPage(turn % 2 ? -1 : 1));
+        QVERIFY(!fixture.state().contains("book_fraction"));
+        QCOMPARE(page->shownTicks(), ticks);
+        // The whole book keeps the ticks in its record through later turns.
+        QVERIFY(fixture.turnPage(1));
+        QVERIFY(fixture.turnPage(-1));
+        QCOMPARE(page->shownTicks(), ticks);
+        fixture.window.readerWindow()->close();
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.window.idle(), 30000);
+        // The book opens again in chapter mode, before any whole book, with
+        // the saved ticks.
+        renderingMode::setBuildQuietMilliseconds(600000);
+        fixture.window.openBook(path);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 2, 20000);
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 20000);
+        page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
+        QVERIFY(fixture.state().contains("book_fraction"));
+        QVERIFY(!fixture.state().value("whole_book_ready").toBool());
+        QCOMPARE(page->shownTicks(), ticks);
+    }
+
     // The progress bar along the top: the header strip holds it, the footer
     // gives up its room, the rule runs under the top edge, and it saves.
     void headerFooterProgressTop()
@@ -10788,6 +10904,21 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         const int bar = ui::metrics::reading::progressHeight;
         QCOMPARE(page->topHeight(), top + bar);
         QCOMPARE(page->bottomHeight(), bottom - bar);
+        // The rule is ink up to the reading position and lighter after it.
+        {
+            const int rule = int(ui::metrics::reading::progressBottom) - 1;
+            QTRY_COMPARE(page->headerImage().pixelColor(page->headerImage().width() - 2, rule),
+                         ui::themeColors(page).outline);
+        }
+        // Chapter ticks: a toggle beside the edges, off without a bar.
+        auto *ticks = fixture.widget("rrHeaderFooterProgressTicks");
+        QVERIFY(ticks && ticks->isEnabled());
+        QVERIFY(fixture.press("rrHeaderFooterProgressTicks"));
+        QTRY_VERIFY(!page->shownTicks().isEmpty());
+        QVERIFY(fixture.press("rrHeaderFooterProgressBar_off"));
+        QTRY_VERIFY(!ticks->isEnabled());
+        QVERIFY(fixture.press("rrHeaderFooterProgressBar_top"));
+        QTRY_VERIFY(ticks->isEnabled() && page->progressAtTop());
         QTRY_VERIFY(fixture.widget("rrHeaderFooterClose")->isEnabled());
         QVERIFY(fixture.press("rrHeaderFooterClose"));
         QTRY_VERIFY(!fixture.visible("rrHeaderFooterView"));
@@ -10800,12 +10931,29 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                              .value("progress_bar_position")
                              .toString(),
                      QString("top"));
-        // The rule spans the width just inside the top edge.
+        QVERIFY(storage::readJson(fixture.paths.preferences())
+                        .value(headerfooter::customKey)
+                        .toObject()
+                        .value("progress_bar_ticks")
+                        .toBool());
+        // The rule runs just inside the top edge, the fill under its read
+        // part, and each chapter tick cuts a gap through both.
+        page->progressFraction = 0.5;
+        page->refreshStrips();
         const auto header = page->headerImage();
         QVERIFY(!header.isNull());
+        const auto ink = page->palette().color(QPalette::WindowText);
         const int rule = int(ui::metrics::reading::progressBottom) - 1;
-        QCOMPARE(header.pixelColor(header.width() - 2, rule),
-                 page->palette().color(QPalette::WindowText));
+        const int fill = rule + int(ui::metrics::reading::progressFillHeight);
+        const int filled = qRound(header.width() * page->progressFraction);
+        QCOMPARE(header.pixelColor(filled - 1, rule), ink);
+        QCOMPARE(header.pixelColor(filled - 1, fill), ink);
+        QCOMPARE(header.pixelColor(header.width() - 2, rule), ui::themeColors(page).outline);
+        const auto paper = header.pixelColor(header.width() - 2, 1);
+        const int tickX = qRound(header.width() * page->shownTicks().last());
+        QCOMPARE(header.pixelColor(tickX, rule), paper);
+        QCOMPARE(header.pixelColor(tickX, fill), paper);
+        QVERIFY(header.pixelColor(tickX + 4, rule) != paper);
     }
 
     void headerFooterSizes_data() { screenshotVariants(); }
@@ -10945,7 +11093,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(page);
             const auto estimated = [&] { return page->slotContents[2].text.contains('~'); };
             // The cover uses its own label while the main-text count is estimated.
-            QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("rough_pages_estimated").toBool(), 10000);
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("rough_pages_estimated").toBool(),
+                                     10000);
             QTRY_VERIFY(page->slotContents[2].text.contains("I"));
             for (int turn = 0; turn < 4; ++turn) {
                 const auto before = fixture.state().value("position").toString();
@@ -14322,7 +14471,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             for (int i = 0; root && i < root->childCount(); ++i) {
                 auto *row = root->child(i);
                 if (row && !row->state().invisible)
-                    result.insert(row->text(QAccessible::Name), row->text(QAccessible::Description));
+                    result.insert(row->text(QAccessible::Name),
+                                  row->text(QAccessible::Description));
             }
             return result;
         };
@@ -14432,8 +14582,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrNavLayout"));
         QTRY_VERIFY(fixture.visible("rrHeaderFooter"));
         QVERIFY(fixture.press("rrNavLayout"));
-        QTRY_VERIFY(!fixture.visible("rrHeaderFooter")
-                    && !fixture.state().value("busy").toBool());
+        QTRY_VERIFY(!fixture.visible("rrHeaderFooter") && !fixture.state().value("busy").toBool());
         if (fixture.visible("rrControlsTop"))
             QVERIFY(fixture.press("rrPage"));
         QTRY_VERIFY(!fixture.visible("rrControlsTop"));
@@ -15783,9 +15932,10 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                                  .value("session_timeout_minutes")
                                  .toInt(-1),
                          minutes);
-            QTRY_COMPARE(timeout->caption(),
-                         strings::get(qPrintable(QString("settings.session_timeout_%1").arg(minutes)))
-                                 .toUpper());
+            QTRY_COMPARE(
+                    timeout->caption(),
+                    strings::get(qPrintable(QString("settings.session_timeout_%1").arg(minutes)))
+                            .toUpper());
         }
         QVERIFY(fixture.press("rrSettingsDisplay"));
         QVERIFY(fixture.press("rrSettingsSystem"));
@@ -19576,8 +19726,8 @@ private slots:
         // Page to the disabled custom font, so the capture shows its reason.
         for (int page = 0; page < 10; ++page) {
             bool shown = false;
-            for (auto *option : static_cast<ui::RadioList *>(fixture.widget("rrSettingsFontChoices"))
-                                        ->options())
+            for (auto *option :
+                 static_cast<ui::RadioList *>(fixture.widget("rrSettingsFontChoices"))->options())
                 shown |= option->isVisible() && !option->isEnabled();
             if (shown || !fixture.visible("rrSettingsFontNext")
                 || !fixture.press("rrSettingsFontNext"))

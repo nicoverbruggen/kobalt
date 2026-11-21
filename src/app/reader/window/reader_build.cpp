@@ -1406,6 +1406,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
     headerSizeControl = appearance.headerSizeControl;
     footerSizeControl = appearance.footerSizeControl;
     progressBarButtons = appearance.progressBarButtons;
+    progressTicksButton = appearance.progressTicksButton;
     connect(headerFooterRow, &QPushButton::clicked, this, [this] { openHeaderFooterView(); });
     // Close returns to the Layout panel, which stayed open beneath the view.
     headerFooterView->closed = [this] { closeChromeViews(); };
@@ -1482,6 +1483,12 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
             });
         });
     }
+    if (progressTicksButton)
+        connect(progressTicksButton, &QPushButton::clicked, this, [editCustom](bool checked) {
+            editCustom([checked](kobalt::headerfooter::Layout &custom) {
+                custom.progressTicks = checked;
+            });
+        });
     fieldChooserEdit = editCustom;
     // The views belong to the Layout panel and leave with it. The Text tab
     // replaces it with the Text page, which also closes them.

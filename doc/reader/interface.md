@@ -53,6 +53,10 @@ Chapters, bookmarks, dictionary choices, reading header and footer size choices,
 
 Long lists wrap when paged. Next on the last page returns to the first page, and Previous on the first page opens the last page. This applies to Chapters, Bookmarks, Search results, font choices, dictionary choices, downloaded dictionaries and the acknowledgments list. Empty and single-page lists disable both page actions. Dictionary definitions, footnotes, license text and the chapter graph keep their page boundaries. Paging a list does not change its selected item.
 
+## Interface text
+
+Use title case for named dialogs. Use sentence case for confirmation questions such as “Delete reading activity?” Keep screen names capitalized, as in “Remove from Library?” Give an action and a dialog separate string keys when they need different capitalization.
+
 ## Zen Mode
 
 Settings > Display > Zen Mode gives the reading menu a smaller layout. A lotus icon identifies the row. Its title reads ZEN MODE in the same style as the reading menu’s ZEN mark. It is a global setting and is off by default. Restore appearance defaults turns it off. The rest of Settings stays the same.

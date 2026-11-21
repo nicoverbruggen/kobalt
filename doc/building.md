@@ -136,7 +136,7 @@ To regenerate the US English whole-word exceptions, run `cmake -P assets/convert
 
 CMake generates the English string table from `assets/en.strings` and rejects missing keys in literal `strings::get` and `strings::key` calls under `src/`. Ordinary builds reconfigure when that file changes, so edits appear without updating a separate snapshot. The icon geometry in `src/ui/controls/reader_icon_vectors.h` is hand-kept C++ outline data based on the Phosphor SVGs. Editing an SVG does not update it, and its maintenance workflow has not been restored. The dictionary catalogue for downloads comes from `assets/dictionaries.json`, and the page style and search script of annotation exports come from `assets/export/`. CMake embeds them when it configures a build. Ordinary builds reconfigure after an edit to these files.
 
-Use title case for named dialogs. Use sentence case for confirmation questions such as “Delete reading activity?” Keep screen names capitalized, as in “Remove from Library?” Give an action and a dialog separate string keys when they need different capitalization.
+For how interface text is capitalized, see [Interface text](reader/interface.md#interface-text).
 
 ## Kobo
 

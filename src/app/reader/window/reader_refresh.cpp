@@ -23,7 +23,10 @@ void Reader::refreshRenderNotice()
         return;
     renderNoticeTimer.stop();
     const auto progress = session->renderProgress();
-    const bool active = progress.active && !resizePending && !closing && !lifecycleHidden;
+    // Rotation and resizing show placeholder text while the page lays out
+    // again. The placeholders already say that layout is happening.
+    const bool active = progress.active && progress.reason != RenderReason::PageLayout
+            && !resizePending && !closing && !lifecycleHidden;
     const bool showNotice = active && progress.elapsedMilliseconds >= 1000;
     const char *message = strings::key("reader.applying_appearance_changes");
     switch (progress.reason) {
@@ -34,8 +37,6 @@ void Reader::refreshRenderNotice()
         message = strings::key("reader.disabling_bold_reading");
         break;
     case RenderReason::PageLayout:
-        message = strings::key("reader.updating_page_layout");
-        break;
     case RenderReason::Appearance:
         break;
     }

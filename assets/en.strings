@@ -653,7 +653,6 @@
 "reader.applying_appearance_changes" = "Applying appearance changes...";
 "reader.enabling_bold_reading" = "Enabling Bold reading...";
 "reader.disabling_bold_reading" = "Disabling Bold reading...";
-"reader.updating_page_layout" = "Updating page layout...";
 "reader.auto_alignment" = "Auto alignment";
 "reader.automatic_rotation" = "Automatic rotation";
 "reader.book_marked_finished" = "Book marked finished";

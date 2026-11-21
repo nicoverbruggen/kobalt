@@ -88,7 +88,7 @@ inline const QMap<QString, QString> &screenshotTitles()
 {
     static const QMap<QString, QString> titles{
         { "about", "About Kobalt" },
-        { "viewport-transition", "Updating page layout" },
+        { "viewport-transition", "Page layout placeholders" },
         { "shutdown-notice", "Shutting down" },
         { "kosync-login-feedback", "Sync sign in: idle" },
         { "kosync-login-feedback-pressed", "Sync sign in: pressed" },

@@ -6212,15 +6212,10 @@ private slots:
         page.setReflowText("Longer words.");
         QCOMPARE(page.snapshot().pixelColor(22, body.top() + 30), ink);
         page.setReflowText({});
-        // Check the notice delay and run it instead of waiting for it.
-        auto *notice = page.findChild<QTimer *>("rrViewportNoticeTimer");
-        QVERIFY(notice && notice->isActive() && notice->isSingleShot()
-                && notice->interval() >= 1000);
+        // The placeholders are the only sign of the layout: no notice appears.
+        QVERIFY(!page.findChild<QTimer *>("rrViewportNoticeTimer"));
         QCoreApplication::processEvents();
-        QCOMPARE(page.snapshot(), preview); // Short transitions show no notice.
-        notice->stop();
-        QMetaObject::invokeMethod(notice, "timeout", Qt::DirectConnection);
-        QVERIFY(page.snapshot() != preview); // The delayed static notice appears.
+        QCOMPARE(page.snapshot(), preview);
         QCOMPARE(page.image.cacheKey(), original);
         int taps = 0;
         page.tapped = [&](QPoint) { ++taps; };
@@ -19265,12 +19260,6 @@ private slots:
         qt::invoke(engineWorker(), [release] { release->acquire(); }, Qt::QueuedConnection);
         QTRY_VERIFY(!page->reflowWordLengths().isEmpty());
         QVERIFY(page->viewportTransition());
-        auto *notice = page->findChild<QTimer *>("rrViewportNoticeTimer");
-        QVERIFY(notice);
-        if (notice->isActive()) {
-            notice->stop();
-            QVERIFY(QMetaObject::invokeMethod(notice, "timeout", Qt::DirectConnection));
-        }
         QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-viewport-transition"));
     }
 

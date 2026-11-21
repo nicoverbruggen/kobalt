@@ -221,9 +221,8 @@ private:
     QColor pagePaper() const;
     void paintContents(QPainter &painter, bool sleeping = false) const;
     void paintBody(QPainter &painter) const;
-    bool changingViewport = false, viewportNoticeVisible = false;
+    bool changingViewport = false;
     QVector<int> wordLengths;
-    QTimer viewportNoticeTimer;
     int headerRightWidth() const;
     ui::HoldTimer holdTimer;
     enum class HoldTarget { Current, Stale };

@@ -664,15 +664,6 @@ ReadingPage::ReadingPage(QWidget *parent, std::function<void()> cancelAnimation)
     : QWidget(parent), cancelAnimation(std::move(cancelAnimation))
 {
     Q_ASSERT(this->cancelAnimation);
-    viewportNoticeTimer.setParent(this);
-    viewportNoticeTimer.setObjectName("rrViewportNoticeTimer");
-    viewportNoticeTimer.setSingleShot(true);
-    viewportNoticeTimer.setInterval(1000);
-    viewportNoticeTimer.setTimerType(Qt::PreciseTimer);
-    connect(&viewportNoticeTimer, &QTimer::timeout, this, [this] {
-        viewportNoticeVisible = changingViewport;
-        update();
-    });
     pageTurnAnimation.setObjectName("rrPageTurn");
     pageTurnAnimation.setParent(this);
     pageTurnAnimation.setDuration(180);
@@ -774,10 +765,6 @@ void ReadingPage::setViewportTransition(bool active)
         cancelHold();
         multipleTouch = annotationTouch = rightPressed = rightMoved = false;
         touchOrigins.clear();
-        viewportNoticeTimer.start();
-    } else {
-        viewportNoticeTimer.stop();
-        viewportNoticeVisible = false;
     }
     update();
 }
@@ -1188,24 +1175,6 @@ void ReadingPage::paintContents(QPainter &painter, bool sleeping) const
     if (!changingViewport)
         kobalt::render::paintBookmarkRibbon(painter, renderedRibbon,
                                             palette().color(QPalette::WindowText));
-    if (viewportNoticeVisible && !sleeping) {
-        painter.save();
-        painter.setFont(ui::interfaceFont(metrics::chrome::captionText));
-        const auto text = strings::get("reader.updating_page_layout");
-        const int padding = ui::px(16);
-        const int h = ui::interfaceLineHeight(painter.font()) + 2 * padding;
-        const int w = qMin(width() - 2 * padding,
-                           ui::interfaceTextWidth(text, painter.font()) + 2 * padding);
-        const QRect card((width() - w) / 2, height() - bottomHeight() - h - padding, w, h);
-        painter.fillRect(card, palette().color(QPalette::Window));
-        ui::paintEdges(painter, card,
-                       ui::Edges(Qt::TopEdge) | Qt::BottomEdge | Qt::LeftEdge | Qt::RightEdge,
-                       palette().color(QPalette::WindowText), metrics::control::border);
-        painter.setPen(palette().color(QPalette::WindowText));
-        ui::drawInterfaceText(painter, card.adjusted(padding, 0, -padding, 0), text,
-                              Qt::AlignCenter);
-        painter.restore();
-    }
 }
 
 bool ReadingPage::annotationCenter(QPointF point) const

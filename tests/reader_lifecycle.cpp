@@ -3162,18 +3162,18 @@ private slots:
         QFETCH(bool, touch);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        if (samePosition) {
-            auto files = test::engineBook();
-            files["OEBPS/c1.xhtml"] =
-                    test::publisherHtml("<p>" + QByteArray("alpha ").repeated(20)
-                                        + "</p><div style=\"padding-bottom:4000px\">t</div><p>"
-                                        + QByteArray("reader ").repeated(60) + "</p>");
-            QVERIFY(test::writeBook(directory.path(), "same-position.epub", files));
-        }
+        auto files = test::engineBook();
+        const QByteArray paragraphs = samePosition
+                ? "<p>" + QByteArray("alpha ").repeated(20)
+                        + "</p><div style=\"padding-bottom:4000px\">t</div><p>"
+                        + QByteArray("reader ").repeated(60) + "</p>"
+                : QByteArray("<p>Each page must have a distinct text position.</p>").repeated(320);
+        files["OEBPS/c1.xhtml"] = test::publisherHtml(paragraphs);
+        QVERIFY(test::writeBook(directory.path(), "held-frame.epub", files));
         ReaderFixture host(testPaths(), testFonts, testPlaceholder);
         CloseHost cleanup{ host };
         QSignalSpy opened(&host, &ReaderFixture::opened);
-        host.open(samePosition ? directory.filePath("same-position.epub") : fixture(), nativeSize);
+        host.open(directory.filePath("held-frame.epub"), nativeSize);
         QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
         Canvas canvas(host.window(), nativeSize);
         canvas.resize(900, 900);
@@ -7329,6 +7329,15 @@ private slots:
         auto *battery = host.window()->findChild<QWidget *>("rrMenuBattery");
         auto *timer = host.window()->findChild<QTimer *>("rrClockTimer");
         QVERIFY(message && clock && battery && timer);
+        const auto check = [&] {
+            return message->isVisible() == !hidden
+                    && message->text()
+                    == (hidden ? QString() : strings::get("reader.session_minutes").arg(12))
+                    && clock->isVisible() && battery->isVisible()
+                    && host.book()->sessionReadingMilliseconds() == 12 * 60000;
+        };
+        // Hybrid uses this label for the page count until its status timer refreshes it.
+        QTRY_VERIFY_WITH_TIMEOUT(check(), 30000);
         const auto capture = qEnvironmentVariable("KOBALT_STATS_VISIBILITY_CAPTURE_DIR");
         if (!capture.isEmpty()) {
             QVERIFY(QDir().mkpath(capture));
@@ -7339,16 +7348,6 @@ private slots:
                               .arg(size.width() == 720 ? "phone" : "six-inch")
                               .arg(hidden ? "hidden" : "visible")));
         }
-        const auto check = [&] {
-            return message->isVisible() == !hidden
-                    && message->text()
-                    == (hidden ? QString() : strings::get("reader.session_minutes").arg(12))
-                    && clock->isVisible() && battery->isVisible()
-                    && host.book()->sessionReadingMilliseconds() == 12 * 60000;
-        };
-        QVERIFY2(
-                check(),
-                "Session message must follow Stats visibility without changing reading time or status icons");
         const auto clockBounds = clock->geometry();
         const auto batteryBounds = battery->geometry();
         for (int pass = 0; pass < 2; ++pass) {
@@ -7413,9 +7412,10 @@ private slots:
         QVERIFY(clickAt(reopened, QPoint(size.width() / 2, size.height() / 2)));
         message = host.window()->findChild<QLabel *>("rrMenuSession");
         QVERIFY(message);
+        QTRY_COMPARE_WITH_TIMEOUT(message->text(),
+                                  hidden ? QString() : strings::get("reader.session_minutes").arg(12),
+                                  30000);
         QCOMPARE(message->isVisible(), !hidden);
-        QCOMPARE(message->text(),
-                 hidden ? QString() : strings::get("reader.session_minutes").arg(12));
         QCOMPARE(host.book()->sessionReadingMilliseconds(), qint64(12 * 60000));
     }
 
@@ -7483,6 +7483,7 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&canvas));
         QTRY_VERIFY(!host.session()->busy());
         QVERIFY(clickAt(canvas, QPoint(size.width() / 2, size.height() / 2)));
+        QTRY_VERIFY_WITH_TIMEOUT(!host.session()->paginationPending(), 30000);
         auto *session = host.window()->findChild<QLabel *>("rrMenuSession");
         auto *clock = host.window()->findChild<QLabel *>("rrMenuClock");
         auto *wifi = host.window()->findChild<QWidget *>("rrMenuWifi");

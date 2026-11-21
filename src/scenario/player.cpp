@@ -35,26 +35,28 @@ public:
         deadline.start(qMax(0, milliseconds));
         exec();
     }
+
+    bool until(const std::function<bool()> &done, int timeout)
+    {
+        QTimer poll;
+        bool met = false;
+        QObject::connect(&poll, &QTimer::timeout, this, [&] {
+            if (done()) {
+                met = true;
+                quit();
+            }
+        });
+        poll.start(16);
+        wait(timeout);
+        return met || done();
+    }
 };
 
-// Host predicates have no change notification. Limit how often the player
-// samples them so a slow operation can leave the reader thread asleep.
+// Other host predicates have no change notification. Limit how often the
+// player samples them so a slow operation can leave the reader thread asleep.
 bool waitUntil(const std::function<bool()> &done, int timeout)
 {
-    if (done())
-        return true;
-    WaitLoop loop;
-    QTimer poll;
-    bool met = false;
-    QObject::connect(&poll, &QTimer::timeout, &loop, [&] {
-        if (done()) {
-            met = true;
-            loop.quit();
-        }
-    });
-    poll.start(16);
-    loop.wait(timeout);
-    return met || done();
+    return done() || WaitLoop().until(done, timeout);
 }
 
 // Diagnostics events from any thread, in the order they were written.
@@ -105,6 +107,29 @@ public:
     {
         QMutexLocker lock(&state->mutex);
         return state->counted;
+    }
+
+    bool waitForClose(const std::function<void()> &request, const std::function<bool()> &done,
+                      int timeout)
+    {
+        WaitLoop loop;
+        {
+            QMutexLocker lock(&state->mutex);
+            // Observe the close before requesting it. Keep the event queued
+            // for an explicit event step and check host state on the GUI thread.
+            state->notify = [&](const QJsonObject &event) {
+                if (event.value("event").toString() == QLatin1String("book-close"))
+                    qt::invoke(&loop, [&] {
+                        if (done())
+                            loop.quit();
+                    }, Qt::QueuedConnection);
+            };
+        }
+        request();
+        const bool completed = done() || loop.until(done, timeout);
+        QMutexLocker lock(&state->mutex);
+        state->notify = {};
+        return completed;
     }
 
     // Consumes events until one matches, and returns it. `where` lists
@@ -322,9 +347,7 @@ public:
             if (!reader)
                 return "no book is open";
             events.skip();
-            reader->close();
-            current.clear();
-            return closed() ? QString() : "the book did not close";
+            return close(reader) ? QString() : "the book did not close";
         }
         // Page keys go where every platform's page buttons go.
         if (step.contains("key")) {
@@ -411,9 +434,7 @@ public:
         if (step.contains("kosync")) {
             if (auto *reader = host.reader ? host.reader() : nullptr) {
                 events.skip();
-                reader->close();
-                current.clear();
-                if (!closed())
+                if (!close(reader))
                     return "the open book did not close";
             }
             const auto account = step.value("kosync").toObject();
@@ -488,12 +509,8 @@ public:
             unsupported = true;
             return "the host cannot remove caches";
         }
-        if (auto *reader = host.reader()) {
-            reader->close();
-            current.clear();
-            if (!closed())
-                return "the open book did not close";
-        }
+        if (auto *reader = host.reader(); reader && !close(reader))
+            return "the open book did not close";
         if (fresh && !host.forget(key))
             return "could not clear the book caches";
         events.skip();
@@ -514,9 +531,14 @@ public:
         return {};
     }
 
-    bool closed()
+    bool close(QWidget *reader)
     {
-        return waitUntil([&] { return !host.reader() && (!host.idle || host.idle()); }, 60000);
+        return events.waitForClose(
+                [this, reader] {
+                    reader->close();
+                    current.clear();
+                },
+                [this] { return !host.reader() && (!host.idle || host.idle()); }, 60000);
     }
 
     // Holds a word or a link, as a lookup or a link selection starts.

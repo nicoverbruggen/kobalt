@@ -1,6 +1,7 @@
 #include "scenario/player.h"
 #include "support/diagnostics.h"
 #include <QApplication>
+#include <QCloseEvent>
 #include <QWidget>
 #include <QElapsedTimer>
 #include <QJsonArray>
@@ -75,12 +76,86 @@ void require(bool condition, const char *message)
         std::exit(1);
     }
 }
+class ClosingWidget final : public QWidget
+{
+public:
+    std::function<void()> requested;
+
+protected:
+    void closeEvent(QCloseEvent *event) override
+    {
+        event->ignore();
+        requested();
+    }
+};
+
+void checkCloseNotifications()
+{
+    for (const auto *mode : { "synchronous", "asynchronous", "early", "missing" }) {
+        ClosingWidget reader;
+        bool hasReader = true, idle = false, dispatchingWake = false, wokeFromNotification = false;
+        const bool synchronous = qstrcmp(mode, "synchronous") == 0;
+        const bool early = qstrcmp(mode, "early") == 0;
+        const bool notified = qstrcmp(mode, "missing") != 0;
+        const auto emitClosed = [] {
+            kobalt::observer(QJsonObject{ { "event", "book-close" }, { "total_ms", 12 } });
+        };
+        const auto retire = [&] {
+            hasReader = false;
+            idle = !early;
+            if (notified)
+                emitClosed();
+            if (!synchronous) {
+                // Deliver queued notification callbacks without dispatching
+                // timer events, even when the test machine is under load.
+                dispatchingWake = true;
+                QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+                dispatchingWake = false;
+            }
+            if (early)
+                QTimer::singleShot(0, &reader, [&] { idle = true; });
+        };
+        reader.requested = [&] {
+            if (synchronous)
+                retire();
+            else
+                QTimer::singleShot(0, &reader, retire);
+        };
+        kobalt::scenario::Host host;
+        host.reader = [&]() -> QWidget * { return hasReader ? &reader : nullptr; };
+        host.idle = [&] {
+            if (dispatchingWake && idle)
+                wokeFromNotification = true;
+            return idle;
+        };
+        host.open = [](const QString &) { return true; };
+        QJsonArray steps{ QJsonObject{ { "mark", true } }, QJsonObject{ { "close", true } } };
+        if (notified)
+            steps.append(QJsonObject{ { "event", "book-close" }, { "earlier", true },
+                                      { "timeout", 100 } });
+        steps.append(QJsonObject{ { "mark_end", true } });
+        const QJsonObject scenario{
+            { "id", "resources.close-notification" },
+            { "repeat", 1 },
+            { "steps", steps },
+            { "sample", QJsonObject{ { "timer", true }, { "resources", true } } }
+        };
+        const auto results = kobalt::scenario::run(
+                QJsonObject{ { "scenarios", QJsonArray{ scenario } } }, host);
+        require(results.size() == 1 && results.first().value("status") == "completed"
+                        && !hasReader && idle,
+                "Close must wait for a missing reader and an idle host, and keep its event");
+        require(wokeFromNotification == (!synchronous && notified && !early),
+                "An asynchronous close must check host completion on notification");
+    }
+}
 } // namespace
 
 // Checks the scenario player's sleep benchmark, KOSync account, `native-sync`, `wifi` and event steps, real-time waits, keep-awake and resource samples, with a controlled host.
 int main(int argc, char **argv)
 {
     QApplication app(argc, argv);
+    checkCloseNotifications();
     auto scenario = QJsonObject{
         { "id", "sleep.test" },
         { "opt_in", true },

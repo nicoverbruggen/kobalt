@@ -25,6 +25,7 @@ The sections come in this order. In each section, the entries that we expect to 
 - [Features](#features): CSS and EPUB support that upstream does not have.
 - [Bug fixes](#bug-fixes): crashes, leaks, undefined behavior and wrong output that KOReader users can meet.
 - [Hardening](#hardening): defects that need damaged or crafted input, or that we could not reach in KOReader.
+- [How Blaze opens a book in parts](#how-blaze-opens-a-book-in-parts): how Blaze loads part of a book, lays out part of a chapter, stops work and builds the whole book in the background.
 - [Changes for Kobalt's reader](#changes-for-kobalts-reader): host interfaces that Kobalt needs. They are listed for completeness and are unlikely to fit upstream.
 
 ## Speedups
@@ -620,9 +621,76 @@ The font classes mark their overrides with `override`, so a changed virtual sign
 
 **Upstream:** present in `master`.
 
+## How Blaze opens a book in parts
+
+This is the main reason Blaze exists, and the part of the fork that changes CREngine the most. This section explains how it works, for maintainers who know CREngine and are curious. The entries in [Changes for Kobalt's reader](#changes-for-kobalts-reader) list the same pieces one by one.
+
+Stock CREngine opens an EPUB in one go. It parses every spine item into one `ldomDocument`, runs the style pass over the whole DOM, lays out the whole book and splits it into pages. Only then can it draw the first page. On a desktop that is quick. A Kobo Clara BW has one core and is roughly 25 to 40 times slower than a Mac for layout. On a Mac, *War and Peace* (393 spine items, about 3,500 pages) took about 570 ms to lay out as a whole, and about 12 ms for the spine item in the middle of the book and its two neighbours. Scaled by that factor, that is an estimated 14 to 23 seconds on the Clara, against well under a second. A font size change costs almost as much as the first layout, so it has the same problem.
+
+Blaze makes that work divisible. A host can load only some spine items, lay out only part of a spine item, stop any of this work when the user does something, and build the whole book in the background without making a page turn wait for it. These pieces do not depend on each other. Kobalt uses all of them together in its Hybrid mode.
+
+The interface is in [koblaze.h](crengine/include/koblaze.h). Koblaze was the working name of the fork, and the prefix stayed.
+
+### Loading a window of spine items
+
+`koblazeSetSpineWindow(first, last)` makes the next EPUB load parse only the spine items from `first` to `last`. Every other spine item still gets a DocFragment, but an empty one. So the DocFragment indices are the same as in a full load, and an XPointer such as `/body/DocFragment[37]/body/p[12]/text().120` points to the same place in the partial document and in the whole book. A negative `first` loads everything, which is the default.
+
+Kobalt opens a book with only the spine item of the saved position. Two smaller changes make each such load cheaper. With document fonts turned off, the book's fonts are listed but not read, unless a style asks for one of them (`koblazeReadFontsFor`). And the font manager keeps the unpacked font data, so the next document of the same book does not read the font files again.
+
+### Laying out a slice of a spine item
+
+Some books have a few very large spine items. *Ulysses* has 25. Loading one spine item does not help much there, so Blaze can also lay out part of one. `ldomDocument::setKoblazeLayoutSlice(first, last)` takes a range in characters of the spine item's text. During layout, the block renderer asks `koblazeEnterBlock()` about each block. A block outside the range gets no layout and is not drawn. A container is entered when some of its text is in the range. The slice starts on a new page, and the page splitter drops the lines before the first block of the slice, so the first page of a slice starts the same way as that page does in the whole spine item.
+
+Each node's character counts are computed once and kept (`koblazeTextLength`, `koblazeTextBefore`), because every slice asks for them again. Kobalt sizes a slice at about 25 pages of text, estimated from the font size and the page size, with a minimum of 2,000 characters. When the reader turns past the end of a slice, Blaze lays out the next one with the styles it already has (`koblazeRelayout`), without another style pass.
+
+### Stopping work
+
+The parser, the style pass and the layout can all stop. The host installs a check with `koblazeSetCancelCheck()`. The parser and the style pass call it every few dozen nodes. The layout asks after each final block, through `OnRenderCancelRequested()`, a new method of the render callback. When the check says stop, the engine throws `KoblazeRenderCancelled`, which unwinds out of `ldomDocument::render()` or `LVDocView::Render()`.
+
+After a stopped layout, the document keeps its DOM and styles, drops the unfinished pages, and starts again from the beginning on the next render. A document whose parse or style pass was stopped is not usable, and the host destroys it.
+
+An exception that unwinds through code not written for one needs some care:
+
+- The parser reads many kinds of files: chapters, the package file, hyphenation dictionaries. It may only stop in a chapter, so its check does nothing unless a `KoblazeParserCanStop` scope is open.
+- A destructor must not throw. Destructors that do work with checks in them open a `KoblazeNoCancel` scope. The check also does nothing while another exception is already unwinding.
+- The parsers delete a stopped document after its writer, because the writer's destructor still uses the document.
+
+In Kobalt, the check asks whether other work waits for the engine. That is how a tap during background work gets the engine back within about one paragraph of layout.
+
+### Keeping a layout while trying the next one
+
+`koblazeSaveLayout()` keeps the current layout aside: the geometry and layout method of every element, the pages and the slice. Styles are not part of it. `koblazeRestoreLayout()` brings it back. Kobalt uses this near the end of a slice. It lays out the next slice in idle time, and if the user turns a page meanwhile, that layout stops and the current slice comes back. The turn does not wait for a layout that it did not need yet.
+
+### Building the whole book in the background
+
+Chapter pages have one weakness: the book has no real page numbers. So while the reader shows the chapter, Kobalt builds the whole book in the background. This is an ordinary full load and render.
+
+CREngine's globals are not thread-safe: the font manager, the text language manager and the render settings, among others. So the background build runs on its own thread, but never at the same time as the thread that serves the reader. The two hand the engine to each other:
+
+- The build installs a stop check that never cancels. When other work waits, the check blocks instead, and the build thread parks inside it, in the middle of `render()`, with its stack intact.
+- While the build is parked, the reader's thread uses the engine for its chapter documents. When that thread is idle, it wakes the build, which goes on where it stopped. No work is lost, and no second busy thread competes for the one core.
+- Global state that belongs to the parked document is saved when it parks and put back when it resumes. This covers the main language and its open quote levels, the base font weight and optical size, the shaping options and the open cancel scopes. The page context of a layout in progress is `thread_local`, so a chapter layout on the other thread cannot reach it. While the build is parked, other documents cannot see its parsed-book cache (`ldomDocCache::koblazeSuspend`).
+- Some places can wait but must not stop, such as between two blocks that a cache save writes. `koblazePausePoint()` marks them.
+
+Saving the parsed-book cache works in steps too. A save with a time limit goes on from the stage and node block where it stopped.
+
+When the build is done, the reader switches to the whole book on a page turn, at the same XPointer. Idle time prepares that turn first, so it costs about as much as an ordinary one. [Rendering engines](../../../doc/engines.md) describes the Kobalt side.
+
+### Limits
+
+- The engine has room for 16 documents, because the document index in a node handle has 4 bits. A seventeenth document shares the nodes of another one without any error. Kobalt keeps several chapter documents open, so Blaze reports the free slots (`koblazeFreeDocumentSlots`), and the parsers refuse to create a document without one.
+- Some content needs the whole book, even in chapter mode. Footnotes that the reader shows below the text that links to them are one example.
+- In chapter layout, margins do not collapse across a spine item border, and each spine item starts on a new page.
+
+### What upstream could use on its own
+
+- Stopping work is the smallest piece and the most general one. A host could stop a layout that a second font size change has already made useless, instead of waiting for it to finish.
+- The spine window gives a quick first page for a book that is not in the cache yet. Page numbers stay unknown until a full load is done.
+- Counting characters once per node is a small speedup for any code that maps character offsets to nodes.
+
 ## Changes for Kobalt's reader
 
-These changes serve Kobalt's reader on slow single-core devices. They add host interfaces that KOReader does not use. They are listed so that a maintainer who reads the diff knows what they are.
+These changes serve Kobalt's reader on slow single-core devices. They add host interfaces that KOReader does not use. They are listed so that a maintainer who reads the diff knows what they are. [How Blaze opens a book in parts](#how-blaze-opens-a-book-in-parts) explains how they work together.
 
 ### Chapter layout
 

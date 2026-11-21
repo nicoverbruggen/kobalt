@@ -154,9 +154,9 @@ void Reader::refresh()
     // A turn that a panel covers is not painted as a turn.
     if (turnFrame)
         turnStarted.invalidate();
-    if (afterTurn && controlsHidden()) {
+    if ((afterTurn || controlsStale) && controlsHidden()) {
         // A page turn changes only what the hidden menu and panels show.
-        // They sync when they open; see syncStaleControls().
+        // Later frame updates keep them stale until they open.
         controlsStale = true;
         syncReadingState();
     } else if (settingsVisible() && !menu->isVisible()) {

@@ -9379,6 +9379,9 @@ private slots:
         // The refresh after the painted turn runs from the event loop.
         QCoreApplication::processEvents();
         QCoreApplication::processEvents();
+        // Hybrid can publish a second update for the same frame as the
+        // background page estimates arrive. It must leave the menu untouched.
+        host.session()->updated();
         QCOMPARE(controlsPosition(), shown);
         QCOMPARE(marks->excerptFont().family(), hiddenFace);
         QVERIFY(!menu->isVisible());

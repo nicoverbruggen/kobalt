@@ -2721,10 +2721,11 @@ void cancelledAppearancePreview()
     QVERIFY(fixture.press("rrNavText"));
     QTRY_VERIFY(fixture.state().value("appearance_preview_pending").toBool());
     QVERIFY(fixture.press("rrNavSeek"));
-    QVERIFY(fixture.press("rrNavText"));
     release->release();
-    QTRY_VERIFY(!fixture.state().value("appearance_preview_pending").toBool());
-    QVERIFY(fixture.visible("rrAppearancePreview"));
+    QTRY_VERIFY(fixture.visible("rrPageScrubber") && !fixture.visible("rrAppearancePreview"));
+    QVERIFY(fixture.press("rrNavText"));
+    QTRY_VERIFY(fixture.visible("rrAppearancePreview")
+                && !fixture.state().value("appearance_preview_pending").toBool());
     QCOMPARE(fixture.state().value("position"), position);
 }
 
@@ -3007,15 +3008,14 @@ void marginPreviewTour(Fixture &fixture, const std::function<bool(const QString 
     QTRY_COMPARE(fixture.visible("rrAppearancePreview"),
                  fixture.state().value("appearance_preview_fits").toBool());
     QVERIFY(fixture.press("rrNavStats"));
-    QTRY_VERIFY(!fixture.visible("rrAppearancePreview"));
+    QTRY_VERIFY(fixture.visible("rrChapterGraph") && !fixture.visible("rrAppearancePreview"));
     // Each paint is a visible e-ink update, so the preview adds none to opening the tab.
     PreviewPaints paints, panelPaints;
     fixture.widget("rrAppearancePreview")->installEventFilter(&paints);
     fixture.widget("rrHeaderFooter")->installEventFilter(&panelPaints);
     QVERIFY(fixture.press("rrNavLayout"));
     QTRY_VERIFY(fixture.visible("rrHeaderFooter"));
-    QTRY_VERIFY(settled());
-    QCOMPARE(fixture.visible("rrAppearancePreview"), fits);
+    QTRY_VERIFY(settled() && fixture.visible("rrAppearancePreview") == fits);
     QTest::qWait(50);
     QVERIFY2(paints.count <= panelPaints.count,
              qPrintable(QString("%1 > %2").arg(paints.count).arg(panelPaints.count)));
@@ -3310,8 +3310,10 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
         QVERIFY(fixture.press("rrHeaderFooterFieldsClose"));
     } else
         QVERIFY(scene("header-footer"));
-    if (!screenshots)
+    if (!screenshots) {
         QVERIFY(fixture.press("rrHeaderFooterPreset_alternative_a"));
+        QTRY_VERIFY(fixture.widget("rrHeaderFooterClose")->isEnabled());
+    }
     QVERIFY(fixture.press("rrHeaderFooterClose"));
     QTRY_VERIFY(!fixture.visible("rrHeaderFooterView"));
     QVERIFY(fixture.press("rrPage"));
@@ -15664,13 +15666,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QTRY_VERIFY(fixture.visible("rrSessionTimeoutPopup"));
             QVERIFY(fixture.press(qPrintable(QString("rrSessionTimeout_%1").arg(minutes))));
             QTRY_VERIFY(!fixture.visible("rrSessionTimeoutPopup"));
-            QCOMPARE(storage::readJson(fixture.paths.preferences())
-                             .value("session_timeout_minutes")
-                             .toInt(-1),
-                     minutes);
-            QCOMPARE(timeout->caption(),
-                     strings::get(qPrintable(QString("settings.session_timeout_%1").arg(minutes)))
-                             .toUpper());
+            QTRY_COMPARE(storage::readJson(fixture.paths.preferences())
+                                 .value("session_timeout_minutes")
+                                 .toInt(-1),
+                         minutes);
+            QTRY_COMPARE(timeout->caption(),
+                         strings::get(qPrintable(QString("settings.session_timeout_%1").arg(minutes)))
+                                 .toUpper());
         }
         QVERIFY(fixture.press("rrSettingsDisplay"));
         QVERIFY(fixture.press("rrSettingsSystem"));

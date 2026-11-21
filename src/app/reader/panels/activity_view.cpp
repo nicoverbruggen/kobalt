@@ -2,7 +2,7 @@
 #include "stats_cell.h"
 #include "app/reader/settings/settings_panel.h"
 #include "platform/api/kobo_refresh.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "ui/controls/buttons.h"
 #include "ui/controls/icons.h"
 #include "ui/controls/paging.h"
@@ -1144,8 +1144,7 @@ protected:
                            ui::Edges(Qt::TopEdge) | Qt::BottomEdge | Qt::LeftEdge | Qt::RightEdge,
                            ink);
             drawCaption(painter, QRect(left + bar + ui::px(16), y, ui::px(120), captionHeight),
-                        strings::get("common.percent").arg(book.percent),
-                        Qt::AlignLeft | Qt::AlignTop, ink);
+                        strings::percentage(book.percent), Qt::AlignLeft | Qt::AlignTop, ink);
         }
         const int baseline = height() / 2 - ui::px(4);
         drawFigure(&painter, right, baseline, book.milliseconds, sizes::figureText * 3 / 4, ink);
@@ -2197,10 +2196,8 @@ public:
         if (!points.isEmpty()) {
             const auto &first = points.first();
             if (first.first != today)
-                entries << chartValue(day(first.first),
-                                      strings::get("common.percent").arg(first.second));
-            entries << chartValue(day(today),
-                                  strings::get("common.percent").arg(points.last().second));
+                entries << chartValue(day(first.first), strings::percentage(first.second));
+            entries << chartValue(day(today), strings::percentage(points.last().second));
             if (finish > today)
                 entries << strings::get("activity.projected_finish").arg(day(finish, true));
         }
@@ -2246,8 +2243,7 @@ private:
         // The percent column grows with the text, so "100%" keeps its digits.
         const int axis =
                 qMax<int>(sizes::chartInset,
-                          ui::interfaceTextWidth(strings::get("common.percent").arg(100), caption)
-                                  + ui::px(12));
+                          ui::interfaceTextWidth(strings::percentage(100), caption) + ui::px(12));
         const QRect plot(chrome::inset + axis, chrome::blockTop + captionHeight,
                          width() - 2 * chrome::inset - axis - ui::px(12),
                          height() - 2 * chrome::blockTop - 2 * captionHeight - sizes::labelGap);
@@ -2268,8 +2264,7 @@ private:
             drawCaption(painter,
                         QRect(chrome::inset, int(y(percent)) - captionHeight / 2, axis - ui::px(12),
                               captionHeight),
-                        strings::get("common.percent").arg(percent),
-                        Qt::AlignRight | Qt::AlignVCenter, ink);
+                        strings::percentage(percent), Qt::AlignRight | Qt::AlignVCenter, ink);
         }
         QPainterPath line;
         line.moveTo(x(first), y(0));
@@ -2461,7 +2456,7 @@ protected:
         ui::paintEdges(painter, track,
                        ui::Edges(Qt::TopEdge) | Qt::BottomEdge | Qt::LeftEdge | Qt::RightEdge, ink);
         drawCaption(painter, QRect(chrome::inset + bar + ui::px(16), y, ui::px(120), captionHeight),
-                    strings::get("common.percent").arg(percent), Qt::AlignLeft | Qt::AlignTop, ink);
+                    strings::percentage(percent), Qt::AlignLeft | Qt::AlignTop, ink);
     }
 
 private:
@@ -2729,10 +2724,10 @@ private:
                 const auto value = extras.ranges.value(session.started);
                 // A session that stayed on one page shows that place once.
                 range = value.first == value.second
-                        ? strings::get("common.percent").arg(value.second)
+                        ? strings::percentage(value.second)
                         : strings::get("activity.range")
-                                  .arg(strings::get("common.percent").arg(value.first))
-                                  .arg(strings::get("common.percent").arg(value.second));
+                                  .arg(strings::percentage(value.first),
+                                       strings::percentage(value.second));
             }
             auto *row = rows[used++];
             row->setSession(when, range, session.milliseconds);

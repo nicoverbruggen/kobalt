@@ -5,7 +5,7 @@
 #include "ui/style/theme.h"
 #include "ui/style/styles.h"
 #include "ui/style/fonts.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include <QPainter>
 #include <QResizeEvent>
 #include "buttons.h"
@@ -594,7 +594,9 @@ SettingSlider *sliderRow(QWidget *parent, QVBoxLayout *rows, const char *name,
     addStep(more);
     slider->setAccessibleName(label.section(':', 0, 0));
     QObject::connect(slider, &QSlider::valueChanged, value, [value, prefix, suffix](int v) {
-        value->setText(prefix + QString::number(v) + suffix);
+        value->setText(
+                prefix
+                + (suffix == "%" ? strings::localizedPercent(v) : QString::number(v) + suffix));
     });
     QObject::connect(less, &QPushButton::clicked, slider, [slider] { slider->nudge(-1); });
     QObject::connect(more, &QPushButton::clicked, slider, [slider] { slider->nudge(1); });

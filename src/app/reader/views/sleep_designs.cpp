@@ -7,7 +7,7 @@
 #include "ui/style/rich_text.h"
 #include "ui/style/theme.h"
 #include "support/qt_compat.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 
 #include <QLinearGradient>
 #include <QPainter>
@@ -85,10 +85,7 @@ struct Content
 
     QString word() const { return sleepStatusText(status); }
 
-    QString percent() const
-    {
-        return strings::get("common.percent").arg(qBound(0, shot.percent, 100));
-    }
+    QString percent() const { return strings::percentage(qBound(0, shot.percent, 100)); }
 };
 
 QFont mono(qreal pixels, qreal spacingEm)
@@ -156,7 +153,7 @@ int lineHeight(const QFont &font)
 // The battery percentage and its icon, as one line. Returns its width.
 qreal batteryWidth(const QFont &font, int percent)
 {
-    const auto label = strings::get("common.percent").arg(percent);
+    const auto label = strings::percentage(percent);
     const qreal body = font.pixelSize() * 0.75;
     return ui::interfaceTextWidth(label, font) + font.pixelSize() * 0.35 + ui::batteryWidth(body);
 }
@@ -173,7 +170,7 @@ qreal inkMiddle(const QFont &font, qreal top, const QString &value)
 void battery(QPainter &painter, const QFont &font, const QColor &ink, const QColor &paper,
              QPointF leftCentre, int percent, bool charging, bool iconFirst = false)
 {
-    const auto label = strings::get("common.percent").arg(percent);
+    const auto label = strings::percentage(percent);
     const qreal body = font.pixelSize() * 0.75;
     const qreal iconWidth = body * int(ui::metrics::panel::batteryBodyWidth)
             / int(ui::metrics::panel::batteryBodyHeight);
@@ -440,7 +437,8 @@ PillLayout pillLayout(const Frame &frame, const Content &content)
     qreal width = 1.8 * frame.u + 2.2 * frame.u + ui::interfaceTextWidth(content.word(), font);
     QString progress;
     if (content.shot.percent >= 0) {
-        progress = strings::get("sleep.percent_read").arg(content.shot.percent);
+        progress = strings::get("sleep.percent_read")
+                           .arg(strings::percentArgument(content.shot.percent));
         width += gap + ui::interfaceTextWidth(progress, font);
     }
     if (content.charging())
@@ -591,7 +589,8 @@ void paintCaption(QPainter &painter, const Frame &frame, const Content &content)
     const QFont state = mono(2.2 * frame.u, 0.3);
     // While charging the state line carries the battery level: CHARGING (67%).
     const auto heading = content.charging()
-            ? strings::get("sleep.state_with_battery").arg(content.word()).arg(content.battery)
+            ? strings::get("sleep.state_with_battery")
+                      .arg(content.word(), strings::percentArgument(content.battery))
             : content.word();
     text(painter, state, white, QRectF(frame.x(8), layout.top, 84 * frame.u, lineHeight(state)),
          heading.toUpper());
@@ -884,10 +883,11 @@ void paintNightText(QPainter &painter, const Frame &frame, const Content &conten
     text(painter, word, colors.ink,
          QRectF(frame.x(9), layout.wordTop, 82 * frame.u, lineHeight(word)), heading,
          Qt::AlignLeft | Qt::AlignTop);
-    QString line = content.shot.privateBook ? content.shot.progress
-                                            : strings::get("sleep.percent_through")
-                                                      .arg(qBound(0, content.shot.percent, 100))
-                                                      .arg(content.shot.details.title);
+    QString line = content.shot.privateBook
+            ? content.shot.progress
+            : strings::get("sleep.percent_through")
+                      .arg(strings::percentArgument(qBound(0, content.shot.percent, 100)),
+                           content.shot.details.title);
     if (!content.shot.remaining.isEmpty())
         line += QStringLiteral(" · ") + content.shot.remaining;
     text(painter, detail, colors.ink,
@@ -897,7 +897,9 @@ void paintNightText(QPainter &painter, const Frame &frame, const Content &conten
         const QFont level = nightLevel(frame);
         text(painter, level, colors.ink,
              QRectF(frame.x(9), frame.y(8), 82 * frame.u, lineHeight(level)),
-             strings::get("sleep.battery_charged").arg(content.battery).toUpper(),
+             strings::get("sleep.battery_charged")
+                     .arg(strings::percentArgument(content.battery))
+                     .toUpper(),
              Qt::AlignLeft | Qt::AlignTop);
     }
 }
@@ -940,22 +942,28 @@ void paintRing(QPainter &painter, const Frame &frame, const Content &content, QS
     }
     painter.restore();
     const QFont figure = jost(25 * s), sign = jost(10 * s);
-    const auto number = QString::number(percent);
-    const int numberWidth = ui::interfaceTextWidth(number, figure);
-    const int signWidth = ui::interfaceTextWidth(QStringLiteral("%"), sign);
-    qreal start = centre.x() - (numberWidth + signWidth) / 2.0;
+    const auto parts = strings::percentParts(percent);
+    const int beforeWidth = ui::interfaceTextWidth(parts.before, sign);
+    const int numberWidth = ui::interfaceTextWidth(parts.number, figure);
+    const int afterX = beforeWidth + numberWidth;
+    const int totalWidth = afterX + ui::interfaceTextWidth(parts.after, sign);
+    qreal start = centre.x() - totalWidth / 2.0;
     qreal percentBaseline = box.top() + 54 * s;
     if (content.shot.details.title.isEmpty()) {
-        const auto ink = ui::interfaceInkBounds(number, figure)
-                                 .united(ui::interfaceInkBounds(QStringLiteral("%"), sign)
-                                                 .translated(numberWidth, 0));
+        const auto ink =
+                ui::interfaceInkBounds(parts.before, sign)
+                        .united(ui::interfaceInkBounds(parts.number, figure)
+                                        .translated(beforeWidth, 0))
+                        .united(ui::interfaceInkBounds(parts.after, sign).translated(afterX, 0));
         start = centre.x() - ink.center().x();
         percentBaseline = centre.y() - ink.center().y();
     }
-    baselineText(painter, figure, colors.ink, QPointF(start, percentBaseline), number,
+    baselineText(painter, sign, colors.ink, QPointF(start, percentBaseline), parts.before,
                  Qt::AlignLeft);
-    baselineText(painter, sign, colors.ink, QPointF(start + numberWidth, percentBaseline),
-                 QStringLiteral("%"), Qt::AlignLeft);
+    baselineText(painter, figure, colors.ink, QPointF(start + beforeWidth, percentBaseline),
+                 parts.number, Qt::AlignLeft);
+    baselineText(painter, sign, colors.ink, QPointF(start + afterX, percentBaseline), parts.after,
+                 Qt::AlignLeft);
     // The title may take two lines under the figure; a longer one is cut short.
     const QFont title = mono(3.6 * s, 0.8 / 3.6);
     const auto lines = wrapLines(content.shot.details.title.toUpper(), title, qRound(60 * s), 2);
@@ -1210,8 +1218,8 @@ QStringList letterParagraphs(const Content &content, const Palette &colors)
         const auto chapter = details.chapter.isEmpty()
                 ? QString()
                 : fill(strings::get("sleep.letter_chapter"), { escaped(details.chapter) });
-        const auto percent = mark(
-                strings::get("common.percent").arg(qBound(0, content.shot.percent, 100)), colors);
+        const auto percent =
+                mark(strings::percentage(qBound(0, content.shot.percent, 100)), colors);
         main = fill(strings::get(off ? "sleep.letter_progress_off" : "sleep.letter_progress"),
                     { percent, title, chapter });
     }
@@ -1221,7 +1229,7 @@ QStringList letterParagraphs(const Content &content, const Palette &colors)
                 fill(strings::get("sleep.letter_remaining"), { mark(details.left, colors) }));
     if (content.charging()) {
         // The battery level starts its own line.
-        const auto level = mark(strings::get("common.percent").arg(content.battery), colors);
+        const auto level = mark(strings::percentage(content.battery), colors);
         paragraphs.append(escaped(strings::get("sleep.letter_charging")) + QStringLiteral("<br>")
                           + fill(strings::get("sleep.letter_battery"), { level }));
     }
@@ -1392,7 +1400,17 @@ sleep::Snapshot displaySnapshot(sleep::Snapshot shot)
     shot.details.greeting = metadata(shot.details.greeting);
     shot.details.left = metadata(shot.details.left);
     shot.details.clock = metadata(shot.details.clock);
-    shot.progress = metadata(shot.progress);
+    // Generated snapshot text is stored in a stable format. Apply the current
+    // locale when displaying it, keeping any other saved progress text intact.
+    const auto progressLabel = strings::get("sleep.percent_read");
+    const auto localizedProgress = progressLabel.arg(strings::percentArgument(shot.percent));
+    const auto storedProgress =
+            progressLabel.arg(strings::percentArgument(shot.percent, QLocale::c()));
+    if (shot.percent >= 0
+        && (shot.progress == storedProgress || shot.progress == localizedProgress))
+        shot.progress = localizedProgress;
+    else
+        shot.progress = metadata(shot.progress);
     shot.remaining = metadata(shot.remaining);
     return shot;
 }

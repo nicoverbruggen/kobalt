@@ -20,7 +20,7 @@
 #include "storage/saved_words.h"
 #include "support/main_thread.h"
 #include "reading/reading_density.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "ui/input/hold_timer.h"
 #include <QPointer>
 #include <utility>
@@ -102,7 +102,7 @@ QString statusText(const Book &book)
     case Status::Finished:
         return strings::get("library.status_done");
     case Status::Reading:
-        return strings::get("common.percent").arg(book.percent);
+        return strings::percentage(book.percent);
     case Status::New:
         break;
     }
@@ -583,8 +583,8 @@ private:
                     drawCaption(painter,
                                 QRect(bar.left(), bar.bottom() + 1 + metrics::gridBarGap,
                                       bar.width(), percentHeight()),
-                                strings::get("common.percent").arg(book.percent), Qt::AlignLeft,
-                                ink, chrome::numberText);
+                                strings::percentage(book.percent), Qt::AlignLeft, ink,
+                                chrome::numberText);
             }
         }
     }

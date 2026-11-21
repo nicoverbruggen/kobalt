@@ -8,7 +8,7 @@
 #include "dictionaries_page.h"
 #include "ui/style/fonts.h"
 #include "ui/style/styles.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QHideEvent>
@@ -452,7 +452,7 @@ void DictionariesPage::redraw()
         const int percent =
                 totalBytes > 0 ? qBound(0, int(100.0 * receivedBytes / totalBytes), 100) : 0;
         row->setAccessory(ui::ListRow::Caption{
-                active ? QString::number(percent) + "%"
+                active ? strings::localizedPercent(percent)
                        : bytes(installed ? installedSizes.value(entry.id) : entry.size),
                 ui::px(180) });
         if (compact)
@@ -464,7 +464,7 @@ void DictionariesPage::redraw()
         line->metadata->setObjectName(QString("rrDictionaryMetadata%1").arg(index));
         line->metadata->setText(
                 entry.id == failedId ? strings::get("dictionaries.download_failed")
-                        : active     ? QString::number(percent) + "%"
+                        : active     ? strings::localizedPercent(percent)
                                  : bytes(installed ? installedSizes.value(entry.id) : entry.size));
         const int nameHeight =
                 ui::wrappedInterfaceTextHeight(entry.name, line->name->font(), nameWidth);

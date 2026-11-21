@@ -1,5 +1,5 @@
 #include "sync_choice.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "ui/controls/text.h"
 #include "ui/style/fonts.h"
 #include "ui/style/private_text.h"
@@ -150,7 +150,7 @@ QString syncTimeText(const QDateTime &time, const QDateTime &now)
 QString syncPercentText(double percent)
 {
     return percent < 0 ? QString()
-                       : strings::get("kosync.percent").arg(QLocale().toString(percent, 'f', 1));
+                       : strings::get("kosync.percent").arg(strings::percentArgument(percent, 1));
 }
 
 SyncChoiceView::SyncChoiceView(QWidget *parent) : QWidget(parent)

@@ -21,7 +21,7 @@
 #include "app/reader/settings/settings_panel.h"
 #include "host_presentation.h"
 #include "support/qt_font.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "ui/style/fonts.h"
 #include "app/reader/window/font_registration.h"
 #include <QFileInfo>
@@ -2591,7 +2591,7 @@ int main(int argc, char **argv)
         graph.setData(chapters, { 20, -1, 1, 1 }, true, {});
         require(title->text() == "The Second Voyage", "The chapter title is missing");
         // Nickel's count: chapter page 4 of 10 is 40%, book page 26 of 100 is 26%.
-        require(text("rrGraphChapterPercent") == get("common.percent").arg(40)
+        require(text("rrGraphChapterPercent") == kobalt::strings::percentage(40)
                         && text("rrGraphChapterFigure") == "7"
                         && text("rrGraphChapterUnit") == get("stats.pages_left"),
                 "Chapter progress differs from the shared display rule");
@@ -2600,7 +2600,7 @@ int main(int argc, char **argv)
         require(text("rrGraphNextChapter")
                         == get("chapter_graph.next_chapter").arg(12).arg(get("common.pages")),
                 "Next chapter length is missing");
-        require(text("rrGraphBookPercent") == get("common.percent").arg(26),
+        require(text("rrGraphBookPercent") == kobalt::strings::percentage(26),
                 "Book progress disagrees with the current page");
         require(text("rrGraphBookFigure") == "75", "Book pages remaining omit the displayed page");
         graph.setChapterNumber(13, 24);

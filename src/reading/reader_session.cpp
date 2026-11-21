@@ -1,7 +1,7 @@
 #include "reading/header_footer.h"
 #include <cmath>
 #include "support/qt_compat.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "reader_session.h"
 #include "opening_job.h"
 #include "sync/kosync.h"
@@ -2752,7 +2752,7 @@ QString ReaderSession::displayPageLabel(int absolute, const QString &style) cons
 QString ReaderSession::displayBookPosition(const QString &style) const
 {
     if (bookPages() <= 0)
-        return strings::get("common.percent").arg(mainPercent());
+        return strings::percentage(mainPercent());
     const auto label = displayPageLabel(bookPage(), style);
     if (mainPage() < 0 || mainPage() >= mainPages())
         return label;

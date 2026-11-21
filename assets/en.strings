@@ -174,7 +174,7 @@
 "kosync.position_error" = "This synced position could not be opened. Your position was kept and automatic sync was disabled.";
 "kosync.resume_title" = "Resume synced reading?";
 /* Arguments: %1 percentage read; %2 device name. */
-"kosync.resume_description" = "Another device saved a position at %1% (%2). Choose which position to keep.";
+"kosync.resume_description" = "Another device saved a position at %1 (%2). Choose which position to keep.";
 "kosync.use_remote" = "Use synced position";
 "kosync.kept_local" = "Your position was kept. It will be sent on the next sync.";
 "kosync.resumed" = "Resumed at the synced position.";
@@ -290,10 +290,10 @@
 
 /* chapter_graph */
 /* Arguments: %1 */
-"chapter_graph.book_progress" = "Book progress: %1%";
+"chapter_graph.book_progress" = "Book progress: %1";
 "chapter_graph.chapter_lengths_are_unavailable" = "Chapter lengths are unavailable";
 /* Arguments: %1 */
-"chapter_graph.chapter_progress" = "Chapter progress: %1%";
+"chapter_graph.chapter_progress" = "Chapter progress: %1";
 /* Arguments: %1, %2, %3 */
 "chapter_graph.chapters_to_of" = "Chapters %1 to %2 of %3";
 /* Arguments: %1 */
@@ -321,7 +321,7 @@
 "common.estimated_total" = "~%1";
 "common.pages" = "pages";
 /* Arguments: %1 */
-"common.percent" = "%1%";
+"common.percent" = "%1";
 "common.previous_page" = "Previous page";
 "common.size_large" = "Large";
 "common.size_extra_large_short" = "XL";
@@ -562,7 +562,7 @@
 "header_footer.field.chapter_load_time" = "Chapter load time";
 "header_footer.field.book_status" = "Book status";
 /* Arguments: %1 */
-"header_footer.field_description.battery_warning" = "Shows the battery only below %1%.";
+"header_footer.field_description.battery_warning" = "Shows the battery only below %1.";
 "header_footer.field_description.time_left" = "Estimated from your reading pace.";
 "header_footer.field_description.book_status" = "The last turn time and the layout: fast while one chapter is laid out, full once the whole book is. Updates every 5 seconds.";
 "header_footer.status.fast" = "fast";
@@ -668,7 +668,7 @@
 "reader.previous_chapter" = "Previous chapter";
 "reader.next_chapter" = "Next chapter";
 /* Arguments: %1 */
-"reader.brightness" = "Brightness %1%";
+"reader.brightness" = "Brightness %1";
 "reader.brightness_and_warmth" = "Brightness and warmth";
 "reader.built_in_fonts" = "Built-in Fonts";
 "reader.chapter_lengths" = "Chapter lengths";
@@ -732,7 +732,7 @@
 "settings.section_paragraphs" = "Paragraphs";
 "settings.paragraph_spacing" = "Paragraph adjustments";
 "settings.paragraph_spacing_summary" = "Adjust spacing and first-line indents.";
-"settings.paragraph_spacing_description" = "Values are percentages of the text size: with 12 pt text, a 100% indent is 12 pt. Applies to all books. Headings and special blocks keep their formatting.";
+"settings.paragraph_spacing_description" = "Values are percentages of the text size: with 12 pt text, a %1 indent is 12 pt. Applies to all books. Headings and special blocks keep their formatting.";
 "settings.paragraph_choices_description" = "Each Publisher choice keeps that part of the book’s formatting. Diagonal lines mark extra space between paragraphs.";
 "settings.paragraph_gap" = "Spacing";
 "settings.paragraph_indent" = "First-line indent";
@@ -768,7 +768,7 @@
 "reader.rotation" = "Rotation";
 "reader.search_book" = "Search book";
 /* Arguments: %1 */
-"reader.counting_pages" = "Counting pages… %1%";
+"reader.counting_pages" = "Counting pages… %1";
 "reader.session_minutes" = "You've been reading for %1 minutes now";
 "reader.sideloaded_fonts" = "Sideloaded Fonts";
 "reader.simulate_nickel_progress_these_controls_change_only_the_synthetic" = "Simulate Nickel progress. These controls change only the synthetic progress test book. No server sync is performed.";
@@ -781,7 +781,7 @@
 "reader.typography" = "Typography";
 "reader.untitled_chapter" = "Untitled chapter";
 /* Arguments: %1 */
-"reader.warmth" = "Warmth %1%";
+"reader.warmth" = "Warmth %1";
 /* Arguments: %1 */
 "reader.weight_value" = "+%1";
 "reader.your_reading_position_stays_the_same_the_defaults_apply_when_you_c" = "Font, layout, and display preferences will be reset to their defaults. Your reading position will not change. The defaults apply when you close Settings.";
@@ -951,21 +951,21 @@
 "sleep.charging" = "Charging";
 "sleep.charged" = "Charged";
 /* Arguments: %1 */
-"sleep.percent_read" = "%1% read";
+"sleep.percent_read" = "%1 read";
 /* Arguments: %1 */
 "sleep.time_left" = "%1 to go";
 "sleep.read" = "read";
 /* Arguments: %1 status, %2 battery percentage */
-"sleep.state_with_battery" = "%1 (%2%)";
+"sleep.state_with_battery" = "%1 (%2)";
 "sleep.goodnight" = "Goodnight";
 /* Arguments: %1 battery percentage */
-"sleep.battery_charged" = "%1% charged";
+"sleep.battery_charged" = "%1 charged";
 "sleep.greeting_title" = "Night greeting";
 "sleep.greeting_hint" = "Shown on the Night sleep screen instead of Goodnight. Leave it empty to use Goodnight.";
 /* Arguments: %1 percentage, %2 book title */
 "sleep.missing_cover" = "?";
 "sleep.private_book" = "your book";
-"sleep.percent_through" = "%1% through %2";
+"sleep.percent_through" = "%1 through %2";
 "sleep.now_reading" = "Now reading";
 "sleep.read_label" = "Read";
 "sleep.today" = "Today";
@@ -1481,7 +1481,7 @@
 /* Arguments: %1 */
 "dictionaries.downloading_name" = "Downloading %1";
 /* Arguments: %1, %2 */
-"dictionaries.downloading_progress" = "Downloading %1 · %2%";
+"dictionaries.downloading_progress" = "Downloading %1 · %2";
 "dictionaries.installation_cancelled" = "Installation cancelled.";
 "dictionaries.installed_dictionary_is_damaged" = "Installed dictionary is damaged.";
 "dictionaries.installed_inflection_index_is_damaged" = "Installed inflection index is damaged.";
@@ -1712,9 +1712,9 @@
 "settings.word_spacing_narrow" = "Narrow";
 "settings.word_spacing_normal" = "Normal";
 "settings.word_spacing_wide" = "Wide";
-"settings.word_spacing_narrow_description" = "Use 80% of the normal space width.";
-"settings.word_spacing_normal_description" = "Keep the font’s normal space width (100%).";
-"settings.word_spacing_wide_description" = "Use 120% of the normal space width.";
+"settings.word_spacing_narrow_description" = "Use %1 of the normal space width.";
+"settings.word_spacing_normal_description" = "Keep the font’s normal space width (%1).";
+"settings.word_spacing_wide_description" = "Use %1 of the normal space width.";
 "settings.close" = "Close settings";
 "settings.title" = "Settings";
 "common.more_next_page" = "More on the next page";
@@ -1784,7 +1784,7 @@
 "settings.vertical_spacing_expand_description" = "Spread spare height between lines. Keep the first line in place.";
 "settings.vertical_spacing_center" = "Center nearly full pages";
 "settings.vertical_spacing_center_short" = "Center";
-"settings.vertical_spacing_center_description" = "Center prose that occupies at least 90% of the reading height. Keep line spacing unchanged.";
+"settings.vertical_spacing_center_description" = "Center prose that occupies at least %1 of the reading height. Keep line spacing unchanged.";
 "settings.vertical_spacing_scope" = "Pages to adjust";
 "settings.vertical_spacing_scope_description" = "Choose which page gaps to adjust.";
 "settings.vertical_spacing_scope_all" = "All suitable pages";
@@ -1835,7 +1835,7 @@
 "kosync.page_number" = "p. %1";
 "kosync.here" = "Here";
 "kosync.synced_label" = "Synced";
-"kosync.percent" = "%1%";
+"kosync.percent" = "%1";
 "kosync.from" = "From";
 "kosync.to" = "To";
 "kosync.device" = "Device";
@@ -1879,8 +1879,8 @@
 "settings.percentage_format_description" = "Choose how book and chapter progress appears in the header and footer.";
 "settings.percentage_whole" = "Whole percentages";
 "settings.percentage_decimal" = "One decimal place";
-"settings.percentage_whole_description" = "For example, 8%";
-"settings.percentage_decimal_description" = "For example, 8.1%";
+"settings.percentage_whole_description" = "For example, %1";
+"settings.percentage_decimal_description" = "For example, %1";
 "settings.time_remaining_format" = "Time remaining format";
 "settings.time_remaining_format_description" = "Applies to reading-time estimates in the header, footer and sleep screen.";
 "settings.time_remaining_detailed" = "Detailed";

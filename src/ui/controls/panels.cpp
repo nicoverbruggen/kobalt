@@ -5,7 +5,7 @@
 #include "ui/style/styles.h"
 #include "ui/style/fonts.h"
 #include "ui/style/private_text.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include <QPainter>
 #include <QResizeEvent>
 #include <QPainterPath>
@@ -129,12 +129,12 @@ void LightSwipeNotice::setLevel(bool warmth, int value)
     const bool changed = warm != warmth || level != next;
     warm = warmth;
     level = next;
-    percentage->setText(QString::number(level) + '%');
+    percentage->setText(strings::localizedPercent(level));
     caption->setText(
             (warm ? strings::get("light_panel.warmth") : strings::get("light_panel.brightness"))
                     .toUpper());
-    setAccessibleName(
-            (warm ? strings::get("reader.warmth") : strings::get("reader.brightness")).arg(level));
+    setAccessibleName((warm ? strings::get("reader.warmth") : strings::get("reader.brightness"))
+                              .arg(strings::percentArgument(level)));
     if (changed)
         update();
 }
@@ -302,7 +302,7 @@ void BatteryIndicator::setStatus(int value, bool pluggedIn)
     percent = value;
     charging = pluggedIn;
     setText(percent < 0 ? strings::get("components.battery_unknown")
-                        : strings::get("common.percent").arg(percent));
+                        : strings::percentage(percent));
     setAccessibleName(percent < 0
                               ? strings::get("components.battery_level_unavailable")
                               : strings::get("components.battery_percent")
@@ -423,7 +423,7 @@ qreal batteryWidth(qreal bodyHeight)
 
 QFont batteryTextFont(QFont font, qreal bodyHeight, int weight)
 {
-    const auto sample = renderPrivateText(QStringLiteral("100%"), font, weight).image;
+    const auto sample = renderPrivateText(strings::localizedPercent(100), font, weight).image;
     int first = sample.height(), last = -1;
     for (int y = 0; y < sample.height(); ++y) {
         const auto *pixels = reinterpret_cast<const QRgb *>(sample.constScanLine(y));

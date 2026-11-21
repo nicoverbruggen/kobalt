@@ -7,7 +7,7 @@
 #include "app/reader/settings/settings_panel.h"
 #include "reading/appearance_settings.h"
 #include "reading/page_navigation.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "support/diagnostics.h"
 #include <QElapsedTimer>
 #include <QtMath>
@@ -638,8 +638,7 @@ void Reader::syncAppearanceControls(bool pickingFont)
     }
     if (!spacingSlider->interacting()) {
         spacingSlider->setValue(settings->spacing());
-        spacingSlider->valueLabel()->setText(
-                strings::get("common.percent").arg(settings->spacing()));
+        spacingSlider->valueLabel()->setText(strings::percentage(settings->spacing()));
     }
     if (!marginSlider->interacting()) {
         marginSlider->setValue(kobalt::marginDesign(settings->margin()));
@@ -972,7 +971,8 @@ void Reader::updateMenuSession()
     const bool counting = menuShowsPagination();
     menuSession->setCountingPages(counting);
     if (counting)
-        label = strings::get("reader.counting_pages").arg(session->layoutProgressPercent());
+        label = strings::get("reader.counting_pages")
+                        .arg(strings::percentArgument(session->layoutProgressPercent()));
     else if (features::enabled(preferences, features::Stats) && reading > 300000)
         label = strings::get("reader.session_minutes").arg(reading / 60000);
     if (menuSession->text() != label)

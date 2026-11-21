@@ -12,7 +12,7 @@
 #include "ui/style/fonts.h"
 #include "ui/style/private_text.h"
 #include "ui/controls/panels.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "ui/input/input.h"
 #include "render/image_damage.h"
 #include "render/page_refresh_regions.h"
@@ -185,10 +185,9 @@ QString ReadingPage::headerText() const
     QString text;
     for (int slot = 0; slot < 3; ++slot) {
         const auto &content = slotContents[slot];
-        const auto part = !content.text.isEmpty() ? content.text
-                : content.batteryIcon && content.battery >= 0
-                ? strings::get("common.percent").arg(content.battery)
-                : QString();
+        const auto part = !content.text.isEmpty()             ? content.text
+                : content.batteryIcon && content.battery >= 0 ? strings::percentage(content.battery)
+                                                              : QString();
         if (part.isEmpty())
             continue;
         text = text.isEmpty() ? part : strings::get("reader.chapter_position").arg(text, part);

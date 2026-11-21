@@ -67,7 +67,7 @@
 #include "support/input_clock.h"
 #include "support/kosync_reply.h"
 #include "support/reading_bridge_fixture.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 
 #include <QApplication>
 #include <QBuffer>
@@ -4886,8 +4886,10 @@ private slots:
         const int percent = host.session()->statsPercent(!host.session()->hasMainTextBoundary());
         // This profile has no native reading pace and has not made forward turns.
         const auto expected = reader::sleepScreenImage(
-                background, strings::get("sleep.percent_read").arg(percent), {}, dark, 67, status,
-                !useCover, sleep::tile(preferences), percent);
+                background,
+                strings::get("sleep.percent_read")
+                        .arg(strings::percentArgument(percent, QLocale::c())),
+                {}, dark, 67, status, !useCover, sleep::tile(preferences), percent);
         host.window()->sleepReader();
         QVERIFY(host.window()->isVisible());
         QVERIFY(sleep->image.isNull());
@@ -9229,7 +9231,7 @@ private slots:
             auto *slot = host.window()->findChild<QPushButton *>("rrHeaderFooterSlot2");
             QVERIFY(slot && slot->isVisible());
             notify(46, false);
-            QVERIFY(slot->accessibleName().contains(strings::get("common.percent").arg(46)));
+            QVERIFY(slot->accessibleName().contains(strings::percentage(46)));
             const auto slotUnplugged = slot->grab().toImage();
             notify(46, true);
             QVERIFY(slot->grab().toImage() != slotUnplugged);
@@ -9378,7 +9380,7 @@ private slots:
         QVERIFY(click(canvas, host.window()->findChild<QWidget *>("rrHeaderFooter")));
         auto *slot = host.window()->findChild<QPushButton *>("rrHeaderFooterSlot2");
         QVERIFY(slot && slot->isVisible());
-        QVERIFY(slot->accessibleName().contains(strings::get("common.percent").arg(percent)));
+        QVERIFY(slot->accessibleName().contains(strings::percentage(percent)));
         const auto *timeSlot = host.window()->findChild<QPushButton *>("rrHeaderFooterSlot0");
         QVERIFY(timeSlot && timeSlot->accessibleName().contains("7:01 AM"));
         QVERIFY(click(canvas, slot));
@@ -12992,7 +12994,7 @@ private slots:
                     QVERIFY(option && option->isVisible());
                     option->click();
                     QCOMPARE(host.window()->findChild<QLabel *>("rrGraphBookPercent")->text(),
-                             strings::get("common.percent").arg(volume));
+                             strings::percentage(volume));
                 }
                 QTRY_VERIFY(host.window()->readyForPresentation());
                 const int expected = whole ? volume : main;
@@ -13029,7 +13031,7 @@ private slots:
         const int percent = int(100 * (pageIndex + 1) / pages);
         auto *page = dynamic_cast<ReadingPage *>(host.window()->findChild<QWidget *>("rrPage"));
         QVERIFY(page);
-        QTRY_COMPARE(page->slotContents[5].text, strings::get("common.percent").arg(percent));
+        QTRY_COMPARE(page->slotContents[5].text, strings::percentage(percent));
         QCOMPARE(page->progressFraction, double(pageIndex + 1) / pages);
         page->tapped(page->rect().center());
         auto *stats = host.window()->findChild<QPushButton *>("rrNavStats");
@@ -13039,7 +13041,7 @@ private slots:
         QTRY_VERIFY(graph && graph->isVisible());
         auto *bookPercent = graph->findChild<QLabel *>("rrGraphBookPercent");
         QVERIFY(bookPercent);
-        QCOMPARE(bookPercent->text(), strings::get("common.percent").arg(percent));
+        QCOMPARE(bookPercent->text(), strings::percentage(percent));
         stats->click();
         QTRY_VERIFY(!graph->isVisible());
         QTRY_VERIFY(host.window()->readyForPresentation());
@@ -13053,7 +13055,9 @@ private slots:
         const auto snapshot = host.window()->powerScreenSnapshot();
         QVERIFY(!snapshot.image.isNull());
         QCOMPARE(snapshot.percent, sleepPercent);
-        QCOMPARE(snapshot.progress, strings::get("sleep.percent_read").arg(sleepPercent));
+        QCOMPARE(snapshot.progress,
+                 strings::get("sleep.percent_read")
+                         .arg(strings::percentArgument(sleepPercent, QLocale::c())));
         host.window()->checkpoint();
         QCOMPARE(storage::readBookState(paths, identity).object.value("percent").toInt(-1),
                  percent);

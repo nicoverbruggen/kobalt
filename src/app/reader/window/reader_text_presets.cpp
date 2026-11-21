@@ -7,7 +7,7 @@
 #include "reading/style_sample_cache.h"
 #include "reading/text_presets.h"
 #include "support/qt_compat.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "support/diagnostics.h"
 #include "ui/controls/text.h"
 #include "ui/style/styles.h"
@@ -86,7 +86,7 @@ private:
 QString presetDetail(const Preset &preset)
 {
     return textpresets::sizeLabel(preset.halfPoints) + QStringLiteral(" · ")
-            + strings::get("common.percent").arg(preset.lineSpacing);
+            + strings::percentage(preset.lineSpacing);
 }
 
 QString presetSummary(const Preset &preset)

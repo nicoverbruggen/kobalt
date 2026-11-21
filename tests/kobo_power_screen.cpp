@@ -8,7 +8,7 @@
 #include "ui/style/fonts.h"
 #include "assets/assets.h"
 #include "storage/sleep_snapshot.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QDir>
@@ -396,7 +396,8 @@ private slots:
         QVERIFY(frame());
         sleep::Snapshot progress;
         progress.percent = 43;
-        progress.progress = strings::get("sleep.percent_read").arg(43);
+        progress.progress =
+                strings::get("sleep.percent_read").arg(strings::percentArgument(43, QLocale::c()));
         const auto neutral =
                 sleep::privateSnapshot(window.size(), preferences, progress, false, powerOff);
         const auto expected = reader::sleepDesignImage(neutral.image, neutral, 31,
@@ -643,7 +644,8 @@ private slots:
             sleep::setDesign(preferences, sleep::Design::Letter);
             QVERIFY(storage::writePreferences(paths.preferences(), preferences));
             progress.percent = 100;
-            progress.progress = strings::get("sleep.percent_read").arg(100);
+            progress.progress = strings::get("sleep.percent_read")
+                                        .arg(strings::percentArgument(100, QLocale::c()));
             const auto completed = sleep::privateSnapshot(window.size(), preferences, progress);
             owner.remember(completed, "private");
             owner.finishSave();
@@ -749,7 +751,8 @@ private slots:
         expected.place = sleep::Place::TopLeft;
         expected.dimPage = false;
         expected.percent = 42;
-        expected.progress = strings::get("sleep.percent_read").arg(42);
+        expected.progress =
+                strings::get("sleep.percent_read").arg(strings::percentArgument(42, QLocale::c()));
         expected.details.title = "Type Tester";
         expected.details.author = "N. Farbridge";
         QCOMPARE(frame->grab().toImage().convertToFormat(QImage::Format_RGB32),

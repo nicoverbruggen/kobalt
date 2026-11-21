@@ -1,6 +1,6 @@
 #include "manager.h"
 #include "support/main_thread.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "stardict.h"
 #include <dictionary_catalog.h>
 #include "publication/zip_resource.h"
@@ -430,7 +430,8 @@ void DictionaryManager::download(const QString &id)
                             ? strings::get("dictionaries.installing_name").arg(data->entry.name)
                             : strings::get("dictionaries.downloading_progress")
                                       .arg(data->entry.name,
-                                           QString::number(bytes * 100 / data->entry.size));
+                                           strings::percentArgument(bytes * 100
+                                                                    / data->entry.size));
                     emit changed();
                 },
                 Qt::QueuedConnection);

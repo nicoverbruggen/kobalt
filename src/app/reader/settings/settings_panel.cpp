@@ -18,7 +18,7 @@
 #include "reading/reading_density.h"
 #include "app/reader/panels/dictionary_panel.h"
 #include "reading/appearance_settings.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "support/qt_font.h"
 #include "assets/font_catalog.h"
 #include "ui/style/metrics.h"
@@ -2174,8 +2174,7 @@ QString SettingsPanel::columnSpacingLabel(int percent)
 
 QString SettingsPanel::paragraphSpacingLabel(int percent)
 {
-    return percent < 0 ? strings::get("reader.publisher_spacing")
-                       : strings::get("common.percent").arg(percent);
+    return percent < 0 ? strings::get("reader.publisher_spacing") : strings::percentage(percent);
 }
 
 void SettingsPanel::showBeautifier(const QJsonObject &current,
@@ -2340,14 +2339,14 @@ void SettingsPanel::showPercentageFormats(const QString &current,
             openChoiceSheet("rrPercentageFormat", strings::get("settings.percentage_format"),
                             strings::get("settings.percentage_format_description"));
     const QStringList formats{ "whole", "decimal" };
-    if (choices->options().isEmpty())
-        for (const auto &format : formats)
-            choices->add(QString("rrPercentageFormat_%1").arg(format),
-                         percentageFormatLabel(format),
-                         strings::get(QString("settings.percentage_%1_description")
-                                              .arg(format)
-                                              .toLatin1()
-                                              .constData()));
+    if (choices->options().isEmpty()) {
+        choices->add(QStringLiteral("rrPercentageFormat_whole"), percentageFormatLabel("whole"),
+                     strings::get("settings.percentage_whole_description")
+                             .arg(strings::percentArgument(8)));
+        choices->add(QStringLiteral("rrPercentageFormat_decimal"), percentageFormatLabel("decimal"),
+                     strings::get("settings.percentage_decimal_description")
+                             .arg(strings::percentArgument(8.1, 1)));
+    }
     presentChoices(formats.indexOf(current),
                    [chosen, formats](int index) { chosen(formats[index]); });
 }
@@ -2708,6 +2707,8 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
                                     .constData());
     } else {
         note = text("_description");
+        if (paragraph)
+            note = note.arg(strings::percentArgument(100));
     }
     auto *hint = new ui::InterfaceLabel(note, texts);
     hint->setObjectName(tracking ? "rrTrackingAlignmentNotice" : "rrAdvancedTextHint");
@@ -2717,11 +2718,19 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
                         + QString("color:%1;").arg(ui::noteColor(hint).name()));
     textRows->addWidget(hint);
 
-    const auto describe = [description, buttons, text, values](int index) {
+    const auto choiceDescription = [text, values, feature](int index) {
+        const auto choice = '_' + values[index];
+        auto detail = text(choice + "_description");
+        if (feature == AdvancedText::WordSpacing)
+            detail = detail.arg(strings::percentArgument(80 + index * 20));
+        else if (feature == AdvancedText::VerticalSpacing && values[index] == "center")
+            detail = detail.arg(strings::percentArgument(90));
+        return text(choice) + ". " + detail;
+    };
+    const auto describe = [description, buttons, choiceDescription](int index) {
         for (int other = 0; other < buttons.size(); ++other)
             buttons[other]->setChecked(other == index);
-        description->setText(text("_" + values[index]) + ". "
-                             + text("_" + values[index] + "_description"));
+        description->setText(choiceDescription(index));
     };
     if (paragraph) {
         const auto section = padded({ chrome::inset, ui::px(12), chrome::inset, ui::px(16) });
@@ -2735,7 +2744,8 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
                 area, controls, "rrParagraphSpacingSlider", "rrParagraphSpacingValue",
                 strings::get("settings.paragraph_gap"), "rrParagraphSpacingLess",
                 "rrParagraphSpacingMore", -1, 200, 1, {}, {}, {},
-                { strings::get("reader.publisher_spacing"), "0", "50%", "100%", "150%", "200%" });
+                { strings::get("reader.publisher_spacing"), "0", strings::percentage(50),
+                  strings::percentage(100), strings::percentage(150), strings::percentage(200) });
         slider->setMarkers({ -1, 0, 50, 100, 150, 200 }, ui::SettingSlider::MarkerMode::Stops);
         slider->setAdditionalStops({ 25, 75, 125, 175 });
         description->setText(strings::get("settings.paragraph_choices_description"));
@@ -2753,7 +2763,8 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
                 area, controls, "rrParagraphIndentSlider", "rrParagraphIndentValue",
                 strings::get("settings.paragraph_indent"), "rrParagraphIndentLess",
                 "rrParagraphIndentMore", -1, 300, 1, {}, {}, {},
-                { strings::get("reader.publisher_spacing"), "0", "100%", "200%", "300%" });
+                { strings::get("reader.publisher_spacing"), "0", strings::percentage(100),
+                  strings::percentage(200), strings::percentage(300) });
         indentSlider->setMarkers({ -1, 0, 100, 200, 300 }, ui::SettingSlider::MarkerMode::Stops);
         indentSlider->setAdditionalStops({ 25, 50, 75, 125, 150, 175 });
         area->findChild<QLabel *>("rrParagraphIndentSliderCurrentPrefix")->hide();
@@ -2839,8 +2850,8 @@ void SettingsPanel::showStylingChoices(AdvancedText feature, int current,
         label->setMinimumHeight(tallest);
     };
     QStringList descriptions;
-    for (const auto &value : values)
-        descriptions.append(text("_" + value) + ". " + text("_" + value + "_description"));
+    for (int i = 0; i < values.size(); ++i)
+        descriptions.append(choiceDescription(i));
     if (paragraph)
         descriptions = { strings::get("settings.paragraph_choices_description") };
     reserve(description, descriptions);

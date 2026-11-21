@@ -12,7 +12,7 @@
 #include "ui/style/theme.h"
 #include "reader_p.h"
 #include "support/qt_compat.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "ui/input/input.h"
 #include "ui/style/fonts.h"
 #include "app/reader/views/sleep_screen.h"
@@ -658,7 +658,8 @@ sleep::Snapshot Reader::captureSleepScreen(bool poweredOff)
     // A book marked as finished is done, wherever its last page sits.
     const int percent = book->finishedHere() ? 100 : session->statsPercent(statsUseWholeVolume());
     snapshot.orientation = kobalt::shownOrientation(QGuiApplication::primaryScreen());
-    snapshot.progress = strings::get("sleep.percent_read").arg(percent);
+    snapshot.progress =
+            strings::get("sleep.percent_read").arg(strings::percentArgument(percent, QLocale::c()));
     snapshot.remaining = sleepTimeLeft(book->estimates(statsUseWholeVolume()).bookMilliseconds,
                                        remainingTime::approximate(preferences));
     snapshot.dark = darkTheme;

@@ -13,7 +13,7 @@
 #include "ui/dialogs/choice_sheet.h"
 #include "app/reader/settings/settings_panel.h"
 #include "support/qt_compat.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "ui/style/styles.h"
 #include "platform/api/kobo_refresh.h"
 #include "ui/style/metrics.h"
@@ -1067,7 +1067,8 @@ sleep::Snapshot Reader::sleepPreviewSample()
             ? (book->finishedHere() ? 100 : session->statsPercent(statsUseWholeVolume()))
             : 0;
     sample.percent = percent;
-    sample.progress = strings::get("sleep.percent_read").arg(percent);
+    sample.progress =
+            strings::get("sleep.percent_read").arg(strings::percentArgument(percent, QLocale::c()));
     if (book) {
         sample.remaining = sleepTimeLeft(book->estimates(statsUseWholeVolume()).bookMilliseconds,
                                          remainingTime::approximate(preferences));

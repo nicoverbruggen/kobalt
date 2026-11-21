@@ -1,10 +1,9 @@
 #include "header_footer.h"
 #include "remaining_time.h"
 #include "reading_progress.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 
 #include <QJsonArray>
-#include <QLocale>
 
 namespace kobalt::headerfooter {
 QString pageTotal(int pages, bool estimated)
@@ -81,9 +80,7 @@ QString percent(qint64 tenths, bool decimal)
 {
     if (tenths < 0)
         return {};
-    const QLocale locale;
-    return strings::get("common.percent")
-            .arg(decimal ? locale.toString(tenths / 10.0, 'f', 1) : locale.toString(tenths / 10));
+    return decimal ? strings::percentage(tenths / 10.0, 1) : strings::percentage(tenths / 10);
 }
 
 QString percentDone(int page, int pages, bool decimal)
@@ -125,7 +122,7 @@ QString bookStatus(const Values &values)
     } else if (values.wholeBookFailed) {
         detail = strings::get("header_footer.status.failed");
     } else if (values.wholeBookPercent >= 0) {
-        detail = strings::get("common.percent").arg(values.wholeBookPercent);
+        detail = strings::percentage(values.wholeBookPercent);
     }
     const auto mode = strings::get(values.wholeBook ? "header_footer.status.full"
                                                     : "header_footer.status.fast");
@@ -471,7 +468,7 @@ Content content(Field field, const Values &values, bool uppercase)
             break;
         if (values.deviceStatus) {
             if (field != Field::Battery && values.battery >= 0)
-                result.text = strings::get("common.percent").arg(values.battery);
+                result.text = strings::percentage(values.battery);
             result.batteryIcon = field != Field::BatteryPercentOnly;
             result.battery = values.battery;
             result.charging = values.charging;
@@ -589,7 +586,7 @@ QString fieldDescription(Field field)
     switch (field) {
     case Field::BatteryWarning:
         return strings::get("header_footer.field_description.battery_warning")
-                .arg(batteryWarningBelow);
+                .arg(strings::percentArgument(batteryWarningBelow));
     case Field::ChapterTimeLeft:
     case Field::BookTimeLeft:
         return strings::get("header_footer.field_description.time_left");

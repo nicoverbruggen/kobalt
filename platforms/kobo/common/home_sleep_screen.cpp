@@ -8,7 +8,7 @@
 #include "storage/sleep_snapshot.h"
 #include "support/diagnostics.h"
 #include "support/main_thread.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include <QFile>
 #include <QImageReader>
 #include <QSqlQuery>
@@ -330,7 +330,8 @@ bool HomeSleepScreen::preparePrivateScreen(bool powerOff, const QString &opening
             bookState.contains(key) ? bookState.value(key) : bookState.value("percent");
     if (completed || percent.isDouble()) {
         source.percent = completed ? 100 : qBound(0, percent.toInt(), 100);
-        source.progress = strings::get("sleep.percent_read").arg(source.percent);
+        source.progress = strings::get("sleep.percent_read")
+                                  .arg(strings::percentArgument(source.percent, QLocale::c()));
     }
     const auto chosen = statusPick(preferences, powerOff);
     source.place = sleep::place(preferences, bookState.value("sleep_positions").toObject(),
@@ -399,7 +400,8 @@ bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIde
         shot.percent = book.percent >= 0 ? book.percent
                 : completed              ? 100
                                          : qBound(0, state.object.value("percent").toInt(), 100);
-        shot.progress = strings::get("sleep.percent_read").arg(shot.percent);
+        shot.progress = strings::get("sleep.percent_read")
+                                .arg(strings::percentArgument(shot.percent, QLocale::c()));
     }
     shot.details.title = book.title;
     shot.details.author = book.author;

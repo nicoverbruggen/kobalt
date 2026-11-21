@@ -5,7 +5,7 @@
 #include "ui/style/fonts.h"
 #include "ui/style/metrics.h"
 #include "ui/style/private_text.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 
 #include <QPainter>
 #include <QPolygonF>
@@ -91,8 +91,8 @@ Battery sleepBattery(int percent)
 {
     Battery battery;
     const bool valid = percent >= 0 && percent <= 100;
-    battery.text = valid ? strings::get("common.percent").arg(percent)
-                         : strings::get("components.battery_unknown");
+    battery.text =
+            valid ? strings::percentage(percent) : strings::get("components.battery_unknown");
     battery.font = ui::chromeFont(sleepMetrics::batteryText);
     battery.body = qRound(detailFont().pixelSize() * .75);
     battery.textWidth = ui::interfaceTextWidth(battery.text, battery.font);
@@ -228,7 +228,7 @@ void paintBookmark(QPainter &painter, const QRect &ribbon, const Content &conten
             ink);
     y += int(sleepMetrics::border) + int(sleepMetrics::ribbonGap) / 2;
     if (content.percent >= 0)
-        centered(strings::get("common.percent").arg(qMin(content.percent, 100)), lines.figure, y,
+        centered(strings::percentage(qMin(content.percent, 100)), lines.figure, y,
                  lines.figureHeight);
     else
         centered(content.progress, lines.detail, y, lines.figureHeight);

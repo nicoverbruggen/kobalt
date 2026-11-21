@@ -5,7 +5,7 @@
 #include "ui/controls/panels.h"
 #include "ui/style/theme.h"
 #include "support/qt_font.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "chapter_graph.h"
 #include "stats_cell.h"
 #include "reading/reading_progress.h"
@@ -420,20 +420,18 @@ void ChapterGraph::refreshCells()
             : -1;
     chapterCell->set(p.chapterPages > 0 ? QString::number(left) : QString(),
                      p.chapterPages > 0 ? pagesLeft(left) : QString(), next,
-                     p.chapterPages > 0 ? strings::get("common.percent").arg(chapterValue)
-                                        : QString(),
+                     p.chapterPages > 0 ? strings::percentage(chapterValue) : QString(),
                      chapterTime >= 0 ? duration(chapterTime, true) : QString(),
                      wordsInCells() ? wordTotal(chapterTotal) : QString());
-    chapterCell->percent->setAccessibleName(
-            strings::get("chapter_graph.chapter_progress").arg(chapterValue));
+    chapterCell->percent->setAccessibleName(strings::get("chapter_graph.chapter_progress")
+                                                    .arg(strings::percentArgument(chapterValue)));
     bookCell->set(p.pages > 0 ? QString::number(remaining) : QString(),
                   p.pages > 0 ? pagesLeft(remaining) : QString(),
-                  bookTime >= 0 ? duration(bookTime) : QString(),
-                  strings::get("common.percent").arg(bookValue),
+                  bookTime >= 0 ? duration(bookTime) : QString(), strings::percentage(bookValue),
                   bookTime >= 0 ? duration(bookTime, true) : QString(),
                   wordsInCells() ? wordTotal(words) : QString());
     bookCell->percent->setAccessibleName(
-            strings::get("chapter_graph.book_progress").arg(bookValue));
+            strings::get("chapter_graph.book_progress").arg(strings::percentArgument(bookValue)));
     sessionCell->set(QString::number(qMax(0, minutes)), strings::get("stats.minutes"),
                      strings::get(pageTurns == 1 ? "stats.page_turn" : "stats.page_turns")
                              .arg(qMax(0, pageTurns)));

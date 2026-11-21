@@ -9,7 +9,7 @@
 #include "ui/style/private_text.h"
 #include "ui/style/styles.h"
 #include "ui/style/theme.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "ui/input/input.h"
 #include <QMouseEvent>
 #include <QPainter>
@@ -432,9 +432,10 @@ void PageScrubber::syncRange(bool chaptersChanged)
                                                .arg(rangeLast + 1)
                                                .arg(totalPages));
     const auto scope = strings::get("reader.zoom_scale").arg(zoomScales[zoomLevel]);
-    rangeLabel->setText(
-            chapterBar ? strings::get("chapter_graph.book_progress").arg(bookPercent).toUpper()
-                       : scope.toUpper());
+    rangeLabel->setText(chapterBar ? strings::get("chapter_graph.book_progress")
+                                             .arg(strings::percentArgument(bookPercent))
+                                             .toUpper()
+                                   : scope.toUpper());
     rangeStart->setText(bookPageLabel(rangeFirst, firstMainPage, lastMainPage, secondaryStyle));
     rangeEnd->setText(bookPageLabel(rangeLast, firstMainPage, lastMainPage, secondaryStyle));
     overviewStart->setText(bookPageLabel(0, firstMainPage, lastMainPage, secondaryStyle));
@@ -588,7 +589,7 @@ void PageScrubber::setChapterPosition(int index, int count, QString title, int p
     indicator->setRange(0, bookPages > 0 ? qMax(1, bookPages - 1) : 100);
     indicator->setValue(bookPages > 0 ? bookPage : percent);
     indicator->setMarkers(chapterPages);
-    indicator->setAccessibleDescription(QString::number(percent) + QLatin1Char('%'));
+    indicator->setAccessibleDescription(strings::localizedPercent(percent));
     syncRange();
     updateCaption();
 }

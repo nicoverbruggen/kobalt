@@ -3,7 +3,7 @@
 #include "reading/remaining_time.h"
 #include <limits>
 #include "support/qt_compat.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "check.h"
 
 #include <QLocale>
@@ -194,12 +194,11 @@ int main()
             "Default did not uppercase the chapter title");
     require(content(standard.slotFields[3], values, false).text.startsWith(QStringLiteral("15 "))
                     && content(standard.slotFields[5], values, false).text
-                            == strings::get("common.percent").arg(3),
+                            == strings::percentage(3),
             "Default footer did not combine chapter pages left with whole-book percentage");
     values.battery = 80;
     const auto emberProgress = content(b.slotFields[5], values, false).text;
-    require(emberProgress == strings::get("common.percent").arg(3),
-            "Ember does not show whole-book progress");
+    require(emberProgress == strings::percentage(3), "Ember does not show whole-book progress");
     auto nextChapter = values;
     nextChapter.chapterPage = 1;
     nextChapter.chapterPages = 4;
@@ -254,6 +253,26 @@ int main()
                     && content(Field::ChapterPercent, noPages, false).text
                             == QStringLiteral("30,9%"),
             "Book and chapter progress must use the device's decimal separator");
+    QLocale::setDefault(QLocale(QStringLiteral("fr_FR")));
+    require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42,7\u00a0%"),
+            "French progress needs a non-breaking space before the percent sign");
+    require(fieldDescription(Field::BatteryWarning)
+                    == QStringLiteral("Shows the battery only below %1\u00a0%.")
+                               .arg(batteryWarningBelow),
+            "A composed label must keep the localized percent sign and space");
+    strings::showKeys(true);
+    require(content(Field::BookPercent, noPages, false).text
+                    == QStringLiteral("common.percent [42,7]"),
+            "Percentage formatting must keep the string key and its numeric argument");
+    strings::showKeys(false);
+    QLocale::setDefault(QLocale(QStringLiteral("tr_TR")));
+    require(content(Field::BookPercent, noPages, false).text == QStringLiteral("%42,7"),
+            "Turkish progress needs the percent sign before the number");
+    QLocale::setDefault(QLocale(QStringLiteral("ar_EG")));
+    const QLocale arabic;
+    require(content(Field::BookPercent, noPages, false).text
+                    == QStringLiteral("\u0664\u0662\u066b\u0667") + arabic.percent(),
+            "Arabic progress needs localized digits, decimal separator and percent sign");
     QLocale::setDefault(QLocale::c());
     require(content(Field::ChapterAndPage, estimated, false).text == QStringLiteral("6 of ~20"),
             "An estimated total beside a name needs its mark");
@@ -281,8 +300,7 @@ int main()
     const auto battery = content(Field::Battery, values, false);
     require(battery.batteryIcon && battery.text.isEmpty() && battery.battery == 80,
             "Battery is not an icon");
-    require(content(Field::BatteryPercent, values, false).text
-                    == strings::get("common.percent").arg(80),
+    require(content(Field::BatteryPercent, values, false).text == strings::percentage(80),
             "Battery percentage is missing");
     require(content(Field::BatteryPercent, values, false).batteryIcon,
             "Battery with percentage lost its icon");
@@ -294,8 +312,7 @@ int main()
             const auto shown = content(Field::BatteryPercentOnly, status, false);
             require(!shown.batteryIcon
                             && shown.text
-                                    == (percent < 0 ? QString()
-                                                    : strings::get("common.percent").arg(percent)),
+                                    == (percent < 0 ? QString() : strings::percentage(percent)),
                     "Percentage-only battery showed an icon or the wrong text");
         }
         status.deviceStatus = false;
@@ -311,17 +328,14 @@ int main()
             "The existing battery percentage choice changed");
     // Nickel's count: the page on screen is read and the result rounds down,
     // so page 6 of 20 is 30% and the last page is 100%.
-    require(content(Field::ChapterPercent, values, false).text
-                    == strings::get("common.percent").arg(30),
+    require(content(Field::ChapterPercent, values, false).text == strings::percentage(30),
             "Percent of chapter is wrong");
-    require(content(Field::BookPercent, values, false).text
-                    == strings::get("common.percent").arg(3),
+    require(content(Field::BookPercent, values, false).text == strings::percentage(3),
             "Percent of book is wrong");
     {
         auto last = values;
         last.page = last.pages;
-        require(content(Field::BookPercent, last, false).text
-                        == strings::get("common.percent").arg(100),
+        require(content(Field::BookPercent, last, false).text == strings::percentage(100),
                 "The last page is not 100%");
     }
     {
@@ -372,9 +386,7 @@ int main()
         auto low = values;
         low.battery = batteryWarningBelow - 1;
         const auto warning = content(Field::BatteryWarning, low, false);
-        require(warning.batteryIcon
-                        && warning.text
-                                == strings::get("common.percent").arg(batteryWarningBelow - 1),
+        require(warning.batteryIcon && warning.text == strings::percentage(batteryWarningBelow - 1),
                 "Battery warning did not show a low battery");
         low.battery = batteryWarningBelow;
         require(content(Field::BatteryWarning, low, false).empty(),

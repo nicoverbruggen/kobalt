@@ -28,7 +28,7 @@ Settings has the following tabs:
 
 Confirmation and notice dialogs use the same patterned backdrop as settings choices. Their headings have a divider above the message. Actions share a connected footer, with Cancel on the left and the primary action on the right. If either label does not fit on one line, the actions become full-width stacked rows, with the primary action above Cancel. Labels can wrap with padding. Single-action notices use the full footer width. Bookmark and annotation removal show the page number when available and a shortened excerpt of the saved passage.
 
-System > Nitpicks > Progress percentages offers Whole percentages (the default) and One decimal place, with examples in the choice dialog. Closing Settings applies and saves the choice for book and chapter progress in the header, footer and their previews. It does not change page counts, saved positions, Stats or sync prompts.
+System > Nitpicks > Progress percentages offers Whole percentages (the default) and One decimal place, with examples in the choice dialog. Displayed percentages use the device locale for digits, decimal separator, percent sign and spacing. Page numbers and counts use plain digits. Closing Settings applies and saves the choice for book and chapter progress in the header, footer and their previews. It does not change page counts, saved positions, Stats or sync prompts.
 
 ## Hide unneeded features
 

@@ -3,7 +3,7 @@
 #include "ui/controls/panels.h"
 #include "ui/controls/options.h"
 #include "ui/controls/rows.h"
-#include "support/strings.h"
+#include "support/percentage_text.h"
 #include "light_panel.h"
 #include "platform/api/light_controls.h"
 #include "ui/style/metrics.h"
@@ -151,7 +151,7 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent)
     // Brightness changes reach the device while dragging. Native persistence
     // runs on release; interrupted drags restore the original level.
     connect(brightnessSlider, &QSlider::valueChanged, this, [this](int value) {
-        brightnessValue->setText(QString::number(value) + '%');
+        brightnessValue->setText(strings::localizedPercent(value));
         if (!updating && this->light.beginGesture()) {
             this->light.setGestureLevel(value);
             automaticBrightness->setChecked(this->light.automaticBrightness());
@@ -292,7 +292,7 @@ void LightPanel::refreshValues()
     automaticBrightness->setChecked(light.automaticBrightness());
     if (!brightnessSlider->interacting())
         brightnessSlider->setValue(light.brightness());
-    brightnessValue->setText(QString::number(brightnessSlider->value()) + '%');
+    brightnessValue->setText(strings::localizedPercent(brightnessSlider->value()));
     const bool warmth = light.hasWarmth();
     warmthRow->setVisible(warmth);
     automaticWarmth->setVisible(light.hasAutomaticWarmth());
@@ -308,7 +308,7 @@ void LightPanel::refreshValues()
             warmthSlider->setValue(qBound(0, percent, 100));
         }
         // setValue does not emit when the current value is unchanged.
-        warmthValue->setText(QString::number(warmthSlider->value()) + '%');
+        warmthValue->setText(strings::localizedPercent(warmthSlider->value()));
     }
     updating = false;
     layoutPanel();

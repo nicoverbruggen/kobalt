@@ -392,7 +392,8 @@ void Reader::annotationActionsFor(const QVector<AnnotationAction> &actions, QRec
                    (height() - 2 * int(metrics::notice::sideClearance) - paletteHeight)
                            / qMax(1, int(menuActions.size())),
                    int(metrics::links::actionHeight));
-    const bool compact = compactActions && menuActions.size() <= 6;
+    // Load failures can open this menu with no actions: then there is no strip.
+    const bool compact = compactActions && !menuActions.isEmpty() && menuActions.size() <= 6;
     QGridLayout *buttons = nullptr;
     int columns = menuActions.size();
     if (compact) {

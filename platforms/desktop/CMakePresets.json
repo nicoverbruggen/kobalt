@@ -60,11 +60,15 @@
   ],
   "buildPresets": [
     {
-      "name": "mac-sanitize",
-      "configurePreset": "mac-sanitize",
-      "targets": ["kobalt-desktop-tests", "kobalt-reader-ui-tests", "kobalt-reader-lifecycle-tests"],
+      "name": "sanitize",
+      "hidden": true,
+      "targets": [
+        "kobalt-desktop-tests", "kobalt-reader-ui-tests", "kobalt-reader-lifecycle-tests",
+        "kobalt-highlight-session-tests", "kobalt-reader-session-tests"
+      ],
       "jobs": 2
     },
+    { "name": "mac-sanitize", "inherits": "sanitize", "configurePreset": "mac-sanitize" },
     { "name": "mac", "configurePreset": "mac", "targets": ["Kobalt"], "jobs": 2 },
     { "name": "mac-kobo-checks", "configurePreset": "mac", "targets": ["kobo-checks"], "jobs": 2 },
     { "name": "mac-tests", "configurePreset": "mac", "targets": ["kobalt-tests"], "jobs": 2 },
@@ -75,12 +79,7 @@
     { "name": "mac-perf", "configurePreset": "mac-perf", "targets": ["perf"], "jobs": 2 },
     { "name": "mac-eval", "configurePreset": "mac", "targets": ["kobalt-eval-compare"], "jobs": 2 },
     { "name": "linux", "configurePreset": "linux", "targets": ["Kobalt"], "jobs": 2 },
-    {
-      "name": "linux-sanitize",
-      "configurePreset": "linux-sanitize",
-      "targets": ["kobalt-desktop-tests", "kobalt-reader-ui-tests", "kobalt-reader-lifecycle-tests"],
-      "jobs": 2
-    },
+    { "name": "linux-sanitize", "inherits": "sanitize", "configurePreset": "linux-sanitize" },
     { "name": "linux-tests", "configurePreset": "linux", "targets": ["kobalt-tests"], "jobs": 2 },
     { "name": "linux-fast-tests", "configurePreset": "linux", "targets": ["kobalt-fast-tests"], "jobs": 2 },
     { "name": "linux-light-tests", "configurePreset": "linux", "targets": ["kobalt-desktop-tests"], "jobs": 2 },
@@ -93,10 +92,10 @@
     {
       "name": "sanitize",
       "hidden": true,
-      "filter": { "include": { "name": "^(desktop[.](startup|reading)|ui[.]openingLogoSplash|lifecycle[.]teardownRemovesApplicationFilter)$" } },
+      "filter": { "include": { "label": "^sanitize$" } },
       "environment": { "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1" },
       "output": { "outputOnFailure": true },
-      "execution": { "jobs": 1, "noTestsAction": "error" }
+      "execution": { "jobs": 2, "noTestsAction": "error" }
     },
     { "name": "mac-sanitize", "inherits": "sanitize", "configurePreset": "mac-sanitize" },
     {

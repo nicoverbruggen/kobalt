@@ -54,6 +54,10 @@ include("${KOBALT_ROOT}/dependencies/local-engine.cmake")
 kobalt_local_engine()
 option(KOBALT_SANITIZE "Check desktop memory accesses and C++ object lifetimes" OFF)
 if(KOBALT_SANITIZE)
+    # At -O0 GCC instruments a separate stack frame for inline helpers on each pixel.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        add_compile_options("$<$<CONFIG:Debug>:-O1>")
+    endif()
     # Instrument the app and tests. Some external libraries build without RTTI.
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer
                         "$<$<COMPILE_LANGUAGE:CXX>:-fsanitize=vptr>")
@@ -864,6 +868,11 @@ if(BUILD_TESTING)
                 "platforms/desktop/CMakeLists.txt and give its test function a one-line comment that says what it checks.")
         endif()
         get_test_property(${test} LABELS labels)
+        if("lifecycle" IN_LIST labels OR (test_area STREQUAL "annotations" AND "desktop" IN_LIST labels)
+            OR test MATCHES "^(desktop[.](startup|reading)|ui[.]openingLogoSplash)$"
+            OR area_name MATCHES "^session[.](highlight|reader)-session$")
+            set_property(TEST ${test} APPEND PROPERTY LABELS sanitize)
+        endif()
         if(NOT test_area IN_LIST labels)
             set_property(TEST ${test} APPEND PROPERTY LABELS ${test_area})
         endif()

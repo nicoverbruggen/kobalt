@@ -6,10 +6,6 @@ on:
     tags: ['v*']
   workflow_dispatch:
     inputs:
-      native_sanitize:
-        description: Run headless Linux AddressSanitizer and object-lifetime checks
-        type: boolean
-        default: false
       benchmark_linkers:
         description: Compare GNU ld and LLD using the same compiled objects
         type: boolean
@@ -149,9 +145,8 @@ jobs:
 
   native-sanitize:
     needs: validation
-    if: inputs.native_sanitize
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:

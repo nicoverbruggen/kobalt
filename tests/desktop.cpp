@@ -5806,16 +5806,17 @@ private slots:
             QVERIFY(fixture.press("rrGraphWordScope"));
             QCOMPARE(labelText(fixture, "rrStatsWordScopeTitle"), QString("Book Stats For"));
             QVERIFY(fixture.press("rrStatsWordVolume"));
+            QTRY_VERIFY(!fixture.widget("rrStatsWordScopePopup"));
             QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), initial.value("pages").toInt());
             QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Volume · 8106 words"));
             QCOMPARE(storage::readJson(fixture.paths.preferences())
                              .value("stats_word_scope")
                              .toString(),
                      QString("volume"));
-            QTRY_VERIFY(!fixture.widget("rrStatsWordScopePopup"));
             QVERIFY(fixture.press("rrGraphWordScope"));
             QTRY_VERIFY(fixture.visible("rrStatsWordMain"));
             QVERIFY(fixture.press("rrStatsWordMain"));
+            QTRY_VERIFY(!fixture.widget("rrStatsWordScopePopup"));
             QCOMPARE(labelText(fixture, "rrGraphBookFigure").toInt(), mainPagesLeft);
             QTRY_COMPARE(labelText(fixture, "rrGraphBookWords"), QString("Main text · 3152 words"));
             QVERIFY(fixture.press("rrPage"));

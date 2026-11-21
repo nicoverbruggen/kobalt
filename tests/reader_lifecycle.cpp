@@ -1849,19 +1849,30 @@ private slots:
             auto *position = host.window()->findChild<QLabel *>("rrGraphChapterPosition");
             QVERIFY(position);
             const auto hiddenText = position->text();
-            const int previousPage = host.session()->page();
+            const auto previousPosition = host.session()->state().value("position");
             const bool rtl = host.session()->state().value("page_progression_rtl").toBool();
             QVERIFY(clickAt(canvas,
                             page->mapTo(canvas.surface(),
                                         QPoint(rtl ? page->width() / 6 : page->width() * 5 / 6,
                                                page->height() / 2))));
-            QTRY_VERIFY(!host.session()->busy() && host.session()->page() != previousPage);
+            QTRY_VERIFY(!host.session()->busy()
+                        && host.session()->state().value("position") != previousPosition);
             QCoreApplication::processEvents();
             QCOMPARE(position->text(), hiddenText);
         }
         const auto image = page->image.cacheKey();
-        auto state = host.session()->state();
-        state.remove("cached_pages");
+        const auto panelState = [&] {
+            auto state = host.session()->state();
+            // Background estimates update page counts and progress without drawing a page.
+            for (const auto *key :
+                 { "cached_pages", "page_estimate", "book_fraction", "main_text_first",
+                   "main_text_last", "rough_page", "rough_pages", "rough_item_page",
+                   "rough_item_pages", "rough_pages_estimated", "rough_item_pages_estimated",
+                   "whole_book_ready", "whole_book_failed" })
+                state.remove(QLatin1String(key));
+            return state;
+        };
+        const auto state = panelState();
         QVERIFY(clickAt(canvas, QPoint(nativeSize.width() / 2, nativeSize.height() / 2)));
         QTRY_VERIFY(toolbar->isVisible());
 
@@ -1895,9 +1906,7 @@ private slots:
                     QVERIFY(!startPanel->isVisible());
             }
             QTRY_VERIFY(!host.session()->busy());
-            auto current = host.session()->state();
-            current.remove("cached_pages");
-            QCOMPARE(current, state);
+            QCOMPARE(panelState(), state);
             QCOMPARE(page->image.cacheKey(), image);
             QVERIFY(toolbar->isVisible());
             QVERIFY2(startButton->isVisible() && startButton->isEnabled(), qPrintable(start));
@@ -1906,10 +1915,12 @@ private slots:
             QTRY_VERIFY(startPanel->isVisible());
             QVERIFY(!host.session()->busy());
             if (start == "rrNavStats") {
-                QCOMPARE(host.window()->findChild<QLabel *>("rrGraphChapterPosition")->text(),
-                         strings::get("stats.page_of")
-                                 .arg(host.session()->chapterPage())
-                                 .arg(host.session()->chapterPages()));
+                QTRY_COMPARE(host.window()->findChild<QLabel *>("rrGraphChapterPosition")->text(),
+                             strings::get("stats.page_of")
+                                     .arg(host.session()->chapterPage())
+                                     .arg(headerfooter::pageTotal(
+                                             host.session()->chapterPages(),
+                                             host.session()->bookPagesEstimated())));
             }
             QCOMPARE(page->image.cacheKey(), image);
             QVERIFY(toolbar->isVisible());
@@ -9296,6 +9307,21 @@ private slots:
         auto *scrubber = dynamic_cast<ui::PageScrubber *>(
                 host.window()->findChild<QWidget *>("rrPageScrubber"));
         QVERIFY(page && menu && scrubber);
+        auto *bookPosition = scrubber->findChild<QSlider *>("rrBookPositionIndicator");
+        QVERIFY(bookPosition);
+        const auto controlsPosition = [&] {
+            return qMakePair(scrubber->slider()->value(), bookPosition->value());
+        };
+        const auto shownPosition = [&] {
+            return host.session()->state().contains("book_fraction") ? bookPosition->value()
+                                                                     : scrubber->slider()->value();
+        };
+        const auto expectedPosition = [&] {
+            if (!host.session()->state().contains("book_fraction"))
+                return host.session()->page();
+            return host.session()->bookPages() > 0 ? host.session()->bookPage()
+                                                   : host.session()->mainPercent();
+        };
         // Opening syncs the controls once, hidden.
         QCoreApplication::processEvents();
         auto *marks =
@@ -9307,16 +9333,15 @@ private slots:
         batteryReads = 0;
         clockReads = 0;
         local = local.addSecs(60);
-        const int start = host.session()->page();
-        const int shown = scrubber->slider()->value();
+        const auto start = host.session()->state().value("position");
+        const auto shown = controlsPosition();
         test::skipPageTurnWindow();
         host.window()->pageButton(1);
-        QTRY_COMPARE(host.session()->page(), start + 1);
-        QTRY_VERIFY(!host.session()->busy());
+        QTRY_VERIFY(!host.session()->busy() && host.session()->state().value("position") != start);
         // The refresh after the painted turn runs from the event loop.
         QCoreApplication::processEvents();
         QCoreApplication::processEvents();
-        QCOMPARE(scrubber->slider()->value(), shown);
+        QCOMPARE(controlsPosition(), shown);
         QCOMPARE(marks->excerptFont().family(), hiddenFace);
         QVERIFY(!menu->isVisible());
         QCOMPARE(batteryReads, 0);
@@ -9325,7 +9350,8 @@ private slots:
         // The menu opens with the page that is shown now.
         QVERIFY(clickAt(canvas, page->mapTo(canvas.surface(), page->rect().center())));
         QTRY_VERIFY(menu->isVisible());
-        QVERIFY(scrubber->slider()->value() != shown);
+        QTRY_COMPARE(shownPosition(), expectedPosition());
+        QVERIFY(controlsPosition() != shown);
         const auto *indicator = dynamic_cast<ui::BatteryIndicator *>(
                 host.window()->findChild<QWidget *>("rrMenuBattery"));
         QVERIFY(indicator && indicator->isVisible());
@@ -9337,12 +9363,16 @@ private slots:
         QCOMPARE(marks->excerptFont().family(), readingFace);
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrBookmarkListClose")));
         QTRY_VERIFY(!marks->isVisible());
-        const int open = scrubber->slider()->value();
+        QVERIFY(menu->isVisible());
+        const auto firstTurn = host.session()->state().value("position");
+        const auto open = controlsPosition();
         // With the menu open, a page button turn updates the controls at once.
         test::skipPageTurnWindow();
         host.window()->pageButton(1);
-        QTRY_COMPARE(host.session()->page(), start + 2);
-        QTRY_VERIFY(scrubber->slider()->value() != open);
+        QTRY_VERIFY(!host.session()->busy()
+                    && host.session()->state().value("position") != firstTurn);
+        QTRY_COMPARE(shownPosition(), expectedPosition());
+        QVERIFY(controlsPosition() != open);
         percent = 39;
         QVERIFY(click(canvas, host.window()->findChild<QPushButton *>("rrNavLayout")));
         QVERIFY(click(canvas, host.window()->findChild<QWidget *>("rrHeaderFooter")));

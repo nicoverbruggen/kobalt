@@ -8881,7 +8881,7 @@ public:
     */
 
     // Blaze: Chapter documents share font bytes until the reader switches books.
-    blaze::EmbeddedFontCache _embeddedFontCache;
+    blaze::EmbeddedFontCache _embeddedFontCache{MaxEmbeddedFontBytes};
 
     void koblazeForgetFontData() {
         _embeddedFontCache.clear();

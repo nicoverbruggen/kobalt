@@ -21,10 +21,11 @@ LVByteArrayRef EmbeddedFontCache::read(FT_Library library, const lString8 & name
             FT_Face face = nullptr;
             if (FT_New_Memory_Face(library, data->get(), data->length(), 0, &face))
                 return {};
+            // FreeType has opened the face. Bound the SFNT copy kept by Blaze.
             FT_ULong length = 0;
             LVByteArrayRef decoded;
             if (!FT_Load_Sfnt_Table(face, 0, 0, nullptr, &length) && length
-                    && length <= LVFontManager::MaxEmbeddedFontBytes) {
+                    && length <= _maxReconstructedBytes) {
                 decoded = LVByteArrayRef(new LVByteArray(length, 0));
                 if (FT_Load_Sfnt_Table(face, 0, 0, decoded->ptr(), &length))
                     decoded = LVByteArrayRef();

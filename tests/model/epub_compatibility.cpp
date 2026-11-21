@@ -6,6 +6,7 @@
 #include "engine/blaze/extensions/embedded_font_cache.h"
 #include "publication/image_policy.h"
 #include "lvimg.h"
+#include "lvfntman.h"
 #include <QGuiApplication>
 #include <QFileInfo>
 #include <cstring>
@@ -438,13 +439,24 @@ void checkCodecs()
             "XB73R5RcixdMaNxEkNoFxbU+fQkOqxJQeUGU2Auiu55G137fMOLZ+FquS5h6I5OaJpKubArl8FzYp7ntUgiPr7Xe7q"
             "6n9W9V6k9Xv4mf7wTsmdyRO9MsKYhV2Kjhhlxjpyp3PshY3tXt1pTnS6eN+MDMlIkErlfVEguu7JsJvsDVNgpCpDWR"
             "uBm8N5NmPrjafz4OT84fb++uj5fHp3dX+9etaMwCPjHgin2eOSbMhHMeueWOa45ZKvWUGDcYGbFzBWyRP4BxWhwA");
-    auto stream = LVCreateMemoryStream(font.data(), font.size(), false);
+    const auto fontStream = [&font] {
+        return LVCreateMemoryStream(font.data(), font.size(), false);
+    };
     FT_Library library = nullptr;
     require(!FT_Init_FreeType(&library), "FreeType unavailable");
-    blaze::EmbeddedFontCache cache;
-    auto bytes = cache.read(library, lString8("face"), stream, font.size());
+    blaze::EmbeddedFontCache cache(LVFontManager::MaxEmbeddedFontBytes);
+    auto bytes = cache.read(library, lString8("face"), fontStream(), font.size());
     require(!bytes.isNull() && bytes->get()[0] == 0, "WOFF2 did not reconstruct an SFNT");
-    require(cache.read(library, lString8("face"), stream, font.size()).get() == bytes.get(),
+    const auto reconstructedSize = bytes->length();
+    require(reconstructedSize > font.size() + 1, "Fixture needs room between the two sizes");
+    blaze::EmbeddedFontCache atSize(reconstructedSize);
+    const auto exact = atSize.read(library, lString8("face"), fontStream(), font.size());
+    require(!exact.isNull() && exact->length() == reconstructedSize,
+            "The cache rejected a reconstructed font exactly at its limit");
+    blaze::EmbeddedFontCache belowSize(reconstructedSize - 1);
+    require(belowSize.read(library, lString8("face"), fontStream(), font.size()).isNull(),
+            "The cache accepted a reconstructed font over its limit");
+    require(cache.read(library, lString8("face"), fontStream(), font.size()).get() == bytes.get(),
             "A second font size reconstructed the WOFF2 again");
     FT_Face face = nullptr;
     require(!FT_New_Memory_Face(library, bytes->get(), bytes->length(), 0, &face)

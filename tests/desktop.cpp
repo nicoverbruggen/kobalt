@@ -15957,6 +15957,52 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QCOMPARE(fixture.state().value("margin_pixels").toInt(), margin);
     }
 
+    // A theme with other fonts restyles every widget. The busy notice and its
+    // bar show while that runs and are gone when it ends.
+    void themeApplyProgress()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 10000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrTheming"));
+        QVERIFY(fixture.press("rrTheming"));
+        auto *bar = fixture.widget("rrApplyingProgress");
+        QVERIFY(bar);
+
+        struct Shows : QObject
+        {
+            int count = 0;
+            QStringList texts;
+
+            bool eventFilter(QObject *object, QEvent *event) override
+            {
+                if (event->type() == QEvent::Show) {
+                    ++count;
+                    if (auto *label =
+                                static_cast<QWidget *>(object)->parentWidget()->findChild<QLabel *>(
+                                        "rrUpdatingText"))
+                        texts << label->text();
+                }
+                return false;
+            }
+        } shows;
+
+        bar->installEventFilter(&shows);
+        QVERIFY(fixture.press("rrThemePreset"));
+        QVERIFY(fixture.press("rrTheme_playful"));
+        QTRY_COMPARE(ui::interfaceFont().family(), QStringLiteral("Kalam"));
+        bar->removeEventFilter(&shows);
+        QVERIFY(shows.count > 0);
+        QCOMPARE(shows.texts.value(0), strings::get("reader.applying_theme"));
+        QVERIFY(!bar->isVisible());
+    }
+
     void settingsRestorePresets()
     {
         Fixture fixture;

@@ -651,6 +651,7 @@
 "reader.align_left" = "Align left";
 "reader.alignment" = "Alignment";
 "reader.applying_appearance_changes" = "Applying appearance changes...";
+"reader.applying_theme" = "Applying theme...";
 "reader.enabling_bold_reading" = "Enabling Bold reading...";
 "reader.disabling_bold_reading" = "Disabling Bold reading...";
 "reader.auto_alignment" = "Auto alignment";

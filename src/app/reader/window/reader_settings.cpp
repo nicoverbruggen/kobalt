@@ -1787,17 +1787,44 @@ void Reader::applyInterfaceFonts()
         && previousStrip == ui::headerFooterFont().family()
         && previousMono == ui::chromeFont().family())
         return;
-    setFont(ui::interfaceFont());
-    const auto widgets = findChildren<QWidget *>();
-    for (auto *widget : widgets) {
-        const auto style = widget->property("reader_style").toString();
-        if (!style.isEmpty())
-            readerStyle(widget, style);
+    // Restyling every widget takes a while, so a notice with a bar shows
+    // first. The work runs on this thread, so each step paints the bar itself.
+    // The notice restyles last, so its own text keeps one font until the end.
+    const bool notice = isVisible();
+    const auto text = strings::get("reader.applying_theme");
+    const auto showProgress = [this, &text](int percent) {
+        const auto changed = busyNotice->progressUpdateRect(percent, text);
+        busyNotice->setDelayedProgress(true, 1000, percent, text);
+        if (changed.isValid())
+            window()->repaint(changed);
+    };
+    if (notice) {
+        showProgress(0);
+        busyNotice->repaint();
     }
+    setFont(ui::interfaceFont());
+    QList<QWidget *> widgets, noticeWidgets;
+    for (auto *widget : findChildren<QWidget *>()) {
+        if (widget->property("reader_style").toString().isEmpty())
+            continue;
+        (widget == busyNotice || busyNotice->isAncestorOf(widget) ? noticeWidgets : widgets)
+                .append(widget);
+    }
+    constexpr int steps = 4;
+    for (int index = 0; index < widgets.size(); ++index) {
+        readerStyle(widgets[index], widgets[index]->property("reader_style").toString());
+        const int step = (index + 1) * steps / widgets.size();
+        if (notice && step != index * steps / widgets.size() && step < steps)
+            showProgress(step * 100 / steps);
+    }
+    for (auto *widget : noticeWidgets)
+        readerStyle(widget, widget->property("reader_style").toString());
     readerStyle(this, ui::styles::reader());
     page->setFont(ui::headerFooterFont());
     ui::refreshInterfaceText(this);
     fitSettings();
+    if (notice)
+        busyNotice->setDelayedProgress(false, 0, 0);
 }
 
 void Reader::showSettingsFonts()

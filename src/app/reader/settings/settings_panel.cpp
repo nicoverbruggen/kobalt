@@ -1222,8 +1222,9 @@ void SettingsPanel::buildTheming()
             strings::get("settings.theme_details"));
     iconThemeButton = listAction(themingPage, themeRows, "rrIconTheme",
                                  strings::get("settings.icon_theme"), [] { });
-    paletteButton = listAction(themingPage, themeRows, "rrColorTheme",
-                               strings::get("settings.palette"), [] { });
+    if (ui::colorThemes)
+        paletteButton = listAction(themingPage, themeRows, "rrColorTheme",
+                                   strings::get("settings.palette"), [] { });
     uiFontButton =
             listAction(themingPage, nullptr, "rrUiFont", strings::get("settings.ui_font"), [] { });
     uiMonoFontButton = listAction(themingPage, nullptr, "rrUiMonoFont",
@@ -1494,8 +1495,10 @@ void SettingsPanel::selectTheme(const QString &theme, const InterfaceStyle &styl
     };
     presetButton->setCaption(caption);
     setSample(presetButton, ThemeChoice::Preset);
-    paletteButton->setCaption(paletteName(style.palette).toUpper());
-    setSample(paletteButton, ThemeChoice::Palette);
+    if (paletteButton) {
+        paletteButton->setCaption(paletteName(style.palette).toUpper());
+        setSample(paletteButton, ThemeChoice::Palette);
+    }
     iconThemeButton->setCaption(iconStyleName(ui::iconStyleId(style.icons)).toUpper());
     iconThemeButton->setIconStylePreview(style.icons);
     themingPage->update();

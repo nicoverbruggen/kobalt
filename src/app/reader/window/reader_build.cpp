@@ -1882,15 +1882,16 @@ void Reader::connectSettingsPage(SettingsPage section)
                                            showSettingsFonts();
                                        });
         });
-        connect(settings->paletteButton, &QPushButton::clicked, this, [this, settings] {
-            settings->showThemeChoices(SettingsPanel::ThemeChoice::Palette, themeDraft,
-                                       [this](const QString &id) {
-                                           if (themeDraft.palette != id) {
-                                               themeDraft.palette = id;
-                                               markThemeCustom();
-                                           }
-                                       });
-        });
+        if (settings->paletteButton)
+            connect(settings->paletteButton, &QPushButton::clicked, this, [this, settings] {
+                settings->showThemeChoices(SettingsPanel::ThemeChoice::Palette, themeDraft,
+                                           [this](const QString &id) {
+                                               if (themeDraft.palette != id) {
+                                                   themeDraft.palette = id;
+                                                   markThemeCustom();
+                                               }
+                                           });
+            });
         connect(settings->iconThemeButton, &QPushButton::clicked, this, [this, settings] {
             settings->showThemeChoices(SettingsPanel::ThemeChoice::Icons, themeDraft,
                                        [this](const QString &id) {

@@ -80,11 +80,11 @@ const ThemeColors &themeColors(bool dark, const QString &palette)
             tinted(light, "#fcf9f1", "#403428", "#685443", "#c9bba6", "#827362", "#eee5d5");
     static const auto sepiaNight =
             tinted(night, "#231e19", "#f5ede0", "#d5c4ac", "#71624e", "#a99a86", "#44392d");
-    if (palette == "blue")
+    if (colorThemes && palette == "blue")
         return dark ? blueNight : blueDay;
-    if (palette == "sage")
+    if (colorThemes && palette == "sage")
         return dark ? sageNight : sageDay;
-    if (palette == "sepia")
+    if (colorThemes && palette == "sepia")
         return dark ? sepiaNight : sepiaDay;
     return dark ? night : light;
 }

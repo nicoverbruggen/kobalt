@@ -14,6 +14,11 @@ struct ThemeColors
     QColor modalFade, modalPattern, sleepDim;
 };
 
+// Color themes are paused for now: every palette draws as grayscale and
+// Settings does not offer the choice. Saved choices stay, so they return when
+// this is true again. Icon styles keep their colors.
+inline constexpr bool colorThemes = false;
+
 const ThemeColors &themeColors(bool dark, const QString &palette = {});
 QString interfacePalette(const QWidget *widget);
 const ThemeColors &themeColors(const QWidget *widget);

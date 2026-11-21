@@ -19001,20 +19001,23 @@ private slots:
         QVERIFY(showTheme());
         auto *panel = static_cast<reader::SettingsPanel *>(fixture.widget("rrGeneralSettings"));
         auto *presetButton = static_cast<ui::CaptionButton *>(fixture.widget("rrThemePreset"));
+        // Without color themes there is no Color theme row.
         auto *paletteButton = static_cast<ui::CaptionButton *>(fixture.widget("rrColorTheme"));
-        QVERIFY(panel && presetButton && paletteButton);
+        QVERIFY(panel && presetButton && (paletteButton != nullptr) == ui::colorThemes);
         QPointer<QWidget> presetSample = presetButton->sample();
-        QPointer<QWidget> paletteSample = paletteButton->sample();
-        QVERIFY(presetSample && paletteSample);
+        QPointer<QWidget> paletteSample = paletteButton ? paletteButton->sample() : nullptr;
+        QVERIFY(presetSample && (paletteSample || !ui::colorThemes));
         const auto checkSamples = [&](const QString &palette) {
             QVERIFY(presetSample && presetButton->sample() == presetSample);
-            QVERIFY(paletteSample && paletteButton->sample() == paletteSample);
             const int icon = ui::metrics::chrome::tabIcon, gap = ui::metrics::chrome::tabGap;
             QCOMPARE(presetSample->size(), QSize(4 * icon + gap, icon));
-            QCOMPARE(paletteSample->size(), QSize(2 * icon + gap, icon));
             const auto &colors = ui::themeColors(dark, palette);
             const auto presetPixels = presetSample->grab().toImage();
             QCOMPARE(presetPixels.pixelColor(presetPixels.width() - 1, 0), colors.pressedPaper);
+            if (!ui::colorThemes)
+                return;
+            QVERIFY(paletteSample && paletteButton->sample() == paletteSample);
+            QCOMPARE(paletteSample->size(), QSize(2 * icon + gap, icon));
             const auto swatches = paletteSample->grab().toImage();
             const int y = swatches.height() / 2;
             QCOMPARE(swatches.pixelColor(swatches.width() / 6, y), colors.pressedPaper);
@@ -19063,10 +19066,12 @@ private slots:
         QVERIFY(fixture.press("rrIconTheme"));
         QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-theme-icons"));
         QVERIFY(fixture.press("rrIconTheme_color"));
-        QVERIFY(fixture.press("rrColorTheme"));
-        QVERIFY(fixture.press("rrColorTheme_sage"));
-        QCOMPARE(ui::dividerColor(fixture.widget("rrThemePreset")),
-                 ui::themeColors(dark, "sage").divider);
+        if (ui::colorThemes) {
+            QVERIFY(fixture.press("rrColorTheme"));
+            QVERIFY(fixture.press("rrColorTheme_sage"));
+            QCOMPARE(ui::dividerColor(fixture.widget("rrThemePreset")),
+                     ui::themeColors(dark, "sage").divider);
+        }
         auto *presetRow = static_cast<ui::CaptionButton *>(fixture.widget("rrThemePreset"));
         QCOMPARE(presetRow->caption(), QStringLiteral("CUSTOM"));
         QVERIFY(fixture.press("rrThemePreset"));
@@ -19088,8 +19093,9 @@ private slots:
         QTRY_COMPARE(ui::interfaceFont().family(), QStringLiteral("Kalam"));
         QTRY_COMPARE(storage::readJson(fixture.paths.preferences()).value("ui_theme").toString(),
                      QStringLiteral("custom"));
-        QCOMPARE(storage::readJson(fixture.paths.preferences()).value("ui_palette"),
-                 QJsonValue("sage"));
+        if (ui::colorThemes)
+            QCOMPARE(storage::readJson(fixture.paths.preferences()).value("ui_palette"),
+                     QJsonValue("sage"));
         QCOMPARE(storage::readJson(fixture.paths.preferences()).value("ui_icon_style"),
                  QJsonValue("color"));
         if (!fixture.visible("rrSettings"))

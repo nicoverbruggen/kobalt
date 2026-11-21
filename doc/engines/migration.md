@@ -290,7 +290,7 @@ A small record, the book-state field `page_estimate` ([Storage compatibility](..
 
 ### Stages
 
-These stages record the original migration plan. Kobalt now builds the imported fork directly from `src/engine/blaze` on every platform. The FreeType symbol rename is an engine CMake option. The external checkout, post-patch edit and temporary symlink are retired. See [source provenance](koblaze.md) and [current status](../engines.md#status).
+These stages record the original migration plan. Kobalt now builds the imported fork directly from `src/engine/blaze` on every platform. The FreeType symbol rename is an engine CMake option. The external checkout, post-patch edit and temporary symlink are retired. See [source provenance](blaze.md) and [current status](../engines.md#status).
 
 1. Build Kobalt from the fork in place of the pin and the patches, with the same output. Move the FreeType rename into a CMake option of the fork.
 2. Measure on a Kobo: the split of a cold open and of a font size change into parse, style, layout and page split, and the time between two progress points.

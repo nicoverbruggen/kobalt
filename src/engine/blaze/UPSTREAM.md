@@ -174,7 +174,7 @@ Vertical runs use fallback fonts at their nominal size, without x-height matchin
 
 **Summary:** common `display: flex` and `inline-flex` layouts.
 
-Horizontal rows support wrapping, grow and shrink factors, `flex-basis`, percentage widths, gaps, main-axis alignment, cross-axis alignment for single lines, and auto margins. Forward columns stack their children and can center short content. `@supports (display: flex)` stays false, because general nested layouts and fragmentation of side-by-side items are not supported. See [Flex layout](../../../doc/engines/koblaze.md#flex-layout) for the full list.
+Horizontal rows support wrapping, grow and shrink factors, `flex-basis`, percentage widths, gaps, main-axis alignment, cross-axis alignment for single lines, and auto margins. Forward columns stack their children and can center short content. `@supports (display: flex)` stays false, because general nested layouts and fragmentation of side-by-side items are not supported. See [Flex layout](../../../doc/engines/blaze.md#flex-layout) for the full list.
 
 **Code:** [flex_rows.inc](extensions/flex_rows.inc), `css_d_flex` in [cssdef.h](crengine/include/cssdef.h), and the `Blaze:` comments in [lvrend.cpp](crengine/src/lvrend.cpp) and [lvstsheet.cpp](crengine/src/lvstsheet.cpp).
 

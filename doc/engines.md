@@ -1,6 +1,6 @@
 # Rendering engines
 
-Blaze is Kobalt’s EPUB rendering engine. It is a hard fork of KOReader’s CREngine, which grew out of CoolReader. Kobalt maintains the fork in this repository and builds it for Kobo, Android and desktop. See [source provenance and licenses](engines/koblaze.md).
+Blaze is Kobalt’s EPUB rendering engine. It is a hard fork of KOReader’s CREngine, which grew out of CoolReader. Kobalt maintains the fork in this repository and builds it for Kobo, Android and desktop. See [source provenance and licenses](engines/blaze.md).
 
 ## Status
 

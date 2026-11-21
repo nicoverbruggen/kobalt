@@ -148,6 +148,18 @@ Upstream's `TextLangCfg` constructor resolves the hyphenation method, which load
 
 **Upstream:** present upstream.
 
+### Font faces can register without opening their file
+
+**Summary:** a host that already knows a face's family, weight and style can register it without opening the font file.
+
+Upstream's `RegisterFont` opens every face of every font file with `FT_New_Face` when it registers the file, to read its family, weight, style and axes. Blaze adds `RegisterStaticFontFace`, which takes the file, the face index, the family, the weight and the italic flag from the host and opens nothing. The file opens when text first asks for a font instance of that face. Kobalt registers the faces of its 26 MB Noto Serif CJK collection this way, so a book in a Latin script never opens the collection. KOReader already keeps a cache of font metadata, which could feed this call.
+
+It suits static faces only. A face registered this way has no variable axes, math, emoji or small caps capabilities, and its CSS generic family is always sans-serif. A test checks that Latin text opens without the collection, that a CJK character then loads it, and that the face metadata and the cache hash are the same as with `RegisterFont`. We did not measure the time saved.
+
+**Code:** `RegisterStaticFontFace` in [lvfntman.h](crengine/include/lvfntman.h) and [lvfntman.cpp](crengine/src/lvfntman.cpp).
+
+**Upstream:** not upstream.
+
 ### Script lookup for ASCII
 
 **Summary:** ASCII characters get their script without a HarfBuzz call.
@@ -169,6 +181,18 @@ The cache must fill before it saves time, so it only pays off in large books. On
 > We also tried seeding the cache with common words. It was not useful, but it probably deserves another look.
 
 **Code:** [word_cache.cpp](extensions/word_cache.cpp), [fast_shaping.inc](extensions/fast_shaping.inc) and [shaping_options.cpp](extensions/shaping_options.cpp), compiled into [lvfntman.cpp](crengine/src/lvfntman.cpp).
+
+**Upstream:** not upstream.
+
+### An EPUB archive is opened once
+
+**Summary:** a host that already has the book's archive open can pass it in, so the ZIP directory is read once.
+
+Upstream's `LoadDocument` opens the stream as a ZIP archive in `DetectEpubFormat`, which reads the central directory and the `mimetype` entry, and `ImportEpubDocument` opens it again. Blaze adds an optional archive to `LVDocView::LoadDocument` and `ImportEpubDocument`. When the host passes one, `LoadDocument` skips the PDB and EPUB checks and `ImportEpubDocument` uses that archive. Without one, both work as upstream.
+
+The saving is one read of the central directory for each opening, which matters for EPUBs with many entries on slow storage. Kobalt uses the parameter mainly to share one resource container between the parts of a book that it opens separately. We did not measure it.
+
+**Code:** `LVDocView::LoadDocument` in [lvdocview.cpp](crengine/src/lvdocview.cpp) and `ImportEpubDocument` in [epubfmt.cpp](crengine/src/epubfmt.cpp).
 
 **Upstream:** not upstream.
 

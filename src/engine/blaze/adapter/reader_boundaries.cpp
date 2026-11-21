@@ -71,6 +71,13 @@ struct Reference
     int boundary;
 };
 
+struct Element
+{
+    QString name;
+    int ordinal;
+    QHash<QString, int> children;
+};
+
 Reference reference(const QString &base, const QString &href, int boundary)
 {
     const QUrl url(href);
@@ -230,53 +237,58 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
             && !bytes.contains(char(0)))
             continue;
         QXmlStreamReader xml(bytes);
-        QVector<QHash<QString, int>> children;
-        QStringList steps;
+        QVector<Element> elements;
         const auto before = result;
         int elementOrder = 0;
         bool chapterBody = false;
         while (!xml.atEnd()) {
             stopPoint();
             nextToken(xml);
-            const auto name = xml.name().toString();
             if (xml.isStartElement()) {
-                if (steps.isEmpty() && name != "body")
+                if (elements.isEmpty() && xml.name() != QLatin1String("body"))
                     continue;
                 ++elementOrder;
-                const int ordinal = children.isEmpty() ? 1 : ++children.last()[name];
-                steps.append(QString("/%1[%2]").arg(name).arg(ordinal));
-                children.append(QHash<QString, int>());
+                const auto name = xml.name().toString();
+                const int ordinal = elements.isEmpty() ? 1 : ++elements.last().children[name];
+                elements.append(Element{ name, ordinal, {} });
                 const auto attrs = xml.attributes();
-                const auto types =
-                        attrs.value(ops, QStringLiteral("type")).toString().simplified().split(' ');
-                const auto id = attrs.value("id").toString();
-                int flags = targets.value(id);
-                if (!id.isEmpty() && ids.contains(id))
-                    for (const int row : ids.values(id))
-                        source.tocAnchors[row].position = root + steps.join(QString());
+                const auto id = targets.isEmpty() && ids.isEmpty()
+                        ? QString()
+                        : attrs.value("id").toString();
+                int flags = id.isEmpty() ? 0 : targets.value(id);
                 if (epub3
                     && (name == "body" || name == "section" || name == "div"
                         || name == "article")) {
-                    if (steps.size() == 1)
-                        chapterBody = types.contains("chapter");
-                    // A glossary inside a chapter is local to that chapter. Only a
-                    // partition of the publication or a landmark can end the main text.
-                    if (types.contains("backmatter") || types.contains("bodymatter")
-                        || steps.size() == 1 || (steps.size() == 2 && !chapterBody))
-                        flags |= semantics(types);
-                    if (types.contains("chapter") || types.contains("part"))
-                        result.second.clear();
+                    const auto type = attrs.value(ops, QStringLiteral("type"));
+                    if (elements.size() == 1)
+                        chapterBody = false;
+                    if (!type.isEmpty()) {
+                        const auto types = type.toString().simplified().split(' ');
+                        if (elements.size() == 1)
+                            chapterBody = types.contains("chapter");
+                        // A glossary inside a chapter is local to that chapter. Only a
+                        // partition of the publication or a landmark can end the main text.
+                        if (types.contains("backmatter") || types.contains("bodymatter")
+                            || elements.size() == 1 || (elements.size() == 2 && !chapterBody))
+                            flags |= semantics(types);
+                        if (types.contains("chapter") || types.contains("part"))
+                            result.second.clear();
+                    }
                 }
-                if (flags || ids.contains(id)) {
-                    const auto position = root + steps.join(QString());
+                const auto rows = id.isEmpty() ? QList<int>() : ids.values(id);
+                if (flags || !rows.isEmpty()) {
+                    // Only anchors need paths, but their ordinals include every sibling.
+                    auto position = root;
+                    for (const auto &element : elements)
+                        position += QString("/%1[%2]").arg(element.name).arg(element.ordinal);
+                    for (const int row : rows)
+                        source.tocAnchors[row].position = position;
                     source.boundaryElementOrder.insert(position, elementOrder);
                     if (flags)
                         record(flags, position);
                 }
-            } else if (xml.isEndElement() && !steps.isEmpty()) {
-                steps.removeLast();
-                children.removeLast();
-            }
+            } else if (xml.isEndElement() && !elements.isEmpty())
+                elements.removeLast();
         }
         if (xml.hasError())
             result = before;

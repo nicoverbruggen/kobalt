@@ -6037,8 +6037,8 @@ private slots:
         const auto marks = fixture.state().value("main_text_marks").toObject();
         const auto start = marks.value("start").toObject().value("anchor").toString();
         const auto after = marks.value("end").toObject().value("anchor").toString();
-        QVERIFY(start.contains("DocFragment[3]/body") && after.contains("DocFragment[3]/body"));
-        QVERIFY(start != after);
+        QCOMPARE(start, QString("/body/DocFragment[3]/body[1]/p[11]"));
+        QCOMPARE(after, QString("/body/DocFragment[3]/body[1]/p[21]"));
         QTRY_COMPARE(fixture.state().value("word_counts").toObject().value("main_words").toInt(),
                      900);
         QVERIFY(fixture.press("rrChapter3"));

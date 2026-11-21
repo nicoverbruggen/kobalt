@@ -226,13 +226,15 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
       authorization(new kobalt::NativeAuthorization(this))
 {
     activeCoordinator = this;
-    homeSleep = std::make_unique<HomeSleepScreen>(environment_.paths, this);
+    homeSleep = std::make_unique<HomeSleepScreen>(environment_.paths, this,
+                                                  NativeLifecycle::stockStorageGeneration);
     authorization->revoked = [this](kobalt::NativeAuthorization::Reason) {
         const QPointer<ReaderWindow> reader = run.reader;
         if (reader)
             reader->revokeNativeReading();
         homeAfterClose = false;
         homeSleep->forget();
+        homeSleep->invalidatePowerOff();
         if (run.sourceLease)
             run.sourceLease->revoke();
         timer.stop();
@@ -348,12 +350,14 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     };
     lifecycle->prepareUsb = [this](std::function<void()> ready) {
         homeSleep->clear();
+        homeSleep->invalidatePowerOff();
         homeAfterClose = false;
         authorization->setBlocked(true);
         timer.stop();
         disposeForTransition(std::move(ready), false, true);
     };
     lifecycle->usbCancelled = [this] {
+        prefetchHomePowerOff();
         if (sleepingOpening && (lifecycle->sleepRequested() || NativeLifecycle::suspended()))
             sleepingOpening->setOpeningSaveState(OpeningSaveState::Sleeping);
         // finishWake resumes an awake reader once Nickel's views are clear.
@@ -365,23 +369,20 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
     };
     lifecycle->storageRestored = [this] {
         environment_.verifyAssets(this, "usb", {}, NativeLifecycle::stockStorageGeneration);
+        prefetchHomePowerOff();
     };
-    lifecycle->preparePowerScreen = [this](NativeLifecycle::Shutdown mode) {
-        if (mode == NativeLifecycle::Shutdown::Reboot) {
-            homeSleep->clear();
-            return;
-        }
+    lifecycle->preparePowerScreen = [this](NativeLifecycle::Shutdown) {
         // The reader hides after handing its sleep frame to Nickel, but still
         // owns this book and the clean backdrop needed for power-off.
-        const bool readerOwnsScreen = run.reader && !busy && !BrowserHandoff::activeFor(run.reader);
+        const bool readerOwnsScreen = run.reader && !busy;
         if (lifecycle->sleepRequested()
             && homeSleep->keepPresentedForPowerOff(
                     readerOwnsScreen ? run.reader->presentedSleepSnapshot() : sleep::Snapshot{}))
             return;
         if (readerOwnsScreen)
-            homeSleep->preparePowerOff(run.reader->powerScreenSnapshot());
-        else if (bindings_.enabled())
-            homeSleep->prepareHomeScreen(true, busy || run.reader ? run.identity : QString());
+            homeSleep->preparePowerOff(run.reader->powerScreenSnapshot(), true);
+        else if (homePowerOffEnabled)
+            homeSleep->prepareCachedPowerOff(busy || run.reader ? run.identity : QString());
         else
             homeSleep->clear();
     };
@@ -403,6 +404,7 @@ ReaderCoordinator::ReaderCoordinator(ReaderEnvironment &environment, Coordinator
         openingDark = storage::readPreferences(environment_.paths.preferences())
                               .object.value("dark_mode")
                               .toBool(false);
+        prefetchHomePowerOff();
     }
 #ifdef KOBALT_SCENARIO_PLAYER
     // A device set up for scenarios must not sync the benchmark book, also
@@ -477,6 +479,17 @@ void ReaderCoordinator::finishHomeNavigation()
         && !kobalt::NativeLifecycle::suspended()) {
         bindings_.goHome();
     }
+    if (!lifecycle->blocked())
+        prefetchHomePowerOff();
+}
+
+void ReaderCoordinator::prefetchHomePowerOff(const QString &identity)
+{
+    homePowerOffEnabled = bindings_.enabled();
+    if (homePowerOffEnabled)
+        homeSleep->prefetchPowerOff(identity);
+    else
+        homeSleep->invalidatePowerOff();
 }
 
 bool ReaderCoordinator::idleForBenchmark() const
@@ -573,6 +586,7 @@ void ReaderCoordinator::prepareOpeningControls()
     const bool discardRetained = run.session && !prepared;
     run.identity = nextIdentity;
     run.filePath = nextPath;
+    prefetchHomePowerOff(run.identity);
     // The logo splash has reached Qt's backing store. No font registration,
     // storage commit or live widget layout can hold up that first feedback.
     kobalt::markMemoryBase();
@@ -916,6 +930,7 @@ void ReaderCoordinator::finishDisposal(const QString &finalStatus, bool nativeAl
             for (const auto &callback : callbacks)
                 callback();
             if (!lifecycle->blocked() && !lifecycle->draining) {
+                prefetchHomePowerOff();
                 kobalt::engineActivity().pause(false);
                 authorization->setBlocked(false);
                 timer.start();

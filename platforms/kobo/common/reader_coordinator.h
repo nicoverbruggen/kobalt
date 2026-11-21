@@ -144,12 +144,14 @@ private:
     bool profilePrepared = false;
     // The interface fonts are registered; the Home sleep screen reuses them.
     bool interfaceFontsLoaded = false;
+    bool homePowerOffEnabled = false;
     // Shown by the next reader: a saved-data reset, or a benchmark result that
     // no reader was open to show.
     kobalt::ReaderNotice pendingNotice;
     std::shared_ptr<kobalt::ReadingHistory::Profile> historyProfile;
     bool homeAfterClose = false;
     void finishHomeNavigation();
+    void prefetchHomePowerOff(const QString &identity = {});
 
     void status(const QString &value, const QString &reason = {});
     void hideLoading();

@@ -499,15 +499,20 @@ void Reader::prepareSleepWallpapers()
 }
 
 void Reader::sleepBackdrop(const sleep::Look &look, QSize size, sleep::Snapshot &shot,
-                           bool poweredOff)
+                           bool poweredOff, bool pageReady)
 {
     shot.mode = look.mode;
     shot.coverArea = {};
     shot.dimPage = false;
     shot.image = {};
     const auto pageBackdrop = [&] {
-        shot.image = page->snapshot(true);
-        shot.dimPage = true;
+        if (pageReady) {
+            shot.image = page->snapshot(true);
+            shot.dimPage = true;
+        } else {
+            shot.image = QImage(size, QImage::Format_RGB32);
+            shot.image.fill(darkTheme ? Qt::black : Qt::white);
+        }
     };
     switch (look.mode) {
     case sleep::Mode::Stock:
@@ -606,7 +611,7 @@ sleep::Snapshot Reader::presentedSleepSnapshot() const
     return frame;
 }
 
-sleep::Details Reader::sleepDetails()
+sleep::Details Reader::sleepDetails(bool poweredOff)
 {
     sleep::Details details;
     details.title = session->title();
@@ -615,11 +620,13 @@ sleep::Details Reader::sleepDetails()
     details.clock = clockText();
     // The letter uses the reader's chosen face; private text needs it registered.
     details.font = preferences.value("default_font_face").toString(kobalt::defaultFontFace);
-    registerPickerFonts(details.font);
+    if (!poweredOff)
+        registerPickerFonts(details.font);
     details.greeting = preferences.value(sleep::greetingKey).toString();
     details.left = sleepDuration(book->estimates().bookMilliseconds,
                                  remainingTime::approximate(preferences));
-    loadTodayReading();
+    if (!poweredOff)
+        loadTodayReading();
     details.todayMilliseconds =
             qMax<qint64>(0, todayReadingFinished) + book->readingDayMilliseconds();
     return details;
@@ -651,7 +658,7 @@ void Reader::loadTodayReading()
 
 sleep::Snapshot Reader::privateSleepSnapshot(bool poweredOff)
 {
-    auto snapshot = sleep::privateSnapshot(page->size(), preferences, sleepPreviewSample(),
+    auto snapshot = sleep::privateSnapshot(page->size(), preferences, sleepPreviewSample(poweredOff),
                                            sleep::followsReading(preferences), poweredOff,
                                            sleepStatusPick(poweredOff));
     // Nickel can change orientation after handoff. A later power screen keeps
@@ -686,15 +693,16 @@ sleep::Snapshot Reader::captureSleepScreen(bool poweredOff)
         look.design = sleep::legacyDesign(look.mode, look.tile);
     }
 #endif
-    if (look.mode == sleep::Mode::Stock || !presentation->supportsSleepScreen() || !isVisible()
-        || !foreground || pixels <= 0 || pixels > 4 * 1024 * 1024 || !readyForPresentation()
-        || appearanceEdit.panelOpen() || session->temporaryTypography())
+    const bool pageReady = isVisible() && foreground && readyForPresentation()
+            && !appearanceEdit.panelOpen() && !session->temporaryTypography();
+    if (look.mode == sleep::Mode::Stock || !presentation->supportsSleepScreen()
+        || pixels <= 0 || pixels > 4 * 1024 * 1024 || (!poweredOff && !pageReady))
         return {};
     const QSize sleepSize = sleep::followsReading(preferences)
             ? page->size()
             : QSize(qMin(page->width(), page->height()), qMax(page->width(), page->height()));
     sleep::Snapshot snapshot;
-    sleepBackdrop(look, sleepSize, snapshot, poweredOff);
+    sleepBackdrop(look, sleepSize, snapshot, poweredOff, pageReady);
     if (snapshot.image.isNull())
         return {};
     // A book marked as finished is done, wherever its last page sits.
@@ -709,8 +717,8 @@ sleep::Snapshot Reader::captureSleepScreen(bool poweredOff)
     snapshot.tile = look.tile;
     snapshot.design = look.design;
     snapshot.place = sleep::place(preferences, book->sleepPositions(), look);
-    snapshot.details = sleepDetails();
-    if (!snapshot.coverArea.isEmpty() && sleepCoverSource.isFile()) {
+    snapshot.details = sleepDetails(poweredOff);
+    if (!poweredOff && !snapshot.coverArea.isEmpty() && sleepCoverSource.isFile()) {
         snapshot.coverPath = sleepCoverSource.absoluteFilePath();
         snapshot.coverBytes = sleepCoverSource.size();
         snapshot.coverModified = sleepCoverSource.lastModified().toMSecsSinceEpoch();

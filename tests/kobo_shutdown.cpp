@@ -335,6 +335,7 @@ private slots:
         int screens = 0;
         lifecycle.preparePowerScreen = [&](kobalt::NativeLifecycle::Shutdown mode) {
             QCOMPARE(mode == kobalt::NativeLifecycle::Shutdown::BatteryLow, low);
+            QVERIFY(!kobalt::NativeLifecycle::nativeSessionSaveAllowed());
             ++screens;
         };
         QSemaphore started, release;

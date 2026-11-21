@@ -10,6 +10,7 @@
 #include "support/main_thread.h"
 #include "support/percentage_text.h"
 #include <QFile>
+#include <QFileInfo>
 #include <QImageReader>
 #include <QSqlQuery>
 #include <QApplication>
@@ -138,6 +139,35 @@ QImage readCover(const QString &path, QSize screen)
     return reader.read();
 }
 
+void setHomeBackdrop(sleep::Snapshot &shot, QSize size, QImage page, const QImage &cover,
+                     const QImage &overlay, const QImage &wallpaper)
+{
+    if (!page.isNull()) {
+        shot.image = std::move(page);
+        shot.dimPage = true;
+        if (shot.mode == sleep::Mode::Overlay && !overlay.isNull()) {
+            reader::dimSleepPage(shot.image, shot.dark);
+            sleep::drawOverlay(shot.image, overlay);
+            shot.dimPage = false;
+        }
+    } else if (shot.mode == sleep::Mode::Cover || shot.mode == sleep::Mode::Page
+               || shot.mode == sleep::Mode::Overlay) {
+        if (!cover.isNull()) {
+            shot.mode = sleep::Mode::Cover;
+            shot.image = sleep::coverBackground(cover, size);
+            shot.coverArea = sleep::coverArea(cover.size(), size);
+        }
+    } else if (shot.mode == sleep::Mode::Wallpaper) {
+        shot.image = reader::sleepWallpaperBackground(wallpaper, size);
+    }
+    // A missing cover or wallpaper leaves the status on blank paper.
+    if (shot.image.isNull()) {
+        shot.mode = sleep::Mode::Plain;
+        shot.image = QImage(size, QImage::Format_RGB32);
+        shot.image.fill(shot.dark ? Qt::black : Qt::white);
+    }
+}
+
 QString readToken(const QString &path, const QString &book = {}, QJsonObject *measurement = nullptr)
 {
     if (path.isEmpty())
@@ -172,13 +202,169 @@ QString readToken(const QString &path, const QString &book = {}, QJsonObject *me
 }
 } // namespace
 
-HomeSleepScreen::HomeSleepScreen(storage::Paths paths, QObject *parent)
+struct HomeSleepScreen::PowerOffInputs
+{
+    QString identity;
+    QJsonObject preferences, state;
+    NativeBook book;
+    QImage cover, overlay, wallpaper;
+    sleep::Snapshot privateSource;
+    bool verified = false, privateBook = false;
+};
+
+HomeSleepScreen::HomeSleepScreen(storage::Paths paths, QObject *parent,
+                                 std::function<quint64()> storageGeneration)
     : QObject(parent),
+      storageGeneration(std::move(storageGeneration)),
       paths(std::move(paths)),
+      powerOffBattery(nativeReaderBattery()),
       presentation(makeWindowPresentation(nullptr, nativeReaderSleepScreenAvailable()))
 {
     qApp->installEventFilter(this);
     observeNativeBattery(this, [this] { updateBattery(); });
+    const auto changed = [this](const QString &) {
+        if (watchingPowerOff)
+            prefetchPowerOff(powerOffIdentity);
+    };
+    connect(&powerOffFiles, &QFileSystemWatcher::fileChanged, this, changed);
+    connect(&powerOffFiles, &QFileSystemWatcher::directoryChanged, this, changed);
+    powerOffPageTimer.setSingleShot(true);
+    powerOffPageTimer.setInterval(150);
+    connect(&powerOffPageTimer, &QTimer::timeout, this, [this] {
+        if (!watchingPowerOff || !powerOffIdentity.isEmpty() || !powerOffInputs
+            || !powerOffInputs->verified || powerOffInputs->privateBook
+            || (this->storageGeneration && !this->storageGeneration()) || nativeReading())
+            return;
+        grabbingPowerOffPage = true;
+        powerOffPage = nativeScreen();
+        grabbingPowerOffPage = false;
+    });
+}
+
+void HomeSleepScreen::invalidatePowerOff()
+{
+    ++powerOffGeneration;
+    if (powerOffRequest)
+        powerOffRequest->store(false);
+    powerOffInputs.reset();
+    powerOffPage = {};
+    powerOffPageTimer.stop();
+    watchingPowerOff = false;
+}
+
+void HomeSleepScreen::prefetchPowerOff(const QString &identity)
+{
+    const auto generation = storageGeneration ? storageGeneration() : quint64(1);
+    if (!generation || !presentation->supportsSleepScreen())
+        return;
+    invalidatePowerOff();
+    const auto request = powerOffGeneration;
+    const auto current = std::make_shared<std::atomic_bool>(true);
+    powerOffRequest = current;
+    powerOffIdentity = identity;
+    powerOffInputs.reset();
+    watchingPowerOff = true;
+    const auto database = databasePath();
+    const auto *screen = QGuiApplication::primaryScreen();
+    const QSize size = screen ? screen->size() : QSize(800, 1200);
+    const QPointer<HomeSleepScreen> guard(this);
+    const auto snapshotPaths = paths;
+    auto inputs = std::make_shared<PowerOffInputs>();
+    const auto anonymous = remembered.privateBook ? remembered : sleep::Snapshot{};
+    const auto anonymousToken = rememberedToken;
+    const QStringList wallpaperDirectories{ paths.directory + QStringLiteral("/wallpapers") };
+    const QStringList overlayDirectories{ paths.directory + QStringLiteral("/screensaver"),
+                                          QStringLiteral("/mnt/onboard/.adds/screensaver") };
+    powerOffReader.post(
+            [inputs, current, snapshotPaths, database, identity, generation, size, anonymous,
+             anonymousToken,
+             storageAvailable = storageGeneration,
+             wallpaperDirectories, overlayDirectories] {
+                if (!current->load() || (storageAvailable && storageAvailable() != generation))
+                    return false;
+                const auto preferences = storage::inspectPreferences(snapshotPaths.preferences());
+                inputs->preferences = preferences.object;
+                if (preferences.status != storage::ReadStatus::Ok)
+                    return false;
+                inputs->identity = identity;
+                if (inputs->identity.isEmpty()) {
+                    const auto fields = QJsonDocument::fromJson(readToken(database).toUtf8()).array();
+                    if (!fields.isEmpty())
+                        inputs->identity = fields.at(0).toString();
+                }
+                if (!inputs->identity.isEmpty()) {
+                    if (!current->load())
+                        return false;
+                    const auto saved = storage::inspectBookState(snapshotPaths, inputs->identity);
+                    inputs->state = saved.object;
+                    inputs->verified = saved.status == storage::ReadStatus::Missing
+                            || (saved.status == storage::ReadStatus::Ok
+                                && inputs->state.value("book").toString() == inputs->identity);
+                    inputs->privateBook =
+                            inputs->state.value("hide_book_on_sleep_screen").toBool();
+                }
+                const auto look = sleep::look(inputs->preferences, true);
+                if (!current->load())
+                    return false;
+                if (!inputs->privateBook && look.mode == sleep::Mode::Wallpaper) {
+                    const auto custom = sleep::custom(inputs->preferences);
+                    const auto &layer = custom.same ? custom.sleep : custom.off;
+                    inputs->wallpaper = storage::loadSleepWallpaper(wallpaperDirectories,
+                                                                     layer.wallpaper, size);
+                }
+                if (look.mode == sleep::Mode::Overlay)
+                    inputs->overlay = storage::loadSleepOverlay(overlayDirectories);
+                if (inputs->verified && !inputs->privateBook && !inputs->state.isEmpty()) {
+                    inputs->book = readNativeBook(database, inputs->identity);
+                    if (look.mode == sleep::Mode::Cover || look.mode == sleep::Mode::Page
+                        || look.mode == sleep::Mode::Overlay) {
+                        inputs->cover = readCover(nativeCoverPath(inputs->book.imageId), size);
+                    }
+                }
+                if (inputs->verified && inputs->privateBook && current->load()) {
+                    const auto token = readToken(database, inputs->identity);
+                    if (!token.isEmpty()) {
+                        auto source = token == anonymousToken
+                                ? anonymous
+                                : storage::readSleepSnapshot(snapshotPaths.sleepScreen(), token,
+                                                             sleep::Mode::Plain);
+                        if (source.privateBook)
+                            inputs->privateSource = std::move(source);
+                    }
+                }
+                return true;
+            },
+            [guard, request, generation, inputs, database, snapshotPaths,
+             wallpaperDirectories, overlayDirectories](bool loaded) {
+                qt::invoke(
+                        QCoreApplication::instance(),
+                        [guard, request, generation, inputs, loaded, database,
+                         snapshotPaths, wallpaperDirectories, overlayDirectories] {
+                            if (!guard || request != guard->powerOffGeneration
+                                || (guard->storageGeneration
+                                    && guard->storageGeneration() != generation))
+                                return;
+                            if (loaded) {
+                                guard->lastPowerOffPreferences = inputs->preferences;
+                                guard->powerOffInputs = inputs;
+                                const auto mode = sleep::look(inputs->preferences, true).mode;
+                                if (mode == sleep::Mode::Page || mode == sleep::Mode::Overlay)
+                                    guard->powerOffPageTimer.start();
+                            }
+                            QStringList paths{ snapshotPaths.directory, snapshotPaths.preferences(),
+                                               database };
+                            if (!database.isEmpty())
+                                paths.append(database + QStringLiteral("-wal"));
+                            paths += wallpaperDirectories;
+                            paths += overlayDirectories;
+                            const auto watched = guard->powerOffFiles.files()
+                                    + guard->powerOffFiles.directories();
+                            for (const auto &path : paths)
+                                if (!path.isEmpty() && !watched.contains(path) && QFileInfo::exists(path))
+                                    guard->powerOffFiles.addPath(path);
+                        },
+                        Qt::QueuedConnection);
+            });
 }
 
 void HomeSleepScreen::remember(const sleep::Snapshot &next, const QString &identity)
@@ -408,39 +594,19 @@ bool HomeSleepScreen::prepareHomeScreen(bool powerOff, const QString &openingIde
     shot.details.font = preferences.object.value("default_font_face").toString();
     shot.details.greeting = preferences.object.value(sleep::greetingKey).toString();
     shot.mode = look.mode;
-    if (!page.isNull()) {
-        shot.image = std::move(page);
-        shot.dimPage = true;
-        if (look.mode == sleep::Mode::Overlay) {
-            const auto overlay =
-                    storage::loadSleepOverlay({ QStringLiteral(KOBALT_CONFIG_DIR "/screensaver"),
-                                                QStringLiteral("/mnt/onboard/.adds/screensaver") });
-            if (!overlay.isNull()) {
-                reader::dimSleepPage(shot.image, shot.dark);
-                sleep::drawOverlay(shot.image, overlay);
-                shot.dimPage = false;
-            }
-        }
+    QImage cover, overlay, wallpaper;
+    if (!page.isNull() && look.mode == sleep::Mode::Overlay) {
+        overlay = storage::loadSleepOverlay({ QStringLiteral(KOBALT_CONFIG_DIR "/screensaver"),
+                                              QStringLiteral("/mnt/onboard/.adds/screensaver") });
     } else if (look.mode == sleep::Mode::Cover) {
-        const auto cover = readCover(nativeCoverPath(book.imageId), size);
-        if (!cover.isNull()) {
-            shot.image = sleep::coverBackground(cover, size);
-            shot.coverArea = sleep::coverArea(cover.size(), size);
-        }
+        cover = readCover(nativeCoverPath(book.imageId), size);
     } else if (look.mode == sleep::Mode::Wallpaper) {
         const auto custom = sleep::custom(preferences.object);
         const auto &layer = powerOff && !custom.same ? custom.off : custom.sleep;
-        shot.image = reader::sleepWallpaperBackground(
-                storage::loadSleepWallpaper({ QStringLiteral(KOBALT_CONFIG_DIR "/wallpapers") },
-                                            layer.wallpaper, size),
-                size);
+        wallpaper = storage::loadSleepWallpaper(
+                { QStringLiteral(KOBALT_CONFIG_DIR "/wallpapers") }, layer.wallpaper, size);
     }
-    // A missing cover or wallpaper leaves the status on blank paper.
-    if (shot.image.isNull()) {
-        shot.mode = sleep::Mode::Plain;
-        shot.image = QImage(size, QImage::Format_RGB32);
-        shot.image.fill(shot.dark ? Qt::black : Qt::white);
-    }
+    setHomeBackdrop(shot, size, std::move(page), cover, overlay, wallpaper);
     snapshot = std::move(shot);
     poweredOff = powerOff;
     composeHome();
@@ -483,13 +649,81 @@ void HomeSleepScreen::prepare(bool enabled, bool powerOff)
     compose();
 }
 
-void HomeSleepScreen::preparePowerOff(sleep::Snapshot next)
+void HomeSleepScreen::preparePowerOff(sleep::Snapshot next, bool preparedOnly)
 {
     clear();
     shutdownBackdrop = next;
     snapshot = std::move(next);
     poweredOff = true;
-    compose();
+    compose(preparedOnly);
+}
+
+void HomeSleepScreen::prepareCachedPowerOff(const QString &identity)
+{
+    const auto inputs = powerOffInputs;
+    const auto &preferences = inputs ? inputs->preferences : lastPowerOffPreferences;
+    const auto look = sleep::look(preferences, true, statusPick(preferences, true));
+    const auto *screen = QGuiApplication::primaryScreen();
+    QSize size = screen ? screen->size() : QSize(800, 1200);
+    size = QSize(qMin(size.width(), size.height()), qMax(size.width(), size.height()));
+    const bool verified = inputs && inputs->verified && identity == powerOffIdentity
+            && (identity.isEmpty() || identity == inputs->identity);
+    const bool stockReader = nativeReading() && identity.isEmpty();
+    if (verified && !inputs->privateBook
+        && (stockReader || inputs->state.isEmpty() || look.mode == sleep::Mode::Stock)) {
+        clearFrame();
+        return;
+    }
+    sleep::Snapshot shot = verified && inputs->privateBook ? inputs->privateSource
+                                                          : sleep::Snapshot{};
+    shot.mode = look.mode;
+    shot.design = look.design;
+    shot.tile = look.tile;
+    shot.place = sleep::place(preferences, {}, look);
+    shot.orientation = Qt::PortraitOrientation;
+    shot.dark = preferences.value("dark_mode").toBool(false);
+    shot.details.font = preferences.value("default_font_face").toString();
+    shot.details.greeting = preferences.value(sleep::greetingKey).toString();
+    if (verified) {
+        const auto &state = inputs->state;
+        const auto finished = state.value("finished_position").toString();
+        const bool completed = !finished.isEmpty() && finished == state.value("position").toString();
+        const auto key = preferences.value("stats_word_scope").toString() == "volume"
+                ? "stats_volume_percent"
+                : "stats_main_percent";
+        const auto percent = inputs->privateBook && state.contains(key)
+                ? state.value(key)
+                : state.value("percent");
+        if (completed || inputs->book.percent >= 0 || percent.isDouble()) {
+            shot.percent = inputs->book.percent >= 0 ? inputs->book.percent
+                    : completed                     ? 100
+                                                    : qBound(0, percent.toInt(), 100);
+            shot.progress = strings::get("sleep.percent_read")
+                                    .arg(strings::percentArgument(shot.percent, QLocale::c()));
+        }
+        shot.place = sleep::place(preferences, state.value("sleep_positions").toObject(), look);
+    }
+    if (!verified || inputs->privateBook) {
+        const auto privateOverlay = verified && shot.design == sleep::Design::Overlay
+                && inputs->privateSource.design == sleep::Design::Overlay
+                ? inputs->privateSource.image
+                : QImage{};
+        shot = sleep::privateSnapshot(size, preferences, shot, false, true, look.design);
+        if (!privateOverlay.isNull())
+            shot.image = privateOverlay;
+        // A chosen wallpaper is independent of unverified book data. A book
+        // known to be private keeps its existing neutral backdrop policy.
+        if (!verified && inputs && !inputs->privateBook && !inputs->wallpaper.isNull())
+            shot.image = reader::sleepWallpaperBackground(inputs->wallpaper, size);
+    } else {
+        shot.details.title = inputs->book.title;
+        shot.details.author = inputs->book.author;
+        const auto page = look.mode == sleep::Mode::Page || look.mode == sleep::Mode::Overlay
+                ? powerOffPage
+                : QImage{};
+        setHomeBackdrop(shot, size, page, inputs->cover, inputs->overlay, inputs->wallpaper);
+    }
+    preparePowerOff(std::move(shot), true);
 }
 
 bool HomeSleepScreen::keepPresentedForPowerOff(sleep::Snapshot shown)
@@ -520,6 +754,15 @@ bool HomeSleepScreen::eventFilter(QObject *object, QEvent *event)
 {
     if (poweredOff && event->type() == QEvent::Show && object->inherits("AbstractPowerView"))
         present();
+    if (!poweredOff && !grabbingPowerOffPage && watchingPowerOff && powerOffIdentity.isEmpty()
+        && powerOffInputs && powerOffInputs->verified && !powerOffInputs->privateBook
+        && event->type() == QEvent::UpdateRequest && object->inherits("MainWindowView")) {
+        const auto mode = sleep::look(powerOffInputs->preferences, true).mode;
+        if (mode == sleep::Mode::Page || mode == sleep::Mode::Overlay) {
+            powerOffPage = {};
+            powerOffPageTimer.start();
+        }
+    }
     return false;
 }
 
@@ -556,12 +799,12 @@ void HomeSleepScreen::finishFonts(bool ready)
     presentation->updateSleepScreen(snapshot.image, snapshot.image.rect());
 }
 
-void HomeSleepScreen::compose()
+void HomeSleepScreen::compose(bool preparedOnly)
 {
     if (snapshot.image.isNull())
         return;
     reader::portraitSleepSnapshot(snapshot);
-    const auto battery = nativeReaderBattery();
+    const auto battery = preparedOnly ? powerOffBattery : nativeReaderBattery();
     paintedBattery = battery;
     const auto status = poweredOff ? reader::SleepStatus::PoweredOff
             : battery.fullyCharged ? reader::SleepStatus::Charged
@@ -597,9 +840,12 @@ void HomeSleepScreen::clearFrame()
 
 void HomeSleepScreen::updateBattery()
 {
-    if (snapshot.image.isNull() || poweredOff)
+    if (poweredOff)
         return;
-    const auto battery = nativeReaderBattery();
+    powerOffBattery = nativeReaderBattery();
+    if (snapshot.image.isNull())
+        return;
+    const auto battery = powerOffBattery;
     // The sleep screen only shows the percentage while charging or fully charged.
     if (battery.charging == paintedBattery.charging
         && battery.fullyCharged == paintedBattery.fullyCharged

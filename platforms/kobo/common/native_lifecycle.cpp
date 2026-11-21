@@ -519,10 +519,9 @@ bool NativeLifecycle::interceptShutdown(QObject *, Shutdown mode)
 {
     if (active && active->poweringOff)
         return true;
-    if (active && mode != Shutdown::Reboot && !active->storageBlocked()
-        && active->preparePowerScreen) {
-        active->preparePowerScreen(mode);
-    }
+    const auto prepareScreen = active && mode != Shutdown::Reboot && !active->storageBlocked()
+            ? active->preparePowerScreen
+            : std::function<void(Shutdown)>{};
     // Nickel owns shutdown. Gate new saves without waiting for a writer,
     // snapshot worker or engine job to finish.
     sessionStorageAvailable.store(false);
@@ -536,6 +535,8 @@ bool NativeLifecycle::interceptShutdown(QObject *, Shutdown mode)
         active->pendingWorkflow.clear();
         active->pendingGadget.clear();
     }
+    if (prepareScreen)
+        prepareScreen(mode);
     return false;
 }
 

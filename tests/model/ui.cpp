@@ -554,7 +554,8 @@ static void checkPreparedOpeningFonts()
     bool changed = true;
     require(initializeInterfaceFonts(bundle, &changed) && !changed,
             "Full init reread or replaced the opening faces");
-    require(privateInterfaceFontBytes() == 0, "Full init eagerly retained private font bytes");
+    require(privateInterfaceFontBytes() == faceBytes,
+            "Full init did not keep the seven interface faces from the prepared bytes");
     for (const auto &name : faces) {
         auto font = name.startsWith("Instrument") ? brandFont(24)
                 : name.contains("Mono")           ? chromeFont(24)

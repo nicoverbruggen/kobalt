@@ -131,6 +131,9 @@ struct Fonts
     QSet<QString> unreadable;
     QStringList recent;
     QSet<QString> pinned;
+    // Interface faces stay loaded: the budget never evicts them, so drawing
+    // interface text never reads storage again.
+    QSet<QString> kept;
     int rendering = 0;
 
     qint64 bytes() const
@@ -148,7 +151,7 @@ struct Fonts
         while (bytes() + size > privateInterfaceFontBudget) {
             QString victim;
             for (const auto &file : recent)
-                if (!pinned.contains(file) && pending.contains(file)) {
+                if (!pinned.contains(file) && !kept.contains(file) && pending.contains(file)) {
                     victim = file;
                     break;
                 }
@@ -665,15 +668,22 @@ struct Glyph
 };
 } // namespace
 
+// The bundled faces of the interface families, 1.1 MB together.
+constexpr const char *interfaceFontFiles[] = {
+    "IBMPlexSans-Regular.ttf", "IBMPlexSans-Bold.ttf",        "IBMPlexSans-Italic.ttf",
+    "IBMPlexMono-Regular.ttf", "IBMPlexMono-Bold.ttf",        "InstrumentSerif-Regular.ttf",
+    "InstrumentSerif-Italic.ttf",
+};
+
 bool initializePrivateInterfaceText(const AssetBundle &assets, bool opening,
                                     const QMap<QString, QByteArray> &checked)
 {
     QMap<QString, std::function<QByteArray()>> pending;
-    QStringList files{ "IBMPlexSans-Regular.ttf",    "IBMPlexSans-Bold.ttf",
-                       "IBMPlexSans-Italic.ttf",     "IBMPlexMono-Regular.ttf",
-                       "IBMPlexMono-Bold.ttf",       "InstrumentSerif-Regular.ttf",
-                       "InstrumentSerif-Italic.ttf", "NotoSansMath-Regular.ttf",
-                       "NotoSerifCJK-Regular.ttc" };
+    QStringList files;
+    for (const auto *file : interfaceFontFiles)
+        files.append(QLatin1String(file));
+    files << "NotoSansMath-Regular.ttf"
+          << "NotoSerifCJK-Regular.ttc";
     for (const auto *file : serifFallbackFontFiles) {
         files.append(QLatin1String(file));
     }
@@ -708,6 +718,7 @@ bool initializePrivateInterfaceText(const AssetBundle &assets, bool opening,
     state.unreadable.clear();
     state.recent.clear();
     state.pinned.clear();
+    state.kept.clear();
     state.pending = pending;
     for (auto it = pending.cbegin(); it != pending.cend(); ++it) {
         const auto path = assets.file("fonts/" + it.key());
@@ -724,8 +735,41 @@ bool initializePrivateInterfaceText(const AssetBundle &assets, bool opening,
             state.pendingPaths.insert(it.key(), info.absoluteFilePath());
         }
     }
+    // The bundled interface faces draw every screen. Load them now, mostly
+    // from the bytes that Qt already checked, and keep them.
+    for (const auto *file : interfaceFontFiles) {
+        const QString name = QLatin1String(file);
+        state.kept.insert(name);
+        state.face(name);
+    }
     setDiagnosticFontBytes(state.bytes());
     return true;
+}
+
+bool keepPrivateInterfaceFamilies(const QStringList &families)
+{
+    auto &state = fonts();
+    QSet<QString> files;
+    for (const auto *file : interfaceFontFiles)
+        files.insert(QLatin1String(file));
+    bool loaded = true;
+    for (const auto &family : families) {
+        if (family.isEmpty())
+            continue;
+        const auto faces = state.registered.value(family);
+        if (faces.isEmpty())
+            loaded = false;
+        for (const auto &face : faces) {
+            files.insert(face.file);
+            state.kept.insert(face.file);
+            if (!state.face(face.file, face.index))
+                loaded = false;
+        }
+    }
+    // A family that is no longer chosen can be evicted again.
+    state.kept = files;
+    setDiagnosticFontBytes(state.bytes());
+    return loaded;
 }
 
 void warmTextShaping(const QByteArray &font, const QString &text)

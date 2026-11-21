@@ -12918,6 +12918,63 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
 
     // Checks that a reused font cell repaints its whole area after paging.
     // Qt 5.2 does not repaint a hidden caption's area; desktop Qt 6 does, so this cannot show that failure.
+    // Checks that interface font pickers leave out families of 3 MB or more, show
+    // such custom fonts disabled with the reason, and keep a chosen family loaded.
+    void interfaceFontSizeLimit()
+    {
+        QTemporaryDir fonts;
+        QVERIFY(fonts.isValid());
+        const auto source = assets->file("fonts/ebook-core/NV_Bitter-Regular.ttf");
+        const auto small = fonts.filePath("KF_Small.ttf"), large = fonts.filePath("KF_Large.ttf");
+        QVERIFY(test::renamedFontFixture(source, small, "NV Bitter", "KF Little"));
+        QVERIFY(test::renamedFontFixture(source, large, "NV Bitter", "KF Bigger"));
+        {
+            // Bytes after the tables leave the font valid but make it large.
+            QFile file(large);
+            QVERIFY(file.open(QIODevice::Append));
+            QCOMPARE(file.write(QByteArray(int(interfaceFontByteLimit), '\0')),
+                     qint64(interfaceFontByteLimit));
+        }
+        Fixture fixture(false, false, false, true, false, false, {}, fonts.path());
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE(opened.count(), 1);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrTheming"));
+        QVERIFY(fixture.press("rrTheming"));
+        QVERIFY(fixture.press("rrThemePreset"));
+        QVERIFY(fixture.press("rrTheme_custom"));
+        QVERIFY(revealSettingsOption(fixture, "rrUiFont"));
+        QVERIFY(fixture.press("rrUiFont"));
+        QTRY_VERIFY(fixture.visible("rrSettingsFontPopup"));
+        auto *list = static_cast<ui::RadioList *>(fixture.widget("rrSettingsFontChoices"));
+        QVERIFY(list);
+        ui::DescribedOption *smallRow = nullptr, *largeRow = nullptr;
+        for (auto *option : list->options()) {
+            const auto family = option->property("reader_font_family").toString();
+            if (family == "KF Little")
+                smallRow = option;
+            if (family == "KF Bigger")
+                largeRow = option;
+        }
+        QVERIFY(smallRow && largeRow);
+        QVERIFY(smallRow->isEnabled());
+        QVERIFY(!largeRow->isEnabled());
+        QCOMPARE(largeRow->accessibleDescription(), strings::get("settings.font_too_large"));
+        fixture.press(largeRow->objectName().toLatin1().constData());
+        QVERIFY2(fixture.visible("rrSettingsFontPopup"), "A disabled font was chosen");
+        QVERIFY(fixture.press(smallRow->objectName().toLatin1().constData()));
+        QTRY_COMPARE(ui::interfaceFont().family(), QString("KF Little"));
+        // The chosen faces stay in memory: interface text draws without the file.
+        QVERIFY(QFile::remove(small));
+        ui::refreshInterfaceText(fixture.window.readerWindow());
+        QVERIFY(!ui::renderPrivateText("Mark text", ui::interfaceFont(20)).image.isNull());
+    }
+
     void fontPagingClearsCaptions()
     {
         // Font pages reuse their cells. A cell that shows another font must

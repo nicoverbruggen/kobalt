@@ -1882,7 +1882,7 @@ public:
     }
 
     void configure(const QString &title, const QVector<ReadingFont> &catalog,
-                   const QString &current, const QString &emptyLabel,
+                   const QString &current, const QString &emptyLabel, bool interfaceFonts,
                    std::function<void(const QString &)> chosen)
     {
         setGeometry(parentWidget()->rect());
@@ -1897,11 +1897,17 @@ public:
                     : choices->add(QString("rrSettingsFontChoice%1").arg(index), label);
             option->setText(label);
             option->setProperty("reader_font_family", family);
+            const bool tooLarge =
+                    interfaceFonts && !family.isEmpty() && !fitsInterfaceFont(fonts[index]);
+            option->setEnabled(!tooLarge);
+            option->setDescription(tooLarge ? strings::get("settings.font_too_large") : QString());
             if (family == current)
                 selected = index;
         }
         choices->setCurrent(selected);
         choices->chosen = [this, chosen = std::move(chosen)](int index) {
+            if (!choices->options()[index]->isEnabled())
+                return;
             const auto family = fonts[index].family;
             dismissed();
             chosen(family);
@@ -2004,6 +2010,7 @@ private:
 
 void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
                                     const QString &current, const QString &emptyLabel,
+                                    bool interfaceFonts,
                                     std::function<void(const QString &)> chosen)
 {
     if (sheet || fonts.isEmpty())
@@ -2023,7 +2030,7 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
     }
     sheet = popup;
     popup->setObjectName("rrSettingsFontPopup");
-    popup->configure(title, fonts, current, emptyLabel, std::move(chosen));
+    popup->configure(title, fonts, current, emptyLabel, interfaceFonts, std::move(chosen));
     presentSheet();
 }
 

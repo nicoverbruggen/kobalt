@@ -155,6 +155,11 @@ int main(int argc, char **argv)
     auto sideload = discoverReadingFonts(sources);
     expect(sideload.size() == 1 && sideload.first().origin == FontOrigin::Sideloaded,
            "disabled system source leaves sideload");
+    qint64 sideloadBytes = 0;
+    for (const auto &file : sideload.first().files)
+        sideloadBytes += QFileInfo(file).size();
+    expect(sideloadBytes > 0 && sideload.first().bytes == sideloadBytes,
+           "a family reports the size of all its files");
 
     const auto nested = root + "/nested";
     QFile fixture(QString::fromLocal8Bit(argv[1]));

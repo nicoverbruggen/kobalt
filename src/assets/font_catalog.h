@@ -32,7 +32,19 @@ struct ReadingFont
     FontWeightAxis weightAxis;
     FontOpticalSizeAxis opticalSizeAxis;
     QByteArray directoryFileVersions = {};
+    // Total size of the family's files.
+    qint64 bytes = 0;
 };
+
+// The interface keeps the faces of a family it uses in memory, so drawing
+// never waits for or fails on a storage read. Larger families cannot be
+// interface fonts.
+inline constexpr qint64 interfaceFontByteLimit = 3LL * 1024 * 1024;
+
+inline bool fitsInterfaceFont(const ReadingFont &font)
+{
+    return font.bytes < interfaceFontByteLimit;
+}
 
 struct FontSources
 {

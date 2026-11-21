@@ -196,7 +196,8 @@ void StartScreen::applyLibraryTheme(const QJsonObject &preferences, const FontSo
     const auto mono = preferences.value("ui_mono_font_face").toString();
     if (!style.mainFace.isEmpty() || !mono.isEmpty()) {
         for (const auto &font : discoverReadingFonts(sources)) {
-            if (font.family != style.mainFace && font.family != mono)
+            // A family too large to stay in memory is not an interface font.
+            if ((font.family != style.mainFace && font.family != mono) || !fitsInterfaceFont(font))
                 continue;
             for (const auto &file : font.files)
                 ui::registerPrivateInterfaceFont(file, font.family);
@@ -206,6 +207,7 @@ void StartScreen::applyLibraryTheme(const QJsonObject &preferences, const FontSo
                 monoFace = font.family;
         }
     }
+    ui::keepPrivateInterfaceFamilies({ mainFace, monoFace });
     ui::setInterfaceFontFamily(mainFace);
     ui::setInterfaceMonoFontFamily(monoFace);
     setProperty("kobalt_icon_style", int(style.icons));

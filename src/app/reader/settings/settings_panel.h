@@ -96,8 +96,10 @@ public:
     std::function<void()> restoreDefaultsConfirmed, restorePresetsConfirmed;
     // Prepares widgets outside a section, such as a dialog or the Zen heading.
     std::function<void(QWidget *)> widgetCreated;
+    // With `interfaceFonts`, a family too large for the interface shows
+    // disabled, with the reason.
     void showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
-                         const QString &current, const QString &emptyLabel,
+                         const QString &current, const QString &emptyLabel, bool interfaceFonts,
                          std::function<void(const QString &)> chosen);
     void dismissSheet();
     // Shows, raises and focuses the open sheet, then reports it through

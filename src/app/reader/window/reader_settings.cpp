@@ -1718,6 +1718,16 @@ void Reader::finishPreview()
     // Finish opening the draft before applying it to the reading session.
     if (appearanceEdit.preview() && !appearanceEdit.ready()) {
         appearanceEdit.deferApply();
+bool Reader::interfaceFontFits(const QString &family) const
+{
+    if (family.isEmpty())
+        return true;
+    for (const auto &font : session->fontCatalog())
+        if (font.family == family)
+            return fitsInterfaceFont(font);
+    return true;
+}
+
         return;
     }
     appearanceEdit.cancelDeferredApply();
@@ -1753,6 +1763,8 @@ void Reader::finishPreviewWrite(const QJsonObject &next, bool saved)
     header->setVisible(page->topHeight() > 0);
     if (appearanceEdit.destination() == AppearanceDestination::None)
         appearanceEdit.request(AppearanceDestination::Controls);
+    // Read the chosen faces now, so a later screen cannot find them unreadable.
+    ui::keepPrivateInterfaceFamilies({ themeDraft.mainFace, settingsMonoFace, settingsStripFace });
     applyingText = session->busy();
     appearanceEdit.beginApply();
     refresh();
@@ -1795,7 +1807,7 @@ void Reader::loadThemeSettings()
     settingsStripFace = preferences.value("header_footer_font_face").toString();
     settingsStripWeight = preferences.value("header_footer_added_weight").toInt(2);
     for (auto *face : { &customTheme.mainFace, &settingsMonoFace, &settingsStripFace })
-        if (!session->fontFaces().contains(*face))
+        if (!session->fontFaces().contains(*face) || !interfaceFontFits(*face))
             face->clear();
     themeDraft = themeStyle(interfaceTheme());
 }
@@ -1894,6 +1906,13 @@ void Reader::showSettingsFonts(SettingsPage section)
         panel->uiFontButton->setCaption(
                 (themeDraft.mainFace.isEmpty()
                          ? strings::get("settings.font_default_value").arg("IBM Plex Sans")
+    // Interface families stay in memory. Larger ones are left out, except
+    // custom fonts, which show why they cannot be chosen.
+    const bool interfaceChoice = isUi || isMono || isHeaderFooter;
+    if (interfaceChoice)
+        for (int row = fonts.size() - 1; row >= 0; --row)
+            if (!fitsInterfaceFont(fonts[row]) && fonts[row].origin != FontOrigin::Sideloaded)
+                fonts.removeAt(row);
                          : fontDisplayName(themeDraft.mainFace))
                         .toUpper());
         panel->uiMonoFontButton->setCaption(
@@ -1914,6 +1933,7 @@ void Reader::showSettingsFonts(SettingsPage section)
         sample(panel->headerFooterFontButton,
                settingsStripFace.isEmpty() ? QStringLiteral("IBM Plex Mono") : settingsStripFace);
     } else if (section == SettingsPage::Defaults) {
+            interfaceChoice,
         sample(panel->defaultFontButton, settingsDefaultFontFace);
         panel->defaultFontButton->setCaption((settingsDefaultFontFace.isEmpty()
                                                       ? strings::get("reader.publisher_fonts")

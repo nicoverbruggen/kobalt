@@ -792,6 +792,8 @@ private:
     int settingsStripWeight = 2;
     InterfaceStyle themeStyle(const QString &theme) const;
     void loadThemeSettings();
+    // False when the family is too large to stay in memory as an interface font.
+    bool interfaceFontFits(const QString &family) const;
     void markThemeCustom();
     QString settingsDictionaryFontFace;
     QString settingsTimeRemainingFormat, settingsPercentageFormat, settingsSecondaryNumbers;

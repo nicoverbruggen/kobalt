@@ -167,6 +167,7 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources)
         FT_Done_Face(face);
         if (family.isEmpty())
             return;
+        const qint64 bytes = QFileInfo(path).size();
         QByteArray version;
         if (origin == FontOrigin::Sideloaded
             || (origin == FontOrigin::BuiltIn && !sources.systemFiles.contains(path))) {
@@ -181,6 +182,7 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources)
             if (entry.origin == origin && !entry.files.contains(path)) {
                 entry.files.append(path);
                 entry.directoryFileVersions += version;
+                entry.bytes += bytes;
                 if (entry.opticalSizeAxis.available() && optical.available()) {
                     auto &range = entry.opticalSizeAxis;
                     range.minimum = qMax(range.minimum, optical.minimum);
@@ -208,7 +210,7 @@ QVector<ReadingFont> discoverReadingFonts(const FontSources &sources)
             return;
         }
         seen.insert(key, result.size());
-        result.append({ family, { path }, origin, axis, optical, version });
+        result.append({ family, { path }, origin, axis, optical, version, bytes });
     };
     const auto core = [](const QString &path) {
         return path.contains("/ebook-core/") || path.contains("/ebook-core-");

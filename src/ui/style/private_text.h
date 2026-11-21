@@ -38,6 +38,10 @@ void warmTextShaping(const QByteArray &font, const QString &text);
 // may be evicted between layouts. Qt's font loader never sees them.
 // Remember unreadable files until the next book or a refresh of their folder.
 bool registerPrivateInterfaceFont(const QString &path, const QString &expectedFamily);
+// Loads the registered faces of each family now and keeps them, with the
+// bundled interface faces, out of eviction. Families kept by an earlier call
+// can be evicted again. False if a face could not be loaded.
+bool keepPrivateInterfaceFamilies(const QStringList &families);
 // A new reader may have a new font catalog, including files replaced over USB.
 void retryFailedPrivateInterfaceFonts();
 // GUI-thread only, between readers. Forget a replaced host folder and text derived from its faces.

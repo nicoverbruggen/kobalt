@@ -1005,7 +1005,7 @@ private slots:
                                       { "NV Jost", {}, FontOrigin::Recommended, {}, {} },
                                       { "Libron", {}, FontOrigin::BuiltIn, {}, {} } };
         QStringList chosen;
-        settings.showFontChoices("Main font", catalog, "NV Jost", "Publisher",
+        settings.showFontChoices("Main font", catalog, "NV Jost", "Publisher", false,
                                  [&](const QString &value) { chosen.append("main:" + value); });
         QPointer<QWidget> sheet = window.findChild<QWidget *>("rrSettingsFontPopup");
         QPointer<QCheckBox> empty = window.findChild<QCheckBox *>("rrSettingsFontChoice0");
@@ -1018,7 +1018,7 @@ private slots:
         QVERIFY(chosen.isEmpty());
 
         window.resize(1440, 720);
-        settings.showFontChoices("Strip font", catalog, "Libron", "Default",
+        settings.showFontChoices("Strip font", catalog, "Libron", "Default", false,
                                  [&](const QString &value) { chosen.append("strip:" + value); });
         QVERIFY(sheet && sheet->isVisible());
         QCOMPARE(sheet->geometry(), window.rect());
@@ -1038,7 +1038,7 @@ private slots:
         settings.sheetShown = [&](ui::ModalOverlay *shown) { activeSheet = shown; };
         catalog[2].family = QStringLiteral("NV Bitter");
         catalog[2].origin = FontOrigin::Sideloaded;
-        settings.showFontChoices("Strip font", catalog, "NV Bitter", "Default",
+        settings.showFontChoices("Strip font", catalog, "NV Bitter", "Default", false,
                                  [&](const QString &value) { chosen.append(value); });
         QVERIFY(activeSheet && activeSheet->isVisible());
         auto *replacement = activeSheet->findChild<QCheckBox *>("rrSettingsFontChoice2");

@@ -1670,6 +1670,7 @@
 "settings.ui_font" = "Sans-serif UI typeface";
 "settings.header_footer_font" = "Header & footer UI typeface";
 "settings.ui_mono_font" = "Monospaced UI typeface";
+"settings.font_too_large" = "Font disabled due to size limitations.";
 
 "settings.header_footer_weight" = "Header & footer UI weight";
 

@@ -376,8 +376,8 @@ void SlotMap::paintEvent(QPaintEvent *)
     if (bar != headerfooter::BarEdge::None) {
         // Where the page draws it, inside the top or bottom edge.
         const bool atTop = bar == headerfooter::BarEdge::Top;
-        const int edge = atTop ? border + int(metrics::reading::progressBottom)
-                               : height() - border - int(metrics::reading::progressBottom);
+        const int edge = atTop ? border + int(metrics::reading::progressRuleEdge)
+                               : height() - border - int(metrics::reading::progressRuleEdge);
         paintProgressBar(painter, 0, width(), edge, atTop, progress,
                          layout.progressTicks ? ticks : QVector<double>{},
                          { ink, ui::themeColors(this).outline, bandPaper });

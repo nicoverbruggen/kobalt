@@ -308,12 +308,12 @@ inline int stripHeight(int size, int extra = 0)
     return px(stripDesignHeight(size) + extra);
 }
 
-inline constexpr Px progressHeight{ 24 };
 inline constexpr Px headerSide{ 28 }, headerTextGap{ 24 }, batteryGap{ 8 };
-// The bar's rule, progressRuleHeight tall, ends progressBottom from its edge
-// of the screen, and the fill, progressFillHeight tall, lies against it on
-// the side of the text. The rule is 3 pixels at 300 PPI and 2 on the Nia.
-inline constexpr Px progressBottom{ 8 }, progressRuleHeight{ 3 }, progressFillHeight{ 4 };
+// The rule faces the screen edge and the fill faces the text.
+inline constexpr Px progressEdgeInset{ 8 }, progressRuleHeight{ 3 }, progressFillHeight{ 4 },
+        progressTextGap{ 4 };
+inline constexpr Px progressRuleEdge = progressEdgeInset + progressRuleHeight;
+inline constexpr Px progressHeight = progressRuleEdge + progressFillHeight + progressTextGap;
 } // namespace reading
 
 namespace headerFooter {

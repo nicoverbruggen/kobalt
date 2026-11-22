@@ -1500,7 +1500,7 @@ void ReadingPage::paintHeader(QPainter &painter, bool sleeping) const
     if (showHeader())
         paintSlots(painter, headerTextRect(), false, sleeping);
     if (progressAtTop())
-        paintBar(painter, metrics::reading::progressBottom, true);
+        paintBar(painter, metrics::reading::progressRuleEdge, true);
     if (panelBelowHeader)
         painter.fillRect(0, topHeight() - metrics::control::border, width(),
                          metrics::control::border, ui::dividerColor(this));
@@ -1521,7 +1521,7 @@ void ReadingPage::paintFooter(QPainter &painter, bool sleeping) const
             paintSlots(painter, bounds, true, sleeping);
     }
     if (progressAtBottom())
-        paintBar(painter, bottomHeight() - metrics::reading::progressBottom, false);
+        paintBar(painter, bottomHeight() - metrics::reading::progressRuleEdge, false);
 }
 
 QVector<double> ReadingPage::shownTicks() const

@@ -74,8 +74,8 @@ LightPanel::LightPanel(LightControls &light, QWidget *parent)
             new ui::DescribedOption(strings::get("light_panel.automatic_warmth"),
                                     strings::get("light_panel.automatic_warmth_description"), this);
     automaticWarmth->setObjectName("rrAutomaticWarmth");
-    darkMode = new ui::DescribedOption(strings::get("reader.dark_mode"),
-                                       strings::get("settings.dark_description"), this);
+    darkMode = new ui::DescribedOption(strings::get("settings.dark_mode"),
+                                       strings::get("settings.night_mode_description"), this);
     darkMode->setObjectName("rrLightDarkMode");
     darkMode->hide();
     connect(darkMode, &QCheckBox::clicked, this, [this](bool enabled) {

@@ -246,7 +246,7 @@ PageScrubber::PageScrubber(QWidget *parent)
     captionBackground->setObjectName("rrScrubberCaptionBackground");
     captionBackground->setAttribute(Qt::WA_TransparentForMouseEvents);
     captionBackground->setEdgeWidth(metrics::chrome::heavyRule);
-    captionBackground->setFill(QPalette::Midlight);
+    captionBackground->setFill(QPalette::Base);
     captionBackground->setDividers(Qt::BottomEdge);
     captionBackground->hide();
     chapterLabel = new PrivateTextLabel(this);
@@ -261,10 +261,10 @@ PageScrubber::PageScrubber(QWidget *parent)
     overviewRule = new Panel(this, Qt::LeftEdge);
     overviewRule->setSoftEdges(true);
     overviewRule->setAttribute(Qt::WA_TransparentForMouseEvents);
-    overviewRule->setFill(QPalette::Midlight);
+    overviewRule->setFill(QPalette::Base);
     auto *disclosure = button("rrScrubberOverviewToggle", ControlIcon::Up,
                               strings::get("reader.expand_book_map"));
-    disclosure->setFill(QPalette::Midlight);
+    disclosure->setFill(QPalette::Base);
     overviewToggle = disclosure;
     connect(overviewToggle, &QPushButton::clicked, this, [this] {
         overviewExpanded = !overviewExpanded;
@@ -345,6 +345,7 @@ void PageScrubber::setBook(int page, int pages, const QVector<QPair<int, QString
 {
     const int count = qMax(1, pages);
     const bool changed = count != totalPages || chapters != values;
+    const bool resized = size.isValid() && pageSize != size;
     if (lastMain < 0)
         lastMain = count - 1;
     const bool sameRange =
@@ -353,7 +354,7 @@ void PageScrubber::setBook(int page, int pages, const QVector<QPair<int, QString
     firstMainPage = firstMain;
     lastMainPage = lastMain;
     const bool unchanged = sameRange && !changed && current == qBound(0, page, count - 1)
-            && (!size.isValid() || pageSize == size) && !rangeLabel->text().isEmpty();
+            && !resized && !rangeLabel->text().isEmpty();
     if (unchanged) {
         return;
     }
@@ -369,12 +370,18 @@ void PageScrubber::setBook(int page, int pages, const QVector<QPair<int, QString
     if (size.isValid()) {
         pageSize = size;
     }
-    if (selecting() && !changed)
+    if (selecting() && !changed) {
+        if (resized)
+            arrange();
         return;
+    }
     if (changed || current < rangeFirst || current > rangeLast)
         centerRange(current);
     syncRange(changed);
-    arrange();
+    if (changed || resized)
+        arrange();
+    else
+        updateCaption();
 }
 
 int PageScrubber::maximumZoomLevel() const
@@ -761,7 +768,10 @@ void PageScrubber::showCurrentPage()
         candidate = current;
         setProperty("preview_page", current);
         syncRange();
-        arrange();
+        // The replacements repaint the cards when they are ready.
+        preceding->setVisible(candidate > 0);
+        following->setVisible(candidate < totalPages - 1);
+        updateCaption();
     } else {
         if (selecting())
             return;
@@ -1138,7 +1148,6 @@ void PageScrubber::updateCaption()
                                      : pageLabel + QStringLiteral(" · ") + chapterName;
     captionBackground->setGeometry(0, panelBounds().top(), width(), scrubber::captionHeight);
     captionBackground->show();
-    chapterLabel->setGeometry(captionBackground->geometry());
     const int toggleWidth = zoomAvailable() ? int(metrics::chrome::cellWidth) : 0;
     overviewToggle->setGeometry(
             width() - toggleWidth, captionBackground->y() + int(metrics::chrome::heavyRule),
@@ -1146,9 +1155,15 @@ void PageScrubber::updateCaption()
             int(scrubber::captionHeight - metrics::chrome::heavyRule - metrics::control::border));
     overviewRule->setGeometry(
             overviewToggle->geometry().adjusted(-int(metrics::control::border), 0, 0, 0));
-    chapterLabel->setText(
-            elideInterfaceText(label, chapterLabel->font(),
-                               chapterLabel->width() - 2 * (int(scrubber::padding) + toggleWidth)));
+    const int room = qMax(1, width() - 2 * (int(scrubber::padding) + toggleWidth));
+    const auto text = elideInterfaceText(label, chapterLabel->font(), room);
+    // Keep the caption's backing-store damage around the text.
+    const int labelWidth = qMin(room,
+                                interfaceTextWidth(text, chapterLabel->font())
+                                        + 2 * int(metrics::control::border));
+    chapterLabel->setGeometry((width() - labelWidth) / 2, captionBackground->y(), labelWidth,
+                              captionBackground->height());
+    chapterLabel->setText(text);
     chapterLabel->setAccessibleName(label);
     chapterLabel->show();
 }

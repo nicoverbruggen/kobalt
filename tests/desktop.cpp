@@ -8418,6 +8418,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
     }
 
+    // Keeps preview geometry stable during a jump and realigns the cards after a resize.
     void fastFirstNavigateJump()
     {
         renderingMode::setOverride(1);
@@ -8458,6 +8459,13 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         watch.navigator = navigator;
         navigator->installEventFilter(&watch);
         QVERIFY(!fixture.visible("rrScrubberReturn"));
+        auto *caption = fixture.widget("rrPreviewChapterCaption");
+        auto *band = fixture.widget("rrScrubberCaptionBackground");
+        QVERIFY(caption && caption->isVisible());
+        QVERIFY(band && band->isVisible());
+        QVERIFY(caption->width() < band->width());
+        QCOMPARE(band->grab().toImage().pixelColor(8, band->height() / 2),
+                 navigator->palette().color(QPalette::Base));
         for (const auto *button : { "rrNavigationNext", "rrNavigationPrevious" }) {
             watch.original = navigator->previewBounds();
             watch.movedWhileLoading = false;
@@ -8467,6 +8475,21 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(!watch.movedWhileLoading);
             QVERIFY(fixture.visible("rrScrubberReturn"));
         }
+
+        ui::PageScrubber resized(nullptr);
+        resized.resize(800, 1100);
+        resized.setBook(1, 4, {}, { 300, 400 });
+        resized.show();
+        resized.showCurrentPage();
+        auto *next = resized.findChild<QWidget *>("rrPreviewNextPage");
+        QVERIFY(next && next->isVisible());
+        const int oldWidth = resized.previewBounds().width();
+        resized.beginNavigation();
+        resized.setBook(2, 4, {}, { 400, 300 });
+        resized.showCurrentPage();
+        const auto center = resized.previewBounds();
+        QVERIFY(center.width() != oldWidth);
+        QCOMPARE(next->x(), center.right() + 1 + int(ui::metrics::scrubber::gap));
     }
 
     void fastLocateText()
@@ -11252,14 +11275,22 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrHeaderFooterProgressBar_bottom"));
         QTRY_VERIFY(page->progressAtBottom());
         const int top = page->topHeight(), bottom = page->bottomHeight();
+        const int inset = ui::px(8);
+        const auto footerPixel = [&](int distance) {
+            const auto &image = page->footerImage();
+            return image.pixelColor(image.width() - 2, image.height() - 1 - distance);
+        };
+        QTRY_COMPARE(footerPixel(inset), ui::themeColors(page).outline);
+        QCOMPARE(footerPixel(inset - 1), footerPixel(0));
         QVERIFY(fixture.press("rrHeaderFooterProgressBar_top"));
         QTRY_VERIFY(page->progressAtTop());
         const int bar = ui::metrics::reading::progressHeight;
+        QCOMPARE(bar, inset + ui::px(3) + ui::px(4) + ui::px(4));
         QCOMPARE(page->topHeight(), top + bar);
         QCOMPARE(page->bottomHeight(), bottom - bar);
         // The rule is ink up to the reading position and lighter after it.
         {
-            const int rule = int(ui::metrics::reading::progressBottom) - 1;
+            const int rule = int(ui::metrics::reading::progressRuleEdge) - 1;
             QTRY_COMPARE(page->headerImage().pixelColor(page->headerImage().width() - 2, rule),
                          ui::themeColors(page).outline);
         }
@@ -11296,13 +11327,15 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         const auto header = page->headerImage();
         QVERIFY(!header.isNull());
         const auto ink = page->palette().color(QPalette::WindowText);
-        const int rule = int(ui::metrics::reading::progressBottom) - 1;
+        const int rule = int(ui::metrics::reading::progressRuleEdge) - 1;
         const int fill = rule + int(ui::metrics::reading::progressFillHeight);
         const int filled = qRound(header.width() * page->progressFraction);
         QCOMPARE(header.pixelColor(filled - 1, rule), ink);
         QCOMPARE(header.pixelColor(filled - 1, fill), ink);
         QCOMPARE(header.pixelColor(header.width() - 2, rule), ui::themeColors(page).outline);
         const auto paper = header.pixelColor(header.width() - 2, 1);
+        QCOMPARE(header.pixelColor(header.width() - 2, inset - 1), paper);
+        QCOMPARE(header.pixelColor(header.width() - 2, inset), ui::themeColors(page).outline);
         const int tickX = qRound(header.width() * page->shownTicks().last());
         QCOMPARE(header.pixelColor(tickX, rule), paper);
         QCOMPARE(header.pixelColor(tickX, fill), paper);
@@ -16283,6 +16316,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
                 auto *toggle = qobject_cast<QCheckBox *>(fixture.widget("rrLightDarkMode"));
                 QVERIFY(toggle);
                 QVERIFY(toggle->isVisible());
+                QCOMPARE(toggle->text(), strings::get("settings.dark_mode"));
+                QCOMPARE(toggle->accessibleDescription(),
+                         strings::get("settings.night_mode_description"));
                 if (pass == 0) {
                     QVERIFY(!toggle->isChecked());
 

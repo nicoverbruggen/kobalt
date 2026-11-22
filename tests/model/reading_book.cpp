@@ -1092,9 +1092,14 @@ int main(int argc, char **argv)
             const QString title(int(storage::maxJsonBytes) + 1, 'T');
             book.session()->setChapters({ { title, snapshot.value("position").toString() } }, {});
             waitUntil([&] { return book.session()->chapterTitle() == title; });
-            require(book.checkpoint(&snapshot) && snapshot.value("chapter_title") == title
-                            && storage::readBookState(paths, identity).object == saved,
-                    "Display-only chapter change affected the saved checkpoint");
+            require(book.checkpoint(&snapshot), "Cannot checkpoint after changing the title");
+            require(snapshot.value("chapter_title") == title, "Inspection snapshot lost the title");
+            // Hybrid can refine the page estimate between saves. It must match
+            // this checkpoint's snapshot, while the other saved fields stay put.
+            auto expected = saved;
+            expected.insert("page_estimate", snapshot.value("page_estimate"));
+            saved = storage::readBookState(paths, identity).object;
+            require(saved == expected, "Display-only chapter change affected the saved checkpoint");
             for (const auto *key :
                  { "chapter_title", "chapter_page", "chapter_pages", "page", "pages", "next_page",
                    "text_font_face", "embedded_font_count", "cached_pages", "continues_before",

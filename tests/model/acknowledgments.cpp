@@ -45,7 +45,9 @@ int main(int argc, char **argv)
         if (group == "author")
             author.append(entry.toObject().value("name").toString());
     }
-    require(author == QStringList({ "NickelRotate", "NickelDissolve", "eBook Fonts" }),
+    require(author
+                    == QStringList({ "NickelRotate", "NickelDissolve", "eBook Fonts",
+                                     "Supplemental eBook Fonts" }),
             "The author's projects are not grouped");
     // Kobalt's own license terms come first, with both license texts.
     const auto kobalt = entries.first().toObject();

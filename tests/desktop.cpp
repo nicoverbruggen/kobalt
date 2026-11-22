@@ -18488,8 +18488,12 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrPage"));
         // The return is used up. What remains is the jump to the prologue
         // from Chapters, back to the page the book opened on.
-        QVERIFY(!fixture.visible("rrScrubberReturn")
-                || fixture.widget("rrScrubberReturn")->property("text").toString() != used);
+        if (!fixture.visible("rrPageScrubber"))
+            QVERIFY(fixture.press("rrNavSeek"));
+        QTRY_VERIFY(fixture.visible("rrScrubberReturn"));
+        QCOMPARE(fixture.widget("rrScrubberReturn")->property("text").toString(),
+                 strings::get("reader.return_page").arg(1));
+        QVERIFY(used != strings::get("reader.return_page").arg(1));
     }
 
     // Kobo's Large Print Mode enlarges interface text, at most to 150%.

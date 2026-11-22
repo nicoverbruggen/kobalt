@@ -784,6 +784,25 @@ inline void checkPrivateInterfaceText(const kobalt::AssetBundle &assets)
             "Private interface renderer lost caption tracking");
     QFont capitals = font;
     capitals.setCapitalization(QFont::AllUppercase);
+    require(privateLayoutKey(capitals) != privateLayoutKey(font)
+                    && privateLayoutKey(tracked) != privateLayoutKey(font),
+            "Wrapped layout keys lost capitalization or letter spacing");
+    {
+        const QString words = QStringLiteral("one two");
+        QFont spaced = font;
+        spaced.setWordSpacing(font.wordSpacing() + 4);
+        const auto runWidth = [&](const QFont &runFont) {
+            PrivateTextStyle style;
+            style.length = words.size();
+            style.font = runFont;
+            return measurePrivateTextLayout(words, font, {}, PrivateTextEmphasis::FontFace,
+                                            Qt::LeftToRight, { style })
+                    .advance;
+        };
+        const int width = runWidth(font);
+        require(runWidth(spaced) == width + 4 && runWidth(font) == width,
+                "Cached styled text reused a run with different word spacing");
+    }
     require(renderPrivateText(QStringLiteral("Ελληνικά"), capitals).image
                     == renderPrivateText(QStringLiteral("ΕΛΛΗΝΙΚΆ"), font).image,
             "Private caption capitalization changed");

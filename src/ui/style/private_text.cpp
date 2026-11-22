@@ -235,12 +235,12 @@ struct Fonts
     QMap<QString, std::shared_ptr<Face>> faces;
     QHash<FT_Face, Face *> owners;
     // Costs are in 256-byte units, so small measurements do not each take a kilobyte of the budget.
-    QCache<QString, CachedText> layouts{ 8192 };
+    QCache<QByteArray, CachedText> layouts{ 8192 };
     // Resolved primary faces and font descriptions, used for every measurement.
     QHash<QString, FT_Face> primaries;
     // Rendered glyphs by face, size, glyph and synthetic emboldening or slant.
     QCache<QByteArray, GlyphMask> glyphs{ 4096 };
-    QVector<QPair<QFont, QString>> descriptions;
+    QVector<QPair<QFont, QByteArray>> descriptions;
     QMap<QString, QVector<RegisteredFace>> registered;
     // Registrations already made, by path and expected family.
     QSet<QString> registrations;
@@ -360,7 +360,7 @@ struct Fonts
         return owner->shaper;
     }
 
-    QString description(const QFont &font)
+    QByteArray description(const QFont &font)
     {
         for (const auto &entry : descriptions) {
             if (entry.first == font) {
@@ -378,7 +378,7 @@ struct Fonts
             << font.underline() << font.strikeOut() << qint32(font.stretch()) << font.kerning()
             << qint32(font.capitalization()) << qint32(font.letterSpacingType())
             << double(font.letterSpacing()) << double(font.wordSpacing());
-        descriptions.prepend({ font, QString::fromLatin1(data.toHex()) });
+        descriptions.prepend({ font, data });
         return descriptions.first().second;
     }
 };
@@ -398,10 +398,10 @@ Fonts &fonts()
     return value;
 }
 
-void cacheLayout(const QString &key, const CachedText &text)
+void cacheLayout(const QByteArray &key, const CachedText &text)
 {
     const int cost = cacheCost(qint64(text.image.bytesPerLine()) * text.image.height()
-                               + qint64(key.size()) * 2 + qint64(sizeof(CachedText)));
+                               + key.capacity() + qint64(sizeof(CachedText)));
     auto &cache = fonts().layouts;
     if (cost <= cache.maxCost())
         cache.insert(key, new CachedText(text), cost);
@@ -986,7 +986,8 @@ QString privateLayoutKey(const QFont &font)
     if (previewFonts || !fonts().library)
         return {};
     auto &state = fonts();
-    return QString::number(state.layoutGeneration) + ':' + state.description(font) + ':'
+    return QString::number(state.layoutGeneration) + ':'
+            + QString::fromLatin1(state.description(font).toHex()) + ':'
             + QString::number(defaultWeightSteps(font));
 }
 
@@ -1024,29 +1025,16 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
     }
     const int steps = weight < 0 ? defaultWeightSteps(font) : qBound(0, weight, 12);
     const auto fontKey = fonts().description(font);
-    QString cacheKey;
-    cacheKey.reserve(fontKey.size() + 7 + text.size());
-    cacheKey += fontKey;
-    cacheKey += ':';
-    cacheKey += QChar(steps);
-    cacheKey += QChar(int(rasterize));
-    cacheKey += QChar(int(emphasis));
-    cacheKey += QChar(int(direction));
-    cacheKey += QChar(int(digits));
-    // Plain labels need no serialized ranges. Hex keeps rich run data
-    // separate from any colons in the text.
-    if (!boldRanges.isEmpty() || !underlineRanges.isEmpty() || !styles.isEmpty()) {
-        QByteArray data;
-        QDataStream key(&data, QIODevice::WriteOnly);
-        key << boldRanges << underlineRanges;
-        for (const auto &style : styles)
-            key << qint32(style.start) << qint32(style.length) << fonts().description(style.font)
-                << style.color << qint32(style.baselineShift) << style.image.cacheKey()
-                << style.background;
-        cacheKey += QString::fromLatin1(data.toHex());
-    }
-    cacheKey += ':';
-    cacheKey += text;
+    QByteArray cacheKey;
+    QDataStream key(&cacheKey, QIODevice::WriteOnly);
+    key << quint8('L') << fontKey << quint8(steps) << rasterize << quint8(emphasis)
+        << quint8(direction) << quint8(digits) << boldRanges << underlineRanges
+        << quint32(styles.size());
+    for (const auto &style : styles)
+        key << qint32(style.start) << qint32(style.length) << fonts().description(style.font)
+            << style.color << qint32(style.baselineShift) << style.image.cacheKey()
+            << style.background;
+    key << text;
     if (auto *cached = fonts().layouts.object(cacheKey)) {
         cached->measureInk(inkBounds);
         return *cached;
@@ -1442,12 +1430,10 @@ QImage tintedPrivateText(const QImage &image, const QColor &color, QRect *inkBou
             *inkBounds = {};
         return {};
     }
-    // Keep the full QColor precision, including alpha. Hex keys cannot collide
-    // with shaped layout keys, which always contain colon separators.
-    QByteArray bytes;
-    QDataStream stream(&bytes, QIODevice::WriteOnly);
-    stream << image.cacheKey() << color;
-    const auto key = QString::fromLatin1(bytes.toHex());
+    // Tints share the layout budget. The tag keeps their keys distinct.
+    QByteArray key;
+    QDataStream stream(&key, QIODevice::WriteOnly);
+    stream << quint8('T') << image.cacheKey() << color;
     if (auto *cached = fonts().layouts.object(key)) {
         cached->measureInk(inkBounds);
         return cached->image;

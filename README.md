@@ -2,7 +2,7 @@
   <img src="assets/kobalt.svg" alt="Kobalt" width="320" height="208">
 </p>
 
-**Kobalt is an EPUB reader with a Qt reading interface. Its rendering engine is [Blaze](doc/engines.md), Kobalt’s hard fork of CREngine.**
+**Kobalt is an EPUB reader with a Qt reading interface. Its rendering engine is [Blaze](doc/engines.md), Kobalt’s fork of CREngine.**
 
 The reader app is its own thing, and as such is planned to be ported to various platforms. On Android, it runs as a standalone app, and on Kobo it runs somewhat integrated into Kobo's own OS.
 

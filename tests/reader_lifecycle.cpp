@@ -7906,6 +7906,7 @@ private slots:
         host.window()->sleepViewReady();
         host.window()->wakeReader();
         if (closeFirst) {
+            QTRY_VERIFY(host.window()->readyForPresentation());
             const int lastPage = host.session()->bookPage();
             host.window()->pageButton(-1);
             QTRY_VERIFY(!host.session()->busy() && host.session()->bookPage() < lastPage);

@@ -3372,7 +3372,10 @@ void tour(Fixture &fixture, const QString &name, bool screenshots)
         while (fixture.visible("rrHeaderFooterPrevious")
                && fixture.widget("rrHeaderFooterPrevious")->isEnabled())
             QVERIFY(fixture.press("rrHeaderFooterPrevious"));
-        QVERIFY(fixture.press("rrHeaderFooterSlot0"));
+        // The phone preset hides the header. Open a slot on its footer instead.
+        const auto *slot = fixture.visible("rrHeaderFooterSlot0") ? "rrHeaderFooterSlot0"
+                                                                  : "rrHeaderFooterSlot3";
+        QVERIFY(fixture.press(slot));
         QTRY_VERIFY(fixture.visible("rrHeaderFooterChooser"));
         while (fixture.visible("rrHeaderFooterFieldsPrevious")
                && fixture.widget("rrHeaderFooterFieldsPrevious")->isEnabled())
@@ -22841,6 +22844,8 @@ private slots:
         openPrologueBody(fixture);
         QVERIFY(capture(fixture, name + "-reading"));
         tour(fixture, name, true);
+        if (QTest::currentTestFailed())
+            return;
         reader = fixture.window.readerWindow();
         QVERIFY(reader);
         QVERIFY(fixture.press("rrBookmarkListClose"));

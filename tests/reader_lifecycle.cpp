@@ -1059,15 +1059,17 @@ private slots:
                                   "Noto Serif Armenian",
                                   "Noto Serif CJK JP" };
             expected.move(2, interfacePicker ? 3 : expected.size() - 1);
-            if (!interfacePicker)
+            if (!interfacePicker) {
                 expected.move(expected.indexOf("IBM Plex Sans"), expected.size() - 2);
+                expected.move(expected.indexOf("Device"), expected.indexOf("IBM Plex Sans") - 1);
+            }
             if (personalFirst)
                 expected.move(expected.indexOf("Personal"), 0);
             QCOMPARE(families, expected);
             QStringList captions = interfacePicker
                     ? QStringList{ "RECOMMENDED FONTS", "KOBALT COLLECTION", "UI FONTS",
                                    "SIDELOADED FONTS", "SUPPLEMENTAL FONTS (INTERNATIONAL)" }
-                    : QStringList{ "RECOMMENDED FONTS", "BUILT-IN FONTS", "KOBALT COLLECTION",
+                    : QStringList{ "RECOMMENDED FONTS", "KOBALT COLLECTION", "SYSTEM FONTS",
                                    "UI FONTS", "SIDELOADED FONTS" };
             if (personalFirst)
                 captions.move(captions.indexOf("SIDELOADED FONTS"), 0);

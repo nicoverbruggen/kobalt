@@ -679,7 +679,7 @@
 /* Arguments: %1 */
 "reader.brightness" = "Brightness %1";
 "reader.brightness_and_warmth" = "Brightness and warmth";
-"reader.built_in_fonts" = "Built-in Fonts";
+"reader.built_in_fonts" = "System Fonts";
 "reader.chapter_lengths" = "Chapter lengths";
 /* Arguments: %1, %2 */
 "reader.chapter_position" = "%1 · %2";

@@ -2916,7 +2916,7 @@ int main(int argc, char **argv)
         const QVector<Choice> sections{
             { "Libron", "Libron", "recommended", "Recommended Fonts" },
             { "Ancizar Serif", "NV Ancizar Serif", "ancizar", "Recommended Fonts" },
-            { "System", "System", "system", "Built-in Fonts" },
+            { "System", "System", "system", "System Fonts" },
             { "Personal", "Personal", "personal", "Sideloaded Fonts" },
             { "Arabic", "Noto Naskh Arabic", "arabic", "Supplemental Fonts" }
         };

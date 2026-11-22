@@ -85,6 +85,7 @@ QPainterPath footnoteOutline(const QRect &reference, const QVector<QRect> &recta
 
 using headerfooter::Content;
 using headerfooter::Field;
+constexpr auto stripDigits = ui::TextDigits::Tabular;
 
 // The battery sits beside the text at a little below the text height.
 qreal batteryBody(const QFont &font)
@@ -96,8 +97,8 @@ int textWidth(const QFont &font, Field field, const QString &text)
 {
     if (text.isEmpty())
         return 0;
-    return headerfooter::pageCount(field) ? qCeil(ui::halfSpacedWidth(font, text))
-                                          : ui::interfaceTextWidth(text, font);
+    return headerfooter::pageCount(field) ? qCeil(ui::halfSpacedWidth(font, text, stripDigits))
+                                          : ui::interfaceTextWidth(text, font, stripDigits);
 }
 
 int iconWidth(const QFont &font, const Content &content)
@@ -146,7 +147,7 @@ void paintContent(QPainter &painter, const QRect &bounds, Field field, const Con
     int width = textWidth(textFont, field, text);
     if (width > room) {
         text = ui::headerFooterText(content, textFont, room);
-        width = ui::interfaceTextWidth(text, textFont);
+        width = ui::interfaceTextWidth(text, textFont, stripDigits);
         field = Field::Nothing;
     }
     const int total = width + icon;
@@ -159,12 +160,14 @@ void paintContent(QPainter &painter, const QRect &bounds, Field field, const Con
     if (!text.isEmpty()) {
         if (content.batteryIcon)
             ui::drawOpticalPrivateText(painter, QRect(x, bounds.y(), width, bounds.height()), text,
-                                       Qt::AlignLeft, ui::headerFooterTextWeight());
+                                       Qt::AlignLeft, ui::headerFooterTextWeight(), {},
+                                       stripDigits);
         else if (headerfooter::pageCount(field))
-            ui::drawHalfSpaced(painter, x, bounds, text, ui::headerFooterTextWeight());
+            ui::drawHalfSpaced(painter, x, bounds, text, ui::headerFooterTextWeight(), stripDigits);
         else
             ui::drawInterfaceText(painter, QRect(x, bounds.y(), width, bounds.height()), text,
-                                  Qt::AlignLeft | Qt::AlignVCenter, ui::headerFooterTextWeight());
+                                  Qt::AlignLeft | Qt::AlignVCenter, ui::headerFooterTextWeight(),
+                                  {}, stripDigits);
     }
     if (content.batteryIcon) {
         const qreal height = batteryBody(font);

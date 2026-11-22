@@ -40,6 +40,7 @@ QFont interfaceFont(int pixels = -1);
 void setInterfaceFontFamily(const QString &family);
 void setInterfaceMonoFontFamily(const QString &family);
 void setHeaderFooterFontFamily(const QString &family);
+QString defaultHeaderFooterFontFamily();
 QFont headerFooterFont(int pixels = -1);
 void setHeaderFooterAddedWeight(int steps);
 bool interfaceFontsMatch(const QString &mainFace, const QString &monoFace, const QString &stripFace,

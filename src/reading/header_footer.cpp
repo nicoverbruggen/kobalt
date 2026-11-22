@@ -380,6 +380,11 @@ static Selection selectLayout(const QJsonObject &preferences)
     const auto legacy = legacyLayout(preferences);
     if (legacy == legacyLayout({})) {
         selection.layout = presetLayout(Preset::Default);
+        // Explicit Small used to look identical to an unset size.
+        if (preferences.value("header_text_size") == QStringLiteral("small"))
+            selection.layout.headerSize = smallSize;
+        if (preferences.value("footer_text_size") == QStringLiteral("small"))
+            selection.layout.footerSize = smallSize;
         return selection;
     }
     selection.preset = Preset::Custom;

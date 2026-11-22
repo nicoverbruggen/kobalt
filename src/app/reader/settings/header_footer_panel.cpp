@@ -27,6 +27,8 @@ using headerfooter::Preset;
 using ui::px;
 
 namespace {
+constexpr auto stripDigits = ui::TextDigits::Tabular;
+
 QFont valueFont()
 {
     QFont font = ui::headerFooterFont(headerFooterMetrics::valueText);
@@ -53,12 +55,12 @@ void paintValue(QPainter &painter, const QRect &bounds, const Content &content, 
     const int room = qMax(0, bounds.width() - icon - gap);
     QString text = content.text;
     int textWidth = text.isEmpty() ? 0
-            : halfSpaces           ? qCeil(ui::halfSpacedWidth(painter.font(), text))
-                                   : ui::interfaceTextWidth(text, textFont);
+            : halfSpaces           ? qCeil(ui::halfSpacedWidth(textFont, text, stripDigits))
+                                   : ui::interfaceTextWidth(text, textFont, stripDigits);
     if (textWidth > room) {
         halfSpaces = false;
         text = ui::headerFooterText(content, textFont, room);
-        textWidth = text.isEmpty() ? 0 : ui::interfaceTextWidth(text, textFont);
+        textWidth = ui::interfaceTextWidth(text, textFont, stripDigits);
     }
     const int total = textWidth + gap + icon;
     const int x = align & Qt::AlignLeft ? bounds.x()
@@ -66,12 +68,13 @@ void paintValue(QPainter &painter, const QRect &bounds, const Content &content, 
                                         : bounds.x() + (bounds.width() - total) / 2;
     if (!text.isEmpty() && content.batteryIcon)
         ui::drawOpticalPrivateText(painter, QRect(x, bounds.y(), textWidth, bounds.height()), text,
-                                   Qt::AlignLeft, ui::headerFooterTextWeight());
+                                   Qt::AlignLeft, ui::headerFooterTextWeight(), {}, stripDigits);
     else if (!text.isEmpty() && halfSpaces)
-        ui::drawHalfSpaced(painter, x, bounds, text, ui::headerFooterTextWeight());
+        ui::drawHalfSpaced(painter, x, bounds, text, ui::headerFooterTextWeight(), stripDigits);
     else if (!text.isEmpty())
         ui::drawInterfaceText(painter, QRect(x, bounds.y(), textWidth, bounds.height()), text,
-                              Qt::AlignLeft | Qt::AlignVCenter, ui::headerFooterTextWeight());
+                              Qt::AlignLeft | Qt::AlignVCenter, ui::headerFooterTextWeight(), {},
+                              stripDigits);
     if (content.batteryIcon) {
         const qreal width = body * int(metrics::panel::batteryBodyWidth)
                 / int(metrics::panel::batteryBodyHeight);
@@ -178,7 +181,7 @@ protected:
         // Header slots keep the top edge and footer slots the bottom edge,
         // inside the progress bar when it is on their edge, as on the page.
         const bool footer = headerfooter::footerSlot(slot);
-        const int line = painter.fontMetrics().height();
+        const int line = ui::interfaceLineHeight(painter.font());
         const auto barEdge = footer ? headerfooter::BarEdge::Bottom : headerfooter::BarEdge::Top;
         const int edge =
                 headerFooterMetrics::mapEdgeInset + (progressBar == barEdge ? progressSpace() : 0);
@@ -708,6 +711,7 @@ void setFieldValue(ui::DescribedOption *row, Field field, const headerfooter::Va
     style.percent = shown.battery;
     style.charging = shown.charging;
     style.halfSpaces = headerfooter::pageCount(field);
+    style.digits = stripDigits;
     if (textPixels > 0) {
         style.sampleFont = ui::headerFooterFont(textPixels);
         style.sampleWeight = ui::interfaceWeight() + ui::headerFooterAddedWeight();

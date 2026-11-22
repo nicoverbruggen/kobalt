@@ -133,6 +133,17 @@ QJsonObject cleanPreferences(QJsonObject preferences)
         preferences[headerfooter::presetKey] = headerfooter::presetValue(layout.preset);
         if (layout.preset == headerfooter::Preset::Custom)
             preferences[headerfooter::customKey] = headerfooter::toJson(layout.layout);
+        else {
+            auto text = preferences.value(headerfooter::textKey).toObject();
+            if (preferences.value("header_text_size") == QStringLiteral("small")
+                && !text.contains("header_size") && !text.contains("header_font_size"))
+                text["header_size"] = QStringLiteral("small");
+            if (preferences.value("footer_text_size") == QStringLiteral("small")
+                && !text.contains("footer_size") && !text.contains("footer_font_size"))
+                text["footer_size"] = QStringLiteral("small");
+            if (!text.isEmpty())
+                preferences[headerfooter::textKey] = text;
+        }
     }
     for (const auto *key : { "show_header", "show_footer", "show_clock", "show_progress_bar",
                              "header_text_size", "footer_text_size" })

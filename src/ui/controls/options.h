@@ -1,6 +1,7 @@
 #pragma once
 #include "ui/style/theme.h"
 #include "ui/style/font_preview.h"
+#include "ui/style/private_text.h"
 #include <QCheckBox>
 #include <QFont>
 #include <QVector>
@@ -56,6 +57,7 @@ public:
         int percent = -1;
         bool charging = false;
         bool halfSpaces = false;
+        TextDigits digits = TextDigits::Default;
         QFont sampleFont;
         int sampleWeight = -1;
 
@@ -63,7 +65,8 @@ public:
         {
             return battery == other.battery && percent == other.percent
                     && charging == other.charging && halfSpaces == other.halfSpaces
-                    && sampleFont == other.sampleFont && sampleWeight == other.sampleWeight;
+                    && digits == other.digits && sampleFont == other.sampleFont
+                    && sampleWeight == other.sampleWeight;
         }
     };
 

@@ -670,8 +670,8 @@ struct Glyph
 
 // The bundled faces of the interface families, 1.1 MB together.
 constexpr const char *interfaceFontFiles[] = {
-    "IBMPlexSans-Regular.ttf", "IBMPlexSans-Bold.ttf",        "IBMPlexSans-Italic.ttf",
-    "IBMPlexMono-Regular.ttf", "IBMPlexMono-Bold.ttf",        "InstrumentSerif-Regular.ttf",
+    "IBMPlexSans-Regular.ttf",    "IBMPlexSans-Bold.ttf", "IBMPlexSans-Italic.ttf",
+    "IBMPlexMono-Regular.ttf",    "IBMPlexMono-Bold.ttf", "InstrumentSerif-Regular.ttf",
     "InstrumentSerif-Italic.ttf",
 };
 
@@ -887,6 +887,11 @@ bool registerPrivateInterfaceFont(const QString &path, const QString &expectedFa
     return true;
 }
 
+bool privateInterfaceFontRegistered(const QString &family)
+{
+    return fonts().registered.contains(family);
+}
+
 void retryFailedPrivateInterfaceFonts()
 {
     fonts().failedRegistrationPaths.clear();
@@ -991,7 +996,8 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
                                      PrivateTextEmphasis emphasis = PrivateTextEmphasis::Synthetic,
                                      Qt::LayoutDirection direction = Qt::LayoutDirectionAuto,
                                      const QVector<PrivateTextStyle> &styles = {},
-                                     QRect *inkBounds = nullptr)
+                                     QRect *inkBounds = nullptr,
+                                     TextDigits digits = TextDigits::Default)
 {
     struct Rendering
     {
@@ -1019,13 +1025,14 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
     const int steps = weight < 0 ? defaultWeightSteps(font) : qBound(0, weight, 12);
     const auto fontKey = fonts().description(font);
     QString cacheKey;
-    cacheKey.reserve(fontKey.size() + 6 + text.size());
+    cacheKey.reserve(fontKey.size() + 7 + text.size());
     cacheKey += fontKey;
     cacheKey += ':';
     cacheKey += QChar(steps);
     cacheKey += QChar(int(rasterize));
     cacheKey += QChar(int(emphasis));
     cacheKey += QChar(int(direction));
+    cacheKey += QChar(int(digits));
     // Plain labels need no serialized ranges. Hex keeps rich run data
     // separate from any colons in the text.
     if (!boldRanges.isEmpty() || !underlineRanges.isEmpty() || !styles.isEmpty()) {
@@ -1274,16 +1281,20 @@ static PrivateText layoutPrivateText(const QString &input, const QFont &font, in
         hb_buffer_add_utf32(buffer, characters.constData(), count, run.first, run.count);
         hb_buffer_guess_segment_properties(buffer);
         hb_buffer_set_direction(buffer, run.level & 1 ? HB_DIRECTION_RTL : HB_DIRECTION_LTR);
-        hb_feature_t features[3];
+        hb_feature_t features[4];
         hb_feature_from_string(runFont.kerning() ? "kern=1" : "kern=0", -1, &features[0]);
+        unsigned featureCount = 1;
         const bool separateLetters = !boldRanges.isEmpty() || !underlineRanges.isEmpty()
                 || (runFont.letterSpacingType() == QFont::AbsoluteSpacing
                     && runFont.letterSpacing() != 0);
         if (separateLetters) {
-            hb_feature_from_string("liga=0", -1, &features[1]);
-            hb_feature_from_string("clig=0", -1, &features[2]);
+            hb_feature_from_string("liga=0", -1, &features[featureCount++]);
+            hb_feature_from_string("clig=0", -1, &features[featureCount++]);
         }
-        hb_shape(hbFont, buffer, features, separateLetters ? 3 : 1);
+        if (digits == TextDigits::Tabular)
+            features[featureCount++] = { HB_TAG('t', 'n', 'u', 'm'), 1, HB_FEATURE_GLOBAL_START,
+                                         HB_FEATURE_GLOBAL_END };
+        hb_shape(hbFont, buffer, features, featureCount);
         auto runUnderlines = underlineRanges;
         if (runFont.underline())
             runUnderlines.append({ 0, int(text.size()) });
@@ -1700,14 +1711,20 @@ int fittingTextEnd(const QVector<int> &ends, int start, int limit, int width,
 }
 
 QString elidePrivateText(const QString &text, const QFont &font, int width,
-                         const QVector<QPair<int, int>> &boldRanges)
+                         const QVector<QPair<int, int>> &boldRanges, TextDigits digits)
 {
-    const int advance = measurePrivateText(text, font, boldRanges);
+    const auto measure = [&](const QString &value) {
+        return layoutPrivateText(value, font, -1, boldRanges, false, {},
+                                 PrivateTextEmphasis::Synthetic, Qt::LayoutDirectionAuto, {},
+                                 nullptr, digits)
+                .advance;
+    };
+    const int advance = measure(text);
     if (advance <= width) {
         return text;
     }
     const QString ellipsis(QChar(0x2026));
-    if (measurePrivateText(ellipsis, font, boldRanges) > width) {
+    if (measure(ellipsis) > width) {
         return {};
     }
     QTextBoundaryFinder finder(QTextBoundaryFinder::Grapheme, text);
@@ -1719,10 +1736,7 @@ QString elidePrivateText(const QString &text, const QFont &font, int width,
     qreal unitAdvance = qreal(advance) / qMax(1, int(text.size()));
     const int end = fittingTextEnd(
             boundaries, 0, text.size(), width,
-            [&](int candidate) {
-                return measurePrivateText(text.left(candidate) + ellipsis, font, boldRanges);
-            },
-            unitAdvance);
+            [&](int candidate) { return measure(text.left(candidate) + ellipsis); }, unitAdvance);
     return text.left(end) + ellipsis;
 }
 
@@ -1749,7 +1763,7 @@ int interfaceLineHeight(const QFont &font)
                            : QFontMetrics(font).height();
 }
 
-int interfaceTextWidth(const QString &text, const QFont &font)
+int interfaceTextWidth(const QString &text, const QFont &font, TextDigits digits)
 {
     if (!needsPrivateText(text, font)) {
 #if QT_VERSION < QT_VERSION_CHECK(5, 11, 0)
@@ -1758,24 +1772,28 @@ int interfaceTextWidth(const QString &text, const QFont &font)
         return QFontMetrics(font).horizontalAdvance(text);
 #endif
     }
-    return measurePrivateText(text, font);
+    return layoutPrivateText(text, font, -1, {}, false, {}, PrivateTextEmphasis::Synthetic,
+                             Qt::LayoutDirectionAuto, {}, nullptr, digits)
+            .advance;
 }
 
-QString elideInterfaceText(const QString &text, const QFont &font, int width)
+QString elideInterfaceText(const QString &text, const QFont &font, int width, TextDigits digits)
 {
     if (!needsPrivateText(text, font)) {
         return QFontMetrics(font).elidedText(text, Qt::ElideRight, width);
     }
-    return elidePrivateText(text, font, width);
+    return elidePrivateText(text, font, width, {}, digits);
 }
 
 namespace {
 void drawPrivateText(QPainter &painter, const QRect &area, const QString &text,
                      Qt::Alignment alignment, int weight,
-                     const QVector<QPair<int, int>> &boldRanges, bool optical,
+                     const QVector<QPair<int, int>> &boldRanges, bool optical, TextDigits digits,
                      bool shareBaseline = false)
 {
-    const auto rendered = renderPrivateText(text, painter.font(), weight, boldRanges);
+    const auto rendered = layoutPrivateText(text, painter.font(), weight, boldRanges, true, {},
+                                            PrivateTextEmphasis::Synthetic, Qt::LayoutDirectionAuto,
+                                            {}, nullptr, digits);
     if (rendered.image.isNull()) {
         return;
     }
@@ -1814,26 +1832,26 @@ void drawPrivateText(QPainter &painter, const QRect &area, const QString &text,
 
 void drawInterfaceText(QPainter &painter, const QRect &area, const QString &text,
                        Qt::Alignment alignment, int weight,
-                       const QVector<QPair<int, int>> &boldRanges)
+                       const QVector<QPair<int, int>> &boldRanges, TextDigits digits)
 {
     if (weight < 0 && !needsPrivateText(text, painter.font())) {
         painter.drawText(area, alignment, text);
         return;
     }
-    drawPrivateText(painter, area, text, alignment, weight, boldRanges, false);
+    drawPrivateText(painter, area, text, alignment, weight, boldRanges, false, digits);
 }
 
 void drawOpticalPrivateText(QPainter &painter, const QRect &area, const QString &text,
                             Qt::Alignment alignment, int weight,
-                            const QVector<QPair<int, int>> &boldRanges)
+                            const QVector<QPair<int, int>> &boldRanges, TextDigits digits)
 {
-    drawPrivateText(painter, area, text, alignment, weight, boldRanges, true);
+    drawPrivateText(painter, area, text, alignment, weight, boldRanges, true, digits);
 }
 
 void drawSegmentPrivateText(QPainter &painter, const QRect &area, const QString &text,
                             Qt::Alignment alignment)
 {
-    drawPrivateText(painter, area, text, alignment, -1, {}, true, true);
+    drawPrivateText(painter, area, text, alignment, -1, {}, true, TextDigits::Default, true);
 }
 
 int PrivateTextLabel::textWidth(const QString &value) const

@@ -1812,7 +1812,8 @@ void Reader::showSettingsFonts(SettingsPage section)
                         .toUpper());
         panel->headerFooterFontButton->setCaption(
                 (settingsStripFace.isEmpty()
-                         ? strings::get("settings.font_default_value").arg("IBM Plex Mono")
+                         ? strings::get("settings.font_default_value")
+                                   .arg(fontDisplayName(ui::defaultHeaderFooterFontFamily()))
                          : fontDisplayName(settingsStripFace))
                         .toUpper());
         sample(panel->uiFontButton,
@@ -1821,7 +1822,8 @@ void Reader::showSettingsFonts(SettingsPage section)
         sample(panel->uiMonoFontButton,
                settingsMonoFace.isEmpty() ? QStringLiteral("IBM Plex Mono") : settingsMonoFace);
         sample(panel->headerFooterFontButton,
-               settingsStripFace.isEmpty() ? QStringLiteral("IBM Plex Mono") : settingsStripFace);
+               settingsStripFace.isEmpty() ? ui::defaultHeaderFooterFontFamily()
+                                           : settingsStripFace);
     } else if (section == SettingsPage::Defaults) {
         sample(panel->defaultFontButton, settingsDefaultFontFace);
         panel->defaultFontButton->setCaption((settingsDefaultFontFace.isEmpty()
@@ -1894,9 +1896,9 @@ void Reader::openSettingsFont(const QString &key)
                     ? strings::get("reader.publisher_fonts")
                     : strings::get("settings.font_default_value")
                               .arg(fontDisplayName(
-                                      isUi ? QString("IBM Plex Sans")
-                                              : (isMono || isHeaderFooter)
-                                              ? QString("IBM Plex Mono")
+                                      isUi                     ? QString("IBM Plex Sans")
+                                              : isMono         ? QString("IBM Plex Mono")
+                                              : isHeaderFooter ? ui::defaultHeaderFooterFontFamily()
                                               : isDictionary
                                               ? bookFace()
                                               : fallbackFontDefaults(session->fontFaces())[index])),

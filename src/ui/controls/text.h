@@ -132,8 +132,9 @@ QFont fontSample(const QString &face);
 // Page counts such as 5 / 33 keep half-width spaces around the slash. A
 // Unicode thin space still takes a full cell in mono fonts, so the painter
 // draws each word and advances half a space between them.
-qreal halfSpacedWidth(const QFont &font, const QString &text);
+qreal halfSpacedWidth(const QFont &font, const QString &text,
+                      TextDigits digits = TextDigits::Default);
 void drawHalfSpaced(QPainter &painter, qreal x, const QRect &bounds, const QString &text,
-                    int weight = -1);
+                    int weight = -1, TextDigits digits = TextDigits::Default);
 void captionLabel(QLabel *label, int pixels = metrics::chrome::captionText);
 } // namespace kobalt::ui

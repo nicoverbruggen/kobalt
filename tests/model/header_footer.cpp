@@ -1,4 +1,5 @@
 #include "reading/header_footer.h"
+#include "reading/appearance_settings.h"
 #include "reading/reading_density.h"
 #include "reading/remaining_time.h"
 #include <limits>
@@ -40,9 +41,9 @@ int main()
                     && standard.slotFields[3] == Field::ChapterPagesLeft
                     && standard.slotFields[5] == Field::BookPercent,
             "Default does not show the clock, chapter, chapter pages left and book percentage");
-    require(standard.uppercase[1] && !standard.progressBar && standard.headerSize == smallSize
-                    && standard.footerSize == smallSize,
-            "Default lost its uppercase chapter, hidden bar or small sizes");
+    require(standard.uppercase[1] && !standard.progressBar && standard.headerSize == mediumSize
+                    && standard.footerSize == mediumSize,
+            "Default lost its uppercase chapter, hidden bar or medium sizes");
     const auto a = presetLayout(Preset::AlternativeA);
     require(a.slotFields[0] == Field::Time && a.slotFields[1] == Field::ChapterAndPage
                     && a.slotFields[4] == Field::TitleAndPage && a.uppercase[1] && a.uppercase[4]
@@ -73,7 +74,7 @@ int main()
     const auto partial =
             fromJson(qt::object({ { "top_left", "author" }, { "footer_size", "huge" } }), standard);
     require(partial.slotFields[0] == Field::Author && partial.slotFields[1] == Field::Chapter
-                    && partial.footerSize == smallSize,
+                    && partial.footerSize == mediumSize,
             "Missing or invalid layout values did not keep the fallback");
 
     // Old presets map exactly; optional numeric sizes retain a disabled strip's last size.
@@ -136,6 +137,13 @@ int main()
             { { "show_header", true }, { "show_footer", true }, { "show_progress_bar", true } }));
     require(selection.preset == Preset::Default && selection.layout == standard,
             "Old default flags prevented the new Default from applying");
+    const auto legacySmall = qt::object({ { "header_text_size", "small" } });
+    for (const auto &preferences : { legacySmall, appearance::cleanPreferences(legacySmall) }) {
+        selection = select(preferences);
+        require(selection.preset == Preset::Default && selection.layout.headerSize == smallSize
+                        && selection.layout.footerSize == mediumSize,
+                "The new default replaced an explicitly saved legacy Small size");
+    }
     selection = select(qt::object({ { "show_clock", false }, { "footer_text_size", "large" } }));
     require(selection.preset == Preset::Custom && selection.layout.slotFields[0] == Field::Nothing
                     && selection.layout.slotFields[1] == Field::Chapter
@@ -547,6 +555,7 @@ int main()
                                   { "uppercase", false },
                                   { "progress_bar", false } });
     auto oldLayout = standard;
+    oldLayout.headerSize = oldLayout.footerSize = smallSize;
     oldLayout.uppercase.fill(false);
     require(fromJson(old, standard) == oldLayout, "An old layout changed on load");
     // The bar position is optional: missing or unknown keeps the fallback,

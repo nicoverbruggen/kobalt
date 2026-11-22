@@ -3851,6 +3851,7 @@ void checkHeaderFooterSizes(int preset, bool dark)
     auto *header = static_cast<ui::SettingSlider *>(fixture.widget("rrHeaderTextSize"));
     auto *footer = static_cast<ui::SettingSlider *>(fixture.widget("rrFooterTextSize"));
     QVERIFY(header && footer && page);
+    QCOMPARE(page->font().family(), QStringLiteral("NV Jost"));
     // Captions stack above the controls on the narrow portrait phone only.
     if (preset == 3) {
         QVERIFY(fixture.reveal(header));
@@ -3890,24 +3891,24 @@ void checkHeaderFooterSizes(int preset, bool dark)
     const int initialHeight = view->height();
     for (const auto name : { QString("rrHeaderTextSize"), QString("rrFooterTextSize") }) {
         auto *slider = static_cast<ui::SettingSlider *>(fixture.widget(qPrintable(name)));
-        QCOMPARE(slider->value(), smallSize);
+        QCOMPARE(slider->value(), mediumSize);
         auto *value = qobject_cast<QLabel *>(fixture.widget(qPrintable(name + "Value")));
         QVERIFY(value);
-        QCOMPARE(value->text(), strings::get("reader.text_size_value").arg("5.8"));
+        QCOMPARE(value->text(), strings::get("reader.text_size_value").arg("6.2"));
         QTRY_VERIFY(view->isEnabled());
         QVERIFY(fixture.press(qPrintable(name + "More")));
-        QTRY_COMPARE(slider->value(), smallSize + 1);
+        QTRY_COMPARE(slider->value(), mediumSize + 1);
         QTRY_VERIFY(view->isEnabled());
         QVERIFY(fixture.press(qPrintable(name + "Less")));
-        QTRY_COMPARE(slider->value(), smallSize);
+        QTRY_COMPARE(slider->value(), mediumSize);
         QTRY_VERIFY(view->isEnabled());
-        QVERIFY(fixture.press(qPrintable(name + "Less")));
+        const int inset = ui::metrics::control::sliderInset;
+        QVERIFY(fixture.click(slider, QPoint(inset, slider->height() / 2)));
         QTRY_COMPARE(slider->value(), offSize);
         QTRY_VERIFY(view->isEnabled());
         QVERIFY(fixture.press(qPrintable(name + "More")));
         QTRY_COMPARE(slider->value(), smallSize);
         // Tap the actual canvas slider at every named checkpoint, then beyond L.
-        const int inset = ui::metrics::control::sliderInset;
         const int span = slider->width() - 2 * inset;
         for (const auto point : { QPoint(1, smallSize), QPoint(2, mediumSize), QPoint(3, largeSize),
                                   QPoint(4, maximumSize) }) {
@@ -16220,7 +16221,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(applied.load() > 0);
         QCOMPARE(ui::interfaceFont().family(), QStringLiteral("IBM Plex Sans"));
         QCOMPARE(ui::chromeFont().family(), QStringLiteral("IBM Plex Mono"));
-        QCOMPARE(ui::headerFooterFont().family(), QStringLiteral("IBM Plex Mono"));
+        QCOMPARE(ui::headerFooterFont().family(), QStringLiteral("NV Jost"));
         QCOMPARE(ui::headerFooterAddedWeight(), 2);
         const auto restored = storage::readJson(fixture.paths.preferences());
         QCOMPARE(restored.value("ui_theme").toString(), QStringLiteral("classic"));

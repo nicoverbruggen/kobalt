@@ -426,22 +426,26 @@ void DescribedOption::paintEvent(QPaintEvent *)
         const int room =
                 qMax(0, valueLine.width() - labelWidth - metrics::settings::toggleGap - icon - gap);
         const int textRight = valueLine.right() + 1 - icon - gap;
-        const qreal halfSpaced = valueStyle.halfSpaces ? halfSpacedWidth(painter.font(), value) : 0;
+        const auto digits = valueStyle.digits;
+        const qreal halfSpaced =
+                valueStyle.halfSpaces ? halfSpacedWidth(valueFont, value, digits) : 0;
         if (valueStyle.battery)
             drawOpticalPrivateText(painter,
                                    QRect(textRight - room, valueLine.y(), room, valueLine.height()),
-                                   elideInterfaceText(value, valueFont, room), Qt::AlignRight,
-                                   valueStyle.sampleWeight);
+                                   elideInterfaceText(value, valueFont, room, digits),
+                                   Qt::AlignRight, valueStyle.sampleWeight, {}, digits);
         else if (valueStyle.halfSpaces && halfSpaced <= room)
             drawHalfSpaced(painter, textRight - halfSpaced, valueLine, value,
-                           valueStyle.sampleWeight);
+                           valueStyle.sampleWeight, digits);
         else {
-            const auto shown = qt::textWidth(painter.fontMetrics(), value) > room
+            const auto shown = digits == TextDigits::Tabular
+                    ? elideInterfaceText(value, valueFont, room, digits)
+                    : qt::textWidth(painter.fontMetrics(), value) > room
                     ? painter.fontMetrics().elidedText(value, Qt::ElideRight, room)
                     : value;
-            drawInterfaceText(painter,
-                              QRect(textRight - room, valueLine.y(), room, valueLine.height()),
-                              shown, Qt::AlignRight | Qt::AlignVCenter, valueStyle.sampleWeight);
+            drawInterfaceText(
+                    painter, QRect(textRight - room, valueLine.y(), room, valueLine.height()),
+                    shown, Qt::AlignRight | Qt::AlignVCenter, valueStyle.sampleWeight, {}, digits);
         }
         if (valueStyle.battery) {
             const qreal width = body * int(metrics::panel::batteryBodyWidth)

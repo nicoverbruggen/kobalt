@@ -4870,6 +4870,7 @@ private slots:
         QFETCH(int, ppi);
         ui::setDensity(ppi);
         ReadingPage page(nullptr, [] { });
+        page.setFont(ui::headerFooterFont());
         page.setProperty("reader_dark", dark);
         auto colors = page.palette();
         colors.setColor(QPalette::Window, dark ? Qt::black : Qt::white);
@@ -4878,21 +4879,37 @@ private slots:
         page.resize(400, 600);
         page.image = QImage(400, 480, QImage::Format_RGB32);
         page.image.fill(Qt::white);
-        page.slotContents[0].text = "09:00";
-        page.slotContents[4].text = "1 / 10";
+        page.slotContents[0].text = "09:04";
+        page.slotContents[3].text = "24 left";
+        page.slotContents[5].text = "11.4%";
         page.refreshContent();
         page.show();
         QCoreApplication::processEvents();
         PaintRegions paints;
         page.installEventFilter(&paints);
-        page.slotContents[0].text = "09:01";
-        page.slotContents[4].text = "2 / 10";
-        page.refreshContent();
-        QCoreApplication::processEvents();
-        QVERIFY(!paints.painted.isEmpty());
-        QVERIFY(!paints.painted.intersects(
-                QRect(0, page.topHeight(), page.width(),
-                      page.height() - page.topHeight() - page.bottomHeight())));
+        // Jost draws 4 and 5 at different ink widths, but they must occupy one cell.
+        for (const auto &change :
+             { qMakePair(0, QStringLiteral("09:05")), qMakePair(3, QStringLiteral("25 left")),
+               qMakePair(5, QStringLiteral("11.5%")) }) {
+            const bool footer = headerfooter::footerSlot(change.first);
+            const int pixels = footer ? page.footerTextPixels() : page.headerTextPixels();
+            const auto font = ui::headerFooterFont(pixels);
+            const auto advance = [&font](const QString &text) {
+                return ui::interfaceTextWidth(text, font, ui::TextDigits::Tabular);
+            };
+            const int digit = advance(QStringLiteral("4"));
+            QCOMPARE(digit, advance(QStringLiteral("5")));
+            QCOMPARE(advance(page.slotContents[change.first].text), advance(change.second));
+            paints.painted = {};
+            page.slotContents[change.first].text = change.second;
+            page.refreshContent();
+            QCoreApplication::processEvents();
+            QVERIFY(!paints.painted.isEmpty());
+            QVERIFY(paints.painted.boundingRect().width() <= digit);
+            QVERIFY(!paints.painted.intersects(
+                    QRect(0, page.topHeight(), page.width(),
+                          page.height() - page.topHeight() - page.bottomHeight())));
+        }
         QVERIFY(!page.property("reader_page_turn").toBool());
         paints.painted = {};
         page.refreshContent();
@@ -5004,22 +5021,20 @@ private slots:
                                    : slot % 3 == 2 ? ribbon
                                                    : 0);
                 const auto fitted = ui::headerFooterText(content, font, room);
+                const auto width = [&font](const QString &text) {
+                    return ui::interfaceTextWidth(text, font, ui::TextDigits::Tabular);
+                };
                 QVERIFY(fitted.endsWith(content.chapterPosition));
                 QVERIFY(fitted.contains(QChar(0x2026)));
-                QVERIFY(ui::interfaceTextWidth(fitted, font) <= room);
+                QVERIFY(width(fitted) <= room);
                 const auto ellipsisAndPage =
                         strings::get("reader.chapter_position")
                                 .arg(QString(QChar(0x2026)), content.chapterPosition);
-                QCOMPARE(ui::headerFooterText(content, font,
-                                              ui::interfaceTextWidth(ellipsisAndPage, font)),
+                QCOMPARE(ui::headerFooterText(content, font, width(ellipsisAndPage)),
                          ellipsisAndPage);
-                QCOMPARE(
-                        ui::headerFooterText(content, font,
-                                             ui::interfaceTextWidth(content.chapterPosition, font)),
-                        content.chapterPosition);
-                QCOMPARE(ui::headerFooterText(content, font,
-                                              ui::interfaceTextWidth(content.text, font)),
-                         content.text);
+                QCOMPARE(ui::headerFooterText(content, font, width(content.chapterPosition)),
+                         content.chapterPosition);
+                QCOMPARE(ui::headerFooterText(content, font, width(content.text)), content.text);
                 page.refreshContent();
                 const auto actual = page.snapshot();
                 const auto captures = qEnvironmentVariable("KOBALT_CAPTURE_HEADER_FOOTER");

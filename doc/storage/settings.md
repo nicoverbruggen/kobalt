@@ -21,7 +21,7 @@ Every key below is optional and keeps settings schema 1. Missing or invalid valu
 | `dark_mode` | Boolean | `false` | Dark theme for the reader and its pages. |
 | `ui_font_face` | font name | theme font | Sans-serif interface typeface, used by the Custom theme. This is the primary font override that `ui_theme` checks. At most 512 characters, as for every font key. |
 | `ui_mono_font_face` | font name | theme font | Monospace interface typeface. |
-| `header_footer_font_face` | font name | theme font | Header and footer typeface. |
+| `header_footer_font_face` | font name | `NV Jost` | Header and footer typeface. Falls back to IBM Plex Mono if NV Jost is unavailable. |
 | `header_footer_added_weight` | `0`, `2`, `4`, `6`, `8` | `2` | Extra weight for header and footer text. |
 | `hide_tab_labels` | Boolean | `false` | The tab bar shows icons only. |
 | `screen_refresh` | `smart`, `1`, `chapter`, `6`, `10`, `20`, `manual` | `smart` | When a page turn flashes the screen. Smart flashes at a chapter start after at least 10 turns. Numbers flash every that many turns. Manual never flashes on a turn. Closing the menu with a tap on the page always flashes. |
@@ -87,7 +87,7 @@ The text values of a book (`font_face`, `font_pixels`, `line_spacing`, `text_ali
 | --- | --- | --- | --- |
 | `header_footer` | `default`, `alternative_a`, `alternative_b`, `phone`, `custom` | see notes | Phone has no header and the usual chapter-pages-left and book-percentage footer. It is the default only on screens with a short edge under 3.4 inches, and only when nothing about headers and footers was saved. Explicit choices survive device detection and rotation. Older builds do not know `phone` and can fall back to their default preset. |
 | `header_footer_custom` | object | none | The Custom layout: the six slots (`top_left` to `bottom_right`), `progress_bar`, the optional `progress_bar_position` (`bottom` or `top`; missing or unknown means `bottom`, which is what older builds draw), the optional `progress_bar_ticks` (missing means no chapter ticks, as in older builds), `uppercase`, and the header and footer sizes. Used when `header_footer` is `custom`. |
-| `header_footer_text` | object | legacy layout | Holds `header_size`, `footer_size`, `header_font_size` and `footer_font_size` apart from the preset. The first preset or size edit saves the current sizes. Preset changes then keep them, and size changes do not overwrite Custom. |
+| `header_footer_text` | object | Medium, or the stored Custom size | Holds `header_size`, `footer_size`, `header_font_size` and `footer_font_size` apart from the preset. The first preset or size edit saves the current sizes. Preset changes then keep them, and size changes do not overwrite Custom. |
 | `header_font_size`, `footer_font_size` | `24` to `48` (300 PPI pixels) | legacy size | Stored in Custom layouts and in `header_footer_text`. A missing value uses the legacy Small, Medium or Large size (24, 26 or 28). Off hides the strip and keeps its size. Saving also writes the legacy size string, or Off. Older builds may drop the numeric fields when they save. |
 | Custom slot values | includes `page_turn_time`, `chapter_load_time`, `battery_percent_only` | | `battery_percent_only` shows the percentage without the icon. `battery_percent` keeps the icon. An older build shows an unknown slot as Nothing and keeps the rest of the layout. It saves `nothing` for that slot only when the user edits the Custom layout in that build. |
 | `header_footer_percentage_format` | `whole`, `decimal` | `whole` | Decimal shows one decimal place in the header, the footer and their previews. Both count the current page and round down. |
@@ -171,7 +171,7 @@ The text values of a book (`font_face`, `font_pixels`, `line_spacing`, `text_ali
 | `show_link_indicator` | Ignored. A saved value stays in the file. |
 | `playful_theme`, `ui_colorful_icons` | Prototype keys. Read to choose `ui_theme` and `ui_icon_style` when those are missing. |
 | `bionic_reading` | Copied to `bold_reading` when that is missing, then removed. |
-| `show_header`, `show_footer`, `show_clock`, `show_progress_bar`, `header_text_size`, `footer_text_size` | Converted to a `header_footer` preset, or a Custom layout, when `header_footer` is missing. Then removed. |
+| `show_header`, `show_footer`, `show_clock`, `show_progress_bar`, `header_text_size`, `footer_text_size` | Converted to a `header_footer` preset, or a Custom layout, when `header_footer` is missing. An explicit Small size with the default layout is saved in `header_footer_text`. Then removed. |
 | `last_header_footer` | Copied to `header_footer` when that is missing, then removed. |
 | `pin_stats`, `show_navigation_thumbnails` | Read to choose `default_menu_view` when that is missing, then removed. |
 | `inherit_header_footer`, `show_navigation_bar`, `columns`, `column_spacing`, `smooth_images`, `heavier_interface_text`, `kobalt_sleep_screen`, `highlight_help_seen` | Removed during normalization. |

@@ -37,6 +37,7 @@ struct Family
 // remaining controls, such as editable fields, in the regular weight. The
 // private renderer draws everything else and adds the interface weight itself.
 enum class FamilyIndex { Sans, Mono, Serif };
+constexpr auto jostFamily = "NV Jost";
 
 const QVector<Family> &families()
 {
@@ -326,15 +327,15 @@ bool initializeInterfaceFonts(const AssetBundle &assets, bool *changed)
     current.fallbackReaders.clear();
     for (const auto *file : scriptFallbackFontFiles)
         current.fallbackReaders.insert(file, readers.value(file));
-    // Some sleep screens use bundled book faces: Jost for figures and Libron
-    // for the letter. Registration records the files; bytes load when drawn.
+    // The strips and some sleep screens use Jost. The sleep letter uses Libron.
+    // Registration records the files; bytes load when drawn.
     const auto bookFace = [&assets](const char *face, const QString &family) {
         const auto name = QStringLiteral("fonts/ebook-core/") + QLatin1String(face);
         if (!assets.setAside(name))
             registerPrivateInterfaceFont(assets.file(name), family);
     };
     for (const auto *face : { "NV_Jost-Regular.ttf", "NV_Jost-Bold.ttf" })
-        bookFace(face, QStringLiteral("NV Jost"));
+        bookFace(face, QString::fromLatin1(jostFamily));
     for (const auto *face : { "Libron-Regular.ttf", "Libron-Italic.ttf" })
         bookFace(face, QStringLiteral("Libron"));
     if (changed) {
@@ -577,9 +578,15 @@ bool interfaceFontsMatch(const QString &mainFace, const QString &monoFace, const
             && stripFace == selectedHeaderFooterFamily && stripWeight == stripAddedWeight;
 }
 
+QString defaultHeaderFooterFontFamily()
+{
+    const auto jost = QString::fromLatin1(jostFamily);
+    return privateInterfaceFontRegistered(jost) ? jost : family(FamilyIndex::Mono);
+}
+
 QFont headerFooterFont(int pixels)
 {
-    return sizedFont(selectedHeaderFooterFamily.isEmpty() ? family(FamilyIndex::Mono)
+    return sizedFont(selectedHeaderFooterFamily.isEmpty() ? defaultHeaderFooterFontFamily()
                                                           : selectedHeaderFooterFamily,
                      pixels);
 }

@@ -95,7 +95,7 @@ int legacySize(const QString &value);
 struct Layout
 {
     std::array<Field, slotCount> slotFields{};
-    int headerSize = smallSize, footerSize = smallSize;
+    int headerSize = mediumSize, footerSize = mediumSize;
     bool headerEnabled = true, footerEnabled = true;
     // Each slot chooses its own case.
     std::array<bool, slotCount> uppercase{ { true, true, true, true, true, true } };

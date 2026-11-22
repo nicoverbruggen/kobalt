@@ -45,16 +45,17 @@ QLabel *makeZenMark(QWidget *parent, const char *name)
 
 QString headerFooterText(const headerfooter::Content &content, const QFont &font, int width)
 {
-    if (interfaceTextWidth(content.text, font) <= width)
+    constexpr auto digits = TextDigits::Tabular;
+    if (interfaceTextWidth(content.text, font, digits) <= width)
         return content.text;
     if (content.chapterPosition.isEmpty())
-        return elideInterfaceText(content.text, font, width);
+        return elideInterfaceText(content.text, font, width, digits);
     const QString ellipsis(QChar(0x2026));
     const auto joined = [&](const QString &title) {
         return strings::get("reader.chapter_position").arg(title, content.chapterPosition);
     };
     QString best = joined(ellipsis);
-    if (interfaceTextWidth(best, font) > width)
+    if (interfaceTextWidth(best, font, digits) > width)
         return content.chapterPosition;
     QTextBoundaryFinder finder(QTextBoundaryFinder::Grapheme, content.chapterTitle);
     QVector<int> boundaries;
@@ -66,7 +67,7 @@ QString headerFooterText(const headerfooter::Content &content, const QFont &font
     while (first <= last) {
         const int middle = first + (last - first) / 2;
         const auto text = joined(content.chapterTitle.left(boundaries[middle]) + ellipsis);
-        if (interfaceTextWidth(text, font) <= width) {
+        if (interfaceTextWidth(text, font, digits) <= width) {
             best = text;
             first = middle + 1;
         } else {
@@ -1000,14 +1001,14 @@ void SampleLabel::paintEvent(QPaintEvent *event)
 
 // Some fonts report an x-height that does not match their glyphs. Measure
 // capitals as well as lowercase so small x-heights do not inflate font names.
-qreal halfSpacedWidth(const QFont &font, const QString &text)
+qreal halfSpacedWidth(const QFont &font, const QString &text, TextDigits digits)
 {
-    return interfaceTextWidth(text, font)
-            - text.count(' ') * interfaceTextWidth(QStringLiteral(" "), font) / 2.0;
+    return interfaceTextWidth(text, font, digits)
+            - text.count(' ') * interfaceTextWidth(QStringLiteral(" "), font, digits) / 2.0;
 }
 
 void drawHalfSpaced(QPainter &painter, qreal x, const QRect &bounds, const QString &text,
-                    int weight)
+                    int weight, TextDigits digits)
 {
     if (weight < 0 && !needsPrivateText(text, painter.font())) {
         const auto metrics = painter.fontMetrics();
@@ -1020,11 +1021,11 @@ void drawHalfSpaced(QPainter &painter, qreal x, const QRect &bounds, const QStri
         }
         return;
     }
-    const qreal space = interfaceTextWidth(QStringLiteral(" "), painter.font()) / 2.0;
+    const qreal space = interfaceTextWidth(QStringLiteral(" "), painter.font(), digits) / 2.0;
     for (const auto &word : text.split(' ')) {
-        const int width = interfaceTextWidth(word, painter.font());
+        const int width = interfaceTextWidth(word, painter.font(), digits);
         drawInterfaceText(painter, QRect(qRound(x), bounds.y(), width, bounds.height()), word,
-                          Qt::AlignLeft | Qt::AlignVCenter, weight);
+                          Qt::AlignLeft | Qt::AlignVCenter, weight, {}, digits);
         x += width + space;
     }
 }

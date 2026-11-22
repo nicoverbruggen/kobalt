@@ -574,6 +574,7 @@ private:
     // slice.
     void prepareNextItem(const std::function<bool()> &current);
     void preparePreviousItem(const std::function<bool()> &current);
+    const QVector<bool> &nonLinearSpineItems() const;
     int adjacentSpineItem(int direction) const;
     QPair<int, int> neighbouringUnit(int item, int direction) const;
     // Opens the unit that starts at spine item `item` in `ahead_`, or keeps

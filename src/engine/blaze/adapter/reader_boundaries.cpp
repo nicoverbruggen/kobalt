@@ -10,7 +10,7 @@
 
 namespace kobalt {
 namespace {
-enum Boundary { Start = 1, After = 2 };
+enum Boundary { Start = 1, After = 2, Prologue = 4, Epilogue = 8 };
 
 int semantics(const QStringList &types)
 {
@@ -20,6 +20,20 @@ int semantics(const QStringList &types)
         || types.contains("bibliography") || types.contains("glossary"))
         return After;
     return 0;
+}
+
+int narrativeType(const QStringList &types)
+{
+    if (types.contains("prologue"))
+        return Prologue;
+    if (types.contains("epilogue"))
+        return Epilogue;
+    return 0;
+}
+
+QString fragment(int item)
+{
+    return QString("/body/DocFragment[%1]").arg(item + 1);
 }
 
 const QString ops = QStringLiteral("http://www.idpf.org/2007/ops");
@@ -74,7 +88,20 @@ struct Element
     QString name;
     int ordinal;
     QHash<QString, int> children;
+    qint64 begin;
+    int textNodes;
+    bool inText;
+    bool narrativeSection;
+    QString precedingEnd;
 };
+
+QString sourcePath(int item, const QVector<Element> &elements)
+{
+    auto position = fragment(item);
+    for (const auto &element : elements)
+        position += QString("/%1[%2]").arg(element.name).arg(element.ordinal);
+    return position;
+}
 
 Reference reference(const QString &base, const QString &href, int boundary)
 {
@@ -113,15 +140,72 @@ struct FragmentAnchors
     }
 };
 
+// Counts source content between anchors, independent of pagination. Equal offsets
+// mean that only container tags and whitespace separate the two positions.
+struct NarrativeRange
+{
+    int type;
+    qint64 begin, end;
+    QString position, after;
+};
+
+struct NarrativeScan
+{
+    qint64 offset = 0;
+    QVector<NarrativeRange> ranges;
+    QHash<QString, qint64> boundaries;
+    QString epilogueBoundary;
+
+    bool finishRange(const QString &publisherEnd)
+    {
+        auto &range = ranges.last();
+        if (offset == range.begin) {
+            ranges.removeLast();
+            return false;
+        }
+        range.end = offset;
+        if (range.type != Epilogue)
+            return false;
+        if (boundaries.value(publisherEnd, -1) == range.begin)
+            epilogueBoundary = publisherEnd;
+        return true;
+    }
+
+    void extend(QPair<QString, QString> &result) const
+    {
+        auto start = boundaries.value(result.first, -1);
+        for (int i = ranges.size() - 1; i >= 0; --i) {
+            const auto &range = ranges[i];
+            if (range.type == Prologue && range.end == start) {
+                result.first = range.position;
+                start = range.begin;
+            }
+        }
+        auto end = boundaries.value(result.second, -1);
+        for (const auto &range : ranges) {
+            if (range.type == Epilogue && range.begin == end && !range.after.isNull()) {
+                result.second = range.after;
+                end = range.end;
+            }
+        }
+    }
+};
+
 void scanSpineItem(FragmentAnchors &anchors, int item, const QByteArray &bytes,
                    const QHash<QString, int> &targets, const QMultiHash<QString, int> &ids,
-                   bool epub3, QPair<QString, QString> &result)
+                   bool epub3, QPair<QString, QString> &result, NarrativeScan *narrative = nullptr,
+                   int fileFlags = 0, const QString &nextFile = {})
 {
     QXmlStreamReader xml(bytes);
     QVector<Element> elements;
     const auto before = result;
     int elementOrder = 0;
     bool chapterBody = false;
+    int narrativeDepth = 0, nextAnchor = -1;
+    bool headingScope = false;
+    const auto priorEpilogue = narrative ? narrative->epilogueBoundary : QString();
+    const int firstRange = narrative ? narrative->ranges.size() : 0;
+    const auto fileOffset = narrative ? narrative->offset : 0;
     while (!xml.atEnd()) {
         stopPoint();
         nextToken(xml);
@@ -131,20 +215,32 @@ void scanSpineItem(FragmentAnchors &anchors, int item, const QByteArray &bytes,
             ++elementOrder;
             const auto name = xml.name().toString();
             const int ordinal = elements.isEmpty() ? 1 : ++elements.last().children[name];
-            elements.append(Element{ name, ordinal, {} });
+            if (!elements.isEmpty())
+                elements.last().inText = false;
+            elements.append(Element{ name,
+                                     ordinal,
+                                     {},
+                                     narrative ? narrative->offset : 0,
+                                     0,
+                                     false,
+                                     name == "section" || name == "article",
+                                     {} });
             const auto attrs = xml.attributes();
-            const auto id = targets.isEmpty() && ids.isEmpty()
-                    ? QString()
-                    : attrs.value("id").toString();
+            const auto id =
+                    targets.isEmpty() && ids.isEmpty() ? QString() : attrs.value("id").toString();
             int flags = id.isEmpty() ? 0 : targets.value(id);
-            if (epub3
-                && (name == "body" || name == "section" || name == "div"
-                    || name == "article")) {
-                const auto type = attrs.value(ops, QStringLiteral("type"));
-                if (elements.size() == 1)
-                    chapterBody = false;
-                if (!type.isEmpty()) {
-                    const auto types = type.toString().simplified().split(' ');
+            const bool headingLandmark = (flags & (Prologue | Epilogue)) && name.size() == 2
+                    && name[0] == QLatin1Char('h') && name[1] >= QLatin1Char('1')
+                    && name[1] <= QLatin1Char('6');
+            if (elements.size() == 1)
+                flags |= fileFlags & (Prologue | Epilogue);
+            const auto type = attrs.value(ops, QStringLiteral("type"));
+            if (epub3 && !type.isEmpty()) {
+                const auto types = type.toString().simplified().split(' ');
+                flags |= narrativeType(types);
+                if (semantics(types) || types.contains("frontmatter"))
+                    elements.last().narrativeSection = false;
+                if (name == "body" || name == "section" || name == "div" || name == "article") {
                     if (elements.size() == 1)
                         chapterBody = types.contains("chapter");
                     // A glossary inside a chapter is local to that chapter. Only a
@@ -152,30 +248,104 @@ void scanSpineItem(FragmentAnchors &anchors, int item, const QByteArray &bytes,
                     if (types.contains("backmatter") || types.contains("bodymatter")
                         || elements.size() == 1 || (elements.size() == 2 && !chapterBody))
                         flags |= semantics(types);
-                    if (types.contains("chapter") || types.contains("part"))
+                    const bool inEpilogue = narrative
+                            && ((flags & Epilogue)
+                                || (narrativeDepth && narrative->ranges.last().type == Epilogue));
+                    if ((types.contains("chapter") || types.contains("part")) && !inEpilogue
+                        && !result.second.isEmpty()
+                        && (!narrative || result.second != narrative->epilogueBoundary)) {
+                        // The first heading may still identify this chapter as the epilogue.
+                        if (narrative
+                            && narrative->boundaries.value(result.second, -1) == narrative->offset)
+                            elements.last().precedingEnd = result.second;
                         result.second.clear();
+                    }
                 }
             }
             const auto rows = id.isEmpty() ? QList<int>() : ids.values(id);
-            if (flags || !rows.isEmpty()) {
+            if (flags || !rows.isEmpty() || nextAnchor >= 0) {
                 // Only anchors need paths, but their ordinals include every sibling.
-                auto position = QString("/body/DocFragment[%1]").arg(item + 1);
-                for (const auto &element : elements)
-                    position += QString("/%1[%2]").arg(element.name).arg(element.ordinal);
+                const auto position = sourcePath(item, elements);
                 for (const int row : rows)
                     anchors.positions.insert(row, position);
                 anchors.order.insert(position, elementOrder);
+                if (nextAnchor >= 0) {
+                    narrative->ranges[nextAnchor].after = position;
+                    nextAnchor = -1;
+                }
+                if (narrative && (flags & (Start | After)))
+                    narrative->boundaries.insert(position, narrative->offset);
+                if (headingScope && (flags & Prologue)
+                    && narrative->ranges.last().type == Epilogue) {
+                    // An opening heading names the enclosing section only up to
+                    // a more specific narrative boundary inside that section.
+                    if (narrative->finishRange(result.second))
+                        narrative->ranges.last().after = position;
+                    narrativeDepth = 0;
+                    headingScope = false;
+                }
+                if (narrative && !narrativeDepth && (flags & (Prologue | Epilogue))) {
+                    narrativeDepth = elements.size();
+                    // A landmark on the opening heading names the enclosing section.
+                    // A partition can contain several works, so keep its heading local.
+                    if (headingLandmark && narrativeDepth > 1) {
+                        const auto &parent = elements.at(narrativeDepth - 2);
+                        if (parent.narrativeSection && parent.begin == narrative->offset) {
+                            --narrativeDepth;
+                            headingScope = true;
+                            if ((flags & Epilogue) && result.second.isEmpty())
+                                result.second = parent.precedingEnd;
+                        }
+                    }
+                    narrative->ranges.append(NarrativeRange{
+                            flags & (Prologue | Epilogue), narrative->offset, 0, position, {} });
+                }
                 if (flags)
                     record(result, flags, position);
             }
-        } else if (xml.isEndElement() && !elements.isEmpty())
+            if (narrative
+                && (name == "img" || name == "svg" || name == "math" || name == "hr" || name == "br"
+                    || name == "object" || name == "audio" || name == "video" || name == "canvas"))
+                ++narrative->offset;
+        } else if (xml.isCharacters() && !elements.isEmpty() && !xml.isWhitespace()) {
+            auto &parent = elements.last();
+            if (!parent.inText) {
+                ++elementOrder;
+                ++parent.textNodes;
+                parent.inText = true;
+            }
+            if (nextAnchor >= 0) {
+                const auto position =
+                        sourcePath(item, elements) + QString("/text()[%1]").arg(parent.textNodes);
+                narrative->ranges[nextAnchor].after = position + ".0";
+                anchors.order.insert(position, elementOrder);
+                nextAnchor = -1;
+            }
+            if (narrative)
+                ++narrative->offset;
+        } else if (xml.isEndElement() && !elements.isEmpty()) {
+            if (narrativeDepth && narrativeDepth == elements.size()) {
+                if (narrative->finishRange(result.second))
+                    nextAnchor = narrative->ranges.size() - 1;
+                narrativeDepth = 0;
+                headingScope = false;
+            }
             elements.removeLast();
+        }
     }
-    if (xml.hasError())
+    if (xml.hasError()) {
         result = before;
+        if (narrative) {
+            narrative->ranges.resize(firstRange);
+            narrative->offset = fileOffset + 1;
+            narrative->epilogueBoundary = priorEpilogue;
+        }
+    } else if (nextAnchor >= 0)
+        narrative->ranges[nextAnchor].after = nextFile;
 }
 
-QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
+QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine,
+                               const QVector<bool> &nonLinear)
 {
     QString package, nav, ncxId;
     QHash<QString, QString> ncx;
@@ -253,9 +423,9 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
                 anchor.id = ref.id;
             }
             if (landmarks && xml.isStartElement() && xml.name() == QStringLiteral("a")
-                && semantics(types))
+                && (semantics(types) || narrativeType(types)))
                 refs.append(reference(nav, xml.attributes().value("href").toString(),
-                                      semantics(types)));
+                                      semantics(types) | narrativeType(types)));
         }
         if (xml.hasError()) {
             refs.clear();
@@ -300,12 +470,20 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
     for (const auto &ref : refs)
         references[ref.path][ref.id] |= ref.boundary;
     QPair<QString, QString> result;
+    NarrativeScan narrative;
     for (int i = 0; i < spine.size(); ++i) {
         stopPoint();
         const auto &path = spine[i];
         auto targets = references.value(path);
-        if (const int flags = targets.take(QString()))
-            record(result, flags, QString("/body/DocFragment[%1]").arg(i + 1));
+        const int flags = targets.take(QString());
+        const bool linear = epub3 && !nonLinear.value(i);
+        const auto before = narrative.offset;
+        if (flags) {
+            const auto position = fragment(i);
+            record(result, flags, position);
+            if (linear && (flags & (Start | After)))
+                narrative.boundaries.insert(position, before);
+        }
         const auto ids = anchors.value(path);
         if (epub3 || !targets.isEmpty()) {
             const auto bytes = resource(source, path);
@@ -315,19 +493,25 @@ QPair<QString, QString> detect(ReaderSource &source, const QStringList &spine)
                     || ((!ids.isEmpty() || bytes.contains("http://www.idpf.org/2007/ops"))
                         && mayHaveNamespacedType(bytes))
                     || (!ids.isEmpty() && bytes.contains("<!ENTITY"));
-            if (!targets.isEmpty() || mayHaveSemantics) {
+            if (!targets.isEmpty() || mayHaveSemantics || (flags & (Prologue | Epilogue))) {
                 FragmentAnchors found;
-                scanSpineItem(found, i, bytes, targets, ids, epub3, result);
+                scanSpineItem(found, i, bytes, targets, ids, epub3, result,
+                              linear ? &narrative : nullptr, flags,
+                              i + 1 < spine.size() ? fragment(i + 1) : QStringLiteral(""));
+                if (narrative.offset == before)
+                    ++narrative.offset;
                 found.publish(source);
                 continue;
             }
         }
+        ++narrative.offset;
         if (!ids.isEmpty()) {
             auto &pending = source.pendingTocFragments[path];
             pending.ids = ids;
             pending.items.append(i);
         }
     }
+    narrative.extend(result);
     return result;
 }
 } // namespace
@@ -401,7 +585,7 @@ QPair<QString, QString> EngineDocument::mainTextHints() const
     if (!source_ || source_->parent || source_->container.isNull())
         return {};
     if (!source_->mainTextChecked) {
-        source_->mainTextHints = detect(*source_, spineItems());
+        source_->mainTextHints = detect(*source_, spineItems(), nonLinearSpineItems());
         source_->mainTextChecked = true;
     }
     return source_->mainTextHints;

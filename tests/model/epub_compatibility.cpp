@@ -78,6 +78,101 @@ void checkChapterGlossary()
             "A glossary inside a chapter hid later text and the publication glossary");
 }
 
+// A typed narrative passage must touch the main text in reading order.
+void checkNarrativeBoundaries()
+{
+    const auto front = test::publisherHtml("<section epub:type='prologue'>Opening</section>");
+    const auto story = test::publisherHtml("<section epub:type='bodymatter'>Story</section>");
+    const auto back = test::publisherHtml(
+            "<section epub:type='backmatter'><div id='last'>Closing</div>"
+            "<section epub:type='epilogue'>Another ending</section>"
+            "<section epub:type='prologue'>Next book preview</section></section>");
+    const auto nav =
+            test::publisherHtml("<nav epub:type='landmarks'><ol><li><a epub:type='epilogue' "
+                                "href='back.xhtml#last'>Fin</a></li></ol></nav>");
+    const QByteArray spine =
+            "<itemref idref='front.xhtml'/><itemref idref='story.xhtml'/><itemref idref='back.xhtml'/>";
+    auto files = test::publisherPackage("en", "Narrative boundaries",
+                                        { { "front.xhtml", front },
+                                          { "story.xhtml", story },
+                                          { "back.xhtml", back },
+                                          { "nav.xhtml", nav } },
+                                        spine);
+    files["book.opf"].replace("id=\"nav.xhtml\"", "properties='nav' id=\"nav.xhtml\"");
+    const auto hints = [&]() {
+        EngineDocument model(test::readerFonts());
+        openPublication(model, files);
+        return model.mainTextHints();
+    };
+    const QString opening = "/body/DocFragment[1]/body[1]/section[1]";
+    const QString main = "/body/DocFragment[2]/body[1]/section[1]";
+    const QString ending = "/body/DocFragment[3]/body[1]/section[1]";
+    require(hints() == qMakePair(opening, ending + "/section[2]"),
+            "The main range missed a typed narrative section or included the preview");
+
+    files["back.xhtml"] = test::publisherHtml(
+            "<section epub:type='backmatter'><section><h2 id='last'>End</h2>"
+            "<p>Closing scene</p></section>Preview text</section>");
+    {
+        EngineDocument model(test::readerFonts());
+        openPublication(model, files);
+        const auto end = model.mainTextHints().second;
+        const auto text = ending + "/text()[1]";
+        require(end == text + ".0" && model.textRange(end, text + ".7").text == "Preview",
+                "The heading landmark lost its section or crossed into the following text");
+    }
+    files["back.xhtml"] = test::publisherHtml(
+            "<section epub:type='backmatter'><section epub:type='chapter'><h2 id='last'>End</h2>"
+            "<p>Closing scene</p><section epub:type='prologue'><h2>Preview</h2>"
+            "<section epub:type='chapter'>Other story</section></section></section></section>");
+    require(hints().second == ending + "/section[1]/section[1]",
+            "A heading landmark in a chapter included its nested preview");
+
+    files["back.xhtml"] = test::publisherHtml(
+            "<section epub:type='backmatter'><section epub:type='chapter epilogue'>Ending</section>"
+            "<section epub:type='prologue'>Preview</section></section>");
+    require(hints().second == ending + "/section[2]",
+            "A chapter-marked epilogue discarded the end and included the preview");
+    files["back.xhtml"] = test::publisherHtml(
+            "<section epub:type='glossary'/><section epub:type='epilogue'/>"
+            "<section epub:type='chapter'>Story continues</section>"
+            "<section epub:type='backmatter'>Notes</section>");
+    require(hints().second == "/body/DocFragment[3]/body[1]/section[4]",
+            "An empty epilogue cut off a later chapter");
+    files["back.xhtml"] = back;
+
+    files["front.xhtml"] = test::publisherHtml("<p>Opening</p>");
+    files["nav.xhtml"].replace("</ol>",
+                               "<li><a epub:type='prologue' href='front.xhtml'>"
+                               "Commencement</a></li></ol>");
+    require(hints().first == "/body/DocFragment[1]/body[1]",
+            "A whole-file landmark lost its prologue");
+    files["nav.xhtml"] = nav;
+    files["front.xhtml"] = front;
+    files["front.xhtml"].replace("</body>", "<p>Credits</p></body>");
+    files["back.xhtml"].replace("<div id='last'>", "<p>Credits</p><div id='last'>");
+    require(hints() == qMakePair(main, ending), "Narrative flags crossed intervening content");
+
+    files["front.xhtml"] = front;
+    files["back.xhtml"] = back;
+    files["book.opf"].replace("<itemref idref='front.xhtml'",
+                              "<itemref linear='no' idref='front.xhtml'");
+    files["book.opf"].replace("<itemref idref='back.xhtml'",
+                              "<itemref linear='no' idref='back.xhtml'");
+    require(hints() == qMakePair(main, ending), "A non-linear item extended the main range");
+
+    files = test::publisherPackage(
+            "en", "One file",
+            { { "front.xhtml",
+                test::publisherHtml("<section epub:type='prologue'>Opening</section>"
+                                    "<section epub:type='bodymatter'>Main</section>"
+                                    "<section epub:type='backmatter'><section epub:type='epilogue'>"
+                                    "Closing</section></section>") } },
+            "<itemref idref='front.xhtml'/>");
+    require(hints() == qMakePair(opening, QString()),
+            "Adjacent sections in a single file did not extend to the end of the book");
+}
+
 void checkUnloadedMainTextRange()
 {
     auto files = test::publisherPackage(
@@ -500,6 +595,7 @@ bool entitiesRefused(const QByteArray &doctype)
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    checkNarrativeBoundaries();
     require(!entitiesRefused(
                     "<!DOCTYPE html [<!ENTITY nbsp \"&#160;\"><!ENTITY mdash \"&#x2014;\">]>"),
             "Short character entities are refused");

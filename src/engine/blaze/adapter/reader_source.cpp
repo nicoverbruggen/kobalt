@@ -1177,13 +1177,8 @@ bool EngineDocument::showSpineItems(int first, int last, QString *error)
     return opened;
 }
 
-int EngineDocument::adjacentSpineItem(int direction) const
+const QVector<bool> &EngineDocument::nonLinearSpineItems() const
 {
-    int item = direction > 0 ? windowLast_ + 1 : windowFirst_ - 1;
-    if (item < 0 || item >= spineItemCount_)
-        return -1;
-    if (!hideNonlinearFragments_)
-        return item;
     // Even a chapter window has a DocFragment for each omitted spine item.
     // The manifest flag lets us skip entire hidden chapters without laying them out.
     auto &hidden = source_->nonLinearItems;
@@ -1197,6 +1192,17 @@ int EngineDocument::adjacentSpineItem(int direction) const
                 hidden.append(fragment->hasAttribute(flag));
         }
     }
+    return hidden;
+}
+
+int EngineDocument::adjacentSpineItem(int direction) const
+{
+    int item = direction > 0 ? windowLast_ + 1 : windowFirst_ - 1;
+    if (item < 0 || item >= spineItemCount_)
+        return -1;
+    if (!hideNonlinearFragments_)
+        return item;
+    const auto &hidden = nonLinearSpineItems();
     // Blaze lays out adjacent non-linear spine items as one non-linear flow.
     // A direct jump into that flow keeps its adjacent pages available.
     const int from = direction > 0 ? windowLast_ : windowFirst_;

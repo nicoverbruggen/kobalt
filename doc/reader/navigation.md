@@ -155,4 +155,5 @@ In Chapters, tap the three dots beside Close for publisher navigation.
 - The main text starts at page 1 and reaches 100% on its last page.
   - Pages before and after the main text each start a separate count. In Settings > System > Secondary page numbers, choose uppercase Roman (the default), lowercase Roman, Arabic numbers, lowercase letters, or section-prefixed numbers (F1 or B1).
   - Each option shows examples for both sections. The choice applies to all books. You can read, bookmark and resume any of these pages. EPUB 3 body and back matter and EPUB 2 guide references can supply the defaults.
+  - For EPUB 3, Kobalt includes an adjacent prologue before the main text and adjacent epilogues after it when the publication identifies them with a structural type or a landmark. It stops at intervening content or a non-linear spine item. A prologue in a preview after the story does not extend the end. Chapter titles alone do not move either flag.
   - When the publisher marks an XHTML body as a chapter, a glossary inside it does not by itself end the main text. Without a declared boundary the reader uses the corresponding end of the spine.

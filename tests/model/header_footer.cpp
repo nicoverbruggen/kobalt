@@ -167,6 +167,8 @@ int main()
     auto enlarged = standard;
     enlarged.headerSize = maximumSize;
     enlarged.footerSize = 37;
+    enlarged.stripPadding = maximumExtraHeight;
+    require(fromJson(toJson(enlarged), standard) == enlarged, "Strip heights did not round-trip");
     enlarged.headerEnabled = false;
     for (const auto chosen : presets) {
         const auto preferences = qt::object({ { presetKey, presetValue(chosen) },
@@ -176,6 +178,7 @@ int main()
         const auto expected = chosen == Preset::Custom ? edited : presetLayout(chosen);
         require(resolved.preset == chosen && resolved.layout.slotFields == expected.slotFields
                         && resolved.layout.progressBar == expected.progressBar
+                        && resolved.layout.stripPadding == maximumExtraHeight
                         && resolved.layout.headerSize == maximumSize
                         && resolved.layout.footerSize == 37 && !resolved.layout.headerEnabled
                         && resolved.layout.footerEnabled,

@@ -240,6 +240,7 @@ inline QMap<QString, QString> makeScreenshotTitles()
         { "footnotes-bottom-continuation", "Page note continuation" },
         { "header-footer-fields", "Choose a header or footer field" },
         { "header-footer", "Headers and footers" },
+        { "header-footer-padding", "Header and footer padding" },
         { "header-footer-large", "Headers and footers: enlarged text" },
         { "header-footer-off", "Headers and footers: disabled" },
         { "layout", "Page layout" },

@@ -9,6 +9,10 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
+namespace kobalt::ui {
+class InterfaceLabel;
+}
+
 namespace kobalt::reader {
 // The sheet's pages, in this order. Header and footer is a full-screen view;
 // the reader supplies its rows in AppearanceLayout.
@@ -55,7 +59,8 @@ private:
 class StripSizeControl final : public ui::ControlRow
 {
 public:
-    StripSizeControl(QWidget *parent, bool footer);
+    StripSizeControl(QWidget *parent, const QString &name, const QString &title,
+                     const QVector<int> &markers, ui::SettingSlider::MarkerMode mode);
     void setSize(int pixels, bool shown);
     ui::SettingSlider *slider;
 
@@ -79,10 +84,11 @@ public:
     // presets and controls, built only when the layout has its rows.
     ui::DropdownButton *headerFooterRow = nullptr;
     SlotMap *slotMap = nullptr;
+    ui::InterfaceLabel *slotHint = nullptr;
     QVector<PresetCard *> presetCards;
-    StripSizeControl *headerSizeControl = nullptr, *footerSizeControl = nullptr;
+    StripSizeControl *headerSizeControl = nullptr, *footerSizeControl = nullptr,
+                     *paddingControl = nullptr;
     QVector<QPushButton *> progressBarButtons;
     QPushButton *progressTicksButton = nullptr;
-    QLabel *slotHint = nullptr;
 };
 } // namespace kobalt::reader

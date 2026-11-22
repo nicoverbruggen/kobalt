@@ -13,8 +13,9 @@ QSize readingViewport(QSize screen, const QJsonObject &preferences)
     namespace reading = ui::metrics::reading;
     const auto chrome =
             headerfooter::select(preferences, isPhoneScreen(screen, ui::density())).layout;
-    screen.rheight() -= (chrome.header() ? reading::stripHeight(chrome.headerSize) : 0)
-            + (chrome.footer() ? reading::stripHeight(chrome.footerSize) : 0)
+    screen.rheight() -=
+            (chrome.header() ? reading::stripHeight(chrome.headerSize, chrome.stripPadding) : 0)
+            + (chrome.footer() ? reading::stripHeight(chrome.footerSize, chrome.stripPadding) : 0)
             + (chrome.progressBar ? reading::progressHeight : 0);
     return screen;
 }

@@ -1396,13 +1396,17 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
         });
     headerFooterRow = appearance.headerFooterRow;
     slotMap = appearance.slotMap;
+    slotHint = appearance.slotHint;
     presetCards = appearance.presetCards;
     headerSizeControl = appearance.headerSizeControl;
     footerSizeControl = appearance.footerSizeControl;
+    paddingControl = appearance.paddingControl;
     progressBarButtons = appearance.progressBarButtons;
     progressTicksButton = appearance.progressTicksButton;
     connect(headerFooterRow, &QPushButton::clicked, this, [this] { openHeaderFooterView(); });
     // Close returns to the Layout panel, which stayed open beneath the view.
+    connect(headerFooterView->fontButton, &QPushButton::clicked, this,
+            [this] { openSettingsFont("header_footer_font_face"); });
     headerFooterView->closed = [this] { closeChromeViews(); };
     for (auto *card : presetCards) {
         const auto preset = card->preset();
@@ -1426,7 +1430,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
                     if (chromePreset != kobalt::headerfooter::Preset::Custom) {
                         const auto start = page->chrome;
                         if (!session->temporaryTypography())
-                            saveChrome(kobalt::headerfooter::Preset::Custom, &start, nullptr,
+                            saveChrome(kobalt::headerfooter::Preset::Custom, &start,
                                        [this, slot] { openFieldChooser(slot); });
                     } else {
                         openFieldChooser(slot);
@@ -1450,6 +1454,11 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
                         },
                         [this] { syncChromeControls(); });
             };
+    paddingControl->slider->committed = [this](int padding) {
+        auto text = page->chrome;
+        text.stripPadding = padding;
+        applyStripText(text);
+    };
     for (auto *control : { headerSizeControl, footerSizeControl }) {
         const bool footer = control == footerSizeControl;
         control->slider->committed = [this, footer](int value) {
@@ -1458,10 +1467,7 @@ void Reader::buildAppearance(const kobalt::reader::AppearanceLayout &layout)
                     value != kobalt::headerfooter::offSize;
             if (value != kobalt::headerfooter::offSize)
                 (footer ? text.footerSize : text.headerSize) = value;
-            if (session->temporaryTypography())
-                syncChromeControls();
-            else
-                saveChrome(chromePreset, nullptr, &text);
+            applyStripText(text);
         };
     }
 
@@ -1663,6 +1669,7 @@ void Reader::buildSettings(QWidget *parent)
         for (auto *widget : sheet->findChildren<QWidget *>())
             textRefresh(widget);
         textRefresh(sheet);
+        raisePopups();
     };
     // A dialog that the panel makes later gets the reader's text, as the
     // widgets built with the window did.

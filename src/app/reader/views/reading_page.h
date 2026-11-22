@@ -47,6 +47,10 @@ public:
         int fontPixels = 40, lineSpacing = 150;
         QMargins margins;
         int columns = 1, columnSpacing = 0;
+
+        int lineHeight() const;
+        void paintText(QPainter &painter, const QRect &text, const QVector<int> &words,
+                       const QColor &ink) const;
     };
 
     ReflowLayout reflowLayout;

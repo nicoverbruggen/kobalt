@@ -713,8 +713,10 @@ private:
     kobalt::headerfooter::Preset chromePreset = kobalt::headerfooter::Preset::Default;
     kobalt::ui::DropdownButton *headerFooterRow = nullptr;
     kobalt::reader::SlotMap *slotMap = nullptr;
+    QLabel *slotHint = nullptr;
     QVector<kobalt::reader::PresetCard *> presetCards;
-    kobalt::reader::StripSizeControl *headerSizeControl = nullptr, *footerSizeControl = nullptr;
+    kobalt::reader::StripSizeControl *headerSizeControl = nullptr, *footerSizeControl = nullptr,
+                                     *paddingControl = nullptr;
     QVector<QPushButton *> progressBarButtons;
     QPushButton *progressTicksButton = nullptr;
     // Header and footer and the field list fill the reading area like
@@ -741,8 +743,8 @@ private:
     // Saves the preset, and the Custom layout when given, then shows them.
     void saveChrome(kobalt::headerfooter::Preset preset,
                     const kobalt::headerfooter::Layout *custom = nullptr,
-                    const kobalt::headerfooter::Layout *text = nullptr,
                     std::function<void()> saved = {});
+    void applyStripText(const kobalt::headerfooter::Layout &layout);
     void syncChromeControls();
     void openFieldChooser(int slot);
     void closeFieldChooser();
@@ -906,6 +908,7 @@ private:
     kobalt::SafeArea safeArea() const;
     // The book's text area: the window without the safe area, header and footer.
     QSize bodySize() const;
+    ReadingPage::ReflowLayout reflowLayout() const;
     void applyTheme(bool dark);
     void registerPickerFonts(const QString &family = {});
     QString bookFace();

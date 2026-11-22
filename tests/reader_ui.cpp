@@ -5058,13 +5058,10 @@ private slots:
                 contents[slot] = content;
                 preview.setSlots(page.chrome, contents);
                 auto *cell = preview.cell(slot);
-                namespace headerFooterMetrics = ui::metrics::headerFooter;
-                const int left = slot % 3 == 0 ? int(headerFooterMetrics::mapSideInset)
-                                               : headerFooterMetrics::slotGap / 2;
-                const int right = slot % 3 == 2 ? int(headerFooterMetrics::mapSideInset)
-                                                : headerFooterMetrics::slotGap / 2;
-                const int previewRoom = cell->width() - left - right
-                        - 2 * (ui::metrics::list::lineInset - headerFooterMetrics::slotGap / 2);
+                const int inset = ui::metrics::list::lineInset;
+                const int previewRoom = cell->width()
+                        - (slot % 3 == 0 ? int(ui::metrics::reading::headerSide) : inset)
+                        - (slot % 3 == 2 ? int(ui::metrics::reading::headerSide) : inset);
                 const auto previewImage = cell->grab().toImage();
                 contents[slot] = {};
                 contents[slot].text = ui::headerFooterText(content, font, previewRoom);
@@ -5178,8 +5175,8 @@ private slots:
             for (const int size : { 24, 26, 28, 48 }) {
                 page.chrome.headerSize = page.chrome.footerSize = size;
                 const int step = (size - 24) / 2;
-                QCOMPARE(page.topHeight(), ui::px(48 + step * 4));
-                QCOMPARE(page.bottomHeight(), ui::px(48 + step * 4));
+                QCOMPARE(page.topHeight(), ui::px(size == 26 ? 48 : 48 + step * 4));
+                QCOMPARE(page.bottomHeight(), ui::px(size == 26 ? 48 : 48 + step * 4));
                 QCOMPARE(page.headerTextPixels(), ui::px(24 + step * 2));
                 QCOMPARE(page.footerTextPixels(), ui::px(24 + step * 2));
                 int iconHeight = 0;

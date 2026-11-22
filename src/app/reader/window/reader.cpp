@@ -1704,6 +1704,23 @@ void Reader::paintEvent(QPaintEvent *event)
                      palette().color(QPalette::WindowText));
 }
 
+ReadingPage::ReflowLayout Reader::reflowLayout() const
+{
+    const auto *settings = appearanceSession();
+    const int columns = preferences.value("two_columns_landscape").toBool(false)
+                    && bodySize().width() > bodySize().height()
+            ? 2
+            : 1;
+    const int gap =
+            qRound(settings->fontSize()
+                   * preferences.value("column_spacing_percent").toInt(defaultColumnSpacingPercent)
+                   / 100.0);
+    return { settings->fontSize(), settings->spacing(),
+             QMargins(settings->margin(), settings->topMargin(), settings->margin(),
+                      settings->bottomMargin()),
+             columns, gap };
+}
+
 void Reader::resizeEvent(QResizeEvent *)
 {
     // This resize shows the reflow placeholder below. Ask for the page's text
@@ -1794,21 +1811,7 @@ void Reader::resizeEvent(QResizeEvent *)
         closeSaveError->setGeometry(rect());
     if (isVisible() && !page->image.isNull() && bodySize() != page->image.size()) {
         resizePending = true;
-        const auto *settings = appearanceEdit.edited() && appearanceEdit.ready()
-                ? appearanceEdit.preview()
-                : session;
-        const int columns = preferences.value("two_columns_landscape").toBool(false)
-                        && bodySize().width() > bodySize().height()
-                ? 2
-                : 1;
-        const int gap = qRound(
-                settings->fontSize()
-                * preferences.value("column_spacing_percent").toInt(defaultColumnSpacingPercent)
-                / 100.0);
-        page->reflowLayout = { settings->fontSize(), settings->spacing(),
-                               QMargins(settings->margin(), settings->topMargin(),
-                                        settings->margin(), settings->bottomMargin()),
-                               columns, gap };
+        page->reflowLayout = reflowLayout();
         page->setViewportTransition(true);
         resizeTimer.start();
         page->refreshContent();
@@ -2732,20 +2735,10 @@ void Reader::syncNavigation()
         choices->raise();
     }
     if (chromeSheet) {
-        const int bottom = navigation->contentBottom(size());
-        // At most up to the toolbar, with the sheet's rule on the toolbar's. A
-        // short screen has no room for the slot map there, so the sheet covers
-        // the action row with its own bar, as Chapters does.
-        const int top = isShortHeight(height(), ui::density())
-                ? navigation->statusHeight()
-                : navigation->toolbarHeight() - int(metrics::chrome::heavyRule);
-        const int room = qMax(1, bottom - top);
-        int sheetHeight = qMin(headerFooterView->preferredHeight(width()), room);
-        if (room - sheetHeight < metrics::headerFooter::toolbarSnap) {
-            sheetHeight = room;
-        }
-        headerFooterView->setGeometry(0, bottom - sheetHeight, width(), sheetHeight);
-        headerFooterView->raise();
+        headerFooterView->setGeometry(
+                rect().adjusted(0, navigation->statusHeight(), 0, -safeArea().bottom));
+        if (!settingsSheet || !settingsSheet->isVisible())
+            headerFooterView->raise();
     }
     if (searchPanel->isVisible()) {
         const auto safe = safeArea();

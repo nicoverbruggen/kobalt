@@ -274,14 +274,33 @@ void Reader::loadChrome()
     header->setVisible(page->topHeight() > 0);
 }
 
+void Reader::applyStripText(const kobalt::headerfooter::Layout &layout)
+{
+    using namespace kobalt::headerfooter;
+    if (session->temporaryTypography()) {
+        syncChromeControls();
+        return;
+    }
+    const auto before = qt::object({ { textKey, preferences.value(textKey) },
+                                     { presetKey, preferences.value(presetKey) } });
+    auto text = preferences.value(textKey).toObject();
+    const auto sizes = textSettings(layout);
+    for (auto it = sizes.begin(); it != sizes.end(); ++it)
+        text[it.key()] = it.value();
+    const auto next = qt::object({ { textKey, text }, { presetKey, presetValue(chromePreset) } });
+    if (before == next)
+        return;
+    persistAppliedSetting(before, next);
+    loadChrome();
+    refresh();
+}
+
 void Reader::saveChrome(kobalt::headerfooter::Preset preset,
-                        const kobalt::headerfooter::Layout *custom,
-                        const kobalt::headerfooter::Layout *text, std::function<void()> saved)
+                        const kobalt::headerfooter::Layout *custom, std::function<void()> saved)
 {
     auto next = preferences;
-    if (text || !next.value(kobalt::headerfooter::textKey).isObject())
-        next[kobalt::headerfooter::textKey] =
-                kobalt::headerfooter::textSettings(text ? *text : page->chrome);
+    if (!next.value(kobalt::headerfooter::textKey).isObject())
+        next[kobalt::headerfooter::textKey] = kobalt::headerfooter::textSettings(page->chrome);
     next[kobalt::headerfooter::presetKey] = kobalt::headerfooter::presetValue(preset);
     if (custom)
         next[kobalt::headerfooter::customKey] = kobalt::headerfooter::toJson(*custom);
@@ -326,6 +345,14 @@ void Reader::syncChromeControls()
         kobalt::reader::SlotContents contents;
         for (int slot = 0; slot < slotCount; ++slot)
             contents[slot] = content(current.slotFields[slot], values, current.uppercase[slot]);
+        const char *hint = "header_footer.custom_hint";
+        if (!current.headerEnabled && !current.footerEnabled)
+            hint = "header_footer.both_off_hint";
+        else if (!current.headerEnabled)
+            hint = "header_footer.header_off_hint";
+        else if (!current.footerEnabled)
+            hint = "header_footer.footer_off_hint";
+        slotHint->setText(strings::get(hint));
         slotMap->setSlots(current, contents);
         slotMap->setProgress(page->progressFraction, session->chapterTicks());
         if (view == fieldChooser) {
@@ -349,6 +376,7 @@ void Reader::syncChromeControls()
     }
     headerSizeControl->setSize(current.headerSize, current.headerEnabled);
     footerSizeControl->setSize(current.footerSize, current.footerEnabled);
+    paddingControl->setSize(current.stripPadding, true);
     for (auto *button : progressBarButtons)
         button->setChecked(button->property("bar_edge").toInt()
                            == int(kobalt::headerfooter::progressEdge(current)));
@@ -1689,6 +1717,7 @@ void Reader::applyInterfaceFonts()
             registerPickerFonts(face);
     // Read the chosen faces now, so a later screen cannot find them unreadable.
     ui::keepPrivateInterfaceFamilies({ themeDraft.mainFace, settingsMonoFace, settingsStripFace });
+    const int previousStripWeight = ui::headerFooterAddedWeight();
     const auto previousUi = ui::interfaceFont().family(),
                previousStrip = ui::headerFooterFont().family(),
                previousMono = ui::chromeFont().family();
@@ -1701,8 +1730,14 @@ void Reader::applyInterfaceFonts()
         applyTheme(darkTheme);
     applyThemeFonts();
     if (previousUi == ui::interfaceFont().family()
-        && previousStrip == ui::headerFooterFont().family()
         && previousMono == ui::chromeFont().family()) {
+        if (previousStrip != ui::headerFooterFont().family()
+            || previousStripWeight != ui::headerFooterAddedWeight()) {
+            readerStyle(page, page->property("reader_style").toString());
+            page->setFont(ui::headerFooterFont());
+            page->refreshStrips();
+            syncChromeControls();
+        }
         // Without a new font nothing repolishes below, so a new palette would
         // keep the text colors it put over the sheets' colors.
         if (property("kobalt_palette").toString() != previousPalette)
@@ -1843,9 +1878,12 @@ void Reader::openSettingsFont(const QString &key)
     for (int family = 0; family < int(appearance::fallbackFontKeys.size()); ++family)
         if (key == appearance::fallbackFontKeys[family])
             index = family;
+    const bool fromStripPanel = isHeaderFooter && !settingsVisible() && headerFooterView
+            && headerFooterView->isVisible();
     if ((!isDefault && !isUi && !isMono && !isHeaderFooter && !isDictionary && index < 0)
-        || !settingsVisible())
+        || (!settingsVisible() && !fromStripPanel))
         return;
+    ensureSettings();
     auto *panel = static_cast<SettingsPanel *>(general);
     const QStringList titles{ strings::get("settings.serif_font"),
                               strings::get("settings.sans_font"),
@@ -1890,8 +1928,8 @@ void Reader::openSettingsFont(const QString &key)
                                               ? bookFace()
                                               : fallbackFontDefaults(session->fontFaces())[index])),
             interfaceChoice,
-            [this, key, selected, isDefault, isUi, isMono, isHeaderFooter,
-             isDictionary](const QString &family) {
+            [this, key, selected, isDefault, isUi, isMono, isHeaderFooter, isDictionary,
+             fromStripPanel](const QString &family) {
                 if (isDefault)
                     settingsDefaultFontFace = family;
                 else if (isUi)
@@ -1908,6 +1946,10 @@ void Reader::openSettingsFont(const QString &key)
                     markThemeCustom();
                 else if ((isMono || isHeaderFooter) && family != selected)
                     applyInterfaceFonts();
+                if (fromStripPanel && family != selected) {
+                    persistAppliedSetting(qt::object({ { key, preferences.value(key) } }),
+                                          qt::object({ { key, family } }));
+                }
                 showSettingsFonts();
                 refresh();
             });

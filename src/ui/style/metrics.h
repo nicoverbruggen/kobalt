@@ -295,15 +295,17 @@ inline int textPixels(int size, bool footer)
     return px(size + (footer ? defaultFooterText.design() - defaultHeaderText.design() : 0));
 }
 
-inline int stripHeight(int size)
+inline int stripDesignHeight(int size)
 {
-    return px(48 + 2 * (size - defaultHeaderText.design()));
+    // Small through Medium share the same reading area.
+    if (size <= 26)
+        return 48;
+    return 48 + 2 * (size - defaultHeaderText.design());
 }
 
-// Preserve the old edge alignment through Large; give larger text a taller band.
-inline int textBandHeight(int size)
+inline int stripHeight(int size, int extra = 0)
 {
-    return px(48 + qMax(0, size - 28) * 2);
+    return px(stripDesignHeight(size) + extra);
 }
 
 inline constexpr Px progressHeight{ 24 };
@@ -311,19 +313,15 @@ inline constexpr Px headerSide{ 28 }, headerTextGap{ 24 }, batteryGap{ 8 };
 // The bar's rule, progressRuleHeight tall, ends progressBottom from its edge
 // of the screen, and the fill, progressFillHeight tall, lies against it on
 // the side of the text. The rule is 3 pixels at 300 PPI and 2 on the Nia.
-// The strip's text keeps progressTextInset from that edge, whatever the bar's
-// own place.
-inline constexpr Px progressBottom{ 8 }, progressRuleHeight{ 3 }, progressFillHeight{ 4 },
-        progressTextInset{ 18 };
+inline constexpr Px progressBottom{ 8 }, progressRuleHeight{ 3 }, progressFillHeight{ 4 };
 } // namespace reading
 
 namespace headerFooter {
 // The slot map is a short page: one-line slot rows, their text at the top
 // and bottom edges as on the page, and a few lines between them.
-inline constexpr Px mapRowHeight{ list::oneLine }, mapLineHeight{ 4 };
-inline constexpr Px mapLineGap{ 12 }, mapLineInset{ list::inset }, mapEdgeInset{ 10 };
+inline constexpr Px mapRowHeight{ list::oneLine }, minimumBodyHeight{ 20 };
 // Each slot is a dashed box around its text, so it reads as something to tap.
-inline constexpr Px slotGap{ 8 }, slotPadding{ 8 }, slotDash{ 4 }, mapSideInset{ 7 };
+inline constexpr Px slotDash{ 4 };
 inline constexpr TextPx valueText{ control::captionValueText }, emptyText{ chrome::captionText };
 // Preset miniatures: a page, then its name in a block as tall as a segment,
 // which grows with large text.

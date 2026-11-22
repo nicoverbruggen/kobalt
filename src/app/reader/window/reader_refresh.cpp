@@ -370,6 +370,8 @@ ReaderSession *Reader::appearanceSession() const
 
 void Reader::syncAppearancePreview()
 {
+    if (slotMap && slotMap->isVisible())
+        slotMap->setBodyLayout(reflowLayout());
     using Axis = kobalt::reader::AppearancePreview::Axis;
     const bool layoutOpen = menu->isVisible()
             && panels->currentIndex() == int(kobalt::reader::AppearancePage::Layout);

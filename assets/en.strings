@@ -497,6 +497,9 @@
 "header_footer.customize_title" = "Customize Header and Footer";
 /* Arguments: %1 */
 "header_footer.customize_slot" = "Customize slot: %1";
+"header_footer.header_off_hint" = "Tap a footer slot to edit it. Turn on Header to edit its slots.";
+"header_footer.footer_off_hint" = "Tap a header slot to edit it. Turn on Footer to edit its slots.";
+"header_footer.both_off_hint" = "Turn on Header or Footer below, then tap a slot to edit it.";
 "header_footer.custom_hint" = "Tap a slot to change it. Changes apply to every book that uses Custom.";
 /* Arguments: %1, %2 */
 "header_footer.slot_value" = "%1: %2";
@@ -726,6 +729,7 @@
 "reader.front_matter" = "Front matter";
 "reader.go_to_synced_position" = "Go to synced position";
 "reader.header" = "Header";
+"reader.strip_padding" = "Padding";
 "reader.columns" = "Columns";
 "reader.column_spacing" = "Column spacing";
 "reader.hyphenation" = "Hyphenation";
@@ -786,6 +790,7 @@
 "reader.text_size" = "Text size: ";
 /* Arguments: %1 */
 "reader.text_size_value" = "%1 pt";
+"reader.strip_size_value" = "%1 px";
 "reader.the_orientation_sensor_is_unavailable" = "The orientation sensor is unavailable";
 "reader.the_simulation_failed_no_successful_update_was_reported" = "The simulation failed. No successful update was reported.";
 "reader.typography" = "Typography";

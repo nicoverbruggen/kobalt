@@ -3826,6 +3826,21 @@ void checkPercentageFormat(int preset, bool dark, bool screenshots)
     QVERIFY(!page->slotContents[5].text.contains('.'));
 }
 
+int previewBodyLineCount(QWidget *previewMap)
+{
+    const auto image = previewMap->grab().toImage();
+    const int x = image.width() / 3;
+    int lines = 0;
+    bool inLine = false;
+    for (int y = image.height() / 4; y < 3 * image.height() / 4; ++y) {
+        const bool painted = image.pixelColor(x, y) == ui::sectionColor(previewMap);
+        if (painted && !inLine)
+            ++lines;
+        inLine = painted;
+    }
+    return lines;
+}
+
 void checkHeaderFooterSizes(int preset, bool dark)
 {
     using namespace headerfooter;
@@ -3847,6 +3862,14 @@ void checkHeaderFooterSizes(int preset, bool dark)
     QVERIFY(fixture.press("rrNavLayout"));
     QVERIFY(fixture.press("rrHeaderFooter"));
     QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+    auto *previewMap = fixture.widget("rrHeaderFooterCustomMap");
+    const int originalLines = previewBodyLineCount(previewMap);
+    QVERIFY(originalLines >= 2);
+    QVERIFY(fixture.press("rrHeaderFooterClose"));
+    QTRY_VERIFY(!fixture.visible("rrHeaderFooterView"));
+    QVERIFY(fixture.press("rrHeaderFooter"));
+    QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+    QCOMPARE(previewBodyLineCount(previewMap), originalLines);
     auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
     auto *header = static_cast<ui::SettingSlider *>(fixture.widget("rrHeaderTextSize"));
     auto *footer = static_cast<ui::SettingSlider *>(fixture.widget("rrFooterTextSize"));
@@ -3865,9 +3888,89 @@ void checkHeaderFooterSizes(int preset, bool dark)
         return capture(fixture, screenshotVariant(preset, dark) + '-' + suffix);
     };
     auto *view = fixture.widget("rrHeaderFooterView");
+    const int initialHeight = view->height();
+    if (preset == 1) {
+        auto *clock = fixture.widget("rrMenuClock");
+        QVERIFY(clock && clock->isVisible());
+        QVERIFY(clock->mapTo(view->parentWidget(), clock->rect().bottomLeft()).y() < view->y());
+        QCOMPARE(view->y(), int(ui::metrics::chrome::statusHeight));
+    }
+    auto *padding = static_cast<ui::SettingSlider *>(fixture.widget("rrStripPadding"));
+    QVERIFY(padding);
+    QCOMPARE(padding->value(), 0);
+    auto *paddingValue = qobject_cast<QLabel *>(fixture.widget("rrStripPaddingValue"));
+    QVERIFY(paddingValue);
+    QCOMPARE(paddingValue->text(), QStringLiteral("0 px"));
+    if (preset == 1 && !largeTextVariant()) {
+        QVERIFY(!fixture.visible("rrHeaderFooterNext"));
+        const auto buttonGap = [view](QWidget *above, QWidget *below) {
+            return below->mapTo(view, QPoint()).y() - above->mapTo(view, QPoint()).y()
+                    - above->height();
+        };
+        auto *headerButton = fixture.widget("rrHeaderTextSizeMore");
+        auto *footerButton = fixture.widget("rrFooterTextSizeMore");
+        auto *paddingButton = fixture.widget("rrStripPaddingMore");
+        QVERIFY(headerButton && footerButton && paddingButton);
+        QCOMPARE(buttonGap(footerButton, paddingButton), buttonGap(headerButton, footerButton));
+        auto *clip = fixture.widget("rrHeaderFooterClip");
+        for (QWidget *item :
+             QList<QWidget *>{ fixture.widget("rrHeaderFooterCustomMap"), header, footer, padding })
+            QVERIFY(clip->rect().contains(QRect(item->mapTo(clip, QPoint()), item->size())));
+    }
+    QVERIFY(fixture.reveal(padding));
+    QVERIFY(fixture.press("rrStripPaddingMore"));
+    QTRY_COMPARE(page->chrome.stripPadding, 1);
+    QCOMPARE(page->chrome.headerSize, mediumSize);
+    QCOMPARE(page->chrome.footerSize, mediumSize);
+    QTRY_VERIFY(view->isEnabled());
+    QVERIFY(fixture.press("rrStripPaddingLess"));
+    QTRY_COMPARE(page->chrome.stripPadding, 0);
+    QTRY_VERIFY(view->isEnabled());
     auto *map = fixture.widget("rrHeaderFooterCustomMap");
     QVERIFY(map);
+    const int paddingInset = ui::metrics::control::sliderInset;
+    for (int stop : { 1, 2, 3, 4, 0 }) {
+        const int x = paddingInset + qRound((padding->width() - 2 * paddingInset) * stop / 4.0);
+        QVERIFY(fixture.click(padding, QPoint(x, padding->height() / 2)));
+        QTRY_COMPARE(page->chrome.stripPadding, stop * 12);
+        QCOMPARE(paddingValue->text(), QStringLiteral("%1 px").arg(stop * 12));
+        QTRY_VERIFY(view->isEnabled());
+        if (preset == 1 && !largeTextVariant()) {
+            const auto image = map->grab().toImage();
+            const auto paper = map->palette().color(QPalette::Window);
+            const auto band = ui::themeColors(map).overviewPaper;
+            const int top = page->topHeight(), bottom = map->height() - page->bottomHeight();
+            // Sample just inside and outside each boundary, clear of the dots and slot labels.
+            QCOMPARE(image.pixelColor(1, top - 4), band);
+            QCOMPARE(image.pixelColor(1, top + 4), paper);
+            QCOMPARE(image.pixelColor(1, bottom - 4), paper);
+            QCOMPARE(image.pixelColor(1, bottom + 4), band);
+            // The clock and footer label must land at the same coordinates as on the page.
+            const auto actual = page->snapshot();
+            const auto ink = map->palette().color(QPalette::WindowText);
+            const auto labelBounds = [&](const QImage &pixels, const QRect &strip) {
+                QRect bounds;
+                for (int y = 2; y < strip.height() - 2; ++y)
+                    for (int x = 2; x < strip.width() / 3 - 2; ++x)
+                        if (pixels.pixelColor(x, strip.y() + y) == ink)
+                            bounds |= QRect(x, y, 1, 1);
+                return bounds;
+            };
+            for (bool footerSlot : { false, true }) {
+                auto strip = footerSlot ? page->footerTextRect() : page->headerTextRect();
+                const auto expected = labelBounds(actual, strip);
+                QVERIFY(!expected.isEmpty());
+                if (footerSlot)
+                    strip.translate(0, map->height() - page->height());
+                QCOMPARE(labelBounds(image, strip), expected);
+            }
+        }
+        if (stop == 2)
+            QVERIFY(captureState("header-footer-padding"));
+    }
     QVERIFY(fixture.reveal(map));
+    QCOMPARE(map->mapTo(view, QPoint()).x(), 0);
+    QCOMPARE(map->width(), view->width());
     QVERIFY(map->height() >= map->sizeHint().height());
     QVector<QRect> slotBounds;
     for (int slot = 0; slot < headerfooter::slotCount; ++slot) {
@@ -3888,13 +3991,12 @@ void checkHeaderFooterSizes(int preset, bool dark)
     QVERIFY(progress->mapTo(view, progress->rect().bottomLeft()).y()
             < divider->mapTo(view, QPoint()).y());
     QVERIFY(divider->mapTo(view, QPoint()).y() < header->mapTo(view, QPoint()).y());
-    const int initialHeight = view->height();
     for (const auto name : { QString("rrHeaderTextSize"), QString("rrFooterTextSize") }) {
         auto *slider = static_cast<ui::SettingSlider *>(fixture.widget(qPrintable(name)));
         QCOMPARE(slider->value(), mediumSize);
         auto *value = qobject_cast<QLabel *>(fixture.widget(qPrintable(name + "Value")));
         QVERIFY(value);
-        QCOMPARE(value->text(), strings::get("reader.text_size_value").arg("6.2"));
+        QCOMPARE(value->text(), QStringLiteral("26 px"));
         QTRY_VERIFY(view->isEnabled());
         QVERIFY(fixture.press(qPrintable(name + "More")));
         QTRY_COMPARE(slider->value(), mediumSize + 1);
@@ -3922,6 +4024,19 @@ void checkHeaderFooterSizes(int preset, bool dark)
     }
     QCOMPARE(page->chrome.headerSize, maximumSize);
     QCOMPARE(page->chrome.footerSize, maximumSize);
+    QVERIFY(fixture.reveal(padding));
+    QVERIFY(fixture.click(padding, QPoint(padding->width() - paddingInset, padding->height() / 2)));
+    QTRY_COMPARE(page->chrome.stripPadding, maximumExtraHeight);
+    QVERIFY(fixture.press("rrHeaderFooterClose"));
+    QVERIFY(fixture.press("rrHeaderFooter"));
+    QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+    QVERIFY(fixture.reveal(previewMap));
+    QVERIFY(previewBodyLineCount(previewMap) >= 1);
+    QVERIFY(fixture.widget("rrHeaderFooterSlot0")->height() >= page->topHeight());
+    QVERIFY(fixture.widget("rrHeaderFooterSlot5")->height() >= page->bottomHeight());
+    QVERIFY(fixture.reveal(padding));
+    QVERIFY(fixture.click(padding, QPoint(paddingInset, padding->height() / 2)));
+    QTRY_COMPARE(page->chrome.stripPadding, 0);
     QCOMPARE(page->headerTextPixels(), page->footerTextPixels());
     QCOMPARE(view->height(), initialHeight);
     QVERIFY(page->headerTextRect().height() >= page->headerTextPixels());
@@ -3939,13 +4054,25 @@ void checkHeaderFooterSizes(int preset, bool dark)
                 slider, QPoint(maximum ? slider->width() - inset : inset, slider->height() / 2));
     };
     QTRY_VERIFY(view->isEnabled());
+    const auto checkSlots = [&](bool headerOn, bool footerOn, const char *hint) {
+        for (int slot = 0; slot < headerfooter::slotCount; ++slot) {
+            auto *cell = fixture.widget(qPrintable(QString("rrHeaderFooterSlot%1").arg(slot)));
+            const bool visible = slot < 3 ? headerOn : footerOn;
+            QCOMPARE(!cell->isHidden(), visible);
+            QCOMPARE(map->childAt(cell->geometry().center()) == cell, visible);
+        }
+        QCOMPARE(static_cast<QLabel *>(fixture.widget("rrHeaderFooterHint"))->text(),
+                 strings::get(hint));
+    };
     QVERIFY(selectSize(header, false));
     QTRY_VERIFY(!page->chrome.headerEnabled);
+    checkSlots(false, true, "header_footer.header_off_hint");
     QTRY_VERIFY(view->isEnabled());
     QVERIFY(selectSize(footer, false));
     QTRY_VERIFY(!page->chrome.footerEnabled);
     QCOMPARE(page->topHeight(), 0);
     QCOMPARE(page->bottomHeight(), 0);
+    checkSlots(false, false, "header_footer.both_off_hint");
     QVERIFY(captureState("header-footer-off"));
     const auto savedPreferences = storage::readJson(fixture.paths.preferences());
     const auto saved = savedPreferences.value(textKey).toObject();
@@ -3960,6 +4087,27 @@ void checkHeaderFooterSizes(int preset, bool dark)
     QTRY_VERIFY(view->isEnabled());
     QVERIFY(fixture.press("rrHeaderFooterProgressBar_off"));
     QTRY_COMPARE(fixture.state().value("header_footer_preset").toString(), QString("custom"));
+    if (preset == 1 && !dark && !largeTextVariant()) {
+        QVERIFY(selectSize(header, true));
+        checkSlots(true, false, "header_footer.footer_off_hint");
+        QVERIFY(selectSize(footer, true));
+        checkSlots(true, true, "header_footer.custom_hint");
+        for (int slot = 0; slot < headerfooter::slotCount; ++slot) {
+            auto *cell = fixture.widget(qPrintable(QString("rrHeaderFooterSlot%1").arg(slot)));
+            const QPoint edge(cell->width() / 2, slot < 3 ? cell->height() - 3 : 2);
+            QCOMPARE(map->childAt(cell->mapTo(map, edge)), cell);
+            QTRY_VERIFY(view->isEnabled());
+            QVERIFY(fixture.click(cell, edge));
+            QTRY_VERIFY(fixture.visible("rrHeaderFooterChooser"));
+            auto *chooser =
+                    static_cast<reader::FieldChooser *>(fixture.widget("rrHeaderFooterChooser"));
+            QCOMPARE(chooser->slot(), slot);
+            QVERIFY(fixture.press("rrHeaderFooterFieldsClose"));
+            QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+        }
+        QVERIFY(selectSize(header, false));
+        QVERIFY(selectSize(footer, false));
+    }
     const auto savedCustom = storage::readJson(fixture.paths.preferences()).value(customKey);
     QCoreApplication::processEvents();
     QTRY_VERIFY(view->isEnabled());
@@ -12103,6 +12251,50 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrNavLayout"));
         QVERIFY(fixture.press("rrHeaderFooter"));
         QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+        QVERIFY(fixture.press("rrStripFontPicker"));
+        QTRY_VERIFY(fixture.visible("rrSettingsFontPopup"));
+        QVERIFY(!fixture.visible("rrGeneralSettings"));
+        auto *list = static_cast<ui::RadioList *>(fixture.widget("rrSettingsFontChoices"));
+        ui::DescribedOption *option = nullptr;
+        for (auto *row : list->options()) {
+            if (row->isVisible() && row->isEnabled()
+                && !row->property("reader_font_family").toString().isEmpty()
+                && row->property("reader_font_family").toString()
+                        != ui::headerFooterFont().family()) {
+                option = row;
+                break;
+            }
+        }
+        QVERIFY(option);
+        const auto family = option->property("reader_font_family").toString();
+        QVERIFY(fixture.click(option));
+        QTRY_VERIFY(!fixture.visible("rrSettingsFontPopup")
+                    && fixture.visible("rrHeaderFooterView"));
+        QTRY_COMPARE(ui::headerFooterFont().family(), family);
+        QTRY_COMPARE(storage::readJson(fixture.paths.preferences())
+                             .value("header_footer_font_face")
+                             .toString(),
+                     family);
+        QVERIFY(fixture.press("rrHeaderFooterClose"));
+        QTRY_VERIFY(!fixture.visible("rrHeaderFooterView"));
+        QVERIFY(fixture.press("rrHeaderFooter"));
+        QTRY_VERIFY(fixture.visible("rrHeaderFooterView"));
+        QVERIFY(previewBodyLineCount(fixture.widget("rrHeaderFooterCustomMap")) >= 2);
+        QVERIFY(fixture.press("rrStripFontPicker"));
+        QTRY_VERIFY(fixture.visible("rrSettingsFontPopup"));
+        auto *selected = static_cast<ui::RadioList *>(fixture.widget("rrSettingsFontChoices"));
+        QVERIFY(std::any_of(selected->options().cbegin(), selected->options().cend(),
+                            [&](auto *row) {
+                                return row->isChecked()
+                                        && row->property("reader_font_family").toString() == family;
+                            }));
+        QVERIFY(fixture.press("rrSettingsFontChoice0"));
+        QTRY_COMPARE(ui::headerFooterFont().family(), ui::defaultHeaderFooterFontFamily());
+        QTRY_COMPARE(storage::readJson(fixture.paths.preferences())
+                             .value("header_footer_font_face")
+                             .toString(),
+                     QString());
+        QVERIFY(fixture.visible("rrHeaderFooterView"));
         const auto position = fixture.state().value("position");
 
         auto *screenshot = fixture.window.findChild<QPushButton *>("desktopScreenshot");
@@ -12127,26 +12319,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTest::mouseClick(&fixture.window, Qt::LeftButton, Qt::NoModifier, QPoint(1, 1));
         QVERIFY(fixture.visible("rrHeaderFooterView"));
 
-        auto *page = fixture.widget("rrPage");
-        auto *reader = fixture.window.readerWindow();
-        QPoint exposed(-1, -1);
-        for (int y = 0; y < page->height(); y += 10) {
-            const QPoint point(page->width() / 2, y);
-            if (reader->childAt(page->mapTo(reader, point)) == page) {
-                exposed = point;
-                break;
-            }
-        }
-        QVERIFY(exposed.x() >= 0);
-        QVERIFY(fixture.click(page, exposed));
-        QVERIFY(fixture.visible("rrHeaderFooterView"));
-        auto *device = QTest::createTouchDevice();
-        auto touch = QTest::touchEvent(page, device, false);
-        touch.press(0, exposed).commit();
-        touch.release(0, exposed).commit();
-        QVERIFY(fixture.visible("rrHeaderFooterView"));
-        QVERIFY(fixture.press("rrNavText"));
-        QVERIFY(fixture.visible("rrHeaderFooterView"));
+        auto *view = fixture.widget("rrHeaderFooterView");
+        QCOMPARE(view->geometry(), fixture.window.readerWindow()->rect());
         QCOMPARE(fixture.state().value("position"), position);
         QVERIFY(fixture.press("rrHeaderFooterPreset_alternative_a"));
         QTRY_COMPARE(fixture.state().value("header_footer_preset").toString(),

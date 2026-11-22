@@ -88,6 +88,7 @@ inline constexpr Preset presets[] = { Preset::Default, Preset::AlternativeA, Pre
 
 // Both strips use the same sizes in 300 PPI pixels.
 inline constexpr int smallSize = 24, mediumSize = 26, largeSize = 28, maximumSize = 48;
+inline constexpr int maximumExtraHeight = 48;
 inline constexpr int offSize = smallSize - 1;
 int legacySize(const QString &value);
 
@@ -96,6 +97,7 @@ struct Layout
 {
     std::array<Field, slotCount> slotFields{};
     int headerSize = mediumSize, footerSize = mediumSize;
+    int stripPadding = 0;
     bool headerEnabled = true, footerEnabled = true;
     // Each slot chooses its own case.
     std::array<bool, slotCount> uppercase{ { true, true, true, true, true, true } };

@@ -2,6 +2,7 @@
 #include "ui/controls/buttons.h"
 #include "ui/controls/panels.h"
 #include "reading/header_footer.h"
+#include "app/reader/views/reading_page.h"
 #include <QVector>
 #include <array>
 #include <functional>
@@ -20,13 +21,14 @@ using SlotContents = std::array<headerfooter::Content, headerfooter::slotCount>;
 
 // The six slots as the header and footer draw them on a short page: header
 // text at the top edge, footer text at the bottom edge above the progress bar,
-// and a few lines between them. The preset page shows it read-only; Custom taps a slot
+// and placeholder lines between them. The preset page shows it read-only; Custom taps a slot
 // to choose what goes in it. Each slot is a button for input and accessibility.
 class SlotMap final : public QWidget
 {
 public:
     SlotMap(QWidget *parent, bool editable);
     void setSlots(const headerfooter::Layout &layout, const SlotContents &contents);
+    void setBodyLayout(const ReadingPage::ReflowLayout &body);
     // The bar's fill and chapter ticks follow the book, as on the page.
     void setProgress(qreal fraction, const QVector<double> &ticks);
     void updateBattery(const headerfooter::Values &values);
@@ -45,6 +47,7 @@ private:
     void setSlot(int slot, const headerfooter::Content &content);
     std::array<Cell *, headerfooter::slotCount> cells{};
     headerfooter::Layout layout;
+    ReadingPage::ReflowLayout bodyLayout;
     qreal progress = 0;
     QVector<double> ticks;
 };
@@ -75,11 +78,8 @@ private:
     bool divider = false, modified = false;
 };
 
-// Header and footer is a sheet over the bottom of the page, like Font: a
-// heavy rule, a bold title and a close cell, then rows sized to their
-// content, so the page shows above. Its rows hold the presets, the slots and
-// the size and progress bar rows. Short screens page between complete rows.
-// Close returns to the Layout panel.
+// The customization view fills the reader below the status bar. Short screens
+// page between complete rows. Close returns to the Layout panel.
 class HeaderFooterView final : public ui::Panel
 {
 public:
@@ -92,12 +92,13 @@ public:
     // The title row and the rows' height at this width.
     int preferredHeight(int width) const;
     std::function<void()> closed;
+    ui::CellButton *fontButton;
 
 protected:
-    void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *) override;
 
 private:
+    ui::Panel *heading;
     ui::CellButton *close;
     QLabel *title;
     QWidget *content, *clip;

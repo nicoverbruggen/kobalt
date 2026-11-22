@@ -239,41 +239,32 @@ QRect ReadingPage::bookmarkCorner() const
 
 int ReadingPage::topHeight() const
 {
-    return (showHeader() ? metrics::reading::stripHeight(chrome.headerSize) : 0)
+    return (showHeader() ? metrics::reading::stripHeight(chrome.headerSize, chrome.stripPadding)
+                         : 0)
             + (progressAtTop() ? ui::metrics::reading::progressHeight : 0);
 }
 
 int ReadingPage::bottomHeight() const
 {
-    return (showFooter() ? metrics::reading::stripHeight(chrome.footerSize) : 0)
+    return (showFooter() ? metrics::reading::stripHeight(chrome.footerSize, chrome.stripPadding)
+                         : 0)
             + (progressAtBottom() ? ui::metrics::reading::progressHeight : 0);
 }
 
-// Keep the old edge alignment through Large. Larger sizes grow the text
-// band as well as the reserved strip so glyphs are not clipped.
 QRect ReadingPage::headerTextRect() const
 {
     if (!showHeader())
         return {};
-    // A bar at the top keeps the text progressTextInset below the top edge,
-    // as a bar at the bottom keeps the footer above the bottom edge.
-    const int top = progressAtTop() ? int(metrics::reading::progressTextInset) : 0;
-    return { 0, top, width(), metrics::reading::textBandHeight(chrome.headerSize) };
+    const int top = progressAtTop() ? int(metrics::reading::progressHeight) : 0;
+    return { 0, top, width(), topHeight() - top };
 }
 
 QRect ReadingPage::footerTextRect() const
 {
     if (!showFooter())
         return {};
-    // The text keeps progressTextInset from the bottom edge, past the bar.
-    // The progress strip adds that space below the text.
-    const int offset = progressAtBottom()
-            ? int(metrics::reading::progressHeight) - int(metrics::reading::progressTextInset)
-            : 0;
-    const int band = metrics::reading::textBandHeight(chrome.footerSize);
-    const int bottom =
-            height() - bottomHeight() + offset + metrics::reading::stripHeight(chrome.footerSize);
-    return { 0, bottom - band, width(), band };
+    const int bar = progressAtBottom() ? int(metrics::reading::progressHeight) : 0;
+    return { 0, height() - bottomHeight(), width(), bottomHeight() - bar };
 }
 
 void ReadingPage::setCornerRadii(int top, int bottom)
@@ -1006,53 +997,56 @@ QImage ReadingPage::snapshot(bool sleeping) const
     return frame;
 }
 
+int ReadingPage::ReflowLayout::lineHeight() const
+{
+    return qMax(1, qRound(qMax(1, fontPixels) * qMax(100, lineSpacing) / 100.0));
+}
+
+void ReadingPage::ReflowLayout::paintText(QPainter &painter, const QRect &text,
+                                          const QVector<int> &words, const QColor &ink) const
+{
+    const int count = qBound(1, columns, 2);
+    const int gap = qMax(0, columnSpacing);
+    const int columnWidth = (text.width() - (count - 1) * gap) / count;
+    const int pixels = qMax(1, fontPixels);
+    const int line = lineHeight();
+    const int barHeight = qMax(1, pixels / 2);
+    if (columnWidth > 0) {
+        int word = 0;
+        const int space = qMax(1, qRound(pixels * .33));
+        for (int column = 0; column < count; ++column) {
+            const int left = text.left() + column * (columnWidth + gap);
+            int row = 0;
+            for (int y = text.top(); y + line <= text.bottom() + 1; y += line, ++row) {
+                const int barTop = y + (line - barHeight) / 2;
+                if (words.isEmpty()) {
+                    const int indent = row % 6 == 0 ? qMin(pixels, columnWidth / 4) : 0;
+                    const int length = row % 6 == 5 ? columnWidth * 3 / 4 : columnWidth - indent;
+                    painter.fillRect(QRect(left + indent, barTop, length, barHeight), ink);
+                    continue;
+                }
+                int x = 0;
+                while (x < columnWidth) {
+                    const int length = qBound(1, qRound(words[word] * pixels * .45), columnWidth);
+                    if (x && x + length > columnWidth)
+                        break;
+                    painter.fillRect(QRect(left + x, barTop, length, barHeight), ink);
+                    x += length + space;
+                    word = (word + 1) % words.size();
+                }
+            }
+        }
+    }
+}
+
 void ReadingPage::paintBody(QPainter &painter) const
 {
     if (changingViewport) {
         const QRect body(0, topHeight(), width(), qMax(0, height() - topHeight() - bottomHeight()));
         const auto text = body.marginsRemoved(reflowLayout.margins);
-        const int columns = qBound(1, reflowLayout.columns, 2);
-        const int gap = qMax(0, reflowLayout.columnSpacing);
-        const int columnWidth = (text.width() - (columns - 1) * gap) / columns;
-        const int fontPixels = qMax(1, reflowLayout.fontPixels);
-        const int lineHeight =
-                qMax(1, qRound(fontPixels * qMax(100, reflowLayout.lineSpacing) / 100.0));
-        const int barHeight = qMax(1, fontPixels / 2);
         painter.save();
         painter.setClipRect(body);
-        // Repeat a small sample of the current page's word lengths. The new
-        // page may contain different words; this is only a transition texture.
-        // Publisher fonts and line breaks remain unknown until reflow.
-        const auto ink = ui::themeColors(this).divider;
-        if (columnWidth > 0) {
-            int word = 0;
-            const int space = qMax(1, qRound(fontPixels * .33));
-            for (int column = 0; column < columns; ++column) {
-                const int left = text.left() + column * (columnWidth + gap);
-                int row = 0;
-                for (int y = text.top(); y + lineHeight <= text.bottom() + 1;
-                     y += lineHeight, ++row) {
-                    const int barTop = y + (lineHeight - barHeight) / 2;
-                    if (wordLengths.isEmpty()) {
-                        const int indent = row % 6 == 0 ? qMin(fontPixels, columnWidth / 4) : 0;
-                        const int length =
-                                row % 6 == 5 ? columnWidth * 3 / 4 : columnWidth - indent;
-                        painter.fillRect(QRect(left + indent, barTop, length, barHeight), ink);
-                        continue;
-                    }
-                    int x = 0;
-                    while (x < columnWidth) {
-                        const int length = qBound(1, qRound(wordLengths[word] * fontPixels * .45),
-                                                  columnWidth);
-                        if (x && x + length > columnWidth)
-                            break;
-                        painter.fillRect(QRect(left + x, barTop, length, barHeight), ink);
-                        x += length + space;
-                        word = (word + 1) % wordLengths.size();
-                    }
-                }
-            }
-        }
+        reflowLayout.paintText(painter, text, wordLengths, ui::dividerColor(this));
         painter.restore();
         // Marks and hit targets belong to the old page coordinates.
         return;

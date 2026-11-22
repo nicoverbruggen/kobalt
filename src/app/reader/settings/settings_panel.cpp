@@ -3192,8 +3192,10 @@ void SettingsPanel::hideEvent(QHideEvent *event)
 
 void SettingsPanel::resizeEvent(QResizeEvent *event)
 {
-    // A rotation can leave too few rows for the current font page. Reopen at the new size.
-    dismissSheet();
+    // The font picker fits itself to the reader. A pending resize of this panel
+    // can arrive during painting even when the header and footer editor opened it.
+    if (sheet != fontSheet)
+        dismissSheet();
     ui::Panel::resizeEvent(event);
 }
 

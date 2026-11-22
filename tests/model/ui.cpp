@@ -3258,10 +3258,11 @@ int main(int argc, char **argv)
                     && kobalt::ui::metrics::reading::textPixels(28, true) == 28,
             "Header and footer checkpoint sizes must match");
     require(kobalt::ui::metrics::reading::stripHeight(24) == 48
-                    && kobalt::ui::metrics::reading::stripHeight(26) == 52
+                    && kobalt::ui::metrics::reading::stripHeight(25) == 48
+                    && kobalt::ui::metrics::reading::stripHeight(26) == 48
                     && kobalt::ui::metrics::reading::stripHeight(28) == 56
                     && kobalt::ui::metrics::reading::stripHeight(48) == 96
-                    && kobalt::ui::metrics::reading::textBandHeight(48) == 88,
+                    && kobalt::ui::metrics::reading::stripHeight(26, 12) == 60,
             "Chrome strips do not reserve enough room for large text");
     // Exercise the final styled layout, not only the constructor's size hints.
     {

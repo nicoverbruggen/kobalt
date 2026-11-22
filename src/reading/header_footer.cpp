@@ -164,10 +164,10 @@ bool Layout::footer() const
 bool Layout::operator==(const Layout &other) const
 {
     return slotFields == other.slotFields && headerSize == other.headerSize
-            && footerSize == other.footerSize && headerEnabled == other.headerEnabled
-            && footerEnabled == other.footerEnabled && uppercase == other.uppercase
-            && progressBar == other.progressBar && progressBarTop == other.progressBarTop
-            && progressTicks == other.progressTicks;
+            && stripPadding == other.stripPadding && footerSize == other.footerSize
+            && headerEnabled == other.headerEnabled && footerEnabled == other.footerEnabled
+            && uppercase == other.uppercase && progressBar == other.progressBar
+            && progressBarTop == other.progressBarTop && progressTicks == other.progressTicks;
 }
 
 Layout presetLayout(Preset preset)
@@ -295,6 +295,7 @@ QJsonObject toJson(const Layout &layout)
         object[names[slot]] = fieldValue(layout.slotFields[slot]);
     object["header_size"] = savedSize(layout.headerSize, layout.headerEnabled);
     object["footer_size"] = savedSize(layout.footerSize, layout.footerEnabled);
+    object["strip_padding"] = layout.stripPadding;
     object["header_font_size"] = layout.headerSize;
     object["footer_font_size"] = layout.footerSize;
     QJsonArray uppercase;
@@ -317,6 +318,8 @@ Layout fromJson(const QJsonObject &object, const Layout &fallback)
     for (int slot = 0; slot < slotCount; ++slot)
         if (object.value(names[slot]).isString())
             layout.slotFields[slot] = field(object.value(names[slot]).toString());
+    layout.stripPadding =
+            qBound(0, object.value("strip_padding").toInt(layout.stripPadding), maximumExtraHeight);
     readSize(object, "header_size", "header_font_size", layout.headerSize, layout.headerEnabled);
     readSize(object, "footer_size", "footer_font_size", layout.footerSize, layout.footerEnabled);
     // One value per slot. A single value applies to every slot.
@@ -397,6 +400,7 @@ QJsonObject textSettings(const Layout &layout)
     QJsonObject result;
     result["header_size"] = savedSize(layout.headerSize, layout.headerEnabled);
     result["footer_size"] = savedSize(layout.footerSize, layout.footerEnabled);
+    result["strip_padding"] = layout.stripPadding;
     result["header_font_size"] = layout.headerSize;
     result["footer_font_size"] = layout.footerSize;
     return result;
@@ -415,6 +419,9 @@ Selection select(const QJsonObject &preferences, bool phone)
         selection.layout = presetLayout(Preset::Phone);
     }
     const auto text = preferences.value(textKey).toObject();
+    selection.layout.stripPadding =
+            qBound(0, text.value("strip_padding").toInt(selection.layout.stripPadding),
+                   maximumExtraHeight);
     readSize(text, "header_size", "header_font_size", selection.layout.headerSize,
              selection.layout.headerEnabled);
     readSize(text, "footer_size", "footer_font_size", selection.layout.footerSize,

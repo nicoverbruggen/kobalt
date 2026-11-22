@@ -174,12 +174,13 @@ public:
     explicit DropdownButton(QWidget *parent);
 
     // A forward button opens another page instead of a list, so it shows a
-    // right chevron in place of the arrow.
-    void setForward(bool value)
+    // right chevron or the supplied action icon in place of the arrow.
+    void setForward(bool value, ControlIcon icon = ControlIcon::Next)
     {
-        if (forward == value)
+        if (forward == value && forwardIcon == icon)
             return;
         forward = value;
+        forwardIcon = icon;
         update();
     }
 
@@ -194,6 +195,7 @@ protected:
 
 private:
     bool forward = false;
+    ControlIcon forwardIcon = ControlIcon::Next;
 };
 
 class FontButton : public DropdownButton

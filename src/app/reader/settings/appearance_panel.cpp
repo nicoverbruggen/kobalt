@@ -65,12 +65,32 @@ private:
     QWidget *frame;
     QVector<QPushButton *> buttons;
 };
+
+// The preview uses the reader's width. The other rows keep the panel's side margins.
+class PagePreviewItem final : public QWidgetItem
+{
+public:
+    using QWidgetItem::QWidgetItem;
+
+    void setGeometry(const QRect &row) override
+    {
+        QWidgetItem::setGeometry(
+                QRect(0, row.y(), widget()->parentWidget()->width(), row.height()));
+    }
+};
+
+QStringList stripMarkerLabels()
+{
+    return { strings::get("common.off"), strings::get("common.size_small_short"),
+             strings::get("common.size_medium_short"), strings::get("common.size_large_short"),
+             strings::get("common.size_extra_large_short") };
+}
 } // namespace
 
-StripSizeControl::StripSizeControl(QWidget *parent, bool footer) : ui::ControlRow(parent)
+StripSizeControl::StripSizeControl(QWidget *parent, const QString &name, const QString &title,
+                                   const QVector<int> &markers, ui::SettingSlider::MarkerMode mode)
+    : ui::ControlRow(parent)
 {
-    const QString name = footer ? "rrFooterTextSize" : "rrHeaderTextSize";
-    const auto title = strings::get(footer ? "reader.footer" : "reader.header");
     auto *line = controls();
     auto *caption = this->caption();
     auto *captionRows = new QVBoxLayout(caption);
@@ -115,16 +135,11 @@ StripSizeControl::StripSizeControl(QWidget *parent, bool footer) : ui::ControlRo
     more->setObjectName(name + "More");
     less->setAccessibleName(strings::get("controls.decrease").arg(title.toLower()));
     more->setAccessibleName(strings::get("controls.increase").arg(title.toLower()));
-    slider = new ui::SettingSlider(this, headerfooter::offSize, headerfooter::maximumSize);
+    slider = new ui::SettingSlider(this, markers.first(), markers.last());
     slider->setObjectName(name);
     slider->setAccessibleName(title);
-    slider->setMarkers({ headerfooter::offSize, headerfooter::smallSize, headerfooter::mediumSize,
-                         headerfooter::largeSize, headerfooter::maximumSize },
-                       ui::SettingSlider::MarkerMode::Checkpoints);
-    slider->setMarkerLabels({ strings::get("common.off"), strings::get("common.size_small_short"),
-                              strings::get("common.size_medium_short"),
-                              strings::get("common.size_large_short"),
-                              strings::get("common.size_extra_large_short") });
+    slider->setMarkers(markers, mode);
+    slider->setMarkerLabels(stripMarkerLabels());
     const auto step = [line](QWidget *button) {
         auto *column = new QVBoxLayout;
         column->setContentsMargins(0, 0, 0, 0);
@@ -139,16 +154,14 @@ StripSizeControl::StripSizeControl(QWidget *parent, bool footer) : ui::ControlRo
     connect(less, &QPushButton::clicked, slider, [this] { slider->nudge(-1); });
     connect(more, &QPushButton::clicked, slider, [this] { slider->nudge(1); });
     connect(slider, &QSlider::valueChanged, this, [this](int value) { showValue(value); });
-    setSize(headerfooter::smallSize, true);
+    setSize(markers.first(), true);
 }
 
 void StripSizeControl::showValue(int value)
 {
     QString text = strings::get("common.off");
-    if (value != headerfooter::offSize) {
-        text = strings::get("reader.text_size_value")
-                       .arg(QString::number(value * 72.0 / 300.0, 'f', 1));
-    }
+    if (slider->minimum() != headerfooter::offSize || value != headerfooter::offSize)
+        text = strings::get("reader.strip_size_value").arg(value);
     valueLabel->setText(text);
     slider->setAccessibleDescription(text);
 }
@@ -518,7 +531,7 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout,
     headerFooterRow = new ui::DropdownButton(pageLayout);
     headerFooterRow->setObjectName("rrHeaderFooter");
     headerFooterRow->setFocusPolicy(Qt::NoFocus);
-    headerFooterRow->setForward(true);
+    headerFooterRow->setForward(true, ControlIcon::EditHighlight);
     // As tall as the segmented rows above it, with their label size.
     readerStyle(headerFooterRow,
                 QString("min-height:%1px;max-height:%1px;")
@@ -546,16 +559,17 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout,
     // The presets are a choice of their own; keep them apart from the slots.
     customRows->addSpacing(metrics::spacing::section);
     slotMap = new SlotMap(custom, true);
-    customRows->addWidget(slotMap);
+    customRows->addItem(new PagePreviewItem(slotMap));
+    customRows->setStretch(customRows->count() - 1, 1);
     slotHint = new ui::InterfaceLabel(strings::get("header_footer.custom_hint"), custom);
     slotHint->setObjectName("rrHeaderFooterHint");
     slotHint->setWordWrap(true);
-    // The same secondary text as the sliders' current values, so it follows the theme.
+    slotHint->setSecondaryInk(true);
     readerStyle(slotHint,
                 styles::font(metrics::control::captionValueText)
                         + "font-style:italic;color:palette(placeholder-text);");
     customRows->addWidget(slotHint);
-    customRows->addSpacing(metrics::spacing::row);
+    customRows->addSpacing(metrics::spacing::section);
     // Off, or the edge the bar runs along.
     ui::SegmentedRow barRow(custom, customRows, "rrHeaderFooterProgressBar",
                             strings::get("header_footer.progress_bar"),
@@ -595,15 +609,25 @@ AppearancePanel::AppearancePanel(const AppearanceLayout &layout,
     ticks->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     ticks->setFixedWidth(rowHeight + ui::px(16));
     barRow.append(ticks);
-    customRows->addSpacing(metrics::spacing::row);
+    customRows->addSpacing(metrics::spacing::section);
     auto *divider = new ui::Panel(custom);
     divider->setObjectName("rrHeaderFooterSizeDivider");
     divider->setFixedHeight(metrics::control::border);
     divider->setDividers(Qt::TopEdge);
     customRows->addWidget(divider);
-    headerSizeControl = new StripSizeControl(custom, false);
-    footerSizeControl = new StripSizeControl(custom, true);
+    using Mode = ui::SettingSlider::MarkerMode;
+    const QVector<int> sizes{ headerfooter::offSize, headerfooter::smallSize,
+                              headerfooter::mediumSize, headerfooter::largeSize,
+                              headerfooter::maximumSize };
+    headerSizeControl = new StripSizeControl(
+            custom, "rrHeaderTextSize", strings::get("reader.header"), sizes, Mode::Checkpoints);
+    footerSizeControl = new StripSizeControl(
+            custom, "rrFooterTextSize", strings::get("reader.footer"), sizes, Mode::Checkpoints);
+    paddingControl =
+            new StripSizeControl(custom, "rrStripPadding", strings::get("reader.strip_padding"),
+                                 { 0, 12, 24, 36, headerfooter::maximumExtraHeight }, Mode::Stops);
     customRows->addWidget(headerSizeControl);
     customRows->addWidget(footerSizeControl);
+    customRows->addWidget(paddingControl);
 }
 } // namespace kobalt::reader

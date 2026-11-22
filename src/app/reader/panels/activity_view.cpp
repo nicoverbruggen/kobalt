@@ -2248,7 +2248,8 @@ private:
                          width() - 2 * chrome::inset - axis - ui::px(12),
                          height() - 2 * chrome::blockTop - 2 * captionHeight - sizes::labelGap);
         const QDate first = points.first().first;
-        const QDate last = end.isValid() && end > today ? end : today;
+        const bool ahead = end.isValid() && end > today;
+        const QDate last = ahead ? end : today;
         const qint64 span = qMax<qint64>(1, first.daysTo(last));
         const auto x = [&](const QDate &date) {
             return plot.left() + plot.width() * double(first.daysTo(date)) / double(span);
@@ -2283,7 +2284,7 @@ private:
         painter.setPen(QPen(ink, ui::metrics::control::border));
         painter.drawLine(QPointF(x(today), plot.top() - ui::px(6)),
                          QPointF(x(today), plot.bottom()));
-        if (end.isValid() && end > today) {
+        if (ahead) {
             painter.setPen(QPen(ink, ui::px(3), Qt::DashLine));
             painter.drawLine(QPointF(x(today), y(previous)), QPointF(x(end), y(100)));
             painter.setPen(QPen(ink, ui::px(3)));
@@ -2310,16 +2311,20 @@ private:
                 left = int(x(date)) - textWidth;
             return QRect(left, labelTop, textWidth, captionHeight);
         };
-        const bool ahead = end.isValid() && end > today;
+        const int labelGap = ui::px(16);
         const auto todayText = strings::get("activity.today");
-        const auto todayArea = area(today, todayText, ahead ? Qt::AlignHCenter : Qt::AlignRight);
-        const auto firstArea = area(first, day(first), Qt::AlignLeft);
-        if (!firstArea.adjusted(0, 0, ui::px(16), 0).intersects(todayArea))
-            drawCaption(painter, firstArea, day(first), Qt::AlignLeft | Qt::AlignTop, ink);
+        auto todayArea = area(today, todayText, ahead ? Qt::AlignHCenter : Qt::AlignRight);
+        if (ahead) {
+            const auto finishText = day(end);
+            const auto finishArea = area(end, finishText, Qt::AlignRight);
+            todayArea.moveRight(qMin(todayArea.right(), finishArea.left() - labelGap - 1));
+            drawCaption(painter, finishArea, finishText, Qt::AlignLeft | Qt::AlignTop, ink);
+        }
+        const auto firstText = day(first);
+        const auto firstArea = area(first, firstText, Qt::AlignLeft);
+        if (!firstArea.adjusted(0, 0, labelGap, 0).intersects(todayArea))
+            drawCaption(painter, firstArea, firstText, Qt::AlignLeft | Qt::AlignTop, ink);
         drawCaption(painter, todayArea, todayText, Qt::AlignLeft | Qt::AlignTop, ink);
-        if (ahead)
-            drawCaption(painter, area(end, day(end), Qt::AlignRight), day(end),
-                        Qt::AlignLeft | Qt::AlignTop, ink);
     }
 
     void paintDays(QPainter &painter)

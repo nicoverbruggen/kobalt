@@ -14895,6 +14895,68 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
     }
 
+    void activityChartLabels()
+    {
+        const auto previousScale = ui::textScale();
+        const auto restoreScale = qScopeGuard([previousScale] { ui::setTextScale(previousScale); });
+        ui::setTextScale(1.5);
+        const QDate today(2026, 11, 22);
+        const QString key = QStringLiteral("activity-chart-labels");
+        constexpr qint64 sessionTime = 30 * 60000;
+        ActivityRecords records;
+        for (const QDate &date : { today.addDays(-60), today }) {
+            ActivitySession session;
+            session.book = key;
+            session.title = QStringLiteral("A Reading History");
+            session.started = QDateTime(date, QTime(9, 0)).toMSecsSinceEpoch();
+            session.milliseconds = sessionTime;
+            session.observed = session.started + sessionTime;
+            records.sessions.append(session);
+        }
+
+        ActivityOpenBook open;
+        open.book = key;
+        open.ranges.insert(records.sessions.first().started, { 0, 10 });
+        open.ranges.insert(records.sessions.last().started, { 80, 95 });
+        open.percent = 95;
+        open.remainingMilliseconds = 60000;
+        ActivityView view(nullptr);
+        view.resize(1072, 1448);
+        view.setRecords(records, activity::summarize(records, today));
+        view.setOpenBook(open);
+        view.openBook(key);
+        view.show();
+        auto *chart = view.findChild<QWidget *>("rrActivityBookChart");
+        QVERIFY(chart && chart->isVisible());
+        QVERIFY(chart->accessibleDescription().contains("23 Nov 2026"));
+
+        const auto caption = ui::captionFont();
+        const int lineHeight = ui::interfaceLineHeight(caption);
+        QImage plot(chart->size(), QImage::Format_RGB32);
+        chart->render(&plot);
+        const auto paper = plot.pixelColor(0, plot.height() - 1);
+        const auto label = [&](const QString &text) {
+            QImage image(ui::interfaceTextWidth(text.toUpper(), caption) + 2, lineHeight,
+                         QImage::Format_RGB32);
+            image.fill(paper);
+            QPainter painter(&image);
+            painter.setFont(caption);
+            painter.setPen(ui::labelInk(chart));
+            ui::drawInterfaceText(painter, image.rect(), text, Qt::AlignLeft | Qt::AlignTop);
+            return image;
+        };
+        const int top = plot.height() - ui::metrics::chrome::blockTop - lineHeight - 1;
+        const auto finishLabel = label(QStringLiteral("23 Nov"));
+        const auto todayLabel = label(QStringLiteral("Today"));
+        const int right = plot.width() - ui::metrics::chrome::inset - ui::px(12);
+        const int finishLeft = right - finishLabel.width();
+        QCOMPARE(plot.copy(finishLeft, top, finishLabel.width(), lineHeight), finishLabel);
+        bool todayVisible = false;
+        for (int left = 0; left + todayLabel.width() <= finishLeft && !todayVisible; ++left)
+            todayVisible = plot.copy(left, top, todayLabel.width(), lineHeight) == todayLabel;
+        QVERIFY2(todayVisible, "Today must fit before the projected finish date.");
+    }
+
     // Deleting a book's activity removes it from Books and its time from the
     // totals once confirmed.
     void activityDelete()

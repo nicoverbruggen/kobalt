@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/style/theme.h"
 #include <QFile>
 #include <algorithm>
 #include <QFileInfo>
@@ -84,9 +85,9 @@ inline bool screenshotSceneShown(const QString &screen, const QString &device)
 
 // The card title of every gallery scene other than the international books.
 // A capture of a scene without a title fails, so this map declares the scenes.
-inline const QMap<QString, QString> &screenshotTitles()
+inline QMap<QString, QString> makeScreenshotTitles()
 {
-    static const QMap<QString, QString> titles{
+    QMap<QString, QString> titles{
         { "about", "About Kobalt" },
         { "viewport-transition", "Page layout placeholders" },
         { "shutdown-notice", "Shutting down" },
@@ -347,17 +348,11 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "styling-hanging-punctuation-on", "Hanging punctuation: on" },
         { "color-only-menu", "Reader menu with color-only icons" },
         { "theme-icons", "Icon theme picker" },
-        { "theme-presets", "Theme preset picker" },
         { "custom-theme", "Custom theme typefaces" },
-        { "notebook-settings", "Notebook theme settings" },
-        { "notebook-menu", "Notebook reader menu" },
         { "sage-library", "Library with Sage colors" },
         { "sepia-library", "Library with Sepia colors" },
         { "sage-zen", "Zen menu with Sage colors" },
         { "sepia-zen", "Zen menu with Sepia colors" },
-        { "playful-reading", "Playful reading page" },
-        { "playful-settings", "Playful theme setting" },
-        { "playful-menu", "Reader menu with Playful theme" },
         { "settings-system", "System settings" },
         { "settings-book-privacy", "Privacy for this book" },
         { "sleep-private", "Private book: asleep" },
@@ -489,6 +484,21 @@ inline const QMap<QString, QString> &screenshotTitles()
         { "widget-keyboard-qwertz", "German QWERTZ keyboard" },
         { "widget-keyboard-azerty", "French AZERTY keyboard" },
     };
+    if (ui::colorThemes)
+        titles.insert(QMap<QString, QString>{
+                { "theme-presets", "Theme preset picker" },
+                { "notebook-settings", "Notebook theme settings" },
+                { "notebook-menu", "Notebook reader menu" },
+                { "playful-reading", "Playful reading page" },
+                { "playful-settings", "Playful theme setting" },
+                { "playful-menu", "Reader menu with Playful theme" },
+        });
+    return titles;
+}
+
+inline const QMap<QString, QString> &screenshotTitles()
+{
+    static const auto titles = makeScreenshotTitles();
     return titles;
 }
 

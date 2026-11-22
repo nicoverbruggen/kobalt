@@ -2510,7 +2510,8 @@ void verticalJustificationTour(Fixture &fixture, const QString &name, bool scree
     QTRY_VERIFY(!fixture.state().value("busy").toBool());
     openPrologueBody(fixture);
     const auto fullProsePage = [&] {
-        for (int attempt = 0; attempt < 16; ++attempt) {
+        // Pagination varies with the viewport. Stop at the end of the book.
+        for (;;) {
             const bool fills =
                     fixture.coordinateQuery(book, false, [](EngineDocument &coordinates) {
                         const int page = coordinates.page();
@@ -2528,15 +2529,13 @@ void verticalJustificationTour(Fixture &fixture, const QString &name, bool scree
                                 && coordinates.image(page) != before;
                     });
             if (fills)
-                return;
+                return true;
             const int previous = fixture.state().value("page").toInt();
-            QVERIFY(fixture.turnPage(1));
-            QTRY_VERIFY(fixture.state().value("page").toInt() > previous);
-            QTRY_VERIFY(!fixture.state().value("busy").toBool());
+            if (!fixture.turnPage(1) || fixture.state().value("page").toInt() <= previous)
+                return false;
         }
-        QFAIL("No full prose page found for the vertical spacing sample");
     };
-    fullProsePage();
+    QVERIFY2(fullProsePage(), "No full prose page found for the vertical spacing sample");
     const auto before = static_cast<ReadingPage *>(fixture.widget("rrPage"))->image;
     const auto pageCount = fixture.state().value("pages");
     QVERIFY(scene("off"));
@@ -2688,7 +2687,8 @@ void verticalJustificationTour(Fixture &fixture, const QString &name, bool scree
     }
     QTRY_VERIFY(!fixture.state().value("busy").toBool());
     QTRY_COMPARE(fixture.state().value("columns").toInt(), 2);
-    fullProsePage();
+    QVERIFY2(fullProsePage(),
+             "No full two-column prose page found for the vertical spacing sample");
     const auto columnsBefore = static_cast<ReadingPage *>(fixture.widget("rrPage"))->image;
     QVERIFY(scene("columns-off"));
     settings("expand", false, false);
@@ -19558,9 +19558,14 @@ private slots:
             QVERIFY(!fixture.widget("rrThemePreset"));
             QVERIFY(fixture.press("rrIconTheme"));
             QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-theme-icons"));
-            QVERIFY(fixture.press("rrIconTheme_monochrome"));
+            QVERIFY(fixture.press("rrIconTheme_color"));
             QVERIFY(revealSettingsOption(fixture, "rrUiFont"));
             QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-custom-theme"));
+            QVERIFY(fixture.press("rrSettingsClose"));
+            QTRY_VERIFY(!fixture.visible("rrGeneralSettings"));
+            if (!fixture.visible("rrSettings"))
+                QVERIFY(fixture.press("rrPage"));
+            QVERIFY(capture(fixture, screenshotVariant(preset, dark) + "-color-only-menu"));
             return;
         }
         auto *panel = static_cast<reader::SettingsPanel *>(fixture.widget("rrGeneralSettings"));
@@ -21990,9 +21995,9 @@ private slots:
             // Current Dense mode preserves a minimum bar width. This pinned
             // 145-chapter edition needs more pages at narrower viewports.
             QTRY_VERIFY(graph->graphPages() >= 2);
-            QVERIFY(storage::readJson(fixture.paths.preferences())
-                            .value("dense_stats_chart")
-                            .toBool());
+            QTRY_VERIFY(storage::readJson(fixture.paths.preferences())
+                                .value("dense_stats_chart")
+                                .toBool());
             capturePages(fixture, name + "-graph", "rrGraph");
         } else if (publication == "maths") {
             // Search through the real panel for the pinned equation passage.

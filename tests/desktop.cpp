@@ -9681,19 +9681,37 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             QVERIFY(!toggle->isChecked());
         }
         // Lookup handles adjust a phrase without enabling annotations or turning pages.
+        const auto second = fixture.wordPoint(1);
+        QVERIFY(second.x() >= 0);
+        const auto top = QPoint(0, page->topHeight());
+        const auto expectedPhrase = [&](QPoint start) {
+            return fixture.coordinateQuery(
+                    book, QString(), [start, later, top](EngineDocument &model) {
+                        return model
+                                .annotationRange(model.wordAt(start - top).start,
+                                                 model.wordAt(later - top).end)
+                                .text.simplified();
+                    });
+        };
+        const auto expanded = expectedPhrase(first), shortened = expectedPhrase(second);
+        QVERIFY(!shortened.isEmpty() && expanded != shortened && expanded.endsWith(shortened));
+        auto *dictionary = fixture.widget("rrDictionary");
+        const auto definitionFor = strings::get("dictionary_panel.definition_for");
+        // Expansion requires crossing the last word's far edge.
         const auto endGrip = page->annotationHandleRect(false).center();
-        QVERIFY(fixture.drag(page, endGrip, endGrip + later - first));
+        QVERIFY(fixture.drag(page, endGrip,
+                             endGrip + fixture.selectionHandleTarget(later, false)
+                                     - fixture.selectionHandleTarget(first, false)
+                                     + QPoint(ui::px(8), 0)));
         QTRY_VERIFY(!fixture.state().value("annotation_dragging").toBool());
         QTRY_VERIFY(fixture.visible("rrDictionary"));
-        QTRY_VERIFY(headword->text().split(' ', Qt::SkipEmptyParts).size() >= 3);
-        const auto phrase = headword->text();
-        const int phraseWords = phrase.split(' ', Qt::SkipEmptyParts).size();
-        const auto second = fixture.wordPoint(1);
+        QTRY_COMPARE(dictionary->accessibleName(), definitionFor.arg(expanded));
         const auto startGrip = page->annotationHandleRect(true).center();
-        QVERIFY(fixture.drag(page, startGrip, startGrip + second - first));
+        QVERIFY(fixture.drag(page, startGrip,
+                             startGrip + second - fixture.selectionHandleTarget(first, true)));
         QTRY_VERIFY(!fixture.state().value("annotation_dragging").toBool());
-        QTRY_VERIFY(fixture.visible("rrDictionary") && headword->text() != phrase);
-        QVERIFY(headword->text().split(' ', Qt::SkipEmptyParts).size() < phraseWords);
+        QTRY_VERIFY(fixture.visible("rrDictionary"));
+        QTRY_COMPARE(dictionary->accessibleName(), definitionFor.arg(shortened));
         QVERIFY(!toggle->isChecked());
         QCOMPARE(fixture.stored("highlights.json", "highlights").size(), 0);
         QCOMPARE(fixture.state().value("position"), position);

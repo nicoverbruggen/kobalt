@@ -592,18 +592,20 @@ bool NativeLifecycle::interceptShutdown(QObject *manager, Shutdown mode)
     };
     QObject::connect(deadline, &QTimer::timeout, deadline, [handOff] { handOff(true); });
     deadline->start(shutdownSaveMilliseconds);
-    active->prepareShutdown(mode, [lifecycle, handOff, handedOff] {
-        storage::afterSleepSnapshotWork([lifecycle, handOff, handedOff] {
+    active->prepareShutdown(mode, [handOff, handedOff] {
+        storage::afterSleepSnapshotWork([handOff, handedOff] {
             if (*handedOff)
                 return;
             // Every reader write has ended. Close the profile on the writer,
             // after any other waiting write, so Nickel finds no open file. The
             // main thread does not wait: the deadline still applies.
             sessionStorageAvailable.store(false);
-            QPointer<QObject> target(lifecycle.data());
-            storage::closeProfileLater([target, handOff] {
-                if (auto *receiver = target.data())
-                    qt::invoke(receiver, [handOff] { handOff(false); }, Qt::QueuedConnection);
+            storage::closeProfileLater([handOff] {
+                // The lifecycle can be destroyed while the writer finishes.
+                // Check its guard in handOff on the GUI thread.
+                qt::invoke(
+                        QCoreApplication::instance(), [handOff] { handOff(false); },
+                        Qt::QueuedConnection);
             });
         });
     });

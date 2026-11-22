@@ -467,8 +467,16 @@ private slots:
                  "An awake screen bypassed the final storage gate");
     }
 
+    void destroyedLifecycleIgnoresCompletion_data()
+    {
+        QTest::addColumn<bool>("closeQueued");
+        QTest::newRow("destroy-before-close") << false;
+        QTest::newRow("destroy-after-writer-posts-completion") << true;
+    }
+
     void destroyedLifecycleIgnoresCompletion()
     {
+        QFETCH(bool, closeQueued);
         std::function<void()> drained;
         {
             kobalt::NativeLifecycle lifecycle(nullptr);
@@ -477,8 +485,15 @@ private slots:
                 drained = std::move(ready);
             };
             kobalt_power_off(N3PowerWorkflowManager::sharedInstance(), false);
+            if (closeQueued) {
+                drained();
+                QVERIFY(kobalt::storage::drainWriterThread());
+            }
         }
-        drained();
+        if (!closeQueued) {
+            drained();
+            QVERIFY(kobalt::storage::drainWriterThread());
+        }
         processQueuedEvents();
         QCOMPARE(powerOffs + reboots, 0);
     }

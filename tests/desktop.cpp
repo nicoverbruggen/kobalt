@@ -18505,7 +18505,6 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         storage::Paths paths{ directory.path() };
-        paths.stateReport = directory.filePath("state.json");
         standalone::ReaderController controller(
                 paths, fixtureFonts(), fixturePlaceholder(),
                 [] {
@@ -18524,8 +18523,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QSignalSpy opened(&controller, &standalone::ReaderController::opened);
         const QSize pixels(600, 800);
         const auto position = [&] {
-            controller.window()->checkpoint();
-            return storage::readJson(paths.stateReport).value("position").toString();
+            return controller.window()->inspect().value("position").toString();
         };
 
         QVERIFY(writeBook(directory.path(), "original.epub", test::songbook(12)));

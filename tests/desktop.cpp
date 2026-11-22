@@ -11865,19 +11865,29 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.press("rrPage"));
         auto *label = qobject_cast<QLabel *>(fixture.widget("rrMenuSession"));
         QVERIFY(label && label->isVisible());
-        QVERIFY(label->text().startsWith(QStringLiteral("Counting pages… ")));
-        QVERIFY(label->text().endsWith('%'));
+        QVERIFY(label->text().isEmpty());
+        QCOMPARE(label->accessibleName(), strings::get("reader.counting_pages"));
         auto *timer = fixture.window.readerWindow()->findChild<QTimer *>("rrBookStatusTimer");
-        QVERIFY(timer && timer->isActive());
-        // The count moves while the whole book is built: the menu reads it
-        // every second.
-        QCOMPARE(timer->interval(), 1000);
+        QVERIFY(!timer || !timer->isActive());
         QVERIFY(fixture.press("rrPage"));
-        QTRY_VERIFY(!timer->isActive());
+        QVERIFY(!label->isVisible());
         QVERIFY(fixture.press("rrPage"));
-        QVERIFY(timer->isActive());
+        QVERIFY(label->isVisible());
         QVERIFY(fixture.press("rrNavChapters"));
         QVERIFY(label->isVisible());
+
+        struct Visibility : QObject
+        {
+            int shows = 0;
+
+            bool eventFilter(QObject *, QEvent *event) override
+            {
+                shows += event->type() == QEvent::Show;
+                return false;
+            }
+        } visibility;
+
+        label->installEventFilter(&visibility);
         const auto output = qEnvironmentVariable("KOBALT_TEST_CAPTURE_DIR");
         if (!output.isEmpty()) {
             QVERIFY(QDir().mkpath(output));
@@ -11885,7 +11895,8 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         }
         QTRY_VERIFY_WITH_TIMEOUT(fixture.state().value("whole_book_ready").toBool(), 60000);
         QCOMPARE(fixture.state().value("position"), position);
-        QTRY_VERIFY_WITH_TIMEOUT(label->text().isEmpty() && !timer->isActive(), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(!label->isVisible(), 10000);
+        QCOMPARE(visibility.shows, 0);
     }
 
     // The Book status field shows the last turn time and fast with the

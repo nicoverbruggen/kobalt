@@ -7528,16 +7528,7 @@ private slots:
                     && clock->isVisible() && battery->isVisible()
                     && host.book()->sessionReadingMilliseconds() == 12 * 60000;
         };
-        // Hybrid temporarily uses the label for pagination. Refresh the
-        // real status strip as soon as the menu-triggered count completes.
-        const auto refreshAfterPagination = [&host] {
-            if (host.session()->paginationPending())
-                return false;
-            auto *status = host.window()->findChild<QTimer *>("rrBookStatusTimer");
-            return !status || !status->isActive()
-                    || QMetaObject::invokeMethod(status, "timeout", Qt::DirectConnection);
-        };
-        QTRY_VERIFY_WITH_TIMEOUT(refreshAfterPagination(), 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!host.session()->paginationPending(), 30000);
         QVERIFY2(check(), "The settled menu must show reading time only when Stats is visible");
         if (!capture.isEmpty()) {
             QVERIFY(QDir().mkpath(capture));
@@ -7614,7 +7605,7 @@ private slots:
         QTRY_VERIFY(host.window()->findChild<QWidget *>("rrControlsTop")->isVisible());
         message = host.window()->findChild<QLabel *>("rrMenuSession");
         QVERIFY(message);
-        QTRY_VERIFY_WITH_TIMEOUT(refreshAfterPagination(), 30000);
+        QTRY_VERIFY_WITH_TIMEOUT(!host.session()->paginationPending(), 30000);
         QCOMPARE(message->text(), hidden ? QString() : strings::get("reader.session_minutes").arg(12));
         QCOMPARE(message->isVisible(), !hidden);
         QCOMPARE(host.book()->sessionReadingMilliseconds(), qint64(12 * 60000));
@@ -7699,6 +7690,7 @@ private slots:
         for (int minutes : { 5, 15, 120 }) {
             // Use the production wording without waiting for a long reading session.
             session->setText(strings::get("reader.session_minutes").arg(minutes));
+            session->show();
             for (int radios : { 3, 1, 2, 0, 3 }) {
                 bluetoothChanged(!(radios & 2));
                 wifiChanged({ bool(radios & 1), bool(radios & 1), 4 });

@@ -1056,7 +1056,6 @@ void Navigation::placeZenToolbar(QSize size, const QVector<QWidget *> &actions,
     const int batteryInk = battery->width() - int(ui::metrics::panel::batteryIconSize) + 1
             + qCeil(ui::batteryWidth(ui::metrics::panel::batteryBodyHeight));
     battery->move(left + groupWidth - margin - batteryInk, clockTop);
-    session->hide();
     if (bluetooth)
         bluetooth->hide();
     if (wifi)
@@ -1078,7 +1077,7 @@ void Navigation::placeZenToolbar(QSize size, const QVector<QWidget *> &actions,
     }
 }
 
-void Navigation::placeToolbar(QSize size, const QVector<QWidget *> &actions, bool zen)
+void Navigation::placeToolbar(QSize size, const QVector<QWidget *> &actions)
 {
     // Undo Zen mode's top group first, so the exit caption counts below.
     if (!toolbar->mask().isEmpty())
@@ -1098,8 +1097,6 @@ void Navigation::placeToolbar(QSize size, const QVector<QWidget *> &actions, boo
     }
     clock->setVisible(statusVisible);
     updateBatteryVisibility();
-    // Zen mode hides the minutes-open count, also under Chapters and Bookmarks.
-    session->setVisible(statusVisible && !zen && !session->text().isEmpty());
     settings->setFixedWidth(chrome::cellWidth);
     int rightActions = 0;
     for (auto *action : actions)
@@ -1189,7 +1186,7 @@ void Navigation::update(QSize size, const NavigationState &state)
     if (zenTop)
         placeZenToolbar(size, actions, state);
     else
-        placeToolbar(size, actions, state.zen);
+        placeToolbar(size, actions);
     for (auto *action : state.topActions)
         action->hide();
     const bool scrubberShown = scrubber

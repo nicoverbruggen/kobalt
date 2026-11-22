@@ -423,6 +423,7 @@ bool ReaderSession::publishPageEstimate(Engine &engine, const std::function<bool
                     || !lease || lease->revoked())
                     return;
                 auto &frame = guard->frame;
+                const bool wasCounting = guard->paginationPending();
                 const bool newBookPages = frame.state.value("columns").toInt() == 2
                         && estimate.state.value("whole_book_ready").toBool()
                         && !frame.state.value("whole_book_ready").toBool();
@@ -475,7 +476,9 @@ bool ReaderSession::publishPageEstimate(Engine &engine, const std::function<bool
                 if (estimate.state.value("whole_book_ready").toBool())
                     guard->showFullDocument(job);
                 // Saved locations can move to another spread even if both totals are the same.
-                if (changed && (shownCounts == 0 || step || newBookPages || newTicks)
+                if (changed
+                    && (shownCounts == 0 || step || newBookPages || newTicks
+                        || wasCounting != guard->paginationPending())
                     && guard->updated)
                     guard->updated();
             },

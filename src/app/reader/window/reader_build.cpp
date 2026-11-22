@@ -743,6 +743,7 @@ void MenuSessionLabel::setCountingPages(bool counting)
 {
     if (countingPages != counting) {
         countingPages = counting;
+        setAccessibleName(counting ? strings::get("reader.counting_pages") : QString());
         update();
     }
 }
@@ -754,20 +755,13 @@ void MenuSessionLabel::paintEvent(QPaintEvent *event)
         return;
     }
     QPainter painter(this);
-    auto countingFont = font();
-    countingFont.setItalic(false);
-    painter.setFont(countingFont);
-    const auto ink = palette().color(QPalette::WindowText);
-    painter.setPen(ink);
     const QRect bounds = contentsRect();
-    const int side = qMin(bounds.height(), painter.fontMetrics().height());
-    const int gap = ui::px(6);
-    const int groupWidth = side + gap + ui::interfaceTextWidth(text(), countingFont);
-    const int left = bounds.left() + qMax(0, (bounds.width() - groupWidth) / 2);
-    ui::controlIcon(ControlIcon::Hourglass, ink)
+    const int side = qMin(bounds.height(), fontMetrics().height());
+    const int center = parentWidget()->rect().center().x() - x();
+    const int left = qBound(bounds.left(), center - side / 2,
+                            qMax(bounds.left(), bounds.right() - side + 1));
+    ui::controlIcon(ControlIcon::Hourglass, palette().color(QPalette::WindowText))
             .paint(&painter, QRect(left, bounds.y() + (bounds.height() - side) / 2, side, side));
-    const auto caption = bounds.adjusted(left - bounds.x() + side + gap, 0, 0, 0);
-    ui::drawInterfaceText(painter, caption, text(), Qt::AlignLeft | Qt::AlignVCenter);
 }
 
 void Reader::buildToolbar()

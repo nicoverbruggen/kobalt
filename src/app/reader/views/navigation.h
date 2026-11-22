@@ -201,7 +201,7 @@ public:
     bool contains(QPoint global) const;
 
 private:
-    void placeToolbar(QSize size, const QVector<QWidget *> &actions, bool zen);
+    void placeToolbar(QSize size, const QVector<QWidget *> &actions);
     void placeZenToolbar(QSize size, const QVector<QWidget *> &actions,
                          const NavigationState &state);
     ui::PageScrubber *scrubber = nullptr;

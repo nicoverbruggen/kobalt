@@ -224,33 +224,22 @@ void Reader::syncStatusTimer()
 {
     const auto needed = [this] {
         return isVisible() && !lifecycleHidden && !closing && !services.suspended()
-                && (bookStatusShown() || menuShowsPagination());
+                && bookStatusShown();
     };
     if (!needed()) {
-        if (statusTimer && statusTimer->isActive()) {
+        if (statusTimer)
             statusTimer->stop();
-            // The timer may stop before its last tick clears the page count.
-            if (takesInput() && topControls->isVisible())
-                updateMenuSession();
-        }
         return;
     }
-    // The menu's page count moves while the whole book is built, which takes
-    // seconds: it reads the progress every second. The book status changes
-    // more slowly.
-    const auto interval = [this] { return menuShowsPagination() ? 1000 : 5000; };
     if (!statusTimer) {
         statusTimer = new QTimer(this);
+        statusTimer->setInterval(5000);
         statusTimer->setObjectName("rrBookStatusTimer");
-        connect(statusTimer, &QTimer::timeout, this, [this, needed, interval] {
-            if (takesInput() && topControls->isVisible())
-                updateMenuSession();
+        connect(statusTimer, &QTimer::timeout, this, [this, needed] {
             if (!needed()) {
                 statusTimer->stop();
                 return;
             }
-            if (statusTimer->interval() != interval())
-                statusTimer->setInterval(interval());
             // Panels over the page draw their own status; the strips wait.
             if (topControls->isVisible() || settingsVisible() || dictionaryPanel->isVisible()
                 || searchPanel->isVisible() || linksActive())
@@ -262,8 +251,6 @@ void Reader::syncStatusTimer()
                 page->refreshContent();
         });
     }
-    if (statusTimer->interval() != interval())
-        statusTimer->setInterval(interval());
     if (!statusTimer->isActive())
         statusTimer->start();
 }

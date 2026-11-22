@@ -3207,12 +3207,17 @@ void Reader::pageButton(int direction, quint32 sourceTime, bool userInput, int p
         || bookmarkList->isVisible())
         return;
     if (userInput && physicalKey && services.buttonControls) {
+        const auto actions = preferences.value(pageButtons::preferenceKey).toObject();
+        const bool invertLandscape = (physicalKey == Qt::Key_F23 || physicalKey == Qt::Key_F24)
+                && width() > height() && actions.value(pageButtons::invertLandscapeKey).toBool();
         // Without saved actions the native direction already follows rotation.
-        const bool rotated = !preferences.value(pageButtons::preferenceKey).toObject().isEmpty()
-                && services.pageButtonsRotated && services.pageButtonsRotated();
-        for (const auto &button : pageButtons::held(services.buttonControls(), rotated)) {
+        const bool rotated =
+                !actions.isEmpty() && services.pageButtonsRotated && services.pageButtonsRotated();
+        for (const auto &button :
+             pageButtons::held(services.buttonControls(), rotated != invertLandscape)) {
             if (button.key == physicalKey) {
-                direction = pageButtons::direction(preferences, button.id, direction);
+                direction = pageButtons::direction(preferences, button.id,
+                                                   invertLandscape ? -direction : direction);
                 break;
             }
         }

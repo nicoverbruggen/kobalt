@@ -5439,6 +5439,21 @@ void buttonMapping(Fixture &fixture, const QString &name, bool volume)
     QVERIFY(modal->rect().contains(modal->card()->geometry()));
     if (!name.isEmpty())
         capturePages(fixture, name + "-button-controls", "rrButtonControlsPopup");
+    auto *invert = qobject_cast<QCheckBox *>(fixture.widget("rrInvertLandscapeButtons"));
+    QCOMPARE(bool(invert), !volume);
+    if (invert) {
+        QVERIFY(!invert->isChecked());
+        auto *upper = fixture.widget("rrButtonDiagram_page_upper");
+        auto *lower = fixture.widget("rrButtonDiagram_page_lower");
+        QVERIFY(upper && lower);
+        const auto first = upper->geometry();
+        const auto second = lower->geometry();
+        const bool landscape = modal->width() > modal->height();
+        QCOMPARE(first.center().y() == second.center().y(), landscape);
+        invert->click();
+        QCOMPARE(upper->geometry(), landscape ? second : first);
+        QCOMPARE(lower->geometry(), landscape ? first : second);
+    }
     const auto first = "rrButtonAction_" + buttons.first().id;
     QVERIFY(fixture.press(qPrintable(first)));
     QTRY_VERIFY(fixture.visible("rrButtonActionPopup"));
@@ -5475,6 +5490,10 @@ void buttonMapping(Fixture &fixture, const QString &name, bool volume)
                      .toObject()
                      .contains(buttons.first().id));
     QVERIFY(fixture.press("rrButtonControls"));
+    if (!volume) {
+        auto *restored = qobject_cast<QCheckBox *>(fixture.widget("rrInvertLandscapeButtons"));
+        QVERIFY(restored && !restored->isChecked());
+    }
     QVERIFY(fixture.press(qPrintable("rrButtonDiagram_" + buttons.first().id)));
     QVERIFY(fixture.press("rrButtonChoose_none"));
     QVERIFY(fixture.press("rrButtonControlsDone"));
@@ -5492,6 +5511,23 @@ void buttonMapping(Fixture &fixture, const QString &name, bool volume)
                      .value("future_button")
                      .toString(),
              QString("future_action"));
+    if (!volume && name.isEmpty()) {
+        QTRY_VERIFY(!fixture.widget("rrButtonControlsPopup"));
+        QVERIFY(fixture.press("rrButtonControls"));
+        QVERIFY(fixture.press("rrInvertLandscapeButtons"));
+        QVERIFY(fixture.press("rrButtonControlsDone"));
+        QTRY_VERIFY(storage::readJson(fixture.paths.preferences())
+                            .value(pageButtons::preferenceKey)
+                            .toObject()
+                            .value(pageButtons::invertLandscapeKey)
+                            .toBool());
+        QTRY_VERIFY(!fixture.widget("rrButtonControlsPopup"));
+        QVERIFY(fixture.press("rrButtonControls"));
+        auto *saved = qobject_cast<QCheckBox *>(fixture.widget("rrInvertLandscapeButtons"));
+        QVERIFY(saved && saved->isChecked());
+        QVERIFY(fixture.press("rrInvertLandscapeButtons"));
+        QVERIFY(fixture.press("rrButtonControlsDone"));
+    }
     QVERIFY(fixture.press("rrSettingsClose"));
 }
 
@@ -5681,17 +5717,50 @@ private slots:
         QTRY_COMPARE(fixture.state().value("page").toInt(), initial + expectedDirection + 1);
     }
 
-    // Upside down, the physically lower button is on top and takes the upper action.
+    void buttonMappingFollowsRotation_data()
+    {
+        QTest::addColumn<bool>("landscape");
+        QTest::addColumn<bool>("rotated");
+        QTest::addColumn<bool>("invert");
+        QTest::addColumn<bool>("lowerAdvances");
+        QTest::addColumn<bool>("assigned");
+        QTest::addColumn<bool>("available");
+        QTest::newRow("portrait") << false << false << true << false << true << true;
+        QTest::newRow("inverted-portrait") << false << true << true << true << true << true;
+        QTest::newRow("landscape-default") << true << false << false << false << true << true;
+        QTest::newRow("inverted-landscape-default")
+                << true << true << false << true << true << true;
+        QTest::newRow("landscape-swapped") << true << false << true << true << true << true;
+        QTest::newRow("inverted-landscape-swapped")
+                << true << true << true << false << true << true;
+        QTest::newRow("swapped-native") << true << false << true << true << false << true;
+        QTest::newRow("no-buttons") << true << false << true << false << false << false;
+    }
+
     void buttonMappingFollowsRotation()
     {
-        Fixture fixture(false, false, false, true, false, false, [](ReaderHostServices &services) {
-            services.pageButtons = [] { return true; };
-            services.buttonControls = [] { return pageButtons::paging(); };
-            services.pageButtonsRotated = [] { return true; };
-        });
+        QFETCH(bool, landscape);
+        QFETCH(bool, rotated);
+        QFETCH(bool, invert);
+        QFETCH(bool, lowerAdvances);
+        QFETCH(bool, assigned);
+        QFETCH(bool, available);
+        Fixture fixture(false, false, false, true, false, false,
+                        [rotated, available](ReaderHostServices &services) {
+                            services.pageButtons = [available] { return available; };
+                            services.buttonControls = [available] {
+                                return available ? pageButtons::paging() : pageButtons::Buttons{};
+                            };
+                            services.pageButtonsRotated = [rotated] { return rotated; };
+                        });
+        selectPreview(fixture, landscape ? 4 : 1);
         auto preferences = storage::readJson(fixture.paths.preferences());
-        preferences[pageButtons::preferenceKey] =
-                QJsonObject{ { "page_upper", "next" }, { "page_lower", "previous" } };
+        QJsonObject actions{ { pageButtons::invertLandscapeKey, invert } };
+        if (assigned) {
+            actions["page_upper"] = "next";
+            actions["page_lower"] = "previous";
+        }
+        preferences[pageButtons::preferenceKey] = actions;
         QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
@@ -5702,7 +5771,7 @@ private slots:
         test::skipPageTurnWindow();
         fixture.window.readerWindow()->physicalPageButton(Qt::Key_F24, -1);
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
-        QTRY_COMPARE(fixture.state().value("page").toInt(), initial + 1);
+        QTRY_COMPARE(fixture.state().value("page").toInt(), initial + (lowerAdvances ? 1 : -1));
         test::skipPageTurnWindow();
         fixture.window.readerWindow()->physicalPageButton(Qt::Key_F23, 1);
         QTRY_VERIFY(!fixture.state().value("busy").toBool());

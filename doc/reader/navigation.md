@@ -23,7 +23,7 @@ In Chapters, tap the three dots beside Close for publisher navigation.
 
 - By default, tap the left third of the page to go back, the right third to go forward and anywhere along the full-height middle strip or the title to open the menus. The Mac e-reader previews use the same tap zones.
 - Swipe left or right to turn pages. For books whose EPUB spine declares right-to-left page progression, the left third advances and the right third goes back; horizontal swipes also reverse. Explicit Next and Previous actions, keyboard arrows and hardware page buttons keep their usual meanings.
-- Hardware page buttons follow Nickel's button mapping and its invert setting until you assign a reading action in Button controls.
+- By default, hardware page buttons follow Nickel's button mapping and its invert setting.
   - Page buttons use the topmost open panel and its page arrows. This includes the sleep screen and text preset galleries, Chapters, Bookmarks, search results, dictionaries, footnotes, settings, font pickers, Stats, header/footer fields, acknowledgments and licenses.
   - Each panel keeps the same wrapping and boundary behavior as its arrows.
 - Definition, footnote and license text stops at its ends. Confirmation dialogs block paging behind them.
@@ -44,7 +44,8 @@ In Chapters, tap the three dots beside Close for publisher navigation.
   - The row is hidden when the host has no supported buttons. Tap a button in the device diagram or its action row to choose Previous page, Next page or Do nothing. Do nothing consumes the press without turning a page.
   - Cancel discards the draft; Done saves it for all books without waiting for storage on the reading thread. Android labels its controls Volume up (+) and Volume down (−). Menus and Navigate previews keep the host's usual directions.
   - Keyboards, Bluetooth arrow keys, touch taps and swipes keep their existing behavior. Missing or invalid saved button actions retain the host's native direction, including Nickel's rotation and inversion policy.
-  - On Kobo, the upper and lower page buttons are the buttons on top and below as the device is held. When a rotation puts the physically lower button on top, it takes the upper button's action, as in Nickel.
+  - On Kobo, the diagram shows which physical key uses the Button 1 or Button 2 assignment in the current orientation. In upright portrait, Button 1 is the upper key and Button 2 is the lower key.
+  - Invert page buttons in landscape swaps the reading actions in either landscape orientation. This also swaps the native directions for buttons without a custom action. It is off by default.
   - Volume buttons keep their actions in every rotation.
 
 - Settings > Controls > Tap zones offers four diagrams: Left / right (the default), Reversed, Top / bottom and One-handed.

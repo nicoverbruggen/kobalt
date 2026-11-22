@@ -17,6 +17,8 @@ struct Button
 using Buttons = QVector<Button>;
 inline constexpr auto preferenceKey = "button_actions";
 
+inline constexpr auto invertLandscapeKey = "invert_landscape";
+
 inline Buttons paging()
 {
     return { { "page_upper", "buttons.upper", Qt::Key_F23, -1 },

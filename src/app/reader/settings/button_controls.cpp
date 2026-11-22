@@ -1,11 +1,14 @@
 #include "settings_panel.h"
 #include "support/strings.h"
+#include "ui/controls/options.h"
 #include "ui/controls/rows.h"
 #include "ui/controls/text.h"
 #include "ui/style/metrics.h"
 #include "ui/style/styles.h"
 #include "ui/style/theme.h"
+#include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QScreen>
 #include <QPainter>
 #include <memory>
 
@@ -33,7 +36,14 @@ protected:
         const auto &colors = ui::themeColors(this);
         painter.setPen(QPen(colors.ink, ui::px(2)));
         painter.setBrush(isDown() ? colors.pressedPaper : colors.paper);
-        painter.drawRoundedRect(QRectF(rect()).adjusted(1, 1, -1, -1), width() / 3., width() / 3.);
+        const auto radius = qMin(width(), height()) / 3.;
+        painter.drawRoundedRect(QRectF(rect()).adjusted(1, 1, -1, -1), radius, radius);
+        if (!text().isEmpty()) {
+            auto marker = font();
+            marker.setPixelSize(qRound(qMin(width(), height()) * .85));
+            painter.setFont(marker);
+            painter.drawText(rect(), Qt::AlignCenter, text());
+        }
     }
 };
 
@@ -41,31 +51,49 @@ protected:
 class ButtonDiagram final : public QWidget
 {
 public:
-    ButtonDiagram(QWidget *parent, const pageButtons::Buttons &buttons, int width,
+    ButtonDiagram(QWidget *parent, const pageButtons::Buttons &buttons, int width, int turns,
                   std::function<void(int)> choose)
         : QWidget(parent), volume(buttons.first().id.startsWith("volume_"))
     {
-        setFixedSize(width, qRound(width * 350. / 260));
+        const QRectF outline(0, 0, 260, 350);
+        QTransform rotation;
+        rotation.rotate(turns * 90);
+        const auto bounds = rotation.mapRect(outline);
         const qreal scale = width / 260.;
+        transform.scale(scale, scale);
+        transform.translate(-bounds.x(), -bounds.y());
+        transform.rotate(turns * 90);
+        setFixedSize((bounds.size() * scale).toSize());
         for (int i = 0; i < buttons.size(); ++i) {
             auto *button = new DiagramButton(this);
             button->setObjectName("rrButtonDiagram_" + buttons[i].id);
             button->setAccessibleName(strings::get(buttons[i].labelKey.toUtf8().constData()));
-            const int position = volume && buttons[i].key == Qt::Key_VolumeDown ? 1 : i;
-            button->setGeometry(
-                    qRound((volume ? 211 : 201) * scale), qRound((100 + position * 82) * scale),
-                    qRound((volume ? 10 : 24) * scale), qRound((volume ? 52 : 64) * scale));
+            const int position = volume ? int(buttons[i].key == Qt::Key_VolumeDown)
+                                        : int(buttons[i].key == Qt::Key_F24);
+            if (!volume)
+                button->setText(QString::number(i + 1));
+            const QRectF key(volume ? 211 : 201, 100 + position * 82, volume ? 10 : 24,
+                             volume ? 52 : 64);
+            button->setGeometry(transform.mapRect(key).toRect());
+            keys.append(button);
             ui::readerStyle(button,
                             "min-width:0;min-height:0;padding:0;border:0;background:transparent;");
             connect(button, &QPushButton::clicked, this, [choose, i] { choose(i); });
         }
     }
 
+    void swapKeyPositions()
+    {
+        const auto first = keys[0]->geometry();
+        keys[0]->setGeometry(keys[1]->geometry());
+        keys[1]->setGeometry(first);
+    }
+
 protected:
     void paintEvent(QPaintEvent *) override
     {
         QPainter p(this);
-        p.scale(width() / 260., height() / 350.);
+        p.setTransform(transform);
         const auto &colors = ui::themeColors(this);
         p.setRenderHint(QPainter::Antialiasing);
         p.setPen(QPen(colors.ink, 2));
@@ -82,6 +110,14 @@ protected:
             p.setPen(QPen(colors.ink, 1));
             p.drawRect(QRect(29, 25, 158, 296));
         }
+        if (!volume) {
+            // The page text stays upright when the reader rotates.
+            const auto screen = transform.mapRect(QRectF(29, 25, 158, 296));
+            p.resetTransform();
+            p.translate(screen.center());
+            p.scale(screen.width() / 158., screen.height() / 296.);
+            p.translate(-108, -173);
+        }
         p.setPen(QPen(colors.secondaryInk, 1));
         for (int line = 0; line < 5; ++line)
             p.drawLine(volume ? 74 : 57, 134 + 17 * line,
@@ -89,6 +125,8 @@ protected:
     }
 
 private:
+    QTransform transform;
+    QVector<DiagramButton *> keys;
     bool volume;
 };
 } // namespace
@@ -273,7 +311,13 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
         connect(controls[i], &QPushButton::clicked, card, [choose, i] { choose(i); });
     const int diagramWidth =
             qMin<int>(ui::px(260), qMin(drawingWidth * 2 / 5, parentWidget()->height() / 5));
-    auto *diagram = new ButtonDiagram(drawing, buttons, diagramWidth, choose);
+    const bool landscape = !volume && parentWidget()->width() > parentWidget()->height();
+    const auto *screen = QGuiApplication::primaryScreen();
+    const auto orientation = screen ? screen->orientation() : Qt::PrimaryOrientation;
+    const int turns = landscape ? (orientation == Qt::InvertedLandscapeOrientation ? -1 : 1)
+            : !volume && orientation == Qt::InvertedPortraitOrientation ? 2
+                                                                        : 0;
+    auto *diagram = new ButtonDiagram(drawing, buttons, diagramWidth, turns, choose);
     drawingRows->addWidget(diagram);
     drawingRows->addWidget(labels, 1);
     previewRows->addStretch();
@@ -283,9 +327,29 @@ void SettingsPanel::showButtonControls(const pageButtons::Buttons &buttons,
     const int notePadding =
             parentWidget()->height() >= ui::px(900) ? int(chrome::inset) : ui::px(12);
     note->setContentsMargins(chrome::inset, notePadding, chrome::inset, notePadding);
-    ui::readerStyle(note, ui::styles::font(chrome::descriptionText));
-    rows->removeWidget(note);
-    mappingRows->addWidget(note);
+    if (volume) {
+        ui::readerStyle(note, ui::styles::font(chrome::descriptionText));
+        rows->removeWidget(note);
+        mappingRows->addWidget(note);
+    } else {
+        ui::readerStyle(note, ui::styles::font(chrome::descriptionText) + "font-style:italic;");
+        auto *invert = checklistOption(card, "rrInvertLandscapeButtons",
+                                       strings::get("buttons.invert_landscape"),
+                                       strings::get("buttons.invert_landscape_hint"), false);
+        invert->setChecked(draft->value(pageButtons::invertLandscapeKey).toBool());
+        if (landscape && buttons.size() == 2) {
+            if (invert->isChecked())
+                diagram->swapKeyPositions();
+            connect(invert, &QCheckBox::toggled, diagram, &ButtonDiagram::swapKeyPositions);
+        }
+        connect(invert, &QCheckBox::toggled, card, [draft](bool checked) {
+            if (checked)
+                draft->insert(pageButtons::invertLandscapeKey, true);
+            else
+                draft->remove(pageButtons::invertLandscapeKey);
+        });
+        rows->addWidget(invert);
+    }
     auto *cancel = ui::makeModalButton(
             card, { strings::get("common.cancel"), "rrButtonControlsCancel" }, false);
     auto *done = ui::makeModalButton(card, { strings::get("common.done"), "rrButtonControlsDone" },

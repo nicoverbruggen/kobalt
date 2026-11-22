@@ -37,6 +37,8 @@ The default section order depends on the picker. Empty sections are omitted.
 | Reading typeface | Recommended Fonts → Kobalt Collection → System Fonts → UI Fonts → Sideloaded Fonts |
 | Settings typefaces, including fallbacks and header and footer | Recommended Fonts → Kobalt Collection → System Fonts → UI Fonts → Sideloaded Fonts → Supplemental Fonts (International) |
 
+The reading picker also shows a saved international typeface under Supplemental Fonts (International) while it is selected for the book or set as the default.
+
 Turn on Show sideloaded fonts first in System > Nitpicks to move Sideloaded Fonts ahead of Recommended Fonts in every picker.
 
 The Kobalt Collection includes Adelph, Alegreya, Aleo, Andada, Basker, Cartisse, Castoro, Halcyon, Publica, Scarlet, Technical and Yrsa. UI Fonts contains IBM Plex Mono, IBM Plex Sans, Kalam and Playpen Sans. Noto Serif appears under Supplemental Fonts (International) in the interface typeface pickers. Script-specific and math fallbacks still render book content automatically.

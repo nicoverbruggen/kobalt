@@ -13634,19 +13634,38 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(fixture.prepared);
         auto preferences = storage::readJson(fixture.paths.preferences());
         preferences[appearance::inheritTextLayoutKey] = false;
-        preferences["default_font_face"] = "NV Ancizar Serif";
+        preferences["default_font_face"] = "Noto Serif";
         QVERIFY(storage::writeJson(fixture.paths.preferences(), preferences));
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
         fixture.window.openBook(book);
         QTRY_COMPARE(opened.count(), 1);
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         const auto originalFace = fixture.state().value("font_face");
-        QCOMPARE(originalFace.toString(), QString("NV Ancizar Serif"));
+        QCOMPARE(originalFace.toString(), QString("Noto Serif"));
         QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrNavText"));
+        QVERIFY(fixture.press("rrFont"));
+        QTRY_COMPARE(labelText(fixture, "rrFontSection"),
+                     QString("SUPPLEMENTAL FONTS (INTERNATIONAL)"));
+        auto *fontChoices = fixture.widget("rrChoices");
+        QAbstractButton *saved = nullptr;
+        for (auto *button : fontChoices->findChildren<QAbstractButton *>())
+            if (button->isVisible() && button->isChecked()
+                && button->accessibleName() == "Noto Serif")
+                saved = button;
+        QVERIFY(saved);
+        auto *detail = fontChoices->findChild<QLabel *>(saved->objectName() + "Detail");
+        QVERIFY(detail && detail->text().contains(strings::get("reader.default_font").toUpper()));
+        QVERIFY(fixture.press("rrFontClose"));
         QVERIFY(fixture.press("rrSettings"));
         QVERIFY(fixture.press("rrSettingsDefaults"));
         QVERIFY(revealSettingsOption(fixture, "rrDefaultFont"));
         QVERIFY(fixture.press("rrDefaultFont"));
+        QTRY_VERIFY(fixture.visible("rrSettingsFontChoices"));
+        auto *previous = qobject_cast<QPushButton *>(fixture.widget("rrSettingsFontPrevious"));
+        QVERIFY(previous);
+        while (previous->isEnabled())
+            QVERIFY(fixture.click(previous));
         QTRY_VERIFY(fixture.visible("rrSettingsFontChoice0"));
         auto *publisher = qobject_cast<QAbstractButton *>(fixture.widget("rrSettingsFontChoice0"));
         QVERIFY(publisher);

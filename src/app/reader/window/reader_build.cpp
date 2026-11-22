@@ -2410,7 +2410,8 @@ void Reader::showFontPicker()
         const auto &font = fonts[row];
         if ((font.origin == FontOrigin::BuiltIn
              && !pickerNativeFamilies.contains(font.family, Qt::CaseInsensitive))
-            || (font.origin == FontOrigin::Interface && internationalSupplementalFont(font.family)))
+            || (font.origin == FontOrigin::Interface && internationalSupplementalFont(font.family)
+                && font.family != settings->fontFace() && font.family != defaultFace))
             fonts.removeAt(row);
     }
     fonts = orderedReadingFonts(std::move(fonts), { settings->fontFace(), defaultFace });

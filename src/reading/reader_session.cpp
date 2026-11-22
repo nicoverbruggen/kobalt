@@ -206,8 +206,9 @@ void captureChapters(ReaderFrame &result, Engine &engine, const std::function<bo
             !first.isEmpty() || !after.isEmpty() || !engine.mainTextMarks.isEmpty();
     result.mainWords = engine.wordsInMainText(first, after, current);
     // The whole book is shown at a later turn. It does this work now, on the
-    // background capture that follows its preparation.
-    if (engine.partOfBook())
+    // background capture that follows its preparation. Only a capture that
+    // can stop for the reader does it: a turn must not walk the whole book.
+    if (engine.partOfBook() && current)
         engine.prepareWholeBookText(first, after, current);
     result.state["main_text_first"] = firstPage;
     result.state["main_text_last"] = lastPage;

@@ -3233,11 +3233,15 @@ void ReaderSession::resumeIdleWork(int direction, quint64 job)
                 // neighbour work: they run after this job has ended, so
                 // that the reader does not count as preparing pages for as
                 // long as they take.
+                // This continuation can land behind a drain marker after
+                // the reader closes. Only an active job should own the engine.
+                const std::weak_ptr<Engine> weakEngine = engine;
                 const quint64 queued = engineWorkRequests();
                 kobalt::qt::invoke(
                         engineWorker(),
-                        [background, engine, current, guard, job, lease, queued] {
-                            if (!current())
+                        [background, weakEngine, current, guard, job, lease, queued] {
+                            const auto engine = weakEngine.lock();
+                            if (!engine || !current())
                                 return;
                             EngineJob activity;
                             // After the neighbour pages: the documents that

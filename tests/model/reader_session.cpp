@@ -8,6 +8,7 @@
 #include "plain_archive.h"
 #include "publication/resource_server.h"
 #include "support/diagnostics.h"
+#include "support/main_thread.h"
 #include "support/qt_compat.h"
 #include "publication/zip_resource.h"
 #include "support/strings.h"
@@ -653,6 +654,94 @@ static void positionImportTransitions(const QString &path, const QString &replac
     }
 }
 
+static ResourceFactory trackedResourceFactory(const QString &path,
+                                              const std::shared_ptr<SourceLease> &lease,
+                                              const std::shared_ptr<int> &owner,
+                                              ResourceCache::Statistics statistics = {})
+{
+    return [path, lease, owner, statistics](const QMap<QString, qint64> &sizes, const QString &,
+                                            std::shared_ptr<std::atomic_bool>) {
+        return std::make_shared<ResourceCache>(
+                sizes.keys(),
+                ResourceCache::Access{ [path, owner](const QString &name,
+                                                     const ResourceCache::Sink &sink, QString *) {
+                                          ZipResource resource;
+                                          if (!resource.open(path, name))
+                                              return false;
+                                          while (resource.valid() && !resource.finished()) {
+                                              const auto bytes = resource.next();
+                                              if (!sink(bytes.constData(), bytes.size()))
+                                                  return false;
+                                          }
+                                          return resource.valid();
+                                      },
+                                       [lease] { return lease->revoked(); }, statistics,
+                                       [](const QString &name) {
+                                           return name.endsWith(".png") ? QSize(128, 64) : QSize();
+                                       } });
+    };
+}
+
+// Close during neighbour work and check that the estimate queued after drain
+// cannot retain the book's resources past the drain callback.
+static void hybridDrainReleasesResources(const QString &path)
+{
+    renderingMode::setOverride(2);
+    auto reader = std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
+    auto lease = std::make_shared<SourceLease>();
+    auto owner = std::make_shared<int>(0);
+    const std::weak_ptr<int> lifetime = owner;
+    std::atomic_bool neighbourStarted{ false };
+    QSemaphore drainQueued;
+    const auto drainObserved = std::make_shared<QSemaphore>();
+    QEventLoop finished;
+    bool released = false;
+    auto source = trackedResourceFactory(path, lease, owner, [&] {
+        if (neighbourStarted.exchange(false)) {
+            // The worker has prepared the neighbour pages and is collecting
+            // their statistics, before it can post the next estimate job.
+            qt::invoke(
+                    qApp,
+                    [&] {
+                        reader.reset();
+                        ReaderSession::drain([&] {
+                            released = lifetime.expired();
+                            drainObserved->release();
+                            finished.quit();
+                        });
+                        // Keep the worker from running the later estimate
+                        // until the GUI has observed the drain callback.
+                        qt::invoke(
+                                engineWorker(),
+                                [drainObserved] {
+                                    mainthread::blocking("test-hybrid-drain-observed");
+                                    require(drainObserved->tryAcquire(1, 10000),
+                                            "GUI did not observe the drain");
+                                },
+                                Qt::QueuedConnection);
+                        drainQueued.release();
+                    },
+                    Qt::QueuedConnection);
+            mainthread::blocking("test-hybrid-drain-queued");
+            require(drainQueued.tryAcquire(1, 10000), "GUI did not queue the drain");
+        }
+        return QJsonObject{};
+    });
+    owner.reset();
+    reader->open({ path, path, QSize(758, 900), {}, {}, lease, std::move(source) },
+                 [&](OpeningResult result) {
+                     require(result.ready(), qPrintable(openingMessage(result)));
+                     require(reader->state().contains("book_fraction") && !lifetime.expired(),
+                             "The Hybrid session must own resources before closing");
+                     neighbourStarted.store(true);
+                 });
+    finished.exec();
+    require(released, "An estimate queued after the drain kept Hybrid resources alive");
+    ReaderSession::drain([&] { finished.quit(); });
+    finished.exec();
+    renderingMode::setOverride(-1);
+}
+
 int run(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
@@ -713,6 +802,7 @@ int run(int argc, char **argv)
         QObject::connect(&timeout, &QTimer::timeout, &opened,
                          [] { require(false, "Session check timed out"); });
         timeout.start(60000);
+        hybridDrainReleasesResources(path);
         QTemporaryDir malformed;
         require(malformed.isValid(), "Cannot create opening fixtures");
         const auto reject = [&](OpenRequest request, OpeningFailureKind kind, const char *reason,
@@ -1994,47 +2084,23 @@ int run(int argc, char **argv)
             auto imageLease = std::make_shared<SourceLease>();
             auto resourceOwner = std::make_shared<int>(0);
             std::weak_ptr<int> resourceLifetime = resourceOwner;
-            const auto source =
-                    [&colorPath, &resourceOwner](
-                            const std::shared_ptr<SourceLease> &imageLease) -> ResourceFactory {
-                return [colorPath, imageLease, resourceOwner](const QMap<QString, qint64> &sizes,
-                                                              const QString &,
-                                                              std::shared_ptr<std::atomic_bool>) {
-                    return std::make_shared<ResourceCache>(
-                            sizes.keys(),
-                            ResourceCache::Access{
-                                    [colorPath, resourceOwner](const QString &name,
-                                                               const ResourceCache::Sink &sink,
-                                                               QString *) {
-                                        ZipResource resource;
-                                        if (!resource.open(colorPath, name))
-                                            return false;
-                                        while (resource.valid() && !resource.finished()) {
-                                            const auto bytes = resource.next();
-                                            if (!sink(bytes.constData(), bytes.size()))
-                                                return false;
-                                        }
-                                        return resource.valid();
-                                    },
-                                    [imageLease] { return imageLease->revoked(); },
-                                    {},
-                                    [](const QString &name) {
-                                        return name.endsWith(".png") ? QSize(128, 64) : QSize();
-                                    } });
-                };
-            };
             // Resolve the pages before the image in another session so seeking
             // the image does not warm the cache of the reader under test.
             QStringList beforeImage;
             {
                 ReaderSession reference(test::readerFonts(), test::readerPlaceholder());
                 auto access = std::make_shared<SourceLease>();
-                reference.open(
-                        { colorPath, colorPath, QSize(758, 900), {}, {}, access, source(access) },
-                        [&](OpeningResult result) {
-                            require(result.ready(), qPrintable(openingMessage(result)));
-                            opened.quit();
-                        });
+                reference.open({ colorPath,
+                                 colorPath,
+                                 QSize(758, 900),
+                                 {},
+                                 {},
+                                 access,
+                                 trackedResourceFactory(colorPath, access, resourceOwner) },
+                               [&](OpeningResult result) {
+                                   require(result.ready(), qPrintable(openingMessage(result)));
+                                   opened.quit();
+                               });
                 opened.exec();
                 reference.updated = [&] {
                     if (!reference.busy())
@@ -2054,7 +2120,13 @@ int run(int argc, char **argv)
             for (const bool image : { false, true }) {
                 ReaderSession idle(test::readerFonts(), test::readerPlaceholder());
                 auto access = std::make_shared<SourceLease>();
-                idle.open({ colorPath, colorPath, QSize(758, 900), {}, {}, access, source(access) },
+                idle.open({ colorPath,
+                            colorPath,
+                            QSize(758, 900),
+                            {},
+                            {},
+                            access,
+                            trackedResourceFactory(colorPath, access, resourceOwner) },
                           [&](OpeningResult result) {
                               require(result.ready(), qPrintable(openingMessage(result)));
                               opened.quit();
@@ -2085,7 +2157,7 @@ int run(int argc, char **argv)
                                 && idle.resourceStats() == stats && idle.cachedPages() == cached,
                         "An ended source published an idle image or neighbouring pages");
             }
-            ResourceFactory images = source(imageLease);
+            auto images = trackedResourceFactory(colorPath, imageLease, resourceOwner);
             auto illustrated =
                     std::make_unique<ReaderSession>(test::readerFonts(), test::readerPlaceholder());
             illustrated->open({ colorPath, colorPath, QSize(758, 900), {}, {}, imageLease, images },

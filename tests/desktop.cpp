@@ -13253,8 +13253,7 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         cell->removeEventFilter(&paints);
     }
 
-    // Checks that interface font pickers leave out families of 3 MB or more, show
-    // such custom fonts disabled with the reason, and keep a chosen family loaded.
+    // Checks bundled families, both sides of the interface font limit and retention after selection.
     void interfaceFontSizeLimit()
     {
         QTemporaryDir fonts;
@@ -13263,13 +13262,9 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         const auto small = fonts.filePath("KF_Small.ttf"), large = fonts.filePath("KF_Large.ttf");
         QVERIFY(test::renamedFontFixture(source, small, "NV Bitter", "KF Little"));
         QVERIFY(test::renamedFontFixture(source, large, "NV Bitter", "KF Bigger"));
-        {
-            // Bytes after the tables leave the font valid but make it large.
-            QFile file(large);
-            QVERIFY(file.open(QIODevice::Append));
-            QCOMPARE(file.write(QByteArray(int(interfaceFontByteLimit), '\0')),
-                     qint64(interfaceFontByteLimit));
-        }
+        // Padding after the tables leaves the font valid.
+        QVERIFY(QFile::resize(small, interfaceFontByteLimit - 1));
+        QVERIFY(QFile::resize(large, interfaceFontByteLimit));
         Fixture fixture(false, false, false, true, false, false, {}, fonts.path());
         QVERIFY(fixture.prepared);
         QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
@@ -13291,13 +13286,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         auto *list = static_cast<ui::RadioList *>(fixture.widget("rrSettingsFontChoices"));
         QVERIFY(list);
         ui::DescribedOption *smallRow = nullptr, *largeRow = nullptr;
+        QStringList enabledFamilies;
         for (auto *option : list->options()) {
             const auto family = option->property("reader_font_family").toString();
+            if (option->isEnabled())
+                enabledFamilies.append(family);
             if (family == "KF Little")
                 smallRow = option;
             if (family == "KF Bigger")
                 largeRow = option;
         }
+        QVERIFY(enabledFamilies.contains("NV Garamond"));
+        QVERIFY(enabledFamilies.contains("NV Charis"));
         QVERIFY(smallRow && largeRow);
         QVERIFY(smallRow->isEnabled());
         QVERIFY(!largeRow->isEnabled());

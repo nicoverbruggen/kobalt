@@ -825,6 +825,8 @@ private:
         bool pinnedShortcut = false;
     };
 
+    // The page on screen, as a place to return to after a jump.
+    LinkVisit currentVisit(bool pinnedShortcut = false) const;
     QVector<LinkVisit> linkHistory;
     LinkVisit pendingPassage{};
     std::shared_ptr<std::atomic<quint64>> linkEpoch = std::make_shared<std::atomic<quint64>>(0);

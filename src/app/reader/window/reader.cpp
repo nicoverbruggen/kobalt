@@ -2162,16 +2162,21 @@ bool Reader::openLink(QPoint point, bool direct)
     return false;
 }
 
+Reader::LinkVisit Reader::currentVisit(bool pinnedShortcut) const
+{
+    return { session->state().value("position").toString(), session->bookPage(),
+             (session->chapterTitle().isEmpty() ? strings::get("reader.reading")
+                                                : session->chapterTitle())
+                     .toUpper(),
+             pinnedShortcut };
+}
+
 void Reader::goToPassage(const QString &target, bool pinnedShortcut)
 {
     if (target.isEmpty() || session->busy() || closing || lifecycleHidden || services.suspended()) {
         return;
     }
-    const LinkVisit origin{ session->state().value("position").toString(), session->bookPage(),
-                            (session->chapterTitle().isEmpty() ? strings::get("reader.reading")
-                                                               : session->chapterTitle())
-                                    .toUpper(),
-                            pinnedShortcut };
+    const auto origin = currentVisit(pinnedShortcut);
     if (!session->goTo(target)) {
         return;
     }
@@ -3016,8 +3021,11 @@ void Reader::showChapters(ContentsList mode)
                 choices->showPrintedPageInput(
                         pages, hasOtherLabels,
                         [this](const QString &position) {
-                            if (session->goTo(position))
+                            const auto origin = currentVisit();
+                            if (session->goTo(position)) {
+                                pendingPassage = origin;
                                 dismissControls();
+                            }
                         },
                         [this] { showChapters(ContentsList::PrintedPages); });
                 return;
@@ -3026,9 +3034,14 @@ void Reader::showChapters(ContentsList mode)
         showChapters(selected);
     };
     choices->previewImage = [this](const QString &resource) { openImagePreview({}, resource); };
+    // A jump from the contents can be undone with Return to page, like a
+    // link or a jump from the scrubber.
     choices->selected = [this, auxiliary](const QString &value) {
-        if (auxiliary ? session->goTo(value) : session->goToChapter(value.toInt()))
+        const auto origin = currentVisit();
+        if (auxiliary ? session->goTo(value) : session->goToChapter(value.toInt())) {
+            pendingPassage = origin;
             dismissControls();
+        }
     };
     choosingTypography = false;
     menu->hide();

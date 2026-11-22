@@ -5507,6 +5507,38 @@ private slots:
         QVERIFY(!fixture.widget("rrButtonControlsPopup"));
     }
 
+    // Checks that a jump from the Chapters list offers Return to page back to the page left.
+    void contentsReturn()
+    {
+        Fixture fixture;
+        QVERIFY(fixture.prepared);
+        QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
+        fixture.window.openBook(book);
+        QTRY_COMPARE_WITH_TIMEOUT(opened.count(), 1, 30000);
+        QTRY_VERIFY(!fixture.state().value("busy").toBool());
+        const auto origin = fixture.state().value("position").toString();
+        // Hybrid names the passage while the page number is not known yet.
+        const int originPage = fixture.state().contains("book_fraction")
+                ? fixture.state().value("rough_page").toInt()
+                : fixture.state().value("page").toInt() + 1;
+        const auto returnLabel = originPage > 0 ? strings::get("reader.return_page").arg(originPage)
+                                                : strings::get("reader.return_to_passage");
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrNavChapters"));
+        QVERIFY(fixture.press("rrNavChapters"));
+        QTRY_VERIFY(fixture.visible("rrContents"));
+        QVERIFY(fixture.press("rrChapter3"));
+        QTRY_VERIFY(!fixture.visible("rrContents"));
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        QVERIFY(fixture.state().value("position").toString() != origin);
+        QVERIFY(fixture.press("rrPage"));
+        QTRY_VERIFY(fixture.visible("rrScrubberReturn"));
+        QCOMPARE(fixture.widget("rrScrubberReturn")->property("text").toString(), returnLabel);
+        QVERIFY(fixture.press("rrScrubberReturn"));
+        QTRY_VERIFY_WITH_TIMEOUT(!fixture.state().value("busy").toBool(), 30000);
+        QTRY_COMPARE(fixture.state().value("position").toString(), origin);
+    }
+
     // Drives the real reader's last TOC page without allocating one widget per song.
     void largeToc()
     {
@@ -18449,11 +18481,15 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         QVERIFY(scrubber);
         QTRY_VERIFY(scrubber->previewReady());
         QTRY_VERIFY(fixture.visible("rrScrubberReturn"));
+        const auto used = fixture.widget("rrScrubberReturn")->property("text").toString();
         QVERIFY(fixture.press("rrScrubberReturn"));
         QTRY_VERIFY(!fixture.state().value("busy").toBool());
         QTRY_COMPARE(fixture.state().value("position"), origin);
         QVERIFY(fixture.press("rrPage"));
-        QVERIFY(!fixture.visible("rrScrubberReturn"));
+        // The return is used up. What remains is the jump to the prologue
+        // from Chapters, back to the page the book opened on.
+        QVERIFY(!fixture.visible("rrScrubberReturn")
+                || fixture.widget("rrScrubberReturn")->property("text").toString() != used);
     }
 
     // Kobo's Large Print Mode enlarges interface text, at most to 150%.

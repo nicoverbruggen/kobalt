@@ -25,6 +25,8 @@ class AboutPage;
 }
 
 namespace kobalt::reader {
+QString fontSectionLabel(FontSection section);
+
 // The brand-face title of a full-screen settings page. It sits where the
 // word "Settings" sits, so every page title shares one baseline.
 class SettingsTitle final : public ui::InterfaceLabel
@@ -100,7 +102,7 @@ public:
     // disabled, with the reason.
     void showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
                          const QString &current, const QString &emptyLabel, bool interfaceFonts,
-                         std::function<void(const QString &)> chosen);
+                         std::function<void(const QString &)> chosen, bool sideloadedFirst = false);
     void dismissSheet();
     // Shows, raises and focuses the open sheet, then reports it through
     // sheetShown().
@@ -179,7 +181,8 @@ public:
                       *debugStorageButton = nullptr;
     void showPowerManagement(bool visible);
     int fitContent(QSize availableSize);
-    ui::DescribedOption *hideTabLabelsOption = nullptr, *saveWordsOption = nullptr;
+    ui::DescribedOption *sideloadedFontsFirstOption = nullptr, *hideTabLabelsOption = nullptr,
+                        *saveWordsOption = nullptr;
     ui::CaptionButton *themingButton = nullptr, *presetButton = nullptr, *iconThemeButton = nullptr,
                       *paletteButton = nullptr;
     QString selectedTheme;

@@ -47,6 +47,25 @@ namespace styles = ui::styles;
 using ui::makeButton;
 using ui::readerStyle;
 
+QString fontSectionLabel(FontSection section)
+{
+    switch (section) {
+    case FontSection::Recommended:
+        return strings::get("reader.recommended_fonts");
+    case FontSection::BuiltIn:
+        return strings::get("reader.built_in_fonts");
+    case FontSection::Supplemental:
+        return strings::get("reader.supplemental_fonts");
+    case FontSection::Ui:
+        return strings::get("reader.ui_fonts");
+    case FontSection::Sideloaded:
+        return strings::get("reader.sideloaded_fonts");
+    case FontSection::International:
+        return strings::get("reader.international_supplemental_fonts");
+    }
+    Q_UNREACHABLE();
+}
+
 namespace {
 
 struct FeatureOption
@@ -1140,6 +1159,11 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
     secondaryNumbersButton = listAction(systemPage, nullptr, "rrSecondaryNumbers",
                                         strings::get("settings.secondary_numbers"), [] { });
     systemRows->addWidget(secondaryNumbersButton);
+    sideloadedFontsFirstOption = settingsOption(
+            systemPage, "rrSideloadedFontsFirst", strings::get("settings.sideloaded_fonts_first"),
+            strings::get("settings.sideloaded_fonts_first_description"));
+    sideloadedFontsFirstOption->setLeadingIcon(ui::ControlIcon::Typography);
+    systemRows->addWidget(sideloadedFontsFirstOption);
     openingCoverOption =
             settingsOption(systemPage, "rrHideOpeningCover", strings::get("settings.opening_cover"),
                            strings::get("settings.opening_cover_description"));
@@ -1912,11 +1936,13 @@ public:
 
     void configure(const QString &title, const QVector<ReadingFont> &catalog,
                    const QString &current, const QString &emptyLabel, bool interfaceFonts,
-                   std::function<void(const QString &)> chosen)
+                   bool sideloadedFirst, std::function<void(const QString &)> chosen)
     {
         setGeometry(parentWidget()->rect());
         heading->setText(title);
         fonts = catalog;
+        interfacePicker = interfaceFonts;
+        sortFontSections(fonts, interfaceFonts, sideloadedFirst);
         int selected = 0;
         for (int index = 0; index < fonts.size(); ++index) {
             const auto &family = fonts[index].family;
@@ -1962,22 +1988,25 @@ private:
     void fit(int row)
     {
         fittedSize = size();
-        cardWidth =
-                qMin<int>(metrics::notice::cardWidth, width() - 2 * metrics::notice::sideClearance);
-        rowHeight = choices->rowHeight(cardWidth - 2 * metrics::control::border);
+        columns = isPhoneScreen(size(), ui::density()) ? 1 : 2;
+        choices->setTwoColumns(columns == 2);
+        cardWidth = qMin(width() - 2 * metrics::notice::sideClearance,
+                         columns * int(metrics::notice::cardWidth));
+        rowHeight = choices->rowHeight((cardWidth - 2 * metrics::control::border) / columns);
         auto *header = heading->parentWidget();
         header->ensurePolished();
         const auto margins = card()->rows()->contentsMargins();
         const int overhead = margins.top() + margins.bottom() + header->sizeHint().height()
                 + section->height() + pager->height();
-        const int perPage =
-                qMax(1, (height() - 2 * metrics::notice::sideClearance - overhead) / rowHeight);
+        const int perPage = columns
+                * qMax(1, (height() - 2 * metrics::notice::sideClearance - overhead) / rowHeight);
         pages.clear();
         int initialPage = 0;
         for (int first = 0; first < fonts.size();) {
             int end = first + 1;
             while (end < fonts.size() && end - first < perPage
-                   && fonts[end].origin == fonts[first].origin)
+                   && fontSection(fonts[end], interfacePicker)
+                           == fontSection(fonts[first], interfacePicker))
                 ++end;
             if (first <= row && row < end)
                 initialPage = pages.size();
@@ -2002,24 +2031,10 @@ private:
             presentation.opticalLabel = !fonts[index].family.isEmpty();
             option->setPresentation(presentation);
         }
-        QString caption;
-        switch (fonts[range.first].origin) {
-        case FontOrigin::Recommended:
-            caption = strings::get("reader.recommended_fonts");
-            break;
-        case FontOrigin::BuiltIn:
-            caption = strings::get("reader.built_in_fonts");
-            break;
-        case FontOrigin::Sideloaded:
-            caption = strings::get("reader.sideloaded_fonts");
-            break;
-        case FontOrigin::Interface:
-            caption = strings::get("reader.supplemental_fonts");
-            break;
-        }
-        section->setCaptions(caption.toUpper());
+        section->setCaptions(
+                fontSectionLabel(fontSection(fonts[range.first], interfacePicker)).toUpper());
         choices->showRows(range.first, range.second);
-        choices->setFixedHeight(range.second * rowHeight);
+        choices->setFixedHeight(((range.second + columns - 1) / columns) * rowHeight);
         pager->setPage(page, pages.size());
         card()->fitToWidth(cardWidth);
         centerCard();
@@ -2031,8 +2046,9 @@ private:
     ui::PagerBar *pager;
     QVector<ReadingFont> fonts;
     QVector<QPair<int, int>> pages;
-    int firstVisible = 0, cardWidth = 0, rowHeight = 0;
+    int firstVisible = 0, cardWidth = 0, rowHeight = 0, columns = 1;
     QSize fittedSize;
+    bool interfacePicker = false;
     const QVariantList appearance;
 };
 } // namespace
@@ -2040,7 +2056,8 @@ private:
 void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingFont> &fonts,
                                     const QString &current, const QString &emptyLabel,
                                     bool interfaceFonts,
-                                    std::function<void(const QString &)> chosen)
+                                    std::function<void(const QString &)> chosen,
+                                    bool sideloadedFirst)
 {
     if (sheet || fonts.isEmpty())
         return;
@@ -2059,7 +2076,8 @@ void SettingsPanel::showFontChoices(const QString &title, const QVector<ReadingF
     }
     sheet = popup;
     popup->setObjectName("rrSettingsFontPopup");
-    popup->configure(title, fonts, current, emptyLabel, interfaceFonts, std::move(chosen));
+    popup->configure(title, fonts, current, emptyLabel, interfaceFonts, sideloadedFirst,
+                     std::move(chosen));
     presentSheet();
 }
 

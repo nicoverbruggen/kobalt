@@ -377,7 +377,7 @@
   {
     "group": "author",
     "name": "eBook Fonts",
-    "version": "13834303660d; Libron 0.32",
+    "version": "4c4e3267138a; Libron 0.32",
     "description": "Reading fonts: Libron 0.32, Sourcerer, NV Ancizar Serif, NV Charis, NV Garamond, NV Jost, NV Bitter, NV Legible Next, NV Literata and NV Palatium. The original authors and licenses are listed below.",
     "license": "SIL OFL and AGPLv3 with font exception",
     "url": "https://github.com/nicoverbruggen/ebook-fonts",
@@ -385,6 +385,17 @@
       "eBook-Fonts",
       "Atkinson-Hyperlegible-Next-OFL",
       "Domitian"
+    ]
+  },
+  {
+    "group": "author",
+    "name": "Supplemental eBook Fonts",
+    "version": "4c4e3267138a",
+    "description": "Additional reading and interface typefaces from the eBook Fonts collection. Original authors and font notices are listed below.",
+    "license": "SIL OFL, Bitstream Charter terms, and Adelphe terms",
+    "url": "https://github.com/nicoverbruggen/ebook-fonts",
+    "notices": [
+      "eBook-Supplemental"
     ]
   }
 ]

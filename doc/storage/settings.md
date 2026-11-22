@@ -23,6 +23,7 @@ Every key below is optional and keeps settings schema 1. Missing or invalid valu
 | `ui_mono_font_face` | font name | theme font | Monospace interface typeface. |
 | `header_footer_font_face` | font name | `NV Jost` | Header and footer typeface. Falls back to IBM Plex Mono if NV Jost is unavailable. |
 | `header_footer_added_weight` | `0`, `2`, `4`, `6`, `8` | `2` | Extra weight for header and footer text. |
+| `sideloaded_fonts_first` | Boolean | `false` | List sideloaded families first in all typeface pickers. |
 | `hide_tab_labels` | Boolean | `false` | The tab bar shows icons only. |
 | `screen_refresh` | `smart`, `1`, `chapter`, `6`, `10`, `20`, `manual` | `smart` | When a page turn flashes the screen. Smart flashes at a chapter start after at least 10 turns. Numbers flash every that many turns. Manual never flashes on a turn. Closing the menu with a tap on the page always flashes. |
 | `show_opening_cover` | Boolean | `true` | False shows the Kobalt logo while a book opens or reopens, also at native-reader handoff. Progress and status messages stay visible. |

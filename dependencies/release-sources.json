@@ -1,7 +1,7 @@
 {
   "ebook-fonts": {
-    "url": "https://codeload.github.com/nicoverbruggen/ebook-fonts/tar.gz/13834303660d071657b1aa885da02c2d075b5368",
-    "sha256": "57b448edd090cdef0dd33d03cc9fe3e04fc55653572ce81db255b29860e26fb0"
+    "url": "https://codeload.github.com/nicoverbruggen/ebook-fonts/tar.gz/4c4e3267138a41be50aa08b02fd8b69fc25640e5",
+    "sha256": "4c606713ed604726ec99bc06e68c6a49a27d5f5660c905915619865834d58981"
   },
   "libron": {
     "url": "https://codeload.github.com/nicoverbruggen/libron/tar.gz/refs/tags/v0.32",

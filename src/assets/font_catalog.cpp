@@ -10,6 +10,50 @@
 #include FT_MULTIPLE_MASTERS_H
 
 namespace kobalt {
+bool internationalSupplementalFont(const QString &family)
+{
+    static const QStringList specialistFamilies{ "Noto Naskh Arabic",   "Noto Sans Math",
+                                                 "Noto Serif",          "Noto Serif Armenian",
+                                                 "Noto Serif Bengali",  "Noto Serif Devanagari",
+                                                 "Noto Serif Georgian", "Noto Serif Hebrew",
+                                                 "Noto Serif Tamil",    "Noto Serif Thai" };
+    return family.startsWith("Noto Serif CJK ") || specialistFamilies.contains(family);
+}
+
+FontSection fontSection(const ReadingFont &font, bool interfaceFonts)
+{
+    if (font.origin == FontOrigin::Recommended)
+        return FontSection::Recommended;
+    if (font.origin == FontOrigin::Sideloaded)
+        return FontSection::Sideloaded;
+    if (font.origin == FontOrigin::Interface
+        && (font.family == "IBM Plex Mono" || font.family == "IBM Plex Sans"
+            || font.family == "Kalam" || font.family == "Playpen Sans"))
+        return FontSection::Ui;
+    if (!interfaceFonts)
+        return font.origin == FontOrigin::BuiltIn ? FontSection::BuiltIn
+                                                  : FontSection::Supplemental;
+
+    return internationalSupplementalFont(font.family) ? FontSection::International
+                                                      : FontSection::Supplemental;
+}
+
+void sortFontSections(QVector<ReadingFont> &fonts, bool interfaceFonts, bool sideloadedFirst)
+{
+    std::stable_sort(fonts.begin(), fonts.end(), [=](const ReadingFont &a, const ReadingFont &b) {
+        const auto left = fontSection(a, interfaceFonts), right = fontSection(b, interfaceFonts);
+        if (left != right) {
+            if (sideloadedFirst
+                && (left == FontSection::Sideloaded || right == FontSection::Sideloaded))
+                return left == FontSection::Sideloaded;
+            return left < right;
+        }
+        return left == FontSection::Supplemental
+                && fontDisplayName(a.family).compare(fontDisplayName(b.family), Qt::CaseInsensitive)
+                < 0;
+    });
+}
+
 QVector<ReadingFont> orderedReadingFonts(QVector<ReadingFont> fonts, const QStringList &selected)
 {
     const auto available = fonts;

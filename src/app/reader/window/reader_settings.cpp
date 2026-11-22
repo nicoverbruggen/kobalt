@@ -529,6 +529,7 @@ void Reader::openSettings()
     settingsPercentageFormat = headerfooter::decimalPercentages(preferences) ? "decimal" : "whole";
     settingsRenderingMode = renderingMode::value(renderingMode::fromPreferences(preferences));
     panel->selectTheme(interfaceTheme(), themeDraft);
+    sideloadedFontsFirstOption.set(preferences.value("sideloaded_fonts_first").toBool());
     hideTabLabelsOption.set(preferences.value("hide_tab_labels").toBool(false));
     saveWordsOption.set(preferences.value("save_looked_up_words").toBool(true));
     zenModeOption.set(preferences.value("zen_mode").toBool(false));
@@ -1054,6 +1055,7 @@ void Reader::applySettings()
     next.remove("ui_colorful_icons");
     next["ui_theme"] = static_cast<SettingsPanel *>(general)->selectedTheme;
     next.remove("playful_theme");
+    next["sideloaded_fonts_first"] = sideloadedFontsFirstOption.checked();
     next["hide_tab_labels"] = hideTabLabelsOption.checked();
     next[features::debugModeKey] = debugModeOption.checked();
     next["save_looked_up_words"] = saveWordsOption.checked();
@@ -1952,6 +1954,8 @@ void Reader::openSettingsFont(const QString &key)
                 }
                 showSettingsFonts();
                 refresh();
-            });
+            },
+            settingsVisible() ? sideloadedFontsFirstOption.checked()
+                              : preferences.value("sideloaded_fonts_first").toBool());
 }
 } // namespace kobalt::reader

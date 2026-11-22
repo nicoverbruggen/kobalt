@@ -172,7 +172,7 @@
     },
     {
       "path": "fonts/ebook-core.json",
-      "sha256": "91d66dd4be1ea82bc4199f2889c525f2a22a838f5cf0e5bc0fd7499250632db1",
+      "sha256": "ba0e4a7d4cbd10044eacc2b2a415e1da567d4453bf02d5f5ae4f76598c0ea9ce",
       "size": 6196
     },
     {
@@ -374,6 +374,251 @@
       "path": "fonts/ebook-core/Sourcerer-Regular.ttf",
       "sha256": "772f8e8db69bc820f205ba3d48961f514362540765aec886d854f9b03e96461e",
       "size": 407328
+    },
+    {
+      "path": "fonts/ebook-supplemental.json",
+      "sha256": "1dd0904c424fc305914a470426ef19a4408dfb2946d1678975700adfa3177f71",
+      "size": 8015
+    },
+    {
+      "path": "fonts/ebook-supplemental/Cartisse-Bold.ttf",
+      "sha256": "66542400de27106d7005ce651a52ec0365b1bcd7f2d9c2378d5a36dbd5c1cb34",
+      "size": 179156
+    },
+    {
+      "path": "fonts/ebook-supplemental/Cartisse-BoldItalic.ttf",
+      "sha256": "53fed1d45879e44691112fb8444c7d2cd4c8f01ec20414e395e2107916beb447",
+      "size": 166640
+    },
+    {
+      "path": "fonts/ebook-supplemental/Cartisse-Italic.ttf",
+      "sha256": "4645ce8499bb5cc770a10d7507fb0969d6e37254cb792ed284ef65f618cf3b32",
+      "size": 184228
+    },
+    {
+      "path": "fonts/ebook-supplemental/Cartisse-Regular.ttf",
+      "sha256": "8eac77e6acca81acea6d7d40ca09994984ac69ee0a06141917a9fd3ed9b99282",
+      "size": 199520
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Adelph-Bold.ttf",
+      "sha256": "9f50d6f6ed3ca4df43285df4bc7bd23d78c0def68fae2d5d0f514c38848fb973",
+      "size": 119324
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Adelph-BoldItalic.ttf",
+      "sha256": "2efc1db809bc547c10095511683e4610f5b6ebb6992d8c2948e873b3a4085bde",
+      "size": 104336
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Adelph-Italic.ttf",
+      "sha256": "b3a507452b17015107e246a6776bf906adfbce409f1aa981ada2f4b9f736c15a",
+      "size": 107116
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Adelph-Regular.ttf",
+      "sha256": "4dc99122e090420a880efcf725103f916f6d6109e7d9e26e545f8b7c21c64fcd",
+      "size": 118508
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Alegreya-Bold.ttf",
+      "sha256": "cd4f9b6294ae5b54452457a5f92b81b738fe31dd83cdef2ed929c006a34a66c8",
+      "size": 326264
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Alegreya-BoldItalic.ttf",
+      "sha256": "21c949581b0af83382587a47e37ffd3786db3f054f50d9f20081162c6041fa75",
+      "size": 329864
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Alegreya-Italic.ttf",
+      "sha256": "dfb0524e6e096d5807efa33d29834c6baf6796f19a5afccd0b95e9a8f17e65bc",
+      "size": 318908
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Alegreya-Regular.ttf",
+      "sha256": "cf89aa70e7a8750667d5578ba407941df1d83414de3caae96d56cd06e2c373e2",
+      "size": 318132
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Aleo-Bold.ttf",
+      "sha256": "ee8fa6632c49e797f3f2ed02328cbb1ed40747e434a953dcc38921a976a8b739",
+      "size": 113536
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Aleo-BoldItalic.ttf",
+      "sha256": "895ffae393296b05fda2e4706641ea4923dee7852bb320a845bd70c326fa153a",
+      "size": 206600
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Aleo-Italic.ttf",
+      "sha256": "942ff845d5d4660ef576ecd6047398f3d92fea9623ea56b78fe3683389e86839",
+      "size": 209656
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Aleo-Regular.ttf",
+      "sha256": "d632aa5c662c0818c698309ec4ca40e1f09ea5946a566f930279dbb05f8b35e7",
+      "size": 114808
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Andada-Bold.ttf",
+      "sha256": "b1aa8a8ff41dfb6c727712b9efc7018c121ff5e364c499b8175343e968a5dbd0",
+      "size": 161044
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Andada-BoldItalic.ttf",
+      "sha256": "9004196b92dfd26981da71b1e09cf9b0eaa6f8f690fefd3f9ef2a1c800af78a6",
+      "size": 161376
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Andada-Italic.ttf",
+      "sha256": "396b4977c387bd0a945e03d1fb709a01daab1607b995c981eb136752c71e25f7",
+      "size": 162312
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Andada-Regular.ttf",
+      "sha256": "13e5a2e81c771dd3b97d6aa4916c916dac077397f82809feb5cc8cb23b4c6991",
+      "size": 161604
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Basker-Bold.ttf",
+      "sha256": "fff03a03f93770230c869821f463bd1e1198fe3b2c09644baff4f1b88d923b6b",
+      "size": 119972
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Basker-BoldItalic.ttf",
+      "sha256": "ebc586be11fe69a1330c5466f5982e5c928d9d48e5f2bbc122e40e4acfee092f",
+      "size": 97516
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Basker-Italic.ttf",
+      "sha256": "3e8676d0dc42d239b1076358b272ce595edaf84bfa52493e0022192e83a02801",
+      "size": 98496
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Basker-Regular.ttf",
+      "sha256": "3090d99e38f6da8859875860617e6a0075ce2322dc2f59f2ab4a3da91a821ce7",
+      "size": 123284
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Castoro-Bold.ttf",
+      "sha256": "8d2f42cb136de94f7e75b3c43fc16018f295f458458013b0340c48c4c7633d13",
+      "size": 145364
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Castoro-BoldItalic.ttf",
+      "sha256": "7cf07d0fd9095c3c20e07d4944db5831d97e83113525ba9488d037390804a378",
+      "size": 149916
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Castoro-Italic.ttf",
+      "sha256": "872e6318e865776226abc2d312f7714583c12f1338f1a087a09fb3731e7dd10f",
+      "size": 149904
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Castoro-Regular.ttf",
+      "sha256": "bb46ec2597d2e5995b4e470b514a699e5475b22e431dafa3822fbc4985f67fbc",
+      "size": 147548
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Halcyon-Bold.ttf",
+      "sha256": "244068170801d32b1ffdfdaa257da51106bb7b2c17151a16cd5700815c94c3ca",
+      "size": 161920
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Halcyon-BoldItalic.ttf",
+      "sha256": "851970271dff5c0db94c659188ca42b2a06f581c0d4efa51289f71c53a316ae3",
+      "size": 145440
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Halcyon-Italic.ttf",
+      "sha256": "37acc0af0d4d5b784604d6246fb7318021fc1962ac243ef57444dd47fbc83fac",
+      "size": 144080
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Halcyon-Regular.ttf",
+      "sha256": "d038a7cec4b9fac21d43eeda5864fba056ac3a52a6ee4df444d3194635fede73",
+      "size": 176228
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Publica-Bold.ttf",
+      "sha256": "5374e610fc71aca1b44ad305ce98e99e2a8ccbefc7a2140c79cb8d7285ffb70c",
+      "size": 305604
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Publica-BoldItalic.ttf",
+      "sha256": "d5aaf51923a1635a9447a3f7d6e9655404b9cfb71961ddfa4e9b4f7b84c17c14",
+      "size": 301832
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Publica-Italic.ttf",
+      "sha256": "89d7511d3ace20f7758fcafc1dfc54d2dd532740fb21c4eb003145f5bdb22d83",
+      "size": 340340
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Publica-Regular.ttf",
+      "sha256": "193aa1535936d820db00ff21c0bd396bcb25c24063a04a7bbdf054b686f12d1b",
+      "size": 324200
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Scarlet-Bold.ttf",
+      "sha256": "f9aca9aa741240b1c6c2052cdf85e0187e6e35dc7640931dfcb8ce6639aec882",
+      "size": 382712
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Scarlet-BoldItalic.ttf",
+      "sha256": "938afa7b84d7436ace2803c51eacd9a2a5352981234a6480cdf5aef130edba73",
+      "size": 370568
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Scarlet-Italic.ttf",
+      "sha256": "33b71d43d24d46d8759e51e369a97679682949be9a5cd0902c79fc0a2dd5cba5",
+      "size": 384508
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Scarlet-Regular.ttf",
+      "sha256": "273992591cace8133b7db80680193c0172f4c2a6f09a447f85d15b51605982b5",
+      "size": 370076
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Technical-Bold.ttf",
+      "sha256": "8fa00b418abc8e25c38950aa02dc4290bbb9ece66c13afbd9ba634d825d3b5b9",
+      "size": 393972
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Technical-BoldItalic.ttf",
+      "sha256": "bf7c73d3ab1dded7dc81606f095f71d115ac7eba11e24e9706ddc249d8505287",
+      "size": 418484
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Technical-Italic.ttf",
+      "sha256": "6186613090af747adaa38b4a55f27b1edab2fa7ce88841b9b5a027ffe5f7ac45",
+      "size": 422848
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Technical-Regular.ttf",
+      "sha256": "0999c9e6b5f159cd2955291167722f5f498f85bd62efa4c8dd1a756b8904e5e4",
+      "size": 393352
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Yrsa-Bold.ttf",
+      "sha256": "5c4163a36979f6d12d890f23f69322cd2424d7fe79341285e77e407f9636f8f6",
+      "size": 123316
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Yrsa-BoldItalic.ttf",
+      "sha256": "cecc373bd5b9f891ec679cdf9d63e27263acbcf09d00ecc11a304d963af90f32",
+      "size": 159528
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Yrsa-Italic.ttf",
+      "sha256": "d68466649a557fac91f3b3dddd266cb0712dfed4544e9837b8b835e825af4d3f",
+      "size": 160188
+    },
+    {
+      "path": "fonts/ebook-supplemental/NV_Yrsa-Regular.ttf",
+      "sha256": "853dbfbfc53359c93353525bd63e7fd631da2fa748ab7ef279eb99e7a7b93654",
+      "size": 123876
     },
     {
       "path": "hyph/Dutch.khg",

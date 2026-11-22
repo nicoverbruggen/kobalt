@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "render/page_content.h"
 #include "ui/controls/text.h"
 #include "ui/controls/buttons.h"
@@ -1773,6 +1774,7 @@ void Reader::connectSettingsPage(SettingsPage section)
             settingsPercentageFormat = "whole";
             settingsRenderingMode = renderingMode::value(renderingMode::Mode::Hybrid);
             static_cast<SettingsPanel *>(general)->selectTheme("classic", themeDraft);
+            sideloadedFontsFirstOption.set(false);
             hideTabLabelsOption.set(false);
             zenModeOption.set(false);
             if (services.turnOffWifi)
@@ -1951,6 +1953,7 @@ void Reader::connectSettingsPage(SettingsPage section)
         sleepScreenButton = settings->sleepScreenButton;
         sessionTimeoutButton = settings->sessionTimeoutButton;
         automaticOpeningOption.bind(settings->automaticOpeningOption);
+        sideloadedFontsFirstOption.bind(settings->sideloadedFontsFirstOption);
         hideTabLabelsOption.bind(settings->hideTabLabelsOption);
         wifiPowerSaverOption.bind(settings->wifiPowerSaverOption);
         disableStandbyOption.bind(settings->disableStandbyOption);
@@ -2397,9 +2400,7 @@ void Reader::showFontPicker()
                              strings::get("reader.recommended_fonts") } };
     pickerNativeFamilies = services.fontFamilies();
     const auto state = settings->state();
-    const auto supplemental = supplementalFontFamily(state.value("language").toString());
-    const auto requestedDefault =
-            preferences.value("default_font_face").toString(kobalt::defaultFontFace);
+    auto defaultFace = preferences.value("default_font_face").toString(kobalt::defaultFontFace);
     auto fonts = settings->fontCatalog();
     // The publisher row's sample uses Libron.
     for (const auto &font : fonts)
@@ -2409,51 +2410,42 @@ void Reader::showFontPicker()
         const auto &font = fonts[row];
         if ((font.origin == FontOrigin::BuiltIn
              && !pickerNativeFamilies.contains(font.family, Qt::CaseInsensitive))
-            || (font.origin == FontOrigin::Interface && font.family != supplemental
-                && font.family != requestedDefault
-                && font.family != state.value("font_face").toString()))
+            || (font.origin == FontOrigin::Interface && internationalSupplementalFont(font.family)))
             fonts.removeAt(row);
     }
-    for (const auto &font :
-         orderedReadingFonts(std::move(fonts), { settings->fontFace(), requestedDefault })) {
-        QString section;
-        switch (font.origin) {
-        case kobalt::FontOrigin::Recommended:
-            section = strings::get("reader.recommended_fonts");
-            break;
-        case kobalt::FontOrigin::BuiltIn:
-            section = strings::get("reader.built_in_fonts");
-            break;
-        case kobalt::FontOrigin::Sideloaded:
-            section = strings::get("reader.sideloaded_fonts");
-            break;
-        case kobalt::FontOrigin::Interface:
-            section = strings::get("reader.supplemental_fonts");
-            break;
-        }
+    fonts = orderedReadingFonts(std::move(fonts), { settings->fontFace(), defaultFace });
+    const bool sideloadedFirst = preferences.value("sideloaded_fonts_first").toBool();
+    sortFontSections(fonts, false, sideloadedFirst);
+    for (const auto &font : fonts) {
+        const QString section = fontSectionLabel(fontSection(font, false));
         items.append({ fontDisplayName(font.family), font.family,
                        QString("rrFontChoice%1").arg(items.size()), section });
         items.last().fontFiles = font.files;
     }
-    QString defaultFace = preferences.value("default_font_face").toString(kobalt::defaultFontFace);
+    const int personalCount = sideloadedFirst
+            ? std::count_if(
+                      fonts.cbegin(), fonts.cend(),
+                      [](const ReadingFont &font) { return font.origin == FontOrigin::Sideloaded; })
+            : 0;
+    std::rotate(items.begin(), items.begin() + 1, items.begin() + personalCount + 1);
     int defaultIndex = -1;
     for (int i = 0; i < items.size(); ++i)
         if (items[i].value == defaultFace)
             defaultIndex = i;
-    if (defaultIndex < 0) {
+    if (defaultIndex < 0 && !settings->fontFaces().contains(defaultFace)) {
         defaultFace = kobalt::defaultFontFace;
-        defaultIndex = 1;
+        defaultIndex = personalCount + 1;
     }
     const int embedded = state.value("embedded_font_count").toInt();
     auto serifFallback = state.value("serif_font_face").toString();
     if (serifFallback.isEmpty())
         serifFallback = kobalt::defaultFontFace;
-    items[0].detail = embedded > 0
+    items[personalCount].detail = embedded > 0
             ? (embedded == 1 ? strings::get("reader.one_embedded_font")
                              : strings::get("reader.embedded_fonts").arg(embedded))
             : strings::get("reader.no_embedded_fonts") + '\n'
                     + strings::get("reader.uses_default_font").arg(fontDisplayName(serifFallback));
-    if (defaultIndex < items.size()) {
+    if (defaultIndex >= 0 && defaultIndex < items.size()) {
         auto &detail = items[defaultIndex].detail;
         if (!detail.isEmpty())
             detail += '\n';
@@ -2469,7 +2461,7 @@ void Reader::showFontPicker()
     if (!services.phoneLayout) {
         // Registration reads only metadata. The slot's Aa loads its face when drawn.
         registerPickerFonts(defaultFace);
-        items.insert(qMin(2, items.size()), slot);
+        items.insert(qMin(personalCount + 2, int(items.size())), slot);
     }
     choices->defaultRequested = [this](const QString &face, bool instructions) {
         showFontDefaultDialog(face, instructions);

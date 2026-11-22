@@ -633,10 +633,10 @@ private:
     };
 
     SettingsCheck darkOption, animationOption, edgeLightOption, lightGestureFeedbackOption,
-            automaticOpeningOption, minimalAnnotationOption, hideTabLabelsOption, zenModeOption,
-            saveWordsOption, wifiPowerSaverOption, disableStandbyOption, hideNonlinearOption,
-            inpageFootnotesOption, bionicOption, hideBookOnSleepOption, openingCoverOption,
-            debugModeOption;
+            automaticOpeningOption, minimalAnnotationOption, sideloadedFontsFirstOption,
+            hideTabLabelsOption, zenModeOption, saveWordsOption, wifiPowerSaverOption,
+            disableStandbyOption, hideNonlinearOption, inpageFootnotesOption, bionicOption,
+            hideBookOnSleepOption, openingCoverOption, debugModeOption;
     QPushButton *autoRotateOption = nullptr, *lockRotationOption = nullptr;
     bool hideNativeStatus() const;
 

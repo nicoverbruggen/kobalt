@@ -995,10 +995,107 @@ private slots:
         QVERIFY(!overlay->isVisible());
     }
 
-    void settingsFontSheetReusesRows()
+    void interfaceFontSections_data()
     {
+        QTest::addColumn<bool>("personalFirst");
+        QTest::newRow("default") << false;
+        QTest::newRow("sideloaded-first") << true;
+    }
+
+    void interfaceFontSections()
+    {
+        QFETCH(bool, personalFirst);
         QWidget window;
         window.resize(720, 1440);
+        reader::SettingsPanel settings(&window, {});
+        window.show();
+        const QVector<ReadingFont> catalog{
+            { "Libron", {}, FontOrigin::Recommended, {}, {} },
+            { "Device", {}, FontOrigin::BuiltIn, {}, {} },
+            { "Personal", {}, FontOrigin::Sideloaded, {}, {} },
+            { "IBM Plex Sans", {}, FontOrigin::Interface, {}, {} },
+            { "Noto Sans Math", {}, FontOrigin::Interface, {}, {} },
+            { "Noto Serif", {}, FontOrigin::Interface, {}, {} },
+            { "Noto Serif Armenian", {}, FontOrigin::Interface, {}, {} },
+            { "Noto Serif CJK JP", {}, FontOrigin::Interface, {}, {} }
+        };
+        for (const bool interfacePicker : { true, false }) {
+            settings.showFontChoices(
+                    "Font", catalog, "Libron", "Default", interfacePicker, [](const QString &) { },
+                    personalFirst);
+            auto *sheet = window.findChild<QWidget *>("rrSettingsFontPopup");
+            QVERIFY(sheet);
+            auto *header = sheet->findChild<QWidget *>("rrSettingsFontSection");
+            auto *next = sheet->findChild<QPushButton *>("rrSettingsFontNext");
+            QVERIFY(header && next);
+            if (personalFirst) {
+                auto *previous = sheet->findChild<QPushButton *>("rrSettingsFontPrevious");
+                QVERIFY(previous && previous->isEnabled());
+                previous->click();
+            }
+            QStringList sections;
+            QStringList families;
+            for (int page = 0; page < catalog.size(); ++page) {
+                const auto caption = static_cast<ui::ListHeader *>(header)->leftLabel()->text();
+                if (sections.isEmpty() || sections.last() != caption)
+                    sections.append(caption);
+                for (auto *row : sheet->findChildren<QCheckBox *>())
+                    if (row->isVisible()) {
+                        const auto family = row->property("reader_font_family").toString();
+                        if (interfacePicker && family.startsWith("Noto "))
+                            QCOMPARE(caption, QStringLiteral("SUPPLEMENTAL FONTS (INTERNATIONAL)"));
+                        families.append(family);
+                    }
+                if (families.size() == catalog.size() || !next->isEnabled())
+                    break;
+                next->click();
+            }
+            QStringList expected{ "Libron",
+                                  "Device",
+                                  "Personal",
+                                  "IBM Plex Sans",
+                                  "Noto Sans Math",
+                                  "Noto Serif",
+                                  "Noto Serif Armenian",
+                                  "Noto Serif CJK JP" };
+            expected.move(2, interfacePicker ? 3 : expected.size() - 1);
+            if (!interfacePicker)
+                expected.move(expected.indexOf("IBM Plex Sans"), expected.size() - 2);
+            if (personalFirst)
+                expected.move(expected.indexOf("Personal"), 0);
+            QCOMPARE(families, expected);
+            QStringList captions = interfacePicker
+                    ? QStringList{ "RECOMMENDED FONTS", "KOBALT COLLECTION", "UI FONTS",
+                                   "SIDELOADED FONTS", "SUPPLEMENTAL FONTS (INTERNATIONAL)" }
+                    : QStringList{ "RECOMMENDED FONTS", "BUILT-IN FONTS", "KOBALT COLLECTION",
+                                   "UI FONTS", "SIDELOADED FONTS" };
+            if (personalFirst)
+                captions.move(captions.indexOf("SIDELOADED FONTS"), 0);
+            QCOMPARE(sections, captions);
+            QTest::keyClick(sheet, Qt::Key_Escape);
+        }
+    }
+
+    void settingsFontSheetReusesRows_data()
+    {
+        QTest::addColumn<QSize>("viewport");
+        QTest::addColumn<qreal>("scale");
+        QTest::addColumn<bool>("twoColumns");
+        QTest::newRow("phone") << QSize(720, 1440) << qreal(1) << false;
+        QTest::newRow("clara") << QSize(1072, 1448) << qreal(1) << true;
+        QTest::newRow("clara-large") << QSize(1072, 1448) << qreal(1.5) << true;
+    }
+
+    void settingsFontSheetReusesRows()
+    {
+        QFETCH(QSize, viewport);
+        QFETCH(qreal, scale);
+        QFETCH(bool, twoColumns);
+        const auto previous = ui::textScale();
+        const auto restore = qScopeGuard([&] { ui::setLargeText(previous); });
+        ui::setLargeText(scale);
+        QWidget window;
+        window.resize(viewport);
         reader::SettingsPanel settings(&window, {});
         window.show();
         QVector<ReadingFont> catalog{ { {}, {}, FontOrigin::Recommended, {}, {} },
@@ -1012,12 +1109,20 @@ private slots:
         QPointer<QCheckBox> jost = window.findChild<QCheckBox *>("rrSettingsFontChoice1");
         QPointer<QCheckBox> libron = window.findChild<QCheckBox *>("rrSettingsFontChoice2");
         QVERIFY(sheet && empty && jost && libron && jost->isVisible() && jost->isChecked());
+        QCOMPARE(empty->y() == jost->y(), twoColumns);
+        QCOMPARE(empty->x() == jost->x(), !twoColumns);
+        QVERIFY(!empty->geometry().intersects(jost->geometry()));
+        // The Mac reader proxy can deliver this pending resize while painting
+        // the first frame of a font picker opened outside Settings.
+        QResizeEvent pendingResize(settings.size(), QSize());
+        QCoreApplication::sendEvent(&settings, &pendingResize);
+        QVERIFY(sheet->isVisible());
         QCOMPARE(empty->text(), QStringLiteral("Publisher"));
         QTest::keyClick(sheet, Qt::Key_Escape);
         QVERIFY(sheet && !sheet->isVisible());
         QVERIFY(chosen.isEmpty());
 
-        window.resize(1440, 720);
+        window.resize(viewport.transposed());
         settings.showFontChoices("Strip font", catalog, "Libron", "Default", false,
                                  [&](const QString &value) { chosen.append("strip:" + value); });
         QVERIFY(sheet && sheet->isVisible());
@@ -1031,6 +1136,7 @@ private slots:
         QVERIFY(libron && libron == sheet->findChild<QCheckBox *>("rrSettingsFontChoice2"));
         QCOMPARE(empty->text(), QStringLiteral("Default"));
         QVERIFY(libron->isVisible() && libron->isChecked());
+        QCOMPARE(libron->width(), libron->parentWidget()->width());
         libron->click();
         QCOMPARE(chosen, QStringList{ "strip:Libron" });
 

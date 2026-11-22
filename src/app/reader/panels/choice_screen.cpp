@@ -329,7 +329,7 @@ void ChoiceScreen::showChoices(const QString &heading, QVector<Choice> choices,
     page = 0;
     layoutChoices();
     for (int i = 0; i < items.size(); ++i)
-        if (!current.isEmpty() && items[i].value == current)
+        if (!items[i].placeholder && items[i].value == current)
             page = pageForIndex(i);
     redraw();
     for (auto *widget : findChildren<QWidget *>())

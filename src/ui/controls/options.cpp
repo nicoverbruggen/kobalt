@@ -559,6 +559,15 @@ void RadioList::setUniformRows(bool uniform)
     updateGeometry();
 }
 
+void RadioList::setTwoColumns(bool enabled)
+{
+    if (twoColumns == enabled)
+        return;
+    twoColumns = enabled;
+    arrange();
+    updateGeometry();
+}
+
 int RadioList::rowHeight(int index, int width) const
 {
     if (index >= 0 && index < leftOut.size() && leftOut[index])
@@ -579,6 +588,13 @@ int RadioList::rowHeight(int width) const
 int RadioList::heightForWidth(int width) const
 {
     const int last = count < 0 ? int(rows.size()) : qMin(int(rows.size()), first + count);
+    if (twoColumns) {
+        int visible = 0;
+        for (int index = first; index < last; ++index)
+            if (index >= leftOut.size() || !leftOut[index])
+                ++visible;
+        return ((visible + 1) / 2) * rowHeight(width / 2);
+    }
     int height = 0;
     for (int index = first; index < last; ++index)
         height += rowHeight(index, width);
@@ -618,23 +634,35 @@ void RadioList::resizeEvent(QResizeEvent *)
 void RadioList::arrange()
 {
     const int last = count < 0 ? int(rows.size()) : qMin(int(rows.size()), first + count);
-    int top = 0;
+    const int cellWidth = twoColumns ? width() / 2 : width();
+    const int uniformHeight = uniformRows || twoColumns ? rowHeight(cellWidth) : 0;
+    int top = 0, visible = 0;
+    DescribedOption *lastShown = nullptr;
     for (int index = 0; index < rows.size(); ++index) {
         auto *row = rows[index];
         const bool shown =
                 index >= first && index < last && !(index < leftOut.size() && leftOut[index]);
+        row->setVisible(shown);
+        if (!shown)
+            continue;
+        const bool right = twoColumns && visible % 2 == 1;
         auto look = row->presentation();
         look.dividers = Edges(Qt::BottomEdge)
-                | (topDivider && index == first ? Edges(Qt::TopEdge) : Edges{});
+                | (topDivider && visible < (twoColumns ? 2 : 1) ? Edges(Qt::TopEdge) : Edges{});
+        if (right)
+            look.dividers |= Qt::LeftEdge;
         row->setPresentation(look);
-        row->setVisible(shown);
-        if (shown) {
-            const int height = rowHeight(index, width());
-            // Replace the minimum measured at the old width before Qt constrains the new geometry.
-            row->setMinimumHeight(height);
-            row->setGeometry(0, top, width(), height);
+        const int height = uniformRows || twoColumns ? uniformHeight : rowHeight(index, width());
+        // Replace the minimum measured at the old width before Qt constrains the new geometry.
+        row->setMinimumHeight(height);
+        row->setGeometry(right ? cellWidth : 0, top, right ? width() - cellWidth : cellWidth,
+                         height);
+        if (!twoColumns || right)
             top += height;
-        }
+        lastShown = row;
+        ++visible;
     }
+    if (twoColumns && visible % 2 == 1)
+        lastShown->resize(width(), lastShown->height());
 }
 } // namespace kobalt::ui

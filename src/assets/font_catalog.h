@@ -83,6 +83,10 @@ inline QString fontDisplayName(const QString &family)
 // families remain visible. Use source groups, Libron first, then family name.
 QVector<ReadingFont> orderedReadingFonts(QVector<ReadingFont> fonts,
                                          const QStringList &selected = {});
+enum class FontSection { Recommended, BuiltIn, Supplemental, Ui, Sideloaded, International };
+FontSection fontSection(const ReadingFont &font, bool interfaceFonts);
+void sortFontSections(QVector<ReadingFont> &fonts, bool interfaceFonts, bool sideloadedFirst);
+bool internationalSupplementalFont(const QString &family);
 QString fontFamilyKey(const QString &family);
 double normalizedOpticalSize(const FontOpticalSizeAxis &axis, double points);
 FontOpticalSizeAxis fontOpticalSizeAxis(const QVector<ReadingFont> &fonts, const QString &family);

@@ -1727,7 +1727,9 @@ int main(int argc, char **argv)
                     require(!file.startsWith(side), "Duplicate sideload replaced a bundled font");
             } else if (font.origin == kobalt::FontOrigin::Interface) {
                 ++interface;
-                if (font.family == "IBM Plex Sans") {
+                if (font.files.first().contains("/ebook-supplemental/")) {
+                    require(font.files.size() == 4, "Supplemental reading family lost a style");
+                } else if (font.family == "IBM Plex Sans") {
                     require(font.files.size() == 3, "Bundled control family lost a style");
                 } else if (font.family == "Kalam") {
                     require(font.files.size() == 2
@@ -1773,7 +1775,7 @@ int main(int argc, char **argv)
         const auto coreFiles =
                 QJsonDocument::fromJson(collection.readAll()).object().value("files").toArray();
         require(!coreFiles.isEmpty() && coreFiles.size() % 4 == 0, "Core collection lost a style");
-        require(core == coreFiles.size() / 4 + variableCore && sideloaded == 1 && interface == 11
+        require(core == coreFiles.size() / 4 + variableCore && sideloaded == 1 && interface == 23
                         && arabicFallback == 1 && hebrewFallback == 1,
                 "Core collection or font catalog incomplete");
         require(kobalt::fontFamilyKey("KF Libron") == kobalt::fontFamilyKey("Libron"),

@@ -928,6 +928,8 @@
 "settings.section_reading_menu" = "Reading menu";
 "settings.section_feature_visibility" = "Feature visibility";
 "settings.section_system_integration" = "System integration";
+"settings.sideloaded_fonts_first" = "Show sideloaded fonts first";
+"settings.sideloaded_fonts_first_description" = "List your own fonts before recommended fonts in every typeface picker.";
 "settings.section_nitpicks" = "Nitpicks";
 "settings.section_sleep" = "Sleep and wake";
 "settings.section_power" = "Power management";
@@ -1441,7 +1443,9 @@
 "recovery.database" = "Kobalt's reading positions, bookmarks and annotations could not be used. Kobalt started again with empty saved data.";
 "recovery.backups" = "The original files are in %1.";
 
-"reader.supplemental_fonts" = "Supplemental Fonts";
+"reader.international_supplemental_fonts" = "Supplemental Fonts (International)";
+"reader.supplemental_fonts" = "Kobalt Collection";
+"reader.ui_fonts" = "UI Fonts";
 
 /* dictionaries */
 "settings.dictionaries" = "Dictionaries";

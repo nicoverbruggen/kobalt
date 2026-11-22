@@ -136,9 +136,10 @@ public:
     void setTopDivider(bool shown);
     // False lets each row take the height it needs.
     void setUniformRows(bool uniform);
+    void setTwoColumns(bool enabled);
     int rowHeight(int width) const;
     int rowHeight(int index, int width) const;
-    // Shows `count` rows from `first`, one under the other.
+    // Shows the next count choices in row-major order.
     void showRows(int first, int count);
     // A left-out row stays in options() but is never shown and takes no
     // height, also inside the range of showRows().
@@ -157,7 +158,7 @@ private:
     QVector<DescribedOption *> rows;
     QVector<bool> leftOut;
     int minimum = 0, first = 0, count = -1;
-    bool topDivider = false, uniformRows = true;
+    bool topDivider = false, uniformRows = true, twoColumns = false;
     void arrange();
 };
 } // namespace kobalt::ui

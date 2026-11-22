@@ -13516,8 +13516,16 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
     }
 
     // Checks the selected KF row in both font pickers, unchanged defaults and the reading position after reopening.
+    void kfFontVariants_data()
+    {
+        QTest::addColumn<bool>("personalFirst");
+        QTest::newRow("default") << false;
+        QTest::newRow("sideloaded-first") << true;
+    }
+
     void kfFontVariants()
     {
+        QFETCH(bool, personalFirst);
         QTemporaryDir fonts;
         QVERIFY(fonts.isValid());
         const auto path = fonts.filePath("KF_Bitter.ttf");
@@ -13539,6 +13547,18 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
         const auto position = fixture.state().value("position");
         QCOMPARE(fixture.state().value("font_face"), QJsonValue("KF Bitter"));
         QVERIFY(fixture.press("rrPage"));
+        if (personalFirst) {
+            QVERIFY(fixture.press("rrSettings"));
+            QVERIFY(fixture.press("rrSettingsSystem"));
+            QVERIFY(revealSettingsOption(fixture, "rrSideloadedFontsFirst"));
+            QVERIFY(fixture.press("rrSideloadedFontsFirst"));
+            QVERIFY(fixture.press("rrSettingsClose"));
+            QTRY_VERIFY(storage::readJson(fixture.paths.preferences())
+                                .value("sideloaded_fonts_first")
+                                .toBool());
+            if (!fixture.visible("rrNavText"))
+                QVERIFY(fixture.press("rrPage"));
+        }
         QVERIFY(fixture.press("rrNavText"));
         QVERIFY(fixture.press("rrFont"));
         QTRY_VERIFY(fixture.visible("rrChoices"));
@@ -13549,6 +13569,35 @@ printf '[{"file":"%s.png","scene":"%s"}]' "$3" "$KOBALT_GALLERY_CAPTURE" > "$2/p
             selected |= button->isVisible() && button->isChecked()
                     && button->accessibleName() == "KF Bitter";
         QVERIFY(selected);
+        auto *grid = static_cast<ChoiceScreen *>(picker);
+        QStringList families;
+        auto *counter = qobject_cast<QLabel *>(fixture.widget("rrFontPagerPage"));
+        QVERIFY(counter);
+        const auto startPage = counter->text();
+        QCOMPARE(startPage.startsWith("1 "), personalFirst);
+        for (int page = 0; page < 20; ++page) {
+            const auto pageFamilies = grid->fontSamples().keys();
+            if (labelText(fixture, "rrFontSection") == "UI FONTS")
+                QCOMPARE(
+                        pageFamilies,
+                        (QStringList{ "IBM Plex Mono", "IBM Plex Sans", "Kalam", "Playpen Sans" }));
+            else
+                QVERIFY(!pageFamilies.contains("IBM Plex Sans"));
+            families.append(pageFamilies);
+            QVERIFY(fixture.press("rrFontPagerNext"));
+            if (counter->text() == startPage)
+                break;
+        }
+        QCOMPARE(counter->text(), startPage);
+        for (const auto *face :
+             { "IBM Plex Mono", "IBM Plex Sans", "Kalam", "Playpen Sans", "Basker", "Adelph",
+               "Yrsa", "Castoro", "Halcyon", "Aleo", "Andada", "Cartisse", "Publica", "Alegreya",
+               "Scarlet", "Technical" })
+            QVERIFY2(families.contains(face), face);
+        QVERIFY(!families.contains("Noto Serif"));
+        QVERIFY(!families.contains("Noto Sans Math"));
+        QVERIFY(!families.contains("Noto Serif Armenian"));
+
         QVERIFY(fixture.press("rrFontClose"));
         QVERIFY(fixture.press("rrSettings"));
         QVERIFY(fixture.press("rrSettingsDefaults"));
@@ -21705,7 +21754,7 @@ private slots:
         QVERIFY(fixture.press("rrNavText"));
         QVERIFY(fixture.press("rrFont"));
         QTRY_VERIFY(fixture.visible("rrChoices"));
-        // The final font page includes the language's supplemental family.
+        // The final font page shows general supplemental families.
         auto *counter = qobject_cast<QLabel *>(fixture.widget("rrFontPagerPage"));
         QVERIFY(counter);
         QSet<QString> seen;

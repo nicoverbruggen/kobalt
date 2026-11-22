@@ -392,7 +392,9 @@ void Reader::syncAppearancePreview()
     auto *settings = appearanceSession();
     using Kind = ReaderSession::PreviewPage;
     const bool sample = textOpen && pageNeedsTextSample(settings->image());
-    const auto kind = sample ? Kind::Sample : textOpen ? Kind::Text : Kind::Layout;
+    const bool illustrated = textOpen && !sample && !pageTextOnly(settings->image())
+            && !pageContent(settings->image()).images.rectangles.isEmpty();
+    const auto kind = textOpen ? Kind::Text : Kind::Layout;
     if (previewPageKind != kind) {
         previewPageKind = kind;
         previewPageKey = previewPageRequested = 0;
@@ -415,7 +417,8 @@ void Reader::syncAppearancePreview()
     content.axis = appearancePreviewAxis;
     content.text = textOpen;
     content.sample = sample;
-    content.cropTop = qMax(0, settings->topMargin() - int(ui::px(16)));
+    const int inset = ui::px(16);
+    content.cropTop = qMax(0, settings->topMargin() - inset);
     appearancePreview->setGeometry(appearancePreviewSpace());
     if (!appearancePreview->isVisible())
         appearancePreview->stackUnder(menu);
@@ -429,33 +432,38 @@ void Reader::syncAppearancePreview()
         previewPageRequested = 0;
     // An unedited page already starts at the reading position. A short page has too little
     // text to judge, so the Text preview continues with the text that follows it.
-    const bool usePage = !sample && settled && !appearanceEdit.edited()
+    const bool usePage = !sample && !illustrated && settled && !appearanceEdit.edited()
             && (!textOpen || appearancePreview->fillsTextCrop(settings->image(), content.cropTop));
     // One change is one screen update. The picture stays during a drag and while
     // a layout runs, so that nothing draws an in-between state.
     if (usePage) {
         content.body = settings->image();
     } else if (settled && previewPageKey == settings->image().cacheKey()) {
-        content.body = previewPage;
+        content.body = previewPage.image;
+        const int textHeight = appearancePreview->height() - int(ui::metrics::list::headerHeight);
+        // The crop also needs the blank row under the line.
+        content.lifted =
+                previewPage.uncroppedHeight > 0 && previewPage.uncroppedHeight >= textHeight;
+        if (content.lifted || previewPage.uncroppedHeight == 0)
+            content.cropTop = previewPage.cropTop;
+        content.sample = previewPage.sample;
     } else {
         if (settled && previewPageRequested != settings->image().cacheKey()) {
             const qint64 key = settings->image().cacheKey();
             previewPageRequested = key;
             const QPointer<Reader> guard(this);
-            // The page starts at the bookmark, so the same text stays in place at every
-            // setting. Real page breaks would move it.
-            settings->appearancePage(kind, [guard, key](QImage image) {
-                if (!guard || guard->previewPageRequested != key)
-                    return;
-                guard->previewPageKey = key;
-                guard->previewPage = std::move(image);
-                guard->syncAppearancePreview();
-            });
+            settings->appearancePage(kind, content.cropTop, inset,
+                                     [guard, key](ReaderSession::AppearanceImage image) {
+                                         if (!guard || guard->previewPageRequested != key)
+                                             return;
+                                         guard->previewPageKey = key;
+                                         guard->previewPage = std::move(image);
+                                         guard->syncAppearancePreview();
+                                     });
         }
-        if (appearancePreview->isVisible() && appearancePreview->showsText() == textOpen
-            && appearancePreview->showsSample() == sample)
+        if (appearancePreview->isVisible() && appearancePreview->showsText() == textOpen)
             return;
-        if (!sample)
+        if (!sample && !illustrated)
             content.body = settings->image();
     }
     appearancePreview->setContent(std::move(content));

@@ -278,9 +278,20 @@ public:
     void previewAdjacentPage(int direction, QSize bounds, QStringList bookmarkPositions,
                              std::function<void(QImage, bool)> finished);
     void cancelPagePreview();
-    // Layout and Text start at the reading position. Sample opens a separate in-memory passage.
-    enum class PreviewPage { Layout, Text, Sample };
-    void appearancePage(PreviewPage kind, std::function<void(QImage)> finished);
+    enum class PreviewPage { Layout, Text };
+
+    struct AppearanceImage
+    {
+        QImage image;
+        int cropTop = 0;
+        bool sample = false;
+        // Height needed to show the first line without lifting it.
+        int uncroppedHeight = 0;
+    };
+
+    // Text may crop below an illustration or render a sample when no text fits.
+    void appearancePage(PreviewPage kind, int cropTop, int inset,
+                        std::function<void(AppearanceImage)> finished);
     // One worker job resolves all eligible passages. Stale replies contain no indices.
     void intersectingRanges(const QString &start, const QString &end,
                             QVector<QPair<QString, QString>> ranges,

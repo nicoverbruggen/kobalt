@@ -26,6 +26,7 @@
 #include <QCryptographicHash>
 #include <QCoreApplication>
 #include <QPointer>
+#include <QRegion>
 #include <QThread>
 #include <QTimer>
 #include <utility>
@@ -2078,7 +2079,54 @@ void ReaderSession::previewAdjacentPage(int direction, QSize bounds, QStringList
             Qt::QueuedConnection);
 }
 
-void ReaderSession::appearancePage(PreviewPage kind, std::function<void(QImage)> finished)
+namespace {
+ReaderSession::AppearanceImage textPreview(const QImage &image, int cropTop, int inset)
+{
+    if (image.isNull() || pageNeedsTextSample(image))
+        return {};
+    cropTop = qBound(0, cropTop, image.height() - 1);
+    if (pageTextOnly(image))
+        return { image, cropTop };
+    const auto illustrations = pageContent(image).images.rectangles;
+    if (illustrations.isEmpty())
+        return { image, cropTop };
+
+    // Use complete rows outside illustrations, so a tall image cannot be
+    // mistaken for a line of text that extends past the preview.
+    QRegion rows(QRect(0, cropTop, 1, image.height() - cropTop));
+    for (const auto &illustration : illustrations)
+        rows -= QRect(0, illustration.top(), 1, illustration.height());
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    const auto bands = rows.rects();
+#else
+    const auto &bands = rows;
+#endif
+    const auto hasInk = [&image](int y) {
+        const auto paper = image.pixel(0, y);
+        for (int x = 1; x < image.width(); ++x) {
+            if (image.pixel(x, y) != paper)
+                return true;
+        }
+        return false;
+    };
+    for (const auto &band : bands) {
+        for (int y = band.top(); y <= band.bottom(); ++y) {
+            if (!hasInk(y))
+                continue;
+            if (band.top() == cropTop)
+                return { image, cropTop };
+            int end = y + 1;
+            while (end <= band.bottom() && hasInk(end))
+                ++end;
+            return { image, qMax(band.top(), y - inset), false, end - cropTop };
+        }
+    }
+    return {};
+}
+} // namespace
+
+void ReaderSession::appearancePage(PreviewPage kind, int cropTop, int inset,
+                                   std::function<void(AppearanceImage)> finished)
 {
     cancelPagePreview();
     if (running || retiring || !lease_ || lease_->revoked())
@@ -2092,21 +2140,32 @@ void ReaderSession::appearancePage(PreviewPage kind, std::function<void(QImage)>
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, kind, fonts = fonts_, page = image().size(), settings = state(),
-             finished, request, token, latest, job, lease] {
+            [engine, guard, kind, fonts = fonts_, source = image(), settings = state(), cropTop,
+             inset, finished, request, token, latest, job, lease] {
                 if (token->load() != request || latest->load() != job || lease->revoked())
                     return;
                 EngineJob activity;
                 DiagnosticOperation operation("appearance-preview-page");
-                const auto image = kind == PreviewPage::Sample
-                        ? drawReadingTextSample(fonts, page, settings)
-                        : engine->imageFromAnchor(kind == PreviewPage::Layout);
+                const auto render = [&]() -> AppearanceImage {
+                    if (kind == PreviewPage::Layout)
+                        return { engine->imageFromAnchor(true), cropTop };
+                    if (!pageNeedsTextSample(source)) {
+                        const bool illustrated = !pageTextOnly(source)
+                                && !pageContent(source).images.rectangles.isEmpty();
+                        const auto body = illustrated ? source : engine->imageFromAnchor(false);
+                        const auto preview = textPreview(body, cropTop, inset);
+                        if (!preview.image.isNull())
+                            return preview;
+                    }
+                    return { drawReadingTextSample(fonts, source.size(), settings), cropTop, true };
+                };
+                const auto result = render();
                 kobalt::qt::invoke(
                         qApp,
-                        [guard, image, finished, token, latest, job, request, lease] {
+                        [guard, result, finished, token, latest, job, request, lease] {
                             if (guard && token->load() == request && latest->load() == job
                                 && !lease->revoked())
-                                finished(image);
+                                finished(result);
                         },
                         Qt::QueuedConnection);
             },

@@ -59,7 +59,7 @@ void AppearancePreview::setContent(Content next)
             && content.verticalMargin == next.verticalMargin && same(content.header, next.header)
             && same(content.footer, next.footer) && same(content.body, next.body)
             && content.sample == next.sample && content.text == next.text
-            && content.cropTop == next.cropTop;
+            && content.lifted == next.lifted && content.cropTop == next.cropTop;
     content = std::move(next);
     // Created on first use: a hidden child repaints the Layout preview once more when
     // it first appears, and each repaint is a visible e-ink update.
@@ -181,22 +181,19 @@ void AppearancePreview::paintCaption(QPainter &painter, int right) const
     painter.restore();
 }
 
-QRect AppearancePreview::noticeRect() const
+QRect AppearancePreview::noticeRect(const QString &notice) const
 {
     const int inset = ui::metrics::panel::contentMargins.left();
     const int room = qMax(1, width() - 2 * inset);
     const auto font = ui::interfaceFont(ui::metrics::chrome::descriptionText);
-    const int lines = content.sample
-            ? ui::wrappedInterfaceTextHeight(strings::get("reader.text_preview_sample"), font, room)
-            : 0;
-    return { inset, textHeader->sizeHint().height() + (content.sample ? int(ui::px(8)) : 0), room,
+    const int lines = notice.isEmpty() ? 0 : ui::wrappedInterfaceTextHeight(notice, font, room);
+    return { inset, textHeader->sizeHint().height() + (notice.isEmpty() ? 0 : ui::px(8)), room,
              lines };
 }
 
-QRect AppearancePreview::textCard() const
+QRect AppearancePreview::textCard(int top) const
 {
-    const int top = noticeRect().bottom() + 1;
-    int available = qMax(0, height() - top);
+    const int available = qMax(0, height() - top);
     if (content.body.isNull() || available <= 0)
         return { 0, top, width(), available };
     // End at the gap under the last whole line, so that no line is cut in half.
@@ -205,9 +202,9 @@ QRect AppearancePreview::textCard() const
     int last = bottom;
     while (last > content.cropTop && !blankRow(content.body, last, paper))
         --last;
-    // A very large sample can have a first line taller than the available space.
+    // Very large text can have a first line taller than the available space.
     // Show that line clipped if trimming would leave just its top margin.
-    if (content.sample && last < bottom) {
+    if ((content.sample || content.lifted) && last < bottom) {
         int row = last;
         while (row >= content.cropTop && blankRow(content.body, row, paper))
             --row;
@@ -237,13 +234,21 @@ void AppearancePreview::paintText(QPainter &painter)
     painter.fillRect(0, top, width(), height() - top,
                      content.body.isNull() ? ui::themeColors(this).paper
                                            : QColor(content.body.pixel(0, content.cropTop)));
-    if (content.sample) {
+    QString notice;
+    if (content.sample)
+        notice = strings::get("reader.text_preview_sample");
+    else if (content.lifted)
+        notice = strings::get("reader.text_preview_lifted");
+    const auto noticeArea = noticeRect(notice);
+    if (!notice.isEmpty()) {
         painter.setFont(ui::interfaceFont(ui::metrics::chrome::descriptionText));
         painter.setPen(ui::themeColors(this).secondaryInk);
-        ui::drawWrappedInterfaceText(painter, noticeRect(),
-                                     strings::get("reader.text_preview_sample"));
+        ui::drawWrappedInterfaceText(painter, noticeArea, notice);
     }
-    const QRect card = textCard();
+    // The source crop can begin right at the illustration's lower edge.
+    // Leave room below the notice even when the book supplies no gap.
+    const int gap = content.lifted ? int(ui::metrics::spacing::row) : 0;
+    const QRect card = textCard(noticeArea.bottom() + 1 + gap);
     if (card.isEmpty() || content.body.isNull())
         return;
     // One image pixel per interface pixel: this is the text's true size.

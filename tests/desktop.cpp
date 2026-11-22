@@ -18,6 +18,7 @@
 #include "ui/style/theme.h"
 #include "app/reader/views/reading_page.h"
 #include "app/reader/views/appearance_preview.h"
+#include "render/page_content.h"
 #include "render/page_refresh_regions.h"
 #include "app/reader/views/kosync_notice.h"
 #include "app/reader/views/sync_choice.h"
@@ -2746,11 +2747,16 @@ void textPreviewPages()
     Fixture fixture;
     selectPreview(fixture, 1);
     const QByteArray image = "<img src='art.svg' width='64' height='64'/>";
+    const QByteArray tallImage =
+            "<img src='tall.svg' width='260' height='270' style='display:block'/>";
     const QList<QByteArray> bodies{
         image,
         "<p>A readable page.</p>",
         "<div style='height:100px'>&#160;</div>",
         image + "<p>An illustration with a caption.</p>",
+        tallImage
+                + "<p>This paragraph follows the tall illustration. It must remain available "
+                  "when the Text panel hides the bottom of the reading page.</p>",
         image + image,
         "<table><tr><td style='height:100px;width:100px'> </td></tr></table>",
         "<div style='height:100px;border:4px solid black'></div>"
@@ -2763,15 +2769,19 @@ void textPreviewPages()
             { { "text.xhtml", test::publisherHtml(html) },
               { "art.svg",
                 "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'>"
-                "<rect width='64' height='64' fill='black'/></svg>" } },
+                "<rect width='64' height='64' fill='black'/></svg>" },
+              { "tall.svg",
+                "<svg xmlns='http://www.w3.org/2000/svg' width='260' height='270'>"
+                "<rect width='260' height='270' fill='#19752b'/></svg>" } },
             "<itemref idref='text.xhtml'/>");
     QVERIFY(writeBook(fixture.directory.path(), "preview.epub", files));
     QSignalSpy opened(&fixture.window, &desktop::Window::bookOpened);
     fixture.window.openBook(fixture.directory.filePath("preview.epub"));
     QTRY_COMPARE(opened.count(), 1);
     QTRY_VERIFY(!fixture.state().value("busy").toBool());
+    int sampleGap = 0;
     for (int i = 0; i < bodies.size(); ++i) {
-        const bool sample = i == 0 || i == 2;
+        const bool sample = i == 0 || i == 2 || i == 5;
         const auto position = fixture.state().value("position");
         auto *page = static_cast<ReadingPage *>(fixture.widget("rrPage"));
         const auto before = page->image;
@@ -2782,6 +2792,64 @@ void textPreviewPages()
         QTRY_VERIFY(preview && preview->isVisible() && previewSettled(fixture));
         QCOMPARE(preview->showsSample(), sample);
         QCOMPARE(page->image, before);
+        if (i == 3) {
+            const auto illustrations = pageContent(before).images.rectangles;
+            QCOMPARE(illustrations.size(), 1);
+            const auto art = illustrations.first();
+            const auto rendered = preview->grab().toImage();
+            const auto ratio = rendered.devicePixelRatio();
+            const int x = qRound(art.center().x() * ratio);
+            const auto color = before.pixel(art.center());
+            int artRows = 0;
+            for (int y = 0; y < rendered.height(); ++y)
+                artRows += rendered.pixel(x, y) == color;
+            QVERIFY2(artRows >= qRound(art.height() * ratio / 2),
+                     "The small illustration should stay when its caption fits");
+        }
+        if (i == 0 || i == 4) {
+            const auto rendered = preview->grab().toImage();
+            const auto *header = preview->findChild<QWidget *>("rrTextPreviewHeader");
+            QVERIFY(header);
+            const auto notice = strings::get(sample ? "reader.text_preview_sample"
+                                                    : "reader.text_preview_lifted");
+            const auto font = ui::interfaceFont(ui::metrics::chrome::descriptionText);
+            const int noticeWidth = preview->width() - ui::metrics::panel::contentMargins.left()
+                    - ui::metrics::panel::contentMargins.right();
+            const int noticeHeight = ui::wrappedInterfaceTextHeight(notice, font, noticeWidth);
+            const auto ratio = rendered.devicePixelRatio();
+            const int noticeTop = header->geometry().bottom() + 1 + ui::px(8);
+            const int bodyTop = qRound((noticeTop + noticeHeight) * ratio);
+            const auto hasInk = [&](int y) {
+                for (int x = 0; x < rendered.width(); ++x) {
+                    const QRgb pixel = rendered.pixel(x, y);
+                    if (qRed(pixel) < 100 && qGreen(pixel) < 100 && qBlue(pixel) < 100)
+                        return true;
+                }
+                return false;
+            };
+            int noticeRows = 0;
+            for (int y = qRound(noticeTop * ratio); y < bodyTop; ++y)
+                noticeRows += hasInk(y);
+            QVERIFY2(noticeRows > 0, "The preview explanation is missing");
+            int firstInk = -1, textRows = 0;
+            for (int y = bodyTop; y < rendered.height(); ++y) {
+                if (hasInk(y)) {
+                    if (firstInk < 0)
+                        firstInk = y;
+                    ++textRows;
+                }
+            }
+            QVERIFY2(textRows > 10, "The preview body is missing");
+            const int bodyGap = firstInk - bodyTop;
+            if (sample) {
+                sampleGap = bodyGap;
+            } else {
+                QVERIFY2(bodyGap >= qRound(int(ui::metrics::spacing::row) * ratio),
+                         "The lifted text is too close to the explanation");
+                QVERIFY2(qAbs(bodyGap - sampleGap) <= qRound(ui::px(12) * ratio),
+                         "The lifted text and sample have noticeably different padding");
+            }
+        }
         if (i == 0) {
             const auto rendered = preview->grab().toImage();
             QVERIFY(fixture.press("rrLarger"));

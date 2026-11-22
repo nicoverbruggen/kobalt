@@ -29,7 +29,7 @@ public:
         int horizontalMargin = 0, verticalMargin = 0;
         Axis axis = Axis::None;
         // Show the page text at its true size, from cropTop in the body image.
-        bool text = false, sample = false;
+        bool text = false, sample = false, lifted = false;
         int cropTop = 0;
     };
 
@@ -63,8 +63,8 @@ private:
 
     const QImage &scaled(ScaledImage &cache, const QImage &source, QSize target) const;
     void paintCaption(QPainter &painter, int right) const;
-    QRect noticeRect() const;
-    QRect textCard() const;
+    QRect noticeRect(const QString &notice) const;
+    QRect textCard(int top) const;
     void paintText(QPainter &painter);
     qreal scale() const;
     QRect pageBounds() const;

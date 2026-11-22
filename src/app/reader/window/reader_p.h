@@ -688,8 +688,8 @@ private:
     kobalt::reader::AppearancePreview *appearancePreview = nullptr;
     kobalt::reader::AppearancePreview::Axis appearancePreviewAxis =
             kobalt::reader::AppearancePreview::Axis::None;
-    // The page drawn from the bookmark, for the frame with this image key.
-    QImage previewPage;
+    // The drawn preview, with its text crop, for the frame with this image key.
+    ReaderSession::AppearanceImage previewPage;
     qint64 previewPageKey = 0, previewPageRequested = 0;
     ReaderSession::PreviewPage previewPageKind = ReaderSession::PreviewPage::Layout;
     kobalt::ui::PageScrubber *pageScrubber = nullptr;

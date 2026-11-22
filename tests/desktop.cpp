@@ -4145,6 +4145,7 @@ void checkHeaderFooterSizes(int preset, bool dark)
     QCOMPARE(page->bottomHeight(), 0);
     checkSlots(false, false, "header_footer.both_off_hint");
     QVERIFY(captureState("header-footer-off"));
+    QTRY_VERIFY(!fixture.window.readerWindow()->pendingStorageSave());
     const auto savedPreferences = storage::readJson(fixture.paths.preferences());
     const auto saved = savedPreferences.value(textKey).toObject();
     QCOMPARE(saved.value("header_font_size").toInt(), maximumSize);

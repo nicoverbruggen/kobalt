@@ -50,7 +50,9 @@ public:
     int currentPage() const { return page; }
 
     std::function<void(int)> boundaryRequested;
-    std::function<QString(int)> pageLabel;
+    std::function<QString(int)> pageLabel, printedLabel;
+
+    void refreshPageLabels() { redraw(); }
     std::function<void(const QString &)> selected;
     std::function<void()> back, changed;
 
@@ -95,7 +97,9 @@ class ChoiceScreen : public kobalt::ui::Panel
 public:
     enum class Mode { Chapters, Fonts, Sizes };
     std::function<void(int)> boundaryRequested;
-    std::function<QString(int)> pageLabel;
+    std::function<QString(int)> pageLabel, printedLabel;
+
+    void refreshPageLabels() { contents->refreshPageLabels(); }
     std::function<void(const QString &)> selected;
     std::function<void()> back, changed;
     std::function<void(const QString &, bool instructions)> defaultRequested;

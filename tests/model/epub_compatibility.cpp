@@ -342,6 +342,43 @@ void checkNavigation(bool epub3)
     require(fromChapter.size() == 1 && model.goTo(fromChapter.first().position),
             "Cross-chapter print jump failed");
     require(model.position() == expected, "Chapter mode lost the printed page anchor");
+    require(model.printedPageLabel(expected) == "xiv", "Printed label at the exact marker");
+    require(model.showSpineItems(3, 3, &error), qPrintable(error));
+    require(model.printedPageLabel("/body/DocFragment[4]") == "xiv",
+            "Hybrid lost the printed label from the preceding unloaded chapter");
+    require(model.showSpineItems(0, 0, &error), qPrintable(error));
+    require(model.printedPageLabel("/body/DocFragment[1]").isEmpty(),
+            "A passage before the first marker acquired a printed label");
+}
+
+void checkInlinePrintedPages()
+{
+    auto files = test::engineBook(false, 2, 1);
+    files["OEBPS/c1.xhtml"] = test::publisherHtml(
+            "<p>Before <span id='p1'>first</span> and <span id='p2'>second</span>.</p>");
+    files["OEBPS/toc.ncx"].replace(
+            "</ncx>",
+            "<pageList><pageTarget><navLabel><text>A-2</text></navLabel><content src='c1.xhtml#p2'/></pageTarget>"
+            "<pageTarget><navLabel><text>iv</text></navLabel><content src='c1.xhtml#p1'/></pageTarget></pageList></ncx>");
+    EngineDocument model(test::readerFonts());
+    openPublication(model, files);
+    const auto markers = model.printedPages();
+    require(markers.size() == 2 && model.goTo(markers[1].position), "Missing inline markers");
+    const auto first = model.position();
+    const int screen = model.page();
+    require(model.goTo(markers[0].position) && model.page() == screen,
+            "Inline markers should share a screen");
+    require(model.printedPageLabel(model.pageStart(screen)).isEmpty()
+                    && model.printedPageLabel(first) == "iv"
+                    && model.printedPageLabel(model.position()) == "A-2",
+            "Passages on the same screen must use their own printed labels");
+    QString error;
+    require(model.showSpineItems(1, 1, &error), qPrintable(error));
+    require(model.printedPageLabel("/body/DocFragment[2]") == "A-2",
+            "Use the preceding chapter's last marker in reading order");
+    require(model.printedPageLabel("/body/DocFragment[99]").isEmpty()
+                    && model.printedPageLabel("/body/DocFragment[2]/missing[42]").isEmpty(),
+            "A missing passage cannot inherit a printed label");
 }
 
 void checkDtbookChapterWindow()
@@ -665,6 +702,7 @@ int main(int argc, char **argv)
     require(optional.readOptional("missing", 8192).isEmpty()
                     && optional.readBounded("present", 8) == "ok",
             "Optional chapter probe blocked another member");
+    checkInlinePrintedPages();
     checkDtbookChapterWindow();
     checkCodecs();
     checkChapterImageWrappers();

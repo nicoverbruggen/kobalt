@@ -182,14 +182,20 @@ void Reader::reloadWords()
                 positions.append(word.position);
             guard->wordList->setWords(words);
             // Pages follow the current layout, as bookmark pages do.
-            guard->session->bookmarkPages(positions, [guard, positions](QVector<int> found) {
-                if (!guard || found.size() != positions.size())
-                    return;
-                QHash<QString, int> pages;
-                for (int i = 0; i < positions.size(); ++i)
-                    pages.insert(positions[i], found[i]);
-                guard->wordList->setPages(std::move(pages));
-            });
+            guard->session->bookmarkPageLabels(
+                    positions, [guard, positions](BookmarkLocations locations) {
+                        const auto &found = locations.bookPages;
+                        if (!guard || found.size() != positions.size())
+                            return;
+                        QHash<QString, int> pages;
+                        QHash<QString, QString> labels;
+                        for (int i = 0; i < positions.size(); ++i) {
+                            pages.insert(positions[i], found[i]);
+                            if (guard->publisherPagesEnabled())
+                                labels.insert(positions[i], locations.printedPages.value(i));
+                        }
+                        guard->wordList->setPages(std::move(pages), std::move(labels));
+                    });
         });
     if (allWords->isVisible())
         savedWords->load({}, [guard](bool ok, QVector<kobalt::SavedWord> words) {
@@ -207,13 +213,15 @@ void Reader::openWord(const kobalt::SavedWord &word)
         return;
     }
     QPointer<Reader> guard(this);
-    session->bookmarkPages({ word.position }, [guard, word](QVector<int> found) {
+    session->bookmarkPageLabels({ word.position }, [guard, word](BookmarkLocations locations) {
         if (!guard)
             return;
-        const int page = found.value(0, -1);
-        guard->wordPage->open(
-                word, page >= 0 ? strings::get("words.go_to_page").arg(page + 1) : QString(),
-                page >= 0 ? QString() : strings::get("words.passage_missing"));
+        const int page = locations.bookPages.value(0, -1);
+        const auto label = locationPageLabel(
+                page, guard->publisherPagesEnabled() ? locations.printedPages.value(0) : QString());
+        guard->wordPage->open(word,
+                              page >= 0 ? strings::get("words.go_to_page").arg(label) : QString(),
+                              page >= 0 ? QString() : strings::get("words.passage_missing"));
     });
 }
 } // namespace kobalt::reader

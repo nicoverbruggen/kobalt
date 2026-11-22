@@ -151,6 +151,7 @@ QJsonObject cleanPreferences(QJsonObject preferences)
     for (const auto *key : { "dark_mode",
                              features::debugModeKey,
                              "hide_tab_labels",
+                             "publisher_page_numbers",
                              "sideloaded_fonts_first",
                              "playful_theme",
                              "save_looked_up_words",

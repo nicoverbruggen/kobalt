@@ -28,7 +28,8 @@ The reader's return control combines the arrow and optically centered title in o
   - Double chevrons preview the previous or next chapter by default. Settings > Controls > Navigate panel > Button action switches between Page jumps and Chapter jumps. Page jumps use single chevrons. Navigate always shows page thumbnails and its navigation controls.
   - Default menu style chooses whether Navigate opens with the reading menu; Default leaves it closed until you select the Navigate tab. These settings are saved for all books.
 
-- The page number, total page count and chapter title always appear in a paper-colored strip at the top of the navigation panel, in smaller uppercase monospace.
+- The page number, total page count and chapter title appear in a paper-colored strip at the top of the navigation panel, in smaller uppercase monospace.
+  - With publisher page numbers enabled, the strip shows the publisher’s label without a layout total.
   - The disclosure cell uses the same background. Only the panel’s top edge has a heavy rule; thin rules separate the caption, map, detailed scrubber and tabs. During a preview they describe the selected page.
   - Highlight links and Return to page use buttons centered above that strip. Each button fits its icon and label in a compact row.
   - The Return button adds a plain X with a taller touch target and a hairline separator to discard the return destination. Labels use optical alignment with their icons. Hairlines also separate the map’s zoom buttons from its track.

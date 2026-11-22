@@ -2,6 +2,7 @@
 #include <future>
 #include "app/reader/settings/interface_style.h"
 #include "reading/features.h"
+#include "support/strings.h"
 // Private to the reader window: its declaration and the widgets only it uses.
 // Include it only from the reader's own translation units.
 #include "ui/controls/buttons.h"
@@ -633,10 +634,10 @@ private:
     };
 
     SettingsCheck darkOption, animationOption, edgeLightOption, lightGestureFeedbackOption,
-            automaticOpeningOption, minimalAnnotationOption, sideloadedFontsFirstOption,
-            hideTabLabelsOption, zenModeOption, saveWordsOption, wifiPowerSaverOption,
-            disableStandbyOption, hideNonlinearOption, inpageFootnotesOption, bionicOption,
-            hideBookOnSleepOption, openingCoverOption, debugModeOption;
+            automaticOpeningOption, minimalAnnotationOption, publisherPageOption,
+            sideloadedFontsFirstOption, hideTabLabelsOption, zenModeOption, saveWordsOption,
+            wifiPowerSaverOption, disableStandbyOption, hideNonlinearOption, inpageFootnotesOption,
+            bionicOption, hideBookOnSleepOption, openingCoverOption, debugModeOption;
     QPushButton *autoRotateOption = nullptr, *lockRotationOption = nullptr;
     bool hideNativeStatus() const;
 
@@ -780,6 +781,7 @@ private:
     quint64 searchEpoch = 0;
     // Where the current search trip started. Empty until a search opens.
     QString searchOriginal;
+    QString searchOriginalPrintedPage;
     int searchOriginalPage = 0;
     kobalt::SearchHit pendingSearchHit;
     void updateOrientationBlock();
@@ -802,6 +804,22 @@ private:
     QString settingsDictionaryFontFace;
     QString settingsTimeRemainingFormat, settingsPercentageFormat, settingsSecondaryNumbers;
 
+    bool publisherPagesEnabled() const
+    {
+        return preferences.value("publisher_page_numbers").toBool();
+    }
+
+    QString currentPrintedPage() const
+    {
+        return publisherPagesEnabled() ? session->currentPrintedPage() : QString();
+    }
+
+    QString displayedBookPosition() const
+    {
+        const auto printed = currentPrintedPage();
+        return printed.isEmpty() ? session->displayBookPosition(secondaryNumberStyle())
+                                 : strings::get("search_panel.page_number").arg(printed);
+    }
     QString secondaryNumberStyle() const
     {
         return preferences.value(secondaryNumberKey).toString(secondaryNumberStyles().first());
@@ -825,6 +843,7 @@ private:
         int page;
         QString chapter;
         bool pinnedShortcut = false;
+        QString printedPage = {};
     };
 
     // The page on screen, as a place to return to after a jump.

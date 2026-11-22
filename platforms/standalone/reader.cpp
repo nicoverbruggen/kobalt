@@ -255,6 +255,7 @@ void ReaderController::begin(BookOpen book)
     request.customPinsPath = paths.customPins();
 #endif
     request.appearanceDefaults = appearance::bookDefaults(settings);
+    opening->setPublisherPageNumbers(settings.value("publisher_page_numbers").toBool());
     opening->open(
             std::move(request),
             [guard, identity, statePath, pixels](const OpeningResult &result) {

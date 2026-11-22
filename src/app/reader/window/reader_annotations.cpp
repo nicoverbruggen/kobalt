@@ -1413,6 +1413,10 @@ QVector<BookmarkRow> Reader::annotationRows() const
         BookmarkRow row{
             item.id, {}, {}, item.created, locations.bookPages.value(i * 2, -1), false
         };
+        if (publisherPagesEnabled()) {
+            row.printedPage = locations.printedPages.value(i * 2);
+            row.printedEnd = locations.printedPages.value(i * 2 + 1);
+        }
         row.endPage = locations.bookPages.value(i * 2 + 1, -1);
         row.pagePending = session->state().contains("book_fraction")
                 && session->state().value("rough_pages").toInt() <= 0;
@@ -1718,18 +1722,18 @@ void Reader::removeAnnotation(const QString &id)
         return;
     }
     QString excerpt = details.first().text;
-    int number = -1;
+    QString label;
     for (const auto &row : annotationRows()) {
         if (row.position == id) {
-            number = row.page;
+            label = locationPageLabel(row.page, row.printedPage);
             break;
         }
     }
     if (excerpt.isEmpty())
         return;
     excerpt = elideBookmarkExcerpt(excerpt, 40, 80);
-    const auto detail = number >= 0
-            ? strings::get("bookmarks.remove_detail").arg(number + 1).arg(excerpt)
+    const auto detail = !label.isEmpty()
+            ? strings::get("bookmarks.remove_detail").arg(label, excerpt)
             : excerpt;
     auto *choice = new ui::ChoiceModal(
             this, { detail, strings::get("annotations.remove_prompt"), {} },

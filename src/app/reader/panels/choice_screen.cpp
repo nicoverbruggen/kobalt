@@ -269,6 +269,7 @@ ChoiceScreen::ChoiceScreen(QWidget *parent)
         if (boundaryRequested)
             boundaryRequested(i);
     };
+    contents->printedLabel = [this](int i) { return printedLabel ? printedLabel(i) : QString(); };
     contents->pageLabel = [this](int page) {
         return pageLabel ? pageLabel(page) : QString::number(page + 1);
     };

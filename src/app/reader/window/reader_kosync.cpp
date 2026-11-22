@@ -719,6 +719,9 @@ void Reader::showKosyncChoice()
                 jump.pages = session->bookPages();
                 jump.here = session->bookPage();
                 jump.synced = compared && info.page < jump.pages ? info.page : -1;
+                jump.hereLabel = currentPrintedPage();
+                if (compared && publisherPagesEnabled())
+                    jump.syncedLabel = info.printedPage;
                 jump.starts = syncChapterStarts(links);
                 jump.nested = std::any_of(links.cbegin(), links.cend(),
                                           [](const ChapterLink &link) { return link.depth > 0; });

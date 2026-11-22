@@ -851,6 +851,8 @@ void EngineDocument::configure(QSize size, const QJsonObject &settings)
     spineNames_.clear();
     spineLocations_.clear();
     printedPages_.clear();
+    printedBySpine_.clear();
+    orderedPrintedMarkers_.clear();
     landmarks_.clear();
     engine_ = std::make_unique<ColumnView>();
     engine_->setHangingPunctuation(hangingPunctuation_);
@@ -1993,6 +1995,79 @@ QVector<ChapterLink> EngineDocument::landmarks() const
     return landmarks_;
 }
 
+QString EngineDocument::printedPageLabel(const QString &position, bool exclusiveEnd, bool *deferred)
+{
+    const int item = spineItemIndex(position);
+    if (!engine_ || item < 0 || item >= spineItemCount_)
+        return {};
+    const auto markers = printedPages();
+    auto group = printedBySpine_.upperBound(item);
+    if (group == printedBySpine_.cbegin())
+        return {};
+    const auto documentFor = [this](int spine) {
+        return windowFirst_ >= 0 && (spine < windowFirst_ || spine > windowLast_)
+                        && fullDocumentReady()
+                ? full_.get()
+                : textDocument(spine);
+    };
+    auto *unit = documentFor(item);
+    if (!unit) {
+        if (deferred)
+            *deferred = true;
+        return {};
+    }
+    auto *doc = unit->engine_->getDocument();
+#ifdef KOBLAZE_SOURCE_TEXT
+    const KoblazeSourceText sourceText(unit->slices() ? doc : nullptr);
+#endif
+    ldomXPointerEx passage(doc->createXPointer(cre(position)));
+    if (passage.isNull())
+        return {};
+    if (passage.getOffset() < 0)
+        passage.setOffset(0);
+    if (exclusiveEnd)
+        passage.prevVisibleChar(false);
+    const auto pointer = [&](ldomDocument *source, int index) {
+        const auto id = cre(markers[index].position.mid(1));
+        auto *node = source->getNodeById(source->findAttrValueIndex(id.c_str()));
+        return node ? ldomXPointerEx(node, 0) : ldomXPointerEx();
+    };
+    while (group != printedBySpine_.cbegin()) {
+        --group;
+        const int spine = group.key();
+        auto ordered = orderedPrintedMarkers_.constFind(spine);
+        if (ordered == orderedPrintedMarkers_.constEnd()) {
+            // A chapter window retains placeholder entries even for missing anchors.
+            // Use the target chapter to validate and order its markers once.
+            auto *source = spine == item ? unit : documentFor(spine);
+            if (!source) {
+                if (deferred)
+                    *deferred = true;
+                return {};
+            }
+            auto *chapter = source->engine_->getDocument();
+            QVector<int> valid;
+            for (const int index : group.value())
+                if (!pointer(chapter, index).isNull())
+                    valid.append(index);
+            std::stable_sort(valid.begin(), valid.end(), [&](int a, int b) {
+                return pointer(chapter, a).compare(pointer(chapter, b)) < 0;
+            });
+            ordered = orderedPrintedMarkers_.insert(spine, valid);
+        }
+        const auto &entries = ordered.value();
+        auto end = entries.cend();
+        if (spine == item)
+            end = std::upper_bound(entries.cbegin(), end, passage,
+                                   [&](const ldomXPointerEx &p, int index) {
+                                       return p.compare(pointer(doc, index)) < 0;
+                                   });
+        if (end != entries.cbegin())
+            return markers[*(end - 1)].title;
+    }
+    return {};
+}
+
 QVector<ChapterLink> EngineDocument::printedPages() const
 {
     if (!engine_)
@@ -2006,8 +2081,15 @@ QVector<ChapterLink> EngineDocument::printedPages() const
     for (int i = 0; i < map->getChildCount(); ++i) {
         auto *entry = map->getChild(i);
         const auto path = qstring(entry->getPath());
-        if (path.startsWith(QStringLiteral("#_doc_fragment_")))
+        const QString prefix = QStringLiteral("#_doc_fragment_");
+        if (!path.startsWith(prefix))
+            continue;
+        bool ok = false;
+        const int item = path.mid(prefix.size()).section('_', 0, 0).toInt(&ok);
+        if (ok && item >= 0) {
+            printedBySpine_[item].append(pages.size());
             pages.append({ qstring(entry->getLabel()), path });
+        }
     }
     return pages;
 }

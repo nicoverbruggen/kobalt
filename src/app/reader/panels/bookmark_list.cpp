@@ -8,6 +8,7 @@
 #include "support/qt_font.h"
 #include "support/strings.h"
 #include "bookmark_list.h"
+#include "reading/reading_progress.h"
 #include "ui/style/styles.h"
 #include "ui/style/fonts.h"
 #include <QLocale>
@@ -1118,13 +1119,13 @@ void BookmarkList::redraw()
                 QString(annotations ? "rrAnnotationRemove%1" : "rrBookmarkMore%1").arg(index));
         const auto title = item.pinName.isEmpty() ? chapter : item.pinName;
         QStringList description;
-        if (item.page >= 0) {
-            description << (annotations && item.endPage > item.page
-                                    ? strings::get("marks.page_range")
-                                              .arg(item.page + 1)
-                                              .arg(item.endPage + 1)
-                                    : strings::get("search_panel.page_number").arg(item.page + 1));
-        }
+        const auto start = locationPageLabel(item.page, item.printedPage);
+        const auto end = locationPageLabel(item.endPage, item.printedEnd);
+        const bool range = annotations && !start.isEmpty() && !end.isEmpty() && start != end;
+        const auto label = range ? QString("%1–%2").arg(start, end) : start;
+        if (!start.isEmpty())
+            description << (range ? strings::get("marks.page_range").arg(start, end)
+                                  : strings::get("search_panel.page_number").arg(start));
         if (!title.isEmpty())
             description << title;
         if (!detailsReady || (description.isEmpty() && excerpt.isEmpty()))
@@ -1168,12 +1169,9 @@ void BookmarkList::redraw()
             metadata << QLocale().toString(item.created.toLocalTime(), "d MMM yyyy, HH:mm");
         itemRow->setCaption(metadata.join(QStringLiteral(" · ")));
         itemRow->setAccessory(ui::ListRow::Caption{
-                item.page >= 0
-                        ? (annotations && item.endPage > item.page
-                                   ? QString("%1–%2").arg(item.page + 1).arg(item.endPage + 1)
-                                   : QString::number(item.page + 1))
-                        : QString(),
-                numberWidth });
+                label,
+                qMax(numberWidth,
+                     ui::interfaceTextWidth(label, ui::interfaceFont(chrome::captionText))) });
         y += itemHeight;
     }
     update();

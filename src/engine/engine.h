@@ -489,6 +489,8 @@ public:
     virtual QImage coverImage(QSize maximumSize, const QString &preferredPath = {},
                               QString *usedPath = nullptr) const = 0;
     virtual QVector<ChapterLink> landmarks() const = 0;
+    virtual QString printedPageLabel(const QString &position, bool exclusiveEnd = false,
+                                     bool *deferred = nullptr) = 0;
     virtual QVector<ChapterLink> printedPages() const = 0;
     virtual QVector<ChapterLink> chapters() const = 0;
     virtual void setChapters(QVector<ChapterLink> contents, QVector<ChapterLink> graph) = 0;

@@ -1159,6 +1159,14 @@ void SettingsPanel::buildSystem(QWidget *systemPage)
     secondaryNumbersButton = listAction(systemPage, nullptr, "rrSecondaryNumbers",
                                         strings::get("settings.secondary_numbers"), [] { });
     systemRows->addWidget(secondaryNumbersButton);
+    publisherPageOption = settingsOption(
+            systemPage, "rrPublisherPageNumbers", strings::get("settings.publisher_page_numbers"),
+            strings::get("settings.publisher_page_numbers_description"));
+    auto publisherPageStyle = publisherPageOption->presentation();
+    publisherPageStyle.wrapLabel = true;
+    publisherPageOption->setPresentation(publisherPageStyle);
+    publisherPageOption->setLeadingIcon(ui::ControlIcon::Books);
+    systemRows->addWidget(publisherPageOption);
     sideloadedFontsFirstOption = settingsOption(
             systemPage, "rrSideloadedFontsFirst", strings::get("settings.sideloaded_fonts_first"),
             strings::get("settings.sideloaded_fonts_first_description"));

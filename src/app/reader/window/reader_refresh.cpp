@@ -250,7 +250,7 @@ void Reader::syncFrameState()
             pages.append(chapter.page);
         choices->setChapterPages(pages);
         syncChapterBoundaries();
-        choices->setChapterPosition(session->displayBookPosition(secondaryNumberStyle()));
+        choices->setChapterPosition(displayedBookPosition());
     }
     syncBookmarks();
     if (!session->busy() && !pendingSearchHit.start.isEmpty()) {
@@ -738,7 +738,8 @@ void Reader::syncReadingControls()
             chapterPages.append(chapter.first);
         pageScrubber->setChapterPosition(session->contentsSelection().current, chapters.size(),
                                          session->chapterTitle(), session->mainPercent(),
-                                         session->bookPage(), session->bookPages(), chapterPages);
+                                         session->bookPage(), session->bookPages(), chapterPages,
+                                         currentPrintedPage());
     } else {
         pageScrubber->setBook(session->page(), session->pages(), chapters, session->image().size(),
                               session->firstMainPage(), session->lastMainPage(),

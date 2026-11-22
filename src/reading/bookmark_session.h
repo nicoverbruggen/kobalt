@@ -96,6 +96,8 @@ public:
     int page(int index) const;
     // Whole-book display index. Local pages still control marking and merging.
     int bookPage(int index) const;
+
+    QString printedPage(const QString &position) const { return printedPages_.value(position); }
     // The page of the bookmark at `position` in the current layout, or -1.
     int pageOf(const QString &position) const;
     enum class Toggle { Refused, Removed, Adding };
@@ -143,6 +145,7 @@ private:
     // layout_ is set, pages_ has one entry per bookmark.
     QVector<int> pages_;
     QHash<QString, int> bookPages_;
+    QHash<QString, QString> printedPages_;
     QString layout_, lookup_;
     quint64 layoutRevision_ = 0, lookupRevision_ = 0, lookupRequest_ = 0, lookupGeneration_ = 0;
     // Changes with every edit of the list, so an older page lookup is repeated.

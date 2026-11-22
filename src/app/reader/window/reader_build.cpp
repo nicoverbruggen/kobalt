@@ -262,11 +262,16 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     preferences = appearance::readerPreferences(savedSettings.object, book->layoutPreferences());
     if (kobalt::annotationDatabaseEnabled())
         savedWords = std::make_unique<kobalt::SavedWords>(book->paths().directory);
+    session->setPublisherPageNumbers(publisherPagesEnabled());
+    const auto markLayout = [this] {
+        const auto key = layoutKey();
+        return publisherPagesEnabled() && !key.isEmpty() ? key + "/printed" : key;
+    };
     bookmarks = std::make_unique<kobalt::BookmarkSession>(
-            *session, [this] { return layoutKey(); }, book->paths().annotations(), book->identity(),
+            *session, markLayout, book->paths().annotations(), book->identity(),
             book->fingerprint(), session->title(), book->paths().database());
     highlights = std::make_unique<kobalt::HighlightSession>(
-            *session, [this] { return layoutKey(); }, book->paths().annotations(), book->identity(),
+            *session, markLayout, book->paths().annotations(), book->identity(),
             book->fingerprint(), session->title(), book->paths().database());
     highlights->changed = [this] {
         syncMarkupRequest();
@@ -591,8 +596,12 @@ void Reader::buildReadingPage()
                 this->session->searchDetails(
                         std::move(hits), searchPanel->scope(), searchOriginal,
                         [guard, epoch, finished](QVector<kobalt::SearchHit> resolved) {
-                            if (guard && guard->searchEpoch == epoch && !guard->lifecycleHidden)
+                            if (guard && guard->searchEpoch == epoch && !guard->lifecycleHidden) {
+                                if (!guard->publisherPagesEnabled())
+                                    for (auto &hit : resolved)
+                                        hit.printedPage.clear();
                                 finished(std::move(resolved));
+                            }
                         });
             };
     searchPanel->dismissed = [this] { closeSearch(); };
@@ -1007,6 +1016,15 @@ void Reader::buildBottomControls()
                 scrubber->setPreview(target, std::move(image));
         });
     };
+    pageScrubber->printedLabel = [this](int page) {
+        return publisherPagesEnabled() ? session->navigationPrintedPage(page, false) : QString();
+    };
+    this->session->printedLabelsChanged = [this] {
+        if (pageScrubber->isVisible())
+            pageScrubber->refreshPageLabels();
+        if (choices && choices->isVisible())
+            choices->refreshPageLabels();
+    };
     pageScrubber->cancelled = [this] {
         session->cancelPagePreview();
         seekOpen = false;
@@ -1017,8 +1035,7 @@ void Reader::buildBottomControls()
         const auto chapters = session->chapters();
         if (chapter < 0 || chapter >= chapters.size())
             return;
-        const LinkVisit origin{ session->state().value("position").toString(), session->bookPage(),
-                                session->chapterTitle().toUpper() };
+        const auto origin = currentVisit();
         session->cancelPagePreview();
         pageScrubber->beginNavigation();
         if (session->goToChapter(chapter))
@@ -1041,8 +1058,7 @@ void Reader::buildBottomControls()
             dismissControls();
             return;
         }
-        const LinkVisit origin{ session->state().value("position").toString(), session->page(),
-                                session->chapterTitle().toUpper() };
+        const auto origin = currentVisit();
         if (!session->go(target))
             return;
         pendingPassage = origin;
@@ -1774,6 +1790,7 @@ void Reader::connectSettingsPage(SettingsPage section)
             settingsPercentageFormat = "whole";
             settingsRenderingMode = renderingMode::value(renderingMode::Mode::Hybrid);
             static_cast<SettingsPanel *>(general)->selectTheme("classic", themeDraft);
+            publisherPageOption.set(false);
             sideloadedFontsFirstOption.set(false);
             hideTabLabelsOption.set(false);
             zenModeOption.set(false);
@@ -1953,6 +1970,7 @@ void Reader::connectSettingsPage(SettingsPage section)
         sleepScreenButton = settings->sleepScreenButton;
         sessionTimeoutButton = settings->sessionTimeoutButton;
         automaticOpeningOption.bind(settings->automaticOpeningOption);
+        publisherPageOption.bind(settings->publisherPageOption);
         sideloadedFontsFirstOption.bind(settings->sideloadedFontsFirstOption);
         hideTabLabelsOption.bind(settings->hideTabLabelsOption);
         wifiPowerSaverOption.bind(settings->wifiPowerSaverOption);

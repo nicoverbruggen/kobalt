@@ -566,8 +566,10 @@ void Reader::askRemoveBookmark(const QString &position)
     const auto chapter = titles.title(number, list[index].chapter);
     const auto excerpt =
             elideBookmarkExcerpt(excerptAfterChapter(list[index].excerpt, chapter), 40, 80);
-    const auto detail = number >= 0
-            ? strings::get("bookmarks.remove_detail").arg(number + 1).arg(excerpt)
+    const auto label = locationPageLabel(
+            number, publisherPagesEnabled() ? bookmarks->printedPage(position) : QString());
+    const auto detail = !label.isEmpty()
+            ? strings::get("bookmarks.remove_detail").arg(label, excerpt)
             : excerpt;
     const bool pinned = list[index].pinned();
     auto description = strings::get(pinned ? "bookmarks.remove_pinned_description"
@@ -762,6 +764,8 @@ QVector<kobalt::BookmarkRow> Reader::bookmarkRows() const
     for (int i = 0; i < list.size(); ++i) {
         kobalt::BookmarkRow row{ list[i].position, list[i].chapter,        list[i].excerpt,
                                  list[i].created,  bookmarks->bookPage(i), false };
+        if (publisherPagesEnabled())
+            row.printedPage = bookmarks->printedPage(row.position);
         row.current = pages.value(i, -1) >= 0 && pages.value(i, -1) == session->page();
         row.pagePending = pagePending;
         row.pinName = list[i].name;

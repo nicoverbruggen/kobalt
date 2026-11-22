@@ -434,20 +434,29 @@ void PageScrubber::syncRange(bool chaptersChanged)
         position->setMarkers(markers);
     }
     overview->setRange(totalPages, rangeFirst, rangeLast, current);
-    position->setAccessibleDescription(strings::get("reader.zoom_range")
-                                               .arg(rangeFirst + 1)
-                                               .arg(rangeLast + 1)
-                                               .arg(totalPages));
+    const auto label = [this](int page) {
+        const auto printed = !chapterBar && printedLabel ? printedLabel(page) : QString();
+        return printed.isEmpty() ? bookPageLabel(page, firstMainPage, lastMainPage, secondaryStyle)
+                                 : printed;
+    };
+    const auto first = label(rangeFirst), last = label(rangeLast);
+    if (!chapterBar && printedLabel
+        && (!printedLabel(rangeFirst).isEmpty() || !printedLabel(rangeLast).isEmpty()))
+        position->setAccessibleDescription(strings::get("marks.page_range").arg(first, last));
+    else
+        position->setAccessibleDescription(strings::get("reader.zoom_range")
+                                                   .arg(rangeFirst + 1)
+                                                   .arg(rangeLast + 1)
+                                                   .arg(totalPages));
     const auto scope = strings::get("reader.zoom_scale").arg(zoomScales[zoomLevel]);
     rangeLabel->setText(chapterBar ? strings::get("chapter_graph.book_progress")
                                              .arg(strings::percentArgument(bookPercent))
                                              .toUpper()
                                    : scope.toUpper());
-    rangeStart->setText(bookPageLabel(rangeFirst, firstMainPage, lastMainPage, secondaryStyle));
-    rangeEnd->setText(bookPageLabel(rangeLast, firstMainPage, lastMainPage, secondaryStyle));
-    overviewStart->setText(bookPageLabel(0, firstMainPage, lastMainPage, secondaryStyle));
-    overviewEnd->setText(
-            bookPageLabel(totalPages - 1, firstMainPage, lastMainPage, secondaryStyle));
+    rangeStart->setText(label(rangeFirst));
+    rangeEnd->setText(label(rangeLast));
+    overviewStart->setText(label(0));
+    overviewEnd->setText(label(totalPages - 1));
     updateButtons();
 }
 
@@ -587,8 +596,10 @@ void PageScrubber::setChapterBar(bool enabled, bool keepNavigation)
 }
 
 void PageScrubber::setChapterPosition(int index, int count, QString title, int percent,
-                                      int bookPage, int bookPages, const QVector<int> &chapterPages)
+                                      int bookPage, int bookPages, const QVector<int> &chapterPages,
+                                      const QString &printed)
 {
+    chapterPrintedPage = printed;
     chapterIndex = index;
     chapterCount = count;
     chapterTitle = std::move(title);
@@ -1139,13 +1150,20 @@ void PageScrubber::updateCaption()
         }
     }
     QString pageLabel = bookPageLabel(page, firstMainPage, lastMainPage, secondaryStyle);
-    if (page >= firstMainPage && page <= lastMainPage)
+    const auto printed = !chapterBar && printedLabel ? printedLabel(page) : QString();
+    if (!printed.isEmpty())
+        pageLabel = strings::get("search_panel.page_number").arg(printed);
+    else if (page >= firstMainPage && page <= lastMainPage)
         pageLabel = strings::get("reader.menu_page_of")
                             .arg(pageLabel)
                             .arg(lastMainPage - firstMainPage + 1);
-    const QString label = chapterBar ? chapterTitle.toUpper()
-            : chapterName.isEmpty()  ? pageLabel
-                                     : pageLabel + QStringLiteral(" · ") + chapterName;
+    if (chapterBar && !chapterPrintedPage.isEmpty()) {
+        pageLabel = strings::get("search_panel.page_number").arg(chapterPrintedPage);
+        chapterName = chapterTitle.toUpper();
+    }
+    const QString label = chapterBar && chapterPrintedPage.isEmpty() ? chapterTitle.toUpper()
+            : chapterName.isEmpty()                                  ? pageLabel
+                                    : pageLabel + QStringLiteral(" · ") + chapterName;
     captionBackground->setGeometry(0, panelBounds().top(), width(), scrubber::captionHeight);
     captionBackground->show();
     const int toggleWidth = zoomAvailable() ? int(metrics::chrome::cellWidth) : 0;

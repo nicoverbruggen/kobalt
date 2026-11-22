@@ -15,7 +15,7 @@
 namespace kobalt {
 struct PageSummary
 {
-    QString start, excerpt, chapter;
+    QString start, excerpt, chapter, printedPage;
     // Whole-book spread index for a prepared two-column chapter, or -1.
     int bookPage = -1;
 };
@@ -25,7 +25,7 @@ struct BookmarkLocations
     QVector<int> pages, order;
     // Whole-book display indexes, separate from the loaded layout pages.
     QVector<int> bookPages = {};
-    QStringList chapters = {};
+    QStringList chapters = {}, printedPages = {};
 };
 
 struct ReaderMarkupRange
@@ -77,7 +77,7 @@ struct ReaderFrame
     QJsonObject state, resources;
     QString title, author, error;
     // Source identity of the painted page, independent of later slice preparation.
-    QString pageStart;
+    QString pageStart, printedPage, printedPosition;
     qint64 totalWords = -1, mainWords = -1;
     QString nativePosition, nativePositionError;
     QImage cover;
@@ -131,7 +131,7 @@ struct PositionComparison
 struct SyncedPositionDescription
 {
     PositionComparison comparison;
-    QString chapter;
+    QString chapter, printedPage;
     // Compared only: the whole-book page of the synced position, or -1.
     int page = -1;
 };
@@ -260,11 +260,14 @@ public:
     // layout changed before they finished; the caller asks again.
     void bookmarkLocations(QStringList positions, std::function<void(BookmarkLocations)> finished,
                            bool rangeEndpoints = false, bool sourceOrder = true,
-                           std::shared_ptr<std::atomic_bool> cancelled = {});
+                           std::shared_ptr<std::atomic_bool> cancelled = {},
+                           bool wantPrinted = true);
     // My Words needs the book page even if Hybrid adopts a prepared layout
     // during the lookup. Retry on the same open book when its pages are ready.
     void bookmarkPages(QStringList positions, std::function<void(QVector<int>)> finished,
                        bool rangeEndpoints = false);
+    void bookmarkPageLabels(QStringList positions, std::function<void(BookmarkLocations)> finished,
+                            bool rangeEndpoints = false, bool wantPrinted = true);
     void pageSummary(int page, std::function<void(QString position, QString excerpt)> finished);
     void pageSummary(int page, std::function<void(PageSummary)> finished);
     // The start of the text on `page` in the layout shown now. A layout that
@@ -455,6 +458,15 @@ public:
     // The physical page numbers above also drive sync, completion and navigation.
     int firstMainPage() const;
     int lastMainPage() const;
+    void setPublisherPageNumbers(bool enabled);
+    void printedPageLabels(QStringList positions,
+                           std::function<void(QHash<QString, QString>)> finished);
+    QString navigationPrintedPage(int index, bool chapter);
+    std::function<void()> printedLabelsChanged;
+
+    QString currentPrintedPosition() const { return frame.printedPosition; }
+
+    QString currentPrintedPage() const { return frame.printedPage; }
     QString displayPageLabel(int absolute, const QString &style) const;
     QString displayBookPosition(const QString &style) const;
 
@@ -674,6 +686,10 @@ private:
     bool preview_ = false;
     bool openingPreview_ = false;
     bool retiring = false;
+    QHash<int, QString> printedScreenLabels_, printedChapterLabels_;
+    quint64 printedLayout_ = 0;
+    bool printedWindow_ = false;
+    bool usePublisherPageNumbers = false;
     bool layoutReady_ = false;
     RenderProgress renderProgress_;
     QElapsedTimer renderTimer;

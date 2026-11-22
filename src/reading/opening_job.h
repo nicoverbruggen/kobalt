@@ -23,6 +23,7 @@ struct OpeningJob
     QString customPinsPath, dictionariesPath;
     QJsonObject pinnedAppearance, appearanceDefaults;
     bool restartAtStart = false;
+    bool printed = false;
     bool migrateKoboDocumentCache = false;
     ReaderMarkupRequest markup;
     quint64 markupGeneration = 0;
@@ -108,10 +109,11 @@ void captureChapters(ReaderFrame &result, Engine &engine,
                      const std::function<bool()> &current = {});
 BookmarkLocations captureBookmarkLocations(Engine &engine, const QStringList &positions,
                                            bool rangeEndpoints, bool sourceOrder,
-                                           const std::function<bool()> &current = {});
+                                           const std::function<bool()> &current = {},
+                                           bool printed = false);
 // `times` gets the milliseconds of each step, for the diagnostics of a slow
 // page turn.
 ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbours = true,
                     const ReaderMarkupRequest &markup = {}, quint64 markupGeneration = 0,
-                    QJsonObject *times = nullptr);
+                    bool printed = false, QJsonObject *times = nullptr);
 } // namespace kobalt

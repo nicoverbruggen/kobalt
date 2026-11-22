@@ -254,6 +254,13 @@ int main()
     require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42%")
                     && content(Field::ChapterPercent, noPages, false).text == QStringLiteral("30%"),
             "The percentage fields keep their percentage");
+    auto printed = noPages;
+    printed.printedPage = "xiv";
+    require(content(Field::BookPage, printed, true).text == "xiv"
+                    && content(Field::TitleAndPage, printed, true).text.endsWith("xiv")
+                    && content(Field::ChapterPage, printed, false).text == calculating
+                    && content(Field::BookPercent, printed, false).text == "42%",
+            "Publisher labels must keep their case and leave layout progress alone");
     noPages.decimalPercentages = true;
     require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42.7%")
                     && content(Field::ChapterPercent, noPages, false).text

@@ -1,4 +1,5 @@
 #include "sync_choice.h"
+#include "reading/reading_progress.h"
 #include "support/percentage_text.h"
 #include "ui/controls/text.h"
 #include "ui/style/fonts.h"
@@ -294,8 +295,11 @@ int SyncChoiceView::pagesGraph(int width, QPainter *painter) const
     painter->setRenderHint(QPainter::Antialiasing, false);
     paintJumpLabel(*painter, (xh + xs) / 2, 0, width);
     // Page numbers count from one. Neighbouring pages push their numbers apart.
-    const auto number = [](int page) { return strings::get("kosync.page_number").arg(page + 1); };
-    const auto hereText = number(value.here), syncedText = number(value.synced);
+    const auto number = [](int page, const QString &printed) {
+        return strings::get("kosync.page_number").arg(locationPageLabel(page, printed));
+    };
+    const auto hereText = number(value.here, value.hereLabel);
+    const auto syncedText = number(value.synced, value.syncedLabel);
     auto hereArea = centeredText(hereText, labelFont(), xh, numbers, width);
     auto syncedArea = centeredText(syncedText, labelFont(true), xs, numbers, width);
     if (hereArea.intersects(syncedArea.adjusted(-metrics::labelGap, 0, metrics::labelGap, 0))) {

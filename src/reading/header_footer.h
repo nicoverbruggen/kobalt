@@ -171,7 +171,7 @@ Layout customLayout(const QJsonObject &preferences, const Layout &fallback);
 struct Values
 {
     QString title, author, chapter, time;
-    QString matterPage;
+    QString matterPage, printedPage;
     int chapterPage = 0, chapterPages = 0, page = 0, pages = 0;
     // True for a total that is an estimate. It shows with a mark.
     bool pagesEstimated = false, chapterPagesEstimated = false;

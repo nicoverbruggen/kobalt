@@ -23,10 +23,18 @@ public:
 
     void setBook(int page, int pages, const QVector<QPair<int, QString>> &chapters, QSize pageSize,
                  int firstMain = 0, int lastMain = -1, const QString &style = {});
+    std::function<QString(int)> printedLabel;
+
+    void refreshPageLabels()
+    {
+        syncRange();
+        updateCaption();
+    }
     void setChapterJumps(bool enabled, bool keepNavigation = false);
     void setChapterBar(bool enabled, bool keepNavigation = false);
     void setChapterPosition(int index, int count, QString title, int percent, int bookPage,
-                            int bookPages, const QVector<int> &chapterPages);
+                            int bookPages, const QVector<int> &chapterPages,
+                            const QString &printed = {});
     void setBookmarkedPages(const QVector<int> &pages);
     void setCurrentPageBookmarked(bool marked);
     void setPreview(int page, QImage image, bool bookmarked = false);
@@ -75,7 +83,7 @@ private:
     SettingSlider *indicator;
     int bookPercent = 0;
     int chapterIndex = -1, chapterCount = 0;
-    QString chapterTitle;
+    QString chapterTitle, chapterPrintedPage;
     QPushButton *previous, *next, *zoomOut, *zoomIn, *overviewToggle;
     RangeOverview *overview;
     QLabel *rangeLabel, *overviewLabel, *rangeStart, *rangeEnd, *overviewStart, *overviewEnd;

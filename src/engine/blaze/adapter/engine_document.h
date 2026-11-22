@@ -355,6 +355,8 @@ public:
     QImage coverImage(QSize maximumSize, const QString &preferredPath = {},
                       QString *usedPath = nullptr) const override;
     QVector<ChapterLink> landmarks() const override;
+    QString printedPageLabel(const QString &position, bool exclusiveEnd = false,
+                             bool *deferred = nullptr) override;
     QVector<ChapterLink> printedPages() const override;
     QVector<ChapterLink> chapters() const override;
     bool goToChapter(int index, const QString &position) override;
@@ -448,6 +450,8 @@ private:
     // The spine items that have their text, or -1 for the whole book.
     mutable QStringList spineNames_, spineLocations_;
     mutable QVector<ChapterLink> printedPages_, landmarks_;
+    mutable QMap<int, QVector<int>> printedBySpine_;
+    mutable QHash<int, QVector<int>> orderedPrintedMarkers_;
     int windowFirst_ = -1, windowLast_ = -1, spineItemCount_ = 0;
     // Keep traversed group boundaries after their rendered documents are evicted.
     mutable QMap<int, int> visitedUnits_;

@@ -6092,6 +6092,31 @@ private slots:
         QTRY_COMPARE(labelText(fixture, "rrPrintedPage0Title"), QString("xiv"));
         QVERIFY(fixture.press("rrPrintedPage0"));
         QTRY_COMPARE(fixture.state().value("chapter_title").toString(), QString("Chapter 3"));
+
+        if (!fixture.visible("rrSettings"))
+            QVERIFY(fixture.press("rrPage"));
+        QVERIFY(fixture.press("rrSettings"));
+        QVERIFY(fixture.press("rrSettingsSystem"));
+        QVERIFY(revealSettingsOption(fixture, "rrPublisherPageNumbers"));
+        QVERIFY(fixture.press("rrPublisherPageNumbers"));
+        // Apply a layout change together with the label change. The previous
+        // jump still returns to the exact passage marked 42.
+        QVERIFY(fixture.press("rrSettingsStyling"));
+        QVERIFY(revealSettingsOption(fixture, "rrHideNonlinearFragments"));
+        QVERIFY(fixture.press("rrHideNonlinearFragments"));
+        QVERIFY(fixture.press("rrSettingsClose"));
+        QTRY_VERIFY(storage::readJson(fixture.paths.preferences())
+                            .value("publisher_page_numbers")
+                            .toBool());
+        QTRY_VERIFY(!fixture.visible("rrGeneralSettings")
+                    && !fixture.state().value("busy").toBool());
+        if (!fixture.visible("rrNavChapters"))
+            QVERIFY(fixture.press("rrPage"));
+        QTRY_COMPARE(fixture.widget("rrScrubberReturn")->property("text").toString(),
+                     strings::get("reader.return_page").arg(42));
+        QVERIFY(fixture.press("rrNavChapters"));
+        // Chapter three starts before its own marker, so it inherits 42.
+        QTRY_COMPARE(labelText(fixture, "rrChapter2Page"), QString("42"));
     }
 
     void illustratedNavigation()

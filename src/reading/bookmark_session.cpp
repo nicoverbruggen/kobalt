@@ -172,8 +172,11 @@ bool BookmarkSession::sync()
                 guard->layoutRevision_ = revision;
                 guard->pages_ = pages;
                 guard->bookPages_.clear();
-                for (int i = 0; i < positions.size(); ++i)
+                guard->printedPages_.clear();
+                for (int i = 0; i < positions.size(); ++i) {
                     guard->bookPages_.insert(positions[i], locations.bookPages.value(i, -1));
+                    guard->printedPages_.insert(positions[i], locations.printedPages.value(i));
+                }
                 guard->merge();
                 if (guard && guard->changed)
                     guard->changed();
@@ -268,6 +271,7 @@ void BookmarkSession::merge()
                     // than resolving the shorter list again after every merge.
                     for (auto it = summaries->begin(); it != summaries->end(); ++it) {
                         pageOf.insert(it.value().start, it.key());
+                        guard->printedPages_.insert(it.value().start, it.value().printedPage);
                         guard->bookPages_.insert(it.value().start, bookPageOf.value(it.key(), -1));
                     }
                     QVector<int> mergedPages;
@@ -314,6 +318,7 @@ bool BookmarkSession::save(QVector<Bookmark> bookmarks, QVector<int> pages, cons
     // for repeated edits in one slice. Clearing the layout forces a lookup.
     if (bookPages_.size() > 2 * BookmarkStore::maxBookmarks) {
         bookPages_.clear();
+        printedPages_.clear();
         layout_.clear();
     }
     if (!writer) {
@@ -534,6 +539,7 @@ BookmarkSession::Toggle BookmarkSession::toggle(int current)
                 const int bookPage = summary.bookPage >= 0 ? summary.bookPage
                         : state.contains("book_fraction")  ? state.value("rough_page").toInt(0) - 1
                                                            : current;
+                guard->printedPages_.insert(summary.start, summary.printedPage);
                 guard->bookPages_.insert(summary.start, bookPage);
                 if (!guard->save(list, pages, "added"))
                     return;

@@ -49,7 +49,7 @@ bool DescribedOption::Presentation::operator==(const Presentation &other) const
             && descriptionPadding == other.descriptionPadding
             && indicatorSize == other.indicatorSize && pressedFill == other.pressedFill
             && leadingIndicator == other.leadingIndicator && opticalLabel == other.opticalLabel
-            && valueBelowLabel == other.valueBelowLabel;
+            && valueBelowLabel == other.valueBelowLabel && wrapLabel == other.wrapLabel;
 }
 
 void DescribedOption::setPresentation(const Presentation &value)
@@ -142,8 +142,11 @@ int DescribedOption::iconSpace() const
     return int(metrics::chrome::cellIcon) + px(20) + indent;
 }
 
-int DescribedOption::labelHeight() const
+int DescribedOption::labelHeight(int textWidth) const
 {
+    if (appearance.wrapLabel && textWidth > 0
+        && interfaceTextWidth(text(), labelFont()) > textWidth)
+        return wrappedInterfaceTextHeight(text(), labelFont(), textWidth);
     // The line grows only by what large text adds, so standard text keeps
     // the checkbox's line.
     if (textScale() == 1)
@@ -173,9 +176,10 @@ int DescribedOption::labelRaise(const QFont &labelFont) const
     return qMax(0, qRound(capitalsBelowMiddle));
 }
 
-int DescribedOption::descriptionTop() const
+int DescribedOption::descriptionTop(int textWidth) const
 {
-    return metrics::settings::descriptionTop + labelHeight() - metrics::settings::checkboxSize;
+    return metrics::settings::descriptionTop + labelHeight(textWidth)
+            - metrics::settings::checkboxSize;
 }
 
 int DescribedOption::valueHeight() const
@@ -212,7 +216,7 @@ int DescribedOption::heightForWidth(int width) const
                     - appearance.indicatorSize.width() - metrics::settings::toggleGap - iconSpace()
                     - (preview ? previewSize.width() + metrics::settings::toggleGap : 0));
     const int textHeight = description.isEmpty() ? int(metrics::control::stepSize)
-                                                 : descriptionTop() + valueHeight()
+                                                 : descriptionTop(textWidth) + valueHeight()
                     + wrappedInterfaceTextHeight(description, descriptionFont, textWidth)
                     + metrics::settings::descriptionBottom + 2 * appearance.descriptionPadding;
     return qMax(qMax(appearance.minimumRowHeight, textHeight),
@@ -247,7 +251,7 @@ QRect DescribedOption::labelLine() const
                     - appearance.indicatorSize.width() - metrics::settings::toggleGap - iconSpace()
                     - (preview ? previewSize.width() + metrics::settings::toggleGap : 0));
     const int textBottom = description.isEmpty() ? metrics::settings::checkboxTop + labelHeight()
-                                                 : descriptionTop()
+                                                 : descriptionTop(textWidth)
                     + wrappedInterfaceTextHeight(description, descriptionFont, textWidth);
     const int textOffset =
             (height() - (textBottom + valueHeight() - metrics::settings::checkboxTop)) / 2
@@ -258,7 +262,8 @@ QRect DescribedOption::labelLine() const
                              + appearance.indicatorSize.width() + metrics::settings::toggleGap
                      : appearance.horizontalInset + metrics::settings::labelLeft)
             + iconSpace();
-    return QRect(textLeft, metrics::settings::checkboxTop + textOffset, textWidth, labelHeight());
+    return QRect(textLeft, metrics::settings::checkboxTop + textOffset, textWidth,
+                 labelHeight(textWidth));
 }
 
 QFont DescribedOption::labelFont() const
@@ -458,7 +463,9 @@ void DescribedOption::paintEvent(QPaintEvent *)
         }
         painter.restore();
     }
-    if (!titleLabel) {
+    if (appearance.wrapLabel && interfaceTextWidth(text(), labelFont) > labelBounds.width())
+        drawWrappedInterfaceText(painter, labelBounds, text());
+    else if (!titleLabel) {
         const auto label = interfaceTextWidth(text(), labelFont) > labelBounds.width()
                 ? elideInterfaceText(text(), labelFont, labelBounds.width())
                 : text();
@@ -474,11 +481,11 @@ void DescribedOption::paintEvent(QPaintEvent *)
     labelFont.setItalic(false);
     painter.setFont(labelFont);
     painter.setPen(themeColors(this).secondaryInk);
-    drawWrappedInterfaceText(painter,
-                             QRect(textLeft, descriptionTop() + valueHeight() + textOffset,
-                                   textWidth,
-                                   height() - descriptionTop() - valueHeight() - textOffset),
-                             description);
+    drawWrappedInterfaceText(
+            painter,
+            QRect(textLeft, descriptionTop(textWidth) + valueHeight() + textOffset, textWidth,
+                  height() - descriptionTop(textWidth) - valueHeight() - textOffset),
+            description);
 }
 
 RadioList::RadioList(QWidget *parent) : QWidget(parent)

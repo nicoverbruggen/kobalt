@@ -540,7 +540,16 @@ void ChapterContents::redraw()
     int lastPage = -1;
     for (const auto &item : items)
         lastPage = qMax(lastPage, item.page);
-    const bool pagesKnown = lastPage >= 0;
+    QVector<QString> printed(rows);
+    bool pagesKnown = lastPage >= 0;
+    if (listMode == ContentsList::Chapters && printedLabel)
+        for (int row = 0; row < rows; ++row) {
+            const int index = itemIndex(row);
+            if (index >= 0) {
+                printed[row] = printedLabel(index);
+                pagesKnown |= !printed[row].isEmpty();
+            }
+        }
     listHeader->setCaptions(summary->text(),
                             pagesKnown ? strings::get("chapter_contents.page") : QString());
     pager->setPage(page, pageCount(), {}, true);
@@ -590,6 +599,8 @@ void ChapterContents::redraw()
                         pageWidth,
                         ui::interfaceTextWidth(pageLabel(items[index].page), ui::captionFont()));
         }
+    for (const auto &label : printed)
+        pageWidth = qMax(pageWidth, ui::interfaceTextWidth(label, ui::captionFont()));
     const int digits = qMax(2, int(QString::number(items.size()).size()));
     const int numberWidth = ui::interfaceTextWidth(QString(digits, QChar('0')), ui::captionFont());
     const bool grouped = collapsible
@@ -670,7 +681,8 @@ void ChapterContents::redraw()
             itemRow->setLeading(number, indent);
             itemRow->leadingLabel()->setObjectName(item.name + "Number");
             itemRow->setAccessory(ui::ListRow::Caption{
-                    item.page >= 0
+                    !printed.value(row).isEmpty() ? printed[row]
+                            : item.page >= 0
                             ? (pageLabel ? pageLabel(item.page) : QString::number(item.page + 1))
                             : QString(),
                     accessoryWidth });

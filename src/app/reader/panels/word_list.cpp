@@ -1,4 +1,5 @@
 #include "word_list.h"
+#include "reading/reading_progress.h"
 #include "ui/controls/icons.h"
 #include "ui/controls/options.h"
 #include "ui/controls/text.h"
@@ -127,8 +128,14 @@ void WordList::setWords(QVector<SavedWord> words, bool pending)
     redraw();
 }
 
-void WordList::setPages(QHash<QString, int> value)
+QString WordList::pageLabel(const QString &position) const
 {
+    return locationPageLabel(pageOf(position), printedLabels.value(position));
+}
+
+void WordList::setPages(QHash<QString, int> value, QHash<QString, QString> labels)
+{
+    printedLabels = std::move(labels);
     pages = std::move(value);
     filterItems();
     arrange();
@@ -333,10 +340,9 @@ void WordList::redraw()
     int numberWidth = 0;
     if (scope == Scope::Book)
         for (int i = first; i < first + rows; ++i)
-            numberWidth =
-                    qMax(numberWidth,
-                         ui::interfaceTextWidth(QString::number(pageOf(items[i].position) + 1),
-                                                ui::interfaceFont(chrome::captionText)));
+            numberWidth = qMax(numberWidth,
+                               ui::interfaceTextWidth(pageLabel(items[i].position),
+                                                      ui::interfaceFont(chrome::captionText)));
     int y = top();
     // The book's face unless Settings chose a dictionary font, as in the sheet.
     QFont glossFont =
@@ -375,9 +381,8 @@ void WordList::redraw()
         const auto gloss = word.gloss();
         item->setCaption(gloss.isEmpty() ? strings::get("words.no_entry") : gloss);
         item->setAccessibleName(word.word);
-        const int pageNumber = scope == Scope::Book ? pageOf(word.position) : -1;
-        item->setAccessory(ui::ListRow::Caption{
-                pageNumber >= 0 ? QString::number(pageNumber + 1) : QString(), numberWidth });
+        const auto label = scope == Scope::Book ? pageLabel(word.position) : QString();
+        item->setAccessory(ui::ListRow::Caption{ label, numberWidth });
         y += height;
     }
     update();

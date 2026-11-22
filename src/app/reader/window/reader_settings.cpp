@@ -120,6 +120,7 @@ kobalt::headerfooter::Values Reader::chromeValues(ChromeFields fields)
             values.matterPage =
                     session->displayPageLabel(session->bookPage(), secondaryNumberStyle());
     }
+    values.printedPage = currentPrintedPage();
     values.deviceStatus = !hideNativeStatus();
     // The chooser previews every field. The slot map also previews assigned
     // fields in disabled strips, which it draws dimmed.
@@ -529,6 +530,7 @@ void Reader::openSettings()
     settingsPercentageFormat = headerfooter::decimalPercentages(preferences) ? "decimal" : "whole";
     settingsRenderingMode = renderingMode::value(renderingMode::fromPreferences(preferences));
     panel->selectTheme(interfaceTheme(), themeDraft);
+    publisherPageOption.set(preferences.value("publisher_page_numbers").toBool());
     sideloadedFontsFirstOption.set(preferences.value("sideloaded_fonts_first").toBool());
     hideTabLabelsOption.set(preferences.value("hide_tab_labels").toBool(false));
     saveWordsOption.set(preferences.value("save_looked_up_words").toBool(true));
@@ -1055,6 +1057,7 @@ void Reader::applySettings()
     next.remove("ui_colorful_icons");
     next["ui_theme"] = static_cast<SettingsPanel *>(general)->selectedTheme;
     next.remove("playful_theme");
+    next["publisher_page_numbers"] = publisherPageOption.checked();
     next["sideloaded_fonts_first"] = sideloadedFontsFirstOption.checked();
     next["hide_tab_labels"] = hideTabLabelsOption.checked();
     next[features::debugModeKey] = debugModeOption.checked();
@@ -1139,7 +1142,35 @@ void Reader::finishSettingsWrite(const QJsonObject &next, bool saved)
     }
     if (zenMode() != next.value("zen_mode").toBool(false))
         flashAfterZenSwitch = true;
+    const bool pageLabelsChanged =
+            publisherPagesEnabled() != next.value("publisher_page_numbers").toBool();
     preferences = next;
+    session->setPublisherPageNumbers(publisherPagesEnabled());
+    if (pageLabelsChanged) {
+        pageScrubber->refreshPageLabels();
+        if (publisherPagesEnabled()) {
+            QStringList positions;
+            for (const auto &visit : linkHistory)
+                positions.append(visit.position);
+            if (!searchOriginal.isEmpty())
+                positions.append(searchOriginal);
+            if (!positions.isEmpty()) {
+                QPointer<Reader> guard(this);
+                session->printedPageLabels(
+                        positions, [guard](const QHash<QString, QString> &labels) {
+                            if (!guard || !guard->publisherPagesEnabled())
+                                return;
+                            for (auto &visit : guard->linkHistory)
+                                if (labels.contains(visit.position))
+                                    visit.printedPage = labels.value(visit.position);
+                            if (labels.contains(guard->searchOriginal))
+                                guard->searchOriginalPrintedPage =
+                                        labels.value(guard->searchOriginal);
+                            guard->syncNavigation();
+                        });
+            }
+        }
+    }
     const bool hideBook = hideBookOnSleepOption.checked();
     if (hideBook != book->hideBookOnSleepScreen()) {
         book->setHideBookOnSleepScreen(hideBook);

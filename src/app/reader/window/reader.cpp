@@ -92,7 +92,11 @@ Reader::~Reader()
     dismissKosyncEditors();
     book->onEstimatesChanged({});
     session->cancelPagePreview();
+    session->printedLabelsChanged = {};
+    if (choices)
+        choices->printedLabel = {};
     if (pageScrubber) {
+        pageScrubber->printedLabel = {};
         pageScrubber->cancel();
         pageScrubber->cancelled = {};
     }
@@ -1888,6 +1892,7 @@ void Reader::closeEvent(QCloseEvent *event)
     book->releaseNative(!closeWithoutSaving && exitProgress != ExitProgress::LocalOnly);
     closingTimes.add("session", step);
     session->updated = {};
+    session->printedLabelsChanged = {};
     session->renderProgressChanged = {};
     session->turnBoundary = {};
     session->idle = {};
@@ -1993,6 +1998,7 @@ void Reader::openSearch(const QString &query)
     dismissControls(false);
     if (searchOriginal.isEmpty()) {
         searchOriginal = session->state().value("position").toString();
+        searchOriginalPrintedPage = session->currentPrintedPosition();
         searchOriginalPage = session->page();
     }
     session->prepareSearch();
@@ -2001,7 +2007,8 @@ void Reader::openSearch(const QString &query)
     const auto safe = safeArea();
     searchPanel->setGeometry(rect().adjusted(0, safe.top, 0, -safe.bottom));
     searchPanel->open(session->state().value("position").toString() != searchOriginal,
-                      searchOriginalPage, query);
+                      searchOriginalPage, query,
+                      publisherPagesEnabled() ? searchOriginalPrintedPage : QString());
     topControls->show();
     updateMenuStatus();
     syncNavigation();
@@ -2171,7 +2178,7 @@ Reader::LinkVisit Reader::currentVisit(bool pinnedShortcut) const
              (session->chapterTitle().isEmpty() ? strings::get("reader.reading")
                                                 : session->chapterTitle())
                      .toUpper(),
-             pinnedShortcut };
+             pinnedShortcut, session->currentPrintedPosition() };
 }
 
 void Reader::goToPassage(const QString &target, bool pinnedShortcut)
@@ -2656,12 +2663,15 @@ void Reader::syncNavigation()
                 && !kosyncDialog && !finishDialog && !imageTarget.isEmpty();
         pageScrubber->setImageAction(imageSuggestion ? strings::get("image.zoom_suggestion")
                                                      : QString());
-        pageScrubber->setReturnAction(linkReturnAvailable
-                                              ? (linkHistory.last().page >= 0
-                                                         ? strings::get("reader.return_page")
-                                                                   .arg(linkHistory.last().page + 1)
-                                                         : strings::get("reader.return_to_passage"))
-                                              : QString(),
+        QString returnText;
+        if (linkReturnAvailable) {
+            const auto &visit = linkHistory.last();
+            const auto printed = publisherPagesEnabled() ? visit.printedPage : QString();
+            returnText = !printed.isEmpty() ? strings::get("reader.return_page").arg(printed)
+                    : visit.page >= 0       ? strings::get("reader.return_page").arg(visit.page + 1)
+                                            : strings::get("reader.return_to_passage");
+        }
+        pageScrubber->setReturnAction(returnText,
                                       linkHistory.isEmpty() || linkHistory.last().chapter.isEmpty()
                                               ? QString()
                                               : strings::get("reader.jumped_from_chapter")
@@ -2680,11 +2690,7 @@ void Reader::syncNavigation()
                   !session->busy() && !appearanceEdit.applying(),
                   services.lightAvailable(),
                   active,
-                  linkReturnAvailable ? (linkHistory.last().page >= 0
-                                                 ? strings::get("reader.return_page")
-                                                           .arg(linkHistory.last().page + 1)
-                                                 : strings::get("reader.return_to_passage"))
-                                      : QString(),
+                  returnText,
                   topActions,
                   general,
                   lightPopup,
@@ -2962,6 +2968,9 @@ void Reader::showChapters(ContentsList mode)
     QVector<Choice> items;
     QString current;
     choices->boundaryRequested = [this](int i) { showChapterActions(i); };
+    choices->printedLabel = [this](int i) {
+        return publisherPagesEnabled() ? session->navigationPrintedPage(i, true) : QString();
+    };
     choices->pageLabel = [this](int p) {
         return session->displayPageLabel(p, secondaryNumberStyle());
     };
@@ -3044,7 +3053,7 @@ void Reader::showChapters(ContentsList mode)
     choices->setGeometry(0, top, width(),
                          (navigation ? navigation->contentBottom(size()) : height()) - top);
     syncChapterBoundaries();
-    choices->setChapterPosition(session->displayBookPosition(secondaryNumberStyle()));
+    choices->setChapterPosition(displayedBookPosition());
     const auto groups = preferences.value("chapter_groups").toString();
     choices->showChoices(session->title(), std::move(items), current, ChoiceScreen::Mode::Chapters,
                          groups == "off"           ? ChapterGroups::Off
@@ -3950,8 +3959,10 @@ void Reader::describe(QJsonObject &state)
     if (services.development.detailedStateReports) {
         state["main_first_page"] = session->firstMainPage();
         state["main_last_page"] = session->lastMainPage();
-        state["main_page_label"] =
-                session->displayPageLabel(session->bookPage(), secondaryNumberStyle());
+        const auto printed = currentPrintedPage();
+        state["main_page_label"] = printed.isEmpty()
+                ? session->displayPageLabel(session->bookPage(), secondaryNumberStyle())
+                : printed;
         state["main_percent"] = session->mainPercent();
     }
     state["cached_pages"] = session->cachedPages();

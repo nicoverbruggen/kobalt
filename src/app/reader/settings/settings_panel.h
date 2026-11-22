@@ -181,8 +181,8 @@ public:
                       *debugStorageButton = nullptr;
     void showPowerManagement(bool visible);
     int fitContent(QSize availableSize);
-    ui::DescribedOption *sideloadedFontsFirstOption = nullptr, *hideTabLabelsOption = nullptr,
-                        *saveWordsOption = nullptr;
+    ui::DescribedOption *publisherPageOption = nullptr, *sideloadedFontsFirstOption = nullptr,
+                        *hideTabLabelsOption = nullptr, *saveWordsOption = nullptr;
     ui::CaptionButton *themingButton = nullptr, *presetButton = nullptr, *iconThemeButton = nullptr,
                       *paletteButton = nullptr;
     QString selectedTheme;

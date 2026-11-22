@@ -48,6 +48,7 @@ struct SearchHit
     int page = -1;
     // In chapter mode, the title of the chapter of the hit.
     QString chapter = {};
+    QString printedPage = {};
 };
 
 enum class SearchScope { Book, Chapter, Before, After };

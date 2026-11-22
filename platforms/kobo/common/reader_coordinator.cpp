@@ -1180,6 +1180,7 @@ void ReaderCoordinator::load(const QJsonObject &globalPreferences)
             : (useNative ? run.diskBaseline.location : run.nativePublication->location());
     const auto bookDefaults = kobalt::appearance::bookDefaults(preferences);
     const bool restart = run.diskBaseline.valid && run.diskBaseline.status == 2;
+    run.session->setPublisherPageNumbers(preferences.value("publisher_page_numbers").toBool());
     run.session->open(
             { run.identity,
               run.filePath,
@@ -1492,6 +1493,7 @@ void ReaderCoordinator::startPreload(const QString &identity, const QString &pat
     diagnostic("book-preload-start");
     QPointer<ReaderCoordinator> guard(this);
     auto *session = preload.session.get();
+    session->setPublisherPageNumbers(preferences.value("publisher_page_numbers").toBool());
     session->open({ identity,
                     path,
                     size,

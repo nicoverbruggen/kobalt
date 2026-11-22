@@ -42,6 +42,7 @@ public:
         bool opticalLabel = false;
         // Narrow field lists keep the complete label above its sample value.
         bool valueBelowLabel = false;
+        bool wrapLabel = false;
         bool operator==(const Presentation &other) const;
     };
 
@@ -103,12 +104,12 @@ private:
     int iconSpace() const;
     // Large text makes the title line taller by what it adds to the line
     // height; the description moves down with it.
-    int labelHeight() const;
+    int labelHeight(int textWidth = 0) const;
     int valueHeight() const;
     // How far a label that stands alone beside its indicator is raised, so
     // its capitals center on the indicator.
     int labelRaise(const QFont &labelFont) const;
-    int descriptionTop() const;
+    int descriptionTop(int textWidth) const;
     // The title line, before a label that stands alone is raised.
     QRect labelLine() const;
     QFont labelFont() const;

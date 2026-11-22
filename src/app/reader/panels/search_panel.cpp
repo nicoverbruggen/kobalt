@@ -8,6 +8,7 @@
 #include "ui/style/theme.h"
 #include "support/strings.h"
 #include "search_panel.h"
+#include "reading/reading_progress.h"
 #include "ui/style/fonts.h"
 #include "ui/style/metrics.h"
 #include "ui/style/styles.h"
@@ -325,7 +326,8 @@ void SearchPanel::choosePage()
     number->setFocus();
 }
 
-void SearchPanel::open(bool returnAvailable, int originalPage, const QString &initialQuery)
+void SearchPanel::open(bool returnAvailable, int originalPage, const QString &initialQuery,
+                       const QString &printedPage)
 {
     if (!keyboard) {
         keyboard = keyboardFactory(this, query);
@@ -340,7 +342,8 @@ void SearchPanel::open(bool returnAvailable, int originalPage, const QString &in
     }
     canReturn = returnAvailable;
     clearDetails();
-    original->setCaption(strings::get("search_panel.page_number").arg(originalPage + 1));
+    original->setCaption(strings::get("search_panel.page_number")
+                                 .arg(locationPageLabel(originalPage, printedPage)));
     show();
     raise();
     redraw();
@@ -408,10 +411,11 @@ QString SearchPanel::caption(const SearchHit &hit) const
     // In chapter mode a hit names its chapter, with an estimated page once
     // there is one.
     if (!hit.chapter.isEmpty())
-        return hit.page < 0 ? hit.chapter.simplified()
-                            : strings::get("search_panel.page_chapter")
-                                      .arg(hit.page + 1)
-                                      .arg(hit.chapter.simplified());
+        return hit.page < 0 && hit.printedPage.isEmpty()
+                ? hit.chapter.simplified()
+                : strings::get("search_panel.page_chapter")
+                          .arg(locationPageLabel(hit.page, hit.printedPage))
+                          .arg(hit.chapter.simplified());
     // The chapter that starts last at or before the hit's page contains it.
     QString title;
     int start = -1;
@@ -421,8 +425,11 @@ QString SearchPanel::caption(const SearchHit &hit) const
             start = chapter.page;
             title = chapter.title.simplified();
         }
-    return title.isEmpty() ? strings::get("search_panel.page_number").arg(hit.page + 1)
-                           : strings::get("search_panel.page_chapter").arg(hit.page + 1).arg(title);
+    return title.isEmpty() ? strings::get("search_panel.page_number")
+                                     .arg(locationPageLabel(hit.page, hit.printedPage))
+                           : strings::get("search_panel.page_chapter")
+                                     .arg(locationPageLabel(hit.page, hit.printedPage))
+                                     .arg(title);
 }
 
 void SearchPanel::run()
@@ -693,8 +700,10 @@ void SearchPanel::redraw()
         labels[row]->setText(
                 ui::fitSearchExcerpt(hit.before, hit.text, hit.after, font, labels[row]->size()));
         buttons[row]->setAccessibleName(
-                hit.page >= 0 || hit.chapter.isEmpty()
-                        ? strings::get("search_panel.page_detail").arg(hit.page + 1).arg(hit.text)
+                !hit.printedPage.isEmpty() || hit.page >= 0 || hit.chapter.isEmpty()
+                        ? strings::get("search_panel.page_detail")
+                                  .arg(locationPageLabel(hit.page, hit.printedPage))
+                                  .arg(hit.text)
                         : strings::get("search_panel.chapter_detail")
                                   .arg(hit.chapter.simplified(), hit.text));
     }

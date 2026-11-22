@@ -31,6 +31,7 @@ struct BookmarkRow
     // Annotation rows: whether the highlight has a note, and the note once read.
     bool hasNote = false;
     QString note = {};
+    QString printedPage = {}, printedEnd = {};
 };
 
 // The Bookmarks list covers the header's action row with its own bar, like

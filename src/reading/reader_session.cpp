@@ -711,7 +711,8 @@ void ReaderSession::refinePageEstimate(std::shared_ptr<Engine> engine,
 // `neighbours` is false when the caller hands the frame to the screen first
 // and prepares the neighbour pages afterwards.
 ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbours,
-                    const ReaderMarkupRequest &markup, quint64 markupGeneration, QJsonObject *times)
+                    const ReaderMarkupRequest &markup, quint64 markupGeneration, bool printed,
+                    QJsonObject *times)
 {
     engineActivity().checkpoint();
     QElapsedTimer step;
@@ -736,6 +737,12 @@ ReaderFrame capture(Engine &engine, const PositionCodec &positions, bool neighbo
     captureChapters(result, engine);
     took("chapters_ms");
     result.pageStart = engine.pageStart(engine.page());
+    if (printed && !result.printedPages.isEmpty()) {
+        result.printedPage = engine.printedPageLabel(result.pageStart);
+        const auto position = result.state.value("position").toString();
+        result.printedPosition = position == result.pageStart ? result.printedPage
+                                                              : engine.printedPageLabel(position);
+    }
     capturePageCoordinates(result.state, engine);
     if (result.formattingWarning)
         diagnostic("page-formatting-warning",
@@ -1025,6 +1032,7 @@ void ReaderSession::open(OpenRequest request, std::function<void(OpeningResult)>
     opening.restartAtStart = restartAtStart;
     opening.markup = markup;
     opening.markupGeneration = markupGeneration;
+    opening.printed = usePublisherPageNumbers;
     opening.retainedHash = retainedHash;
     opening.retainedSettings = retainedSettings;
     opening.progress = report;
@@ -1113,6 +1121,7 @@ void ReaderSession::openPreview(const ReaderSession &source, QSize size,
     ownsLease_ = false;
     lease_ = source.lease_;
     positions_ = source.positions_;
+    usePublisherPageNumbers = source.usePublisherPageNumbers;
     markupRequest_ = source.markupRequest_;
     markupGeneration_ = source.markupGeneration_;
     openingResult_ = {};
@@ -1144,7 +1153,7 @@ void ReaderSession::openPreview(const ReaderSession &source, QSize size,
     kobalt::qt::invoke(
             engineWorker(),
             [guard, engine, book, size, finished, lease, job, positions, latest, markup,
-             markupGeneration] {
+             markupGeneration, printed = usePublisherPageNumbers] {
                 EngineJob activity;
                 if (latest->load() != job) {
                     return;
@@ -1165,7 +1174,7 @@ void ReaderSession::openPreview(const ReaderSession &source, QSize size,
                             false);
                     return;
                 } else
-                    result = capture(*engine, positions, false, markup, markupGeneration);
+                    result = capture(*engine, positions, false, markup, markupGeneration, printed);
                 diagnostic("preview-end",
                            { { "elapsed_ms", double(timer.elapsed()) },
                              { "failed", !result.error.isEmpty() } });
@@ -1245,6 +1254,43 @@ void ReaderSession::showFullDocument(quint64 job)
     // The layout took this long. The next turn shows it, maybe much later.
     if (layoutReadyMilliseconds_ < 0 && layoutClock_.isValid())
         layoutReadyMilliseconds_ = layoutClock_.elapsed();
+}
+
+void ReaderSession::setPublisherPageNumbers(bool enabled)
+{
+    if (usePublisherPageNumbers == enabled)
+        return;
+    usePublisherPageNumbers = enabled;
+    if (enabled && layoutReady_ && !frame.image.isNull() && !frame.printedPages.isEmpty())
+        request();
+}
+
+// Return history stores source positions. Their print labels survive a reflow,
+// including one queued by the same settings change that enabled them.
+void ReaderSession::printedPageLabels(QStringList positions,
+                                      std::function<void(QHash<QString, QString>)> finished)
+{
+    const auto lease = lease_;
+    QPointer<ReaderSession> guard(this);
+    qt::invoke(
+            engineWorker(),
+            [guard, engine = engine_, lease, positions, finished] {
+                EngineJob activity;
+                QHash<QString, QString> labels;
+                for (const auto &position : positions) {
+                    if (!lease || lease->revoked())
+                        return;
+                    labels.insert(position, engine->printedPageLabel(position));
+                }
+                qt::invoke(
+                        qApp,
+                        [guard, lease, labels, finished] {
+                            if (guard && guard->lease_ == lease && lease && !lease->revoked())
+                                finished(labels);
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
 }
 
 void ReaderSession::requestAppearance(const appearance::Requested &settings, QSize size,
@@ -1564,7 +1610,7 @@ bool ReaderSession::importPosition(const QString &location, bool native,
     kobalt::qt::invoke(
             engineWorker(),
             [guard, engine, location, native, finished, job, lease, positions, markup,
-             markupGeneration] {
+             markupGeneration, printed = usePublisherPageNumbers] {
                 EngineJob activity;
                 diagnostic("native-import-start");
                 QString error;
@@ -1572,7 +1618,7 @@ bool ReaderSession::importPosition(const QString &location, bool native,
                     engine->goToPlatform(positions, location, &error);
                 else if (!engine->goTo(location))
                     error = strings::get("kosync.position_error");
-                auto result = capture(*engine, positions, true, markup, markupGeneration);
+                auto result = capture(*engine, positions, true, markup, markupGeneration, printed);
                 diagnostic("native-import-end", { { "failed", !error.isEmpty() } });
                 kobalt::qt::invoke(
                         qApp,
@@ -1632,15 +1678,19 @@ void ReaderSession::describeSyncedPosition(const QString &position,
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, position, lease, job, ready, finished] {
+            [engine, guard, position, lease, job, ready, finished,
+             printed = usePublisherPageNumbers] {
                 EngineJob activity;
                 SyncedPositionDescription result;
                 if (ready && lease && !lease->revoked()) {
                     result.comparison.direction = engine->describePosition(
                             position, &result.chapter, &result.page, &result.comparison.error,
                             [lease] { return !lease->revoked(); });
-                    if (result.comparison.error.isEmpty())
+                    if (result.comparison.error.isEmpty()) {
                         result.comparison.status = PositionComparison::Status::Compared;
+                        if (printed)
+                            result.printedPage = engine->printedPageLabel(position);
+                    }
                 }
                 kobalt::qt::invoke(
                         qApp,
@@ -1760,7 +1810,7 @@ void ReaderSession::sleepOverlay(const QStringList &directories,
 
 BookmarkLocations captureBookmarkLocations(Engine &engine, const QStringList &positions,
                                            bool rangeEndpoints, bool sourceOrder,
-                                           const std::function<bool()> &current)
+                                           const std::function<bool()> &current, bool printed)
 {
     BookmarkLocations result;
     result.pages = engine.pagesOf(positions, rangeEndpoints, sourceOrder ? &result.order : nullptr,
@@ -1775,6 +1825,9 @@ BookmarkLocations captureBookmarkLocations(Engine &engine, const QStringList &po
         if (current && !current())
             return {};
         result.chapters.append(engine.chapterTitle(position));
+        if (printed)
+            result.printedPages.append(engine.printedPageLabel(
+                    position, rangeEndpoints && result.printedPages.size() % 2 == 1));
     }
     return result;
 }
@@ -1810,27 +1863,38 @@ void ReaderSession::sleepWallpapers(const QStringList &directories, const QStrin
 void ReaderSession::bookmarkPages(QStringList positions, std::function<void(QVector<int>)> finished,
                                   bool rangeEndpoints)
 {
+    bookmarkPageLabels(
+            std::move(positions),
+            [finished](BookmarkLocations result) { finished(std::move(result.bookPages)); },
+            rangeEndpoints, false);
+}
+
+void ReaderSession::bookmarkPageLabels(QStringList positions,
+                                       std::function<void(BookmarkLocations)> finished,
+                                       bool rangeEndpoints, bool wantPrinted)
+{
     const auto layout = layoutRevision();
     const auto lease = lease_;
     bookmarkLocations(
             positions,
-            [this, positions, layout, lease, rangeEndpoints, finished](BookmarkLocations result) {
+            [this, positions, layout, lease, rangeEndpoints, wantPrinted,
+             finished](BookmarkLocations result) {
                 // My Words needs a label for this position even when the chapter gives
                 // way to the whole book while its first lookup is queued.
                 if (layout != layoutRevision() && layoutReady_ && lease_ == lease && lease
                     && !lease->revoked()) {
-                    bookmarkPages(positions, finished, rangeEndpoints);
+                    bookmarkPageLabels(positions, finished, rangeEndpoints, wantPrinted);
                     return;
                 }
-                finished(std::move(result.bookPages));
+                finished(std::move(result));
             },
-            rangeEndpoints, false);
+            rangeEndpoints, false, {}, wantPrinted);
 }
 
 void ReaderSession::bookmarkLocations(QStringList positions,
                                       std::function<void(BookmarkLocations)> finished,
                                       bool rangeEndpoints, bool sourceOrder,
-                                      std::shared_ptr<std::atomic_bool> cancelled)
+                                      std::shared_ptr<std::atomic_bool> cancelled, bool wantPrinted)
 {
     auto engine = engine_;
     QPointer<ReaderSession> guard(this);
@@ -1841,7 +1905,7 @@ void ReaderSession::bookmarkLocations(QStringList positions,
     kobalt::qt::invoke(
             engineWorker(),
             [engine, guard, positions, finished, job, latest, lease, ready, rangeEndpoints,
-             sourceOrder, cancelled] {
+             sourceOrder, cancelled, printed = wantPrinted && usePublisherPageNumbers] {
                 EngineJob activity;
                 BookmarkLocations locations;
                 const auto current = [latest, job, lease, ready, cancelled] {
@@ -1850,7 +1914,7 @@ void ReaderSession::bookmarkLocations(QStringList positions,
                 };
                 if (current())
                     locations = captureBookmarkLocations(*engine, positions, rangeEndpoints,
-                                                         sourceOrder, current);
+                                                         sourceOrder, current, printed);
                 kobalt::qt::invoke(
                         qApp,
                         [guard, locations, finished, job, lease, cancelled] {
@@ -1911,7 +1975,8 @@ void ReaderSession::pageSummary(int page, std::function<void(PageSummary)> finis
     const bool ready = layoutReady_;
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, guard, page, finished, job, latest, lease, ready, shown, pairedWindow] {
+            [engine, guard, page, finished, job, latest, lease, ready, shown, pairedWindow,
+             printed = usePublisherPageNumbers] {
                 EngineJob activity;
                 PageSummary summary;
                 if (ready && latest->load() == job && lease && !lease->revoked()) {
@@ -1920,6 +1985,8 @@ void ReaderSession::pageSummary(int page, std::function<void(PageSummary)> finis
                     if (local >= 0) {
                         summary.start = shown.isEmpty() ? engine->pageStart(local) : shown;
                         summary.excerpt = engine->pageExcerpt(local);
+                        if (printed)
+                            summary.printedPage = engine->printedPageLabel(summary.start);
                         summary.chapter = engine->chapterTitle(summary.start);
                         if (pairedWindow && engine->fullDocumentReady() && !summary.start.isEmpty())
                             summary.bookPage =
@@ -2517,13 +2584,17 @@ void ReaderSession::searchDetails(QVector<SearchHit> hits, SearchScope scope, co
     QPointer<ReaderSession> guard(this);
     kobalt::qt::invoke(
             engineWorker(),
-            [engine, lease, job, latest, guard, hits, scope, origin, finished] {
+            [engine, lease, job, latest, guard, hits, scope, origin, finished,
+             printed = usePublisherPageNumbers] {
                 if (lease->revoked() || latest->load() != job)
                     return;
                 EngineJob activity;
                 if (lease->revoked() || latest->load() != job)
                     return;
-                const auto result = engine->searchDetails(hits, scope, origin);
+                auto result = engine->searchDetails(hits, scope, origin);
+                if (printed)
+                    for (auto &hit : result)
+                        hit.printedPage = engine->printedPageLabel(hit.start);
                 kobalt::qt::invoke(
                         qApp,
                         [guard, lease, job, result, finished] {
@@ -2932,6 +3003,70 @@ int ReaderSession::mainPercent() const
     return mainPage() < 0 ? 0 : pageProgressPercent(mainPage(), mainPages());
 }
 
+// Resolve only the rows and scrubber positions the interface asks to display.
+QString ReaderSession::navigationPrintedPage(int index, bool chapter)
+{
+    if (index < 0 || frame.printedPages.isEmpty() || !layoutReady_ || busy() || !lease_)
+        return {};
+    const auto layout = layoutRevision();
+    const bool window = frame.state.contains("book_fraction");
+    if (layout != printedLayout_ || window != printedWindow_) {
+        printedScreenLabels_.clear();
+        printedChapterLabels_.clear();
+        printedLayout_ = layout;
+        printedWindow_ = window;
+    }
+    if (!chapter && window)
+        return {};
+    if (!chapter && index == page())
+        return frame.printedPage;
+    auto &labels = chapter ? printedChapterLabels_ : printedScreenLabels_;
+    const auto found = labels.constFind(index);
+    if (found != labels.constEnd())
+        return found.value();
+    labels.insert(index, {});
+    QPointer<ReaderSession> guard(this);
+    const auto engine = engine_;
+    const auto lease = lease_;
+    const auto latest = newestLayout;
+    qt::invoke(
+            engineWorker(),
+            [guard, engine, lease, latest, layout, window, chapter, index] {
+                EngineJob activity;
+                if (lease->revoked() || latest->load() != layout || engine->partOfBook() != window)
+                    return;
+                QString position;
+                if (chapter) {
+                    const auto links = engine->chapters();
+                    if (index < links.size())
+                        position = engine->chapterBoundaryPosition(links, index);
+                } else
+                    position = engine->pageStart(index);
+                bool deferred = position.isEmpty();
+                const auto label = engine->printedPageLabel(position, false, &deferred);
+                qt::invoke(
+                        qApp,
+                        [guard, lease, layout, window, chapter, index, label, deferred] {
+                            if (!guard || guard->lease_ != lease || lease->revoked()
+                                || guard->layoutRevision() != layout
+                                || guard->printedLayout_ != layout
+                                || guard->printedWindow_ != window)
+                                return;
+                            auto &labels = chapter ? guard->printedChapterLabels_
+                                                   : guard->printedScreenLabels_;
+                            if (deferred)
+                                labels.remove(index);
+                            else
+                                labels.insert(index, label);
+                            if (!label.isEmpty() && guard->printedLabelsChanged)
+                                guard->printedLabelsChanged();
+                        },
+                        Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+    return {};
+}
+
 QString ReaderSession::displayPageLabel(int absolute, const QString &style) const
 {
     return bookPageLabel(absolute, firstMainPage(), lastMainPage(), style);
@@ -3119,7 +3254,8 @@ void ReaderSession::loadImages()
     const bool preview = preview_;
     kobalt::qt::invoke(
             engineWorker(),
-            [guard, engine, latest, job, lease, preview, positions, markup, markupGeneration] {
+            [guard, engine, latest, job, lease, preview, positions, markup, markupGeneration,
+             printed = usePublisherPageNumbers] {
                 EngineJob activity;
                 ReaderFrame result;
                 bool loaded = false;
@@ -3133,7 +3269,8 @@ void ReaderSession::loadImages()
                         timer.start();
                     loaded = engine->loadNextImage();
                     if (loaded && current())
-                        result = capture(*engine, positions, false, markup, markupGeneration);
+                        result = capture(*engine, positions, false, markup, markupGeneration,
+                                         printed);
                     if (loaded && timing)
                         diagnostic("image-load-end",
                                    { { "elapsed_ms", double(timer.elapsed()) },
@@ -3387,7 +3524,7 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
             engineWorker(),
             [guard, engine, requested, chapterMode, swapToFull, size, anchor, chapter, delta,
              target, fraction, job, lease, latest, layouts, progress, positions, markup,
-             markupGeneration, afterFrame] {
+             markupGeneration, afterFrame, printed = usePublisherPageNumbers] {
                 EngineJob activity;
                 const bool timing = diagnosticsActive();
                 QElapsedTimer timer;
@@ -3502,7 +3639,7 @@ void ReaderSession::dispatch(bool pageTurn, std::function<void()> afterFrame)
                 QJsonObject captureTimes;
                 // Whether idle time drew the page that this render shows.
                 const bool imageCached = timing && engine->cachedImageKey(engine->page()) != 0;
-                result = capture(*engine, positions, false, markup, markupGeneration,
+                result = capture(*engine, positions, false, markup, markupGeneration, printed,
                                  timing ? &captureTimes : nullptr);
                 const double capturedMs = timing ? timer.nsecsElapsed() / 1e6 - movedMs : 0;
                 if (!error.isEmpty())

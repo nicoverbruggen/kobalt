@@ -266,7 +266,8 @@ void openRetained(OpeningJob &job, OpeningState &state)
     else if (!job.saved.value("position").toString().isEmpty())
         state.outcome = engine->restoreSavedPosition(job.saved.value("position").toString());
     if (state.outcome.ready() && !job.cancelled()) {
-        state.frame = capture(*engine, job.positions, false, job.markup, job.markupGeneration);
+        state.frame = capture(*engine, job.positions, false, job.markup, job.markupGeneration,
+                              job.printed);
         state.frame.author = engine->author();
         state.frame.cover = engine->coverImage({ 120, 180 });
         job.report(OpeningStage::Ready, 100);
@@ -302,7 +303,8 @@ void openCold(OpeningJob &job, OpeningState &state)
             locate(job, state, state.initial);
         if (outcome.ready()) {
             job.report(OpeningStage::Ready, 0);
-            state.frame = capture(*engine, job.positions, false, job.markup, job.markupGeneration);
+            state.frame = capture(*engine, job.positions, false, job.markup, job.markupGeneration,
+                                  job.printed);
             state.frame.author = engine->author();
             state.frame.cover = engine->coverImage({ 120, 180 });
             job.report(OpeningStage::Ready, 100);

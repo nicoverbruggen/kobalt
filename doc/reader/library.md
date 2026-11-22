@@ -1,31 +1,63 @@
 # Library
 
-The library is the starting screen on Android and in the desktop app. It shows books in the folders the user adds and books opened individually, including external Open With requests. Closing a book returns to the library. There is no separate intro screen. Kobo has no library; Nickel shows the books there.
+The library is the starting screen on Android and in the desktop app.
 
-On first use, the library header stays visible above a compact empty state with Open a single book and Choose folder. Sorting, view choices and paging stay hidden until books or a folder are added.
+- It shows books in the folders the user adds and books opened individually, including external Open With requests. Closing a book returns to the library. There is no separate intro screen. Kobo has no library; Nickel shows the books there.
 
-On Android, Choose folder opens the system folder picker. Kobalt keeps read access to the folder after restarts and reads its books in place, including subfolders. Hidden folders and files are skipped. Opening a library book copies only that book into a cache in app-private storage; the copy of the previous book is deleted. Android reuses the cached book when its size and modification date match the folder scan. A missing date forces a fresh copy.
+- On first use, the library header stays visible above a compact empty state with Open a single book and Choose folder. Sorting, view choices and paging stay hidden until books or a folder are added.
 
-On the Mac, File → Add Library Folder also adds a folder. The Folders screen pages long folder lists and the controls below them. Its arrows and hardware page buttons wrap between pages.
+- On Android, Choose folder opens the system folder picker.
+  - Kobalt keeps read access to the folder after restarts and reads its books in place, including subfolders. Hidden folders and files are skipped.
+  - Opening a library book copies only that book into a cache in app-private storage; the copy of the previous book is deleted. Android reuses the cached book when its size and modification date match the folder scan.
+  - A missing date forces a fresh copy.
 
-The header shows Library and the number of books, with Search and More cells. The Library is the root screen and has no Back cell. Below it, the sort caption opens the sort and filter choices, and three cells switch between the views: Home, List and Cover grid. The view is one setting for the whole library, and Cover grid is the default. The sort applies to List and Cover grid; on Home the caption reads Now reading and opens nothing. Views show pages, not a scrolling list. On a phone in landscape, List shows two columns with up to two rows per page. Books run from left to right, then top to bottom. A centered card taller than the screen, as on a phone in landscape, keeps its first row and its buttons and pages the rows between them. The pager turns them, and a horizontal swipe or a hardware page button does the same.
+- On the Mac, File → Add Library Folder also adds a folder. The Folders screen pages long folder lists and the controls below them. Its arrows and hardware page buttons wrap between pages.
+
+- The header shows Library and the number of books, with Search and More cells.
+  - The Library is the root screen and has no Back cell. Below it, the sort caption opens the sort and filter choices, and three cells switch between the views: Home, List and Cover grid.
+  - The view is one setting for the whole library, and Cover grid is the default. The sort applies to List and Cover grid; on Home the caption reads Now reading and opens nothing. Views show pages, not a scrolling list.
+  - On a phone in landscape, List shows two columns with up to two rows per page. Books run from left to right, then top to bottom.
+  - A centered card taller than the screen, as on a phone in landscape, keeps its first row and its buttons and pages the rows between them. The pager turns them, and a horizontal swipe or a hardware page button does the same.
 
 - Home shows only the books in progress, as large covers from the top of the page, the most recently opened first. Under each cover, the bar and the percentage show how far it is read. With none in progress, it says that books you are reading appear there.
 - List shows one row per book with a large cover, the title, the author and the series. The right column shows the percentage read with a bar, New or Done.
-- Cover grid shows only covers, in 2:3 cells. A book in progress has a thin outlined bar under its cover that shows how far it is read. Cover size, in the sort and filter choices, sets a target width: Small, Medium (the default) or Large. The grid uses the nearest whole number of columns and rows for that width, and covers shrink a little to fill the page both ways. Medium shows 4 by 3 covers on the 6- and 7-inch previews. Long-press a cover to see its title and author.
+- Cover grid shows only covers, in 2:3 cells.
+  - A book in progress has a thin outlined bar under its cover that shows how far it is read. Cover size, in the sort and filter choices, sets a target width: Small, Medium (the default) or Large.
+  - The grid uses the nearest whole number of columns and rows for that width, and covers shrink a little to fill the page both ways. Medium shows 4 by 3 covers on the 6- and 7-inch previews.
+  - Long-press a cover to see its title and author.
 
-Sort by Recently opened, Recently added, Title, Author or Series. On a screen shorter than 3.4 inches, such as a phone in landscape, Sort by, Show and Cover size stand side by side in their own columns. The series comes from the book's EPUB 3 collection metadata or Calibre's series tags. Show All books or Hide finished. Titles and authors sort without case or accents, and numbers in titles sort by value. Search filters the current view by title, author and series, without case or accents. Each view shares the space a page cannot use equally above, between and below its rows, so pages look the same on every screen size.
+- Sort by Recently opened, Recently added, Title, Author or Series.
+  - The series comes from the book's EPUB 3 collection metadata or Calibre's series tags. Titles and authors sort without case or accents, and numbers in titles sort by value.
+- Show offers All books or Hide finished.
+- Search filters the current view by title, author and series, without case or accents.
+- On a screen shorter than 3.4 inches, such as a phone in landscape, Sort by, Show and Cover size stand side by side in their own columns.
+- Each view shares the space a page cannot use equally above, between and below its rows, so pages look the same on every screen size.
 
-Tap a book to open it; a pressed cover gets a heavy frame and a pressed row turns gray. Long-press a book for Cancel sync or Start reading, Mark as finished, Mark as unread and Remove from library; a patterned backdrop covers the library behind this menu. Mark as unread returns a book to Not started, clears its book-specific settings and restarts it at the beginning. Bookmarks and annotations stay saved. On its next opening, the book uses the current text defaults, including inherited settings when enabled. On Kobo, marking a book unread in Nickel also clears Kobalt’s saved settings and position when it is next opened. Removal asks first. It does not delete a book file in a folder, and the book comes back when the folder is scanned again. On Android, removing a book opened on its own deletes Kobalt's copy of it. Reading progress stays on the device.
+- Tap a book to open it; a pressed cover gets a heavy frame and a pressed row turns gray.
+  - Long-press a book for Cancel sync or Start reading, Mark as finished, Mark as unread and Remove from library; a patterned backdrop covers the library behind this menu.
+  - Mark as unread returns a book to Not started, clears its book-specific settings and restarts it at the beginning. Bookmarks and annotations stay saved. On its next opening, the book uses the current text defaults, including inherited settings when enabled.
+  - On Kobo, marking a book unread in Nickel also clears Kobalt’s saved settings and position when it is next opened. Removal asks first.
+  - It does not delete a book file in a folder, and the book comes back when the folder is scanned again. On Android, removing a book opened on its own deletes Kobalt's copy of it. Reading progress stays on the device.
 
-A book is Reading after it was opened, and Finished when the reader saved it as finished or it was marked as finished. Progress comes from the reader's saved page when the book closes. The Library shows main-text progress. It counts the page on screen and rounds the percentage down. For example, page 1 of 83 shows 1%, page 82 shows 98%, and page 83 shows 100%. A one-page book shows 100%. When the book has main-text boundaries, progress is 0% before the main text and stays at 100% after it. The Stats scope setting affects Stats and the sleep screen. The Library keeps showing main-text progress. Chapter percentages use the same rule within the chapter. Progress bars use the corresponding fraction. Reflow can change percentages because it changes pagination. Existing Library percentages update when each book next saves its position.
+- A book is Reading after it was opened, and Finished when the reader saved it as finished or it was marked as finished.
+  - Progress comes from the reader's saved page when the book closes. The Library shows main-text progress. It counts the page on screen and rounds the percentage down.
+  - For example, page 1 of 83 shows 1%, page 82 shows 98%, and page 83 shows 100%. A one-page book shows 100%. When the book has main-text boundaries, progress is 0% before the main text and stays at 100% after it.
+  - The Stats scope setting affects Stats and the sleep screen. The Library keeps showing main-text progress. Chapter percentages use the same rule within the chapter. Progress bars use the corresponding fraction. Reflow can change percentages because it changes pagination.
+  - Existing Library percentages update when each book next saves its position.
 
-More opens Add folder, Open a single book, Library folders and About Kobalt. Android also offers [Resource Folders](android.md#resource-folders) for dictionaries, fonts and custom icons. About Kobalt is the last item. It shows the same version, Qt version, build identifier and acknowledgments as About in reader Settings. It works before any book or folder is added. Back returns to the Library. In Acknowledgments, Back returns from a license to the projects, then to About. These actions share a framed card with the book menus and a patterned backdrop over the library. Tapping outside closes the menu without opening a book. Library folders lists each folder with its number of books. Remove a folder to take its books out of the library; the files and reading progress stay on the device. Check for new books at start is on by default. Rescan all folders checks every folder now.
+- More opens Add folder, Open a single book, Library folders and About Kobalt.
+  - Android also offers [Resource Folders](android.md#resource-folders) for dictionaries, fonts and custom icons. About Kobalt is the last item. It shows the same version, Qt version, build identifier and acknowledgments as About in reader Settings. It works before any book or folder is added.
+  - Back returns to the Library. In Acknowledgments, Back returns from a license to the projects, then to About. These actions share a framed card with the book menus and a patterned backdrop over the library.
+  - Tapping outside closes the menu without opening a book. Library folders lists each folder with its number of books. Remove a folder to take its books out of the library; the files and reading progress stay on the device.
+  - Check for new books at start is on by default. Rescan all folders checks every folder now.
 
-The first scan of a folder reads the title, author, series and cover of every EPUB in it. Later scans compare file names, sizes and dates, and read only new or changed books. After a metadata update, Kobalt reads folder books and individually added books again in the background. Books whose files are gone leave the library. Protected and unreadable files are not shown. While a scan runs, the sort caption shows the number of books found, with the six-square loading indicator, and the library redraws at most once a second. The library catalogue is saved in `kobalt.sqlite`, with cover thumbnails in `library-covers/`. Library preferences stay in `reader-settings.json`. Existing `library.json` catalogues are imported and retained under `migration-backup/`. Damaged or unsupported catalogues are preserved and block saves until the problem is resolved.
+- The first scan of a folder reads the title, author, series and cover of every EPUB in it.
+  - Later scans compare file names, sizes and dates, and read only new or changed books. After a metadata update, Kobalt reads folder books and individually added books again in the background. Books whose files are gone leave the library.
+  - Protected and unreadable files are not shown. While a scan runs, the sort caption shows the number of books found, with the six-square loading indicator, and the library redraws at most once a second.
+  - The library catalogue is saved in `kobalt.sqlite`, with cover thumbnails in `library-covers/`. Library preferences stay in `reader-settings.json`. Existing `library.json` catalogues are imported and retained under `migration-backup/`. Damaged or unsupported catalogues are preserved and block saves until the problem is resolved.
 
-List rows share all the space between the view toolbar and the pager, without the cover grid's top gap. Rounding is distributed across row boundaries, so no strip is left below the last full row.
+- List rows share all the space between the view toolbar and the pager, without the cover grid's top gap. Rounding is distributed across row boundaries, so no strip is left below the last full row.
 
-The library follows the reader's dark mode setting.
+- The library follows the reader's dark mode setting.
 
-On Android, the Qt window and activity both use edge-to-edge layout. The activity reports its surface bounds and visible system-bar and cutout insets together. The Library reserves this space on cold launch as well as after closing a book. Showing or hiding the bars updates the content area even when the screen dimensions stay the same.
+- On Android, the Qt window and activity both use edge-to-edge layout. The activity reports its surface bounds and visible system-bar and cutout insets together. The Library reserves this space on cold launch as well as after closing a book. Showing or hiding the bars updates the content area even when the screen dimensions stay the same.

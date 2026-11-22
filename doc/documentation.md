@@ -32,8 +32,10 @@ When most tasks need only one part of a large doc, split it: `doc/<topic>.md` ke
 
 ## Format
 
-- Keep paragraphs short, under about 100 words.
-- Use tables for settings keys, command options, presets and enumerated values. Use bullet lists for rules and edge cases.
+- Use descriptive headings where they help. A short paragraph can introduce a feature. Use lists by default for feature behavior, settings, defaults, limits and exceptions.
+- Start bullets with the feature or setting name readers would search for. Keep directly related conditions and exceptions together. Give independent facts their own bullets and break long items into subitems.
+- Use numbered lists when order matters. Use tables for comparable entries that share the same fields, such as settings keys, command options and presets.
+- Keep paragraphs short, under about 100 words. Use prose for brief introductions and explanations that need a narrative.
 - Do not start a bullet with a bold label and a colon. Write the rule as a short sentence.
 - Use plain words, not shorthand such as "max", "incl." or "&". Do not use em dashes.
 - Keep headings stable. Do not put code names in parentheses in a heading that is a link target. Write `## Saved words`, not ``## Saved words (`saved_words`)``.

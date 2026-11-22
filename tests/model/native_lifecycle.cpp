@@ -325,6 +325,70 @@ int main(int argc, char **argv)
         QCoreApplication::processEvents();
         require(!lifecycle.blocked(), "Wake did not release sleep state");
     };
+    // A visible native sleep view must pause reading even without aboutToSleep.
+    {
+        int sleepStarts = 0, wakeups = 0;
+        lifecycle.sleep = [&] {
+            ++sleepStarts;
+            require(kobalt::NativeLifecycle::sleepSaveAllowed(),
+                    "Recovered sleep could not save the reading session");
+            require(!kobalt::NativeLifecycle::canSuspend(),
+                    "Standby interrupted the recovered sleep save");
+        };
+        lifecycle.wake = [&] { ++wakeups; };
+        emit standby->aboutToSuspend(nullptr);
+        emit standby->resumed();
+        QCoreApplication::processEvents();
+        require(sleepStarts == 0 && !lifecycle.blocked(),
+                "Ordinary reader standby started a sleep");
+        AbstractPowerView view;
+        QEvent shown(QEvent::Show);
+        power->visible = power->pin = true;
+        kobalt_show_sleep_view(power);
+        QCoreApplication::sendEvent(&view, &shown);
+        QCoreApplication::processEvents();
+        require(sleepStarts == 0 && sleepHandoffs == 0, "An awake PIN started a sleep");
+        power->visible = power->pin = false;
+
+        for (bool bypassHook : { false, true }) {
+            const auto before = sleepStarts;
+            power->asleep = power->visible = true;
+            if (bypassHook) {
+                QCoreApplication::sendEvent(&view, &shown);
+                require(!kobalt::NativeLifecycle::canSuspend(),
+                        "Standby raced the sleep view's queued check");
+            } else {
+                kobalt_show_sleep_view(power);
+            }
+            // Nickel can finish the previous wake after the next sleep has started.
+            emit power->resumedFromSleep();
+            QCoreApplication::processEvents();
+            require(lifecycle.blocked() && sleepStarts == before + 1,
+                    "The native sleep view did not start sleep without aboutToSleep");
+            // Sleep preparation queues a fresh view check after the save.
+            QCoreApplication::processEvents();
+            require(sleepHandoffs == sleepStarts, "Recovered sleep did not hand off its view");
+            emit power->aboutToSleep();
+            kobalt_show_sleep_view(power);
+            QCoreApplication::processEvents();
+            require(sleepStarts == before + 1 && sleepHandoffs == sleepStarts,
+                    "A late aboutToSleep repeated the recovered sleep");
+            if (bypassHook) {
+                power->asleep = power->visible = false;
+                emit power->resumedFromSleep();
+                QCoreApplication::processEvents();
+            } else {
+                wake();
+            }
+            emit power->resumedFromSleep();
+            QCoreApplication::processEvents();
+            require(!lifecycle.blocked() && wakeups == sleepStarts,
+                    "Recovered sleep did not wake exactly once");
+        }
+        lifecycle.sleep = {};
+        lifecycle.wake = {};
+        sleepHandoffs = 0;
+    }
     // The sleep-screen transition precedes the separate hardware suspend gate.
     {
         auto save = std::make_unique<kobalt::EngineDrain>();

@@ -241,12 +241,21 @@ void NativeLifecycle::finishSleepView()
 
 void NativeLifecycle::checkSleepView(const char *source)
 {
-    if (!sleepHandoffPending || !asleep || storageBlocked() || shuttingDown() || removalPending)
+    if ((asleep && !sleepHandoffPending) || savingBeforeSleep || storageBlocked() || shuttingDown()
+        || removalPending)
         return;
     const auto &api = powerApi();
     const auto *power = api.available() ? api.manager() : nullptr;
     const bool visible = power && api.visible(power);
     const bool pin = power && api.pin(power);
+    if (!asleep) {
+        if (visible && !pin) {
+            sleepStartedFromView = true;
+            // The save can process events. Check the view again after it returns.
+            beginSleep(source);
+        }
+        return;
+    }
     const bool ready = visible && !pin && bool(sleepViewReady);
     if (ready) {
         // Claim this transition before painting. Child show events and a
@@ -265,7 +274,7 @@ void NativeLifecycle::checkSleepView(const char *source)
 
 void NativeLifecycle::queueSleepViewCheck()
 {
-    if (sleepHandoffPending && asleep && !sleepViewCheck.isActive())
+    if ((!asleep || sleepHandoffPending) && !sleepViewCheck.isActive())
         sleepViewCheck.start(0);
 }
 
@@ -362,7 +371,7 @@ NativeLifecycle::NativeLifecycle(QObject *parent) : QObject(parent)
     // Start earlier; finishWake still waits for the sleep, PIN and USB views.
     const auto resuming = connect(power(), SIGNAL(resumingFromSleep()), this, SLOT(resumed()),
                                   Qt::DirectConnection);
-    const auto b = connect(power(), SIGNAL(resumedFromSleep()), this, SLOT(resumed()),
+    const auto b = connect(power(), SIGNAL(resumedFromSleep()), this, SLOT(resumeCompleted()),
                            Qt::DirectConnection);
     const auto c = connect(usb(), SIGNAL(doneProcessing()), this, SLOT(processingDone()),
                            Qt::DirectConnection);
@@ -433,11 +442,17 @@ void NativeLifecycle::usbPlugged()
 
 void NativeLifecycle::aboutToSleep()
 {
+    if (!sleepStartedFromView)
+        beginSleep("signal");
+}
+
+void NativeLifecycle::beginSleep(const char *source)
+{
     wakeRetry.stop();
     asleep = true;
     sleepHandoffPending = true;
     engineActivity().pause(!draining && !storageBlocked());
-    diagnostic("sleep-start");
+    diagnostic("sleep-start", { { "source", QString::fromLatin1(source) } });
     savingBeforeSleep = true;
     if (sleep) {
         sleep();
@@ -446,11 +461,13 @@ void NativeLifecycle::aboutToSleep()
     // Older NickelHook users can replace our showSleepView hook without
     // chaining it. Check once after Nickel and the add-on finish their stack.
     // A later power-view Show event schedules another check, without polling.
-    queueSleepViewCheck();
+    if (sleepHandoffPending)
+        queueSleepViewCheck();
 }
 
 void NativeLifecycle::resumed()
 {
+    sleepStartedFromView = false;
     sleepHandoffPending = false;
     sleepViewCheck.stop();
     // The completed signal can arrive after the reader is already awake.
@@ -459,6 +476,13 @@ void NativeLifecycle::resumed()
     }
     // Leave Nickel's resume stack before restoring the reader.
     wakeRetry.start(0);
+}
+
+void NativeLifecycle::resumeCompleted()
+{
+    // The frontlight fade from the previous wake can finish during a new sleep.
+    if (!deviceSleeping())
+        resumed();
 }
 
 void NativeLifecycle::finishWake()
@@ -511,8 +535,8 @@ bool NativeLifecycle::canSuspend()
     // An opening book also keeps the device awake between its engine jobs.
     if (!active)
         return true;
-    if (active->sleepViewCheck.isActive() || active->usbPending || active->poweringOff
-        || !engineActivity().quiescent())
+    if (active->savingBeforeSleep || active->sleepViewCheck.isActive() || active->usbPending
+        || active->poweringOff || !engineActivity().quiescent())
         return false;
     const bool opening = active->openingWorkPending && active->openingWorkPending();
     if (opening || active->draining) {

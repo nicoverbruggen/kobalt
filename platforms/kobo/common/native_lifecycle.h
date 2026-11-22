@@ -124,15 +124,18 @@ private slots:
     void usbPlugged();
     void aboutToSleep();
     void resumed();
+    void resumeCompleted();
     void processingDone();
     void unplugging();
 
 private:
     std::function<void()> scanDone;
     bool eventFilter(QObject *object, QEvent *event) override;
+    void beginSleep(const char *source);
     void checkSleepView(const char *source);
     void queueSleepViewCheck();
     bool sleepHandoffPending = false;
+    bool sleepStartedFromView = false;
     QTimer sleepViewCheck;
     bool savingBeforeSleep = false;
     bool connected_ = false, asleep = false, usbPending = false, exported = false,

@@ -60,11 +60,17 @@ QVector<double> wholeBookTicks(Engine &engine, const QString &first, const QStri
     const auto range =
             QString::fromUtf8(QJsonDocument(engine.mainTextMarks).toJson(QJsonDocument::Compact));
     const int total = engine.wholeBookPageCount();
-    // Ticks measured for this layout and these marks do not change. While
-    // the marks wait for their source, `first` and `after` are not theirs.
+    // Each tick cuts a 4-pixel gap in the bar, so the bar's width sets how
+    // many it can hold: one every 12 design pixels on average keeps two
+    // thirds of the bar.
+    const int maxTicks = engine.viewport().width() / qMax(1, readingPixels(12));
+    // Ticks measured for this layout and these marks do not change, unless
+    // an older, larger limit allowed them. While the marks wait for their
+    // source, `first` and `after` are not theirs.
     QVector<double> saved;
-    if (engine.savedWholeBookTicks(range, &saved) || total <= 0 || deferred)
-        return saved;
+    const bool known = engine.savedWholeBookTicks(range, &saved) && saved.size() <= maxTicks;
+    if (known || total <= 0 || deferred)
+        return known ? saved : QVector<double>{};
     int firstPage = 0, lastPage = total - 1;
     if (!first.isEmpty() || !after.isEmpty()) {
         const auto bounds = engine.wholeBookPages({ first, after }, current, true);
@@ -82,7 +88,6 @@ QVector<double> wholeBookTicks(Engine &engine, const QString &first, const QStri
     int deepest = 0;
     for (const auto &chapter : chapters)
         deepest = qMax(deepest, chapter.depth);
-    const int maxTicks = engine.viewport().width() / qMax(1, readingPixels(12));
     QVector<double> ticks;
     for (int depth = 0; depth <= deepest && ticks.size() < 3; ++depth) {
         QStringList positions;
@@ -101,10 +106,8 @@ QVector<double> wholeBookTicks(Engine &engine, const QString &first, const QStri
             if (page > 0 && main > 0 && main < mainPages - 1)
                 level.append(std::round(pageProgressFraction(main, mainPages) * 1000000) / 1000000);
         }
-        // Each tick cuts a 4-pixel gap in the bar, so the bar's width sets
-        // how many it can hold: one every 12 design pixels on average keeps
-        // two thirds of the bar. Deeper levels would only show part of the
-        // book, so the search ends at a level with more.
+        // Deeper levels than one with too many ticks would only show part of
+        // the book, so the search ends there.
         if (level.size() > maxTicks)
             break;
         if (level.size() > ticks.size())

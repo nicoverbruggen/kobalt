@@ -298,7 +298,7 @@ if(KOBALT_BUILD_TESTS)
         target_link_libraries(kobalt-qt5-refresh-tests PRIVATE Qt5::Widgets ${CMAKE_DL_LIBS} pthread)
         add_test(NAME pewter.qt5-refresh COMMAND kobalt-qt5-refresh-tests)
         set_tests_properties(pewter.qt5-refresh PROPERTIES LABELS "pewter;display;qt5"
-            ENVIRONMENT "${test_environment}" TIMEOUT 120)
+            ENVIRONMENT "${test_environment};QT_QPA_FONTDIR=${KOBALT_ASSETS}/fonts" TIMEOUT 120)
         list(APPEND tests kobalt-qt5-refresh-tests)
     endif()
     add_executable(kobalt-native-keyboard-tests ${kobo_keyboard_test_sources})

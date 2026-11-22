@@ -18,6 +18,8 @@ The widget keyboard batches key release with the editor change. On MediaTek in t
 
 ## Qt5 refresh adapter
 
+Typing in an annotation note keeps its text refresh when the note field covers a coloured highlight. The covered part keeps its pending cleanup until the page is exposed again. Both Kobo adapters use this rule, and the Qt5 adapter check exercises it through both policy-list ABIs.
+
 The Kobo test `pewter.qt5-refresh`, in `tests/pewter/refresh_qt5.cpp`, drives the production Qt5 refresh adapter through both policy-list ABIs, against the firmware Qt 5.2.1 libraries of the prepared Qt5 image. It also checks that a selection drag uses the direct waveform in partial mode, and that the next update redraws the dragged area once with REAGL in full mode. The Qt6 adapter applies the same rule without a pewter check, and the physical refresh speed is not measured. `bash platforms/kobo/build.sh qt5 --check` builds and runs it with the [Kobo adapter tests](kobo.md#pewter-the-fake-nickel).
 
 ## Device results and limits

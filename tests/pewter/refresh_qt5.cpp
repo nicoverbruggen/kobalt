@@ -7,6 +7,8 @@
 #include <QBackingStore>
 #include <QDialog>
 #include <QImage>
+#include <QKeyEvent>
+#include <QTextEdit>
 #include <array>
 #include <cstring>
 #include <vector>
@@ -19,6 +21,7 @@ int flushes = 0;
 std::vector<quint64> policies;
 int expectImmediate = -1;
 bool available = true;
+kobalt::AnimationPanel panel = kobalt::AnimationPanel::Mono;
 
 int ioctl(int, unsigned long request, void *argument)
 {
@@ -62,7 +65,7 @@ PageAnimationSupport pageAnimationSupport()
 
 AnimationPanel pageAnimationPanel()
 {
-    return AnimationPanel::Mono;
+    return panel;
 }
 
 void installPageAnimationHook() { }
@@ -320,6 +323,63 @@ int main(int argc, char **argv)
         policies.clear();
         submit(next);
         require(policies.size() == 1, "The drag cleanup repeated");
+    }
+    panel = AnimationPanel::Color;
+    reader.setProperty("reader_refresh_backend", "hwtcon");
+    reader.setProperty("reader_dark", false);
+    for (const bool legacy : { true, false }) {
+        setReaderRefreshWindow(&reader);
+        QTextEdit note(&reader);
+        note.setObjectName("rrNoteText");
+        note.setProperty("reader_native_keyboard_editor", true);
+        note.setGeometry(20, 70, 250, 120);
+        note.show();
+        note.setFocus();
+        app.processEvents();
+        require(app.focusWidget() == &note, "The note text box must hold focus");
+        const auto *viewport = note.viewport();
+        const QPoint origin = viewport->mapTo(&reader, QPoint());
+        const QRect typing(origin, QSize(140, 35));
+        const QRect covered(origin + QPoint(20, 10), QSize(100, 18));
+        const QRect exposed(55, 225, 140, 18);
+        reader.setProperty("reader_annotation_regions", QVariant::fromValue(QRegion(covered)));
+        reader.setProperty("reader_annotation_repairs",
+                           QVariant::fromValue(QRegion(covered) + exposed));
+        const quint64 text = quint64(1) << (legacy ? 10 : 38);
+        const quint64 image = quint64(1) << (legacy ? 6 : 37);
+        constexpr quint64 full = 1U << 3, partial = 1U << 2;
+        const auto submit = [&](const QRect &bounds) {
+            policies.clear();
+            if (legacy)
+                flushReader32(&store, bounds, reader.windowHandle(), {},
+                              { { bounds, quint32(text | full) } });
+            else
+                flushReader(&store, bounds, reader.windowHandle(), {}, { { bounds, text | full } });
+        };
+        QKeyEvent key(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+        QApplication::sendEvent(&note, &key);
+        require(note.toPlainText() == QStringLiteral("a"), "The key did not edit the note");
+        submit(typing);
+        require(policies == std::vector<quint64>{ text | partial },
+                "Typing over a covered colour highlight did not use partial text refresh");
+        // Done hides the keyboard and moves focus without closing the note.
+        note.clearFocus();
+        note.setProperty("reader_native_keyboard_editor", false);
+        submit(typing);
+        require(policies == std::vector<quint64>{ text | full },
+                "Closing the keyboard requested image cleanup through the note");
+        submit(typing.united(exposed));
+        require(policies == std::vector<quint64>{ image | full },
+                "The note suppressed cleanup of an exposed highlight");
+        require(reader.property("reader_annotation_repairs").value<QRegion>() == QRegion(covered),
+                "A mixed refresh consumed the hidden highlight cleanup");
+        note.hide();
+        reader.setProperty("reader_annotation_regions", QVariant::fromValue(QRegion()));
+        submit(typing);
+        require(policies == std::vector<quint64>{ image | full },
+                "Dismissing the note did not repair the exposed page");
+        require(reader.property("reader_annotation_repairs").value<QRegion>().isEmpty(),
+                "The exposed highlight cleanup did not clear its pending damage");
     }
     std::puts("PASS: Qt5 flush ABIs preserve sweeps, keep MTK tab feedback partial and use the "
               "direct waveform while dragging");

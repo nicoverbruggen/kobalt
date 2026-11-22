@@ -232,8 +232,10 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
                        bit(Qt::WA_KoboEpdWfModeAutoText) | bit(Qt::WA_KoboEpdUpdateModeFull)
                                | (dark ? bit(Qt::WA_KoboEpdFlagDarkMode) : 0) } });
     }
-    const QRegion annotationRepairs = annotationRepairRegions(readerWindow);
-    if (pageAnimationPanel() == AnimationPanel::Color && !(region & annotationRepairs).isEmpty()) {
+    const QRegion annotationRepairs = pageAnimationPanel() == AnimationPanel::Color
+            ? annotationRepairDamage(readerWindow, region, pageTurn || direction)
+            : QRegion();
+    if (!annotationRepairs.isEmpty()) {
         keyboardPixels.clear();
         if (pageTurn || direction) {
             // Nickel turns onto and away from coloured highlights with its
@@ -244,7 +246,7 @@ void flushReader(QBackingStore *store, const QRegion &region, QWindow *target, c
             consumeAnnotationRepairs(readerWindow, QRegion(screen));
         } else {
             submit(region, { { region.boundingRect(), repairPolicy(dark) } });
-            consumeAnnotationRepairs(readerWindow, region);
+            consumeAnnotationRepairs(readerWindow, annotationRepairs);
         }
         return;
     }

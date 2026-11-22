@@ -1941,8 +1941,7 @@ public:
         setGeometry(parentWidget()->rect());
         heading->setText(title);
         fonts = catalog;
-        interfacePicker = interfaceFonts;
-        sortFontSections(fonts, interfaceFonts, sideloadedFirst);
+        sortFontSections(fonts, sideloadedFirst);
         int selected = 0;
         for (int index = 0; index < fonts.size(); ++index) {
             const auto &family = fonts[index].family;
@@ -2005,8 +2004,7 @@ private:
         for (int first = 0; first < fonts.size();) {
             int end = first + 1;
             while (end < fonts.size() && end - first < perPage
-                   && fontSection(fonts[end], interfacePicker)
-                           == fontSection(fonts[first], interfacePicker))
+                   && fontSection(fonts[end]) == fontSection(fonts[first]))
                 ++end;
             if (first <= row && row < end)
                 initialPage = pages.size();
@@ -2031,8 +2029,7 @@ private:
             presentation.opticalLabel = !fonts[index].family.isEmpty();
             option->setPresentation(presentation);
         }
-        section->setCaptions(
-                fontSectionLabel(fontSection(fonts[range.first], interfacePicker)).toUpper());
+        section->setCaptions(fontSectionLabel(fontSection(fonts[range.first])).toUpper());
         choices->showRows(range.first, range.second);
         choices->setFixedHeight(((range.second + columns - 1) / columns) * rowHeight);
         pager->setPage(page, pages.size());
@@ -2048,7 +2045,6 @@ private:
     QVector<QPair<int, int>> pages;
     int firstVisible = 0, cardWidth = 0, rowHeight = 0, columns = 1;
     QSize fittedSize;
-    bool interfacePicker = false;
     const QVariantList appearance;
 };
 } // namespace

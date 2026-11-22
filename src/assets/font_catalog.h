@@ -84,8 +84,8 @@ inline QString fontDisplayName(const QString &family)
 QVector<ReadingFont> orderedReadingFonts(QVector<ReadingFont> fonts,
                                          const QStringList &selected = {});
 enum class FontSection { Recommended, Supplemental, BuiltIn, Ui, Sideloaded, International };
-FontSection fontSection(const ReadingFont &font, bool interfaceFonts);
-void sortFontSections(QVector<ReadingFont> &fonts, bool interfaceFonts, bool sideloadedFirst);
+FontSection fontSection(const ReadingFont &font);
+void sortFontSections(QVector<ReadingFont> &fonts, bool sideloadedFirst);
 bool internationalSupplementalFont(const QString &family);
 QString fontFamilyKey(const QString &family);
 double normalizedOpticalSize(const FontOpticalSizeAxis &axis, double points);

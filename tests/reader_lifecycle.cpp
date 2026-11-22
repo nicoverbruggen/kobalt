@@ -1011,6 +1011,7 @@ private slots:
         window.show();
         const QVector<ReadingFont> catalog{
             { "Libron", {}, FontOrigin::Recommended, {}, {} },
+            { "Adelph", {}, FontOrigin::Interface, {}, {} },
             { "Device", {}, FontOrigin::BuiltIn, {}, {} },
             { "Personal", {}, FontOrigin::Sideloaded, {}, {} },
             { "IBM Plex Sans", {}, FontOrigin::Interface, {}, {} },
@@ -1042,7 +1043,7 @@ private slots:
                 for (auto *row : sheet->findChildren<QCheckBox *>())
                     if (row->isVisible()) {
                         const auto family = row->property("reader_font_family").toString();
-                        if (interfacePicker && family.startsWith("Noto "))
+                        if (family.startsWith("Noto "))
                             QCOMPARE(caption, QStringLiteral("SUPPLEMENTAL FONTS (INTERNATIONAL)"));
                         families.append(family);
                     }
@@ -1050,27 +1051,17 @@ private slots:
                     break;
                 next->click();
             }
-            QStringList expected{ "Libron",
-                                  "Device",
-                                  "Personal",
-                                  "IBM Plex Sans",
-                                  "Noto Sans Math",
-                                  "Noto Serif",
-                                  "Noto Serif Armenian",
+            QStringList expected{ "Libron",           "Adelph",
+                                  "Device",           "IBM Plex Sans",
+                                  "Personal",         "Noto Sans Math",
+                                  "Noto Serif",       "Noto Serif Armenian",
                                   "Noto Serif CJK JP" };
-            expected.move(2, interfacePicker ? 3 : expected.size() - 1);
-            if (!interfacePicker) {
-                expected.move(expected.indexOf("IBM Plex Sans"), expected.size() - 2);
-                expected.move(expected.indexOf("Device"), expected.indexOf("IBM Plex Sans") - 1);
-            }
             if (personalFirst)
                 expected.move(expected.indexOf("Personal"), 0);
             QCOMPARE(families, expected);
-            QStringList captions = interfacePicker
-                    ? QStringList{ "RECOMMENDED FONTS", "KOBALT COLLECTION", "UI FONTS",
-                                   "SIDELOADED FONTS", "SUPPLEMENTAL FONTS (INTERNATIONAL)" }
-                    : QStringList{ "RECOMMENDED FONTS", "KOBALT COLLECTION", "SYSTEM FONTS",
-                                   "UI FONTS", "SIDELOADED FONTS" };
+            QStringList captions{ "RECOMMENDED FONTS", "KOBALT COLLECTION",
+                                  "SYSTEM FONTS",      "UI FONTS",
+                                  "SIDELOADED FONTS",  "SUPPLEMENTAL FONTS (INTERNATIONAL)" };
             if (personalFirst)
                 captions.move(captions.indexOf("SIDELOADED FONTS"), 0);
             QCOMPARE(sections, captions);

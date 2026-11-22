@@ -2415,9 +2415,9 @@ void Reader::showFontPicker()
     }
     fonts = orderedReadingFonts(std::move(fonts), { settings->fontFace(), defaultFace });
     const bool sideloadedFirst = preferences.value("sideloaded_fonts_first").toBool();
-    sortFontSections(fonts, false, sideloadedFirst);
+    sortFontSections(fonts, sideloadedFirst);
     for (const auto &font : fonts) {
-        const QString section = fontSectionLabel(fontSection(font, false));
+        const QString section = fontSectionLabel(fontSection(font));
         items.append({ fontDisplayName(font.family), font.family,
                        QString("rrFontChoice%1").arg(items.size()), section });
         items.last().fontFiles = font.files;

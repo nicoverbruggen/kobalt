@@ -34,8 +34,8 @@ The default section order depends on the picker. Empty sections are omitted.
 
 | Picker | Sections in default order |
 | --- | --- |
-| Reading and fallback typefaces | Recommended Fonts → Kobalt Collection → System Fonts → UI Fonts → Sideloaded Fonts |
-| Interface typefaces, including header and footer | Recommended Fonts → Kobalt Collection → UI Fonts → Sideloaded Fonts → Supplemental Fonts (International) |
+| Reading typeface | Recommended Fonts → Kobalt Collection → System Fonts → UI Fonts → Sideloaded Fonts |
+| Settings typefaces, including fallbacks and header and footer | Recommended Fonts → Kobalt Collection → System Fonts → UI Fonts → Sideloaded Fonts → Supplemental Fonts (International) |
 
 Turn on Show sideloaded fonts first in System > Nitpicks to move Sideloaded Fonts ahead of Recommended Fonts in every picker.
 

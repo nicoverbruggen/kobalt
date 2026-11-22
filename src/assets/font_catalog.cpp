@@ -20,7 +20,7 @@ bool internationalSupplementalFont(const QString &family)
     return family.startsWith("Noto Serif CJK ") || specialistFamilies.contains(family);
 }
 
-FontSection fontSection(const ReadingFont &font, bool interfaceFonts)
+FontSection fontSection(const ReadingFont &font)
 {
     if (font.origin == FontOrigin::Recommended)
         return FontSection::Recommended;
@@ -30,18 +30,17 @@ FontSection fontSection(const ReadingFont &font, bool interfaceFonts)
         && (font.family == "IBM Plex Mono" || font.family == "IBM Plex Sans"
             || font.family == "Kalam" || font.family == "Playpen Sans"))
         return FontSection::Ui;
-    if (!interfaceFonts)
-        return font.origin == FontOrigin::BuiltIn ? FontSection::BuiltIn
-                                                  : FontSection::Supplemental;
+    if (font.origin == FontOrigin::BuiltIn)
+        return FontSection::BuiltIn;
 
     return internationalSupplementalFont(font.family) ? FontSection::International
                                                       : FontSection::Supplemental;
 }
 
-void sortFontSections(QVector<ReadingFont> &fonts, bool interfaceFonts, bool sideloadedFirst)
+void sortFontSections(QVector<ReadingFont> &fonts, bool sideloadedFirst)
 {
     std::stable_sort(fonts.begin(), fonts.end(), [=](const ReadingFont &a, const ReadingFont &b) {
-        const auto left = fontSection(a, interfaceFonts), right = fontSection(b, interfaceFonts);
+        const auto left = fontSection(a), right = fontSection(b);
         if (left != right) {
             if (sideloadedFirst
                 && (left == FontSection::Sideloaded || right == FontSection::Sideloaded))

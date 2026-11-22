@@ -6,6 +6,20 @@ Label `diagnostics`. Build `mac-tests`, then run `ctest --preset mac -L diagnost
 
 These checks cover the diagnostic log, its batches and limits, descriptor-exhaustion reports, crash reports, the storage diagnostics in the desktop app and the Kobo standby input guard and diagnostics. `platform.standby-input` and `platform.standby-diagnostics` run the Kobo standby code with injected reads, writes and hooks, in processes with and without verbose diagnostics. [Page-turn diagnostics](#page-turn-diagnostics) describes the events that these checks protect.
 
+## Asking a contributor for Kobo diagnostics
+
+Use this reply when a contributor can try to reproduce a problem on their Kobo:
+
+> Could you capture a Kobalt log the next time this happens?
+>
+> 1. In Kobalt, open **Settings > System > Developer** and turn on **Debug mode**.
+> 2. Open the **Debug** tab, turn on **Detailed diagnostics**, then close Settings. If Detailed diagnostics is already checked, you can go straight to the next step.
+> 3. Try to reproduce the problem. After it happens, connect the Kobo to your computer. You can leave the book open. If the Kobo asks whether to connect, tap **Connect**.
+> 4. On the Kobo drive, open `.adds/kobalt/diagnostics/`. If you can't see `.adds`, enable hidden files in your file manager.
+> 5. Copy `events.jsonl` to your computer and compress it into a ZIP file. Drag the ZIP into the reply box on this GitHub thread, briefly describe what happened, then post the reply.
+>
+> Afterwards, you can turn Detailed diagnostics and Debug mode back off if you enabled them for this report.
+
 ## Setting changes
 
 Normal logging, as in release builds, writes one `setting-changed` event for each reader setting that a user changes. `setting` names the preference key. `previous` and `value` hold the old and new values when they are true/false, numbers or short lowercase choice tokens such as `bold` or `smart`. Other text values, such as font names, are logged by key only, so the log keeps no input text. `restore_defaults` marks changes made by Restore defaults. The open-books-in-Kobalt choice in `config.json` is logged as `open_books_in_kobalt`, with `source` set to `kobalt` for Kobalt's Settings > System or `nickel` for Nickel's Reading Settings. A key that the preferences file did not hold yet is not logged, because the first save of Settings writes every key. A value that Settings corrects while it saves, such as an unavailable font, is logged as a change. Events are queued to the logging worker; the main thread does not wait for the log.

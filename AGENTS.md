@@ -94,6 +94,12 @@ Run desktop CMake/CTest commands from `platforms/desktop/` and root-level CMake 
 - [src/engine/blaze/UPSTREAM.md](src/engine/blaze/UPSTREAM.md) explains every Blaze change to inherited CREngine code, for CREngine maintainers. When a change touches `src/engine/blaze/crengine/` or extension code that it calls, add or update its entry in the same change, in the section for its kind, at the place that matches how useful it is likely to be to CREngine maintainers. Check new bug fixes against a local checkout of the recorded upstream revision, not against upstream `master` ([Bringing in upstream changes](doc/engines/blaze.md#bringing-in-upstream-changes)), and say whether they were reproduced or found by reading. When you bring in upstream changes, move that revision and recheck every entry in the same change. Remove an entry when Blaze drops the change or upstream has it.
 - Keep Markdown in `doc/`, except the root `README.md` (owned by the user), `AGENTS.md` and `src/engine/blaze/UPSTREAM.md`. Follow [Documentation guide](doc/documentation.md): edit in place rather than appending, do not add no-op entries to `doc/storage/`, and do not add per-assertion test recaps to `doc/validation/*.md`.
 
+## GitHub replies
+
+When working with contributors on a GitHub issue or discussion, read the thread and show me the proposed reply in chat. “Ask them for diagnostics” and similar requests start this draft step. Use the [standard Kobo diagnostics reply](doc/validation/diagnostics.md#asking-a-contributor-for-kobo-diagnostics) when asking for logs.
+
+For a batch, show one table with a row for every thread. Include the thread link, the full proposed reply and the proposed action (for example, reply and close). Revise the drafts after my feedback. Wait for explicit approval of the replies and actions before acting on GitHub. I can approve the whole table or specific rows. Approval to post a reply covers closure only if I also approved closing the thread.
+
 ## Git and worktrees
 
 - Format first-party C/C++ with `.clang-format` before committing ([Code formatting](doc/building.md#code-formatting)).

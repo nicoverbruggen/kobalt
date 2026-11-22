@@ -551,7 +551,9 @@ void ChapterContents::redraw()
             }
         }
     listHeader->setCaptions(summary->text(),
-                            pagesKnown ? strings::get("chapter_contents.page") : QString());
+                            pagesKnown ? strings::get(useScreens ? "chapter_contents.location"
+                                                                 : "chapter_contents.page")
+                                       : QString());
     pager->setPage(page, pageCount(), {}, true);
     const int used = chrome::actionHeight + contents::stripHeight
             + qMin(rows, qMax(0, int(visible.size()) - page * rows))
@@ -591,10 +593,10 @@ void ChapterContents::redraw()
     int pageWidth = pagesKnown
             ? ui::interfaceTextWidth(QString::number(lastPage + 1), ui::captionFont())
             : 0;
-    if (pagesKnown && pageLabel && (firstMainPage > 0 || lastMainPage < lastPage))
+    if (pagesKnown && pageLabel && (useScreens || firstMainPage > 0 || lastMainPage < lastPage))
         for (int row = 0; row < buttons.size(); ++row) {
             const int index = itemIndex(row);
-            if (index >= 0)
+            if (index >= 0 && items[index].page >= 0 && printed.value(row).isEmpty())
                 pageWidth = qMax(
                         pageWidth,
                         ui::interfaceTextWidth(pageLabel(items[index].page), ui::captionFont()));

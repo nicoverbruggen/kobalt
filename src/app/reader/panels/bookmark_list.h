@@ -39,6 +39,7 @@ struct BookmarkRow
 class BookmarkList : public ui::Panel
 {
 public:
+    bool useScreens = false;
     explicit BookmarkList(QWidget *parent, KeyboardFactory keyboard = {});
     ~BookmarkList() override;
 

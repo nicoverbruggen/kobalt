@@ -89,7 +89,7 @@ System starts with System integration, which contains Open books automatically i
   - If either label does not fit on one line, the actions become full-width stacked rows, with the primary action above Cancel. Labels can wrap with padding. Single-action notices use the full footer width.
   - Bookmark and annotation removal show the page number when available and a shortened excerpt of the saved passage.
 
-- System > Nitpicks > Always display publisher provided page numbers uses the print edition’s labels for book locations. It is off by default. A screen uses its first passage. A saved or searched passage uses its own label. Before the first marker, or in a book without a page list, Kobalt uses its usual numbering. Chapter counters, pages left and percentages still follow the reading layout.
+- System > Nitpicks > Always display publisher provided page numbers uses the print edition’s labels for book locations. It is off by default. A screen uses its first passage. A saved or searched passage uses its own label. Before the first marker, or in a book without a page list, Kobalt uses its usual numbering. Kobalt labels its own layout numbers as screens, including chapter counters and screens remaining. Percentages still follow the reading layout.
 
 - System > Nitpicks > Progress percentages offers Whole percentages (the default) and One decimal place, with examples in the choice dialog.
   - Numbers follow one rule: the interface is English, so percentages read 8.1% and counts read 12,345 words on every device. Page numbers use plain digits. When the interface is translated, numbers will follow the interface language.

@@ -28,6 +28,7 @@ struct SyncJump
     double fromPercent = -1, toPercent = -1;
     QString device, time;
     QString hereLabel, syncedLabel;
+    bool useScreens = false;
 
     // Both pages are known and differ, so the graph can show the jump.
     bool drawable() const { return here >= 0 && synced >= 0 && here != synced && pages > 1; }

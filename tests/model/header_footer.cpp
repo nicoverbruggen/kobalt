@@ -255,12 +255,22 @@ int main()
                     && content(Field::ChapterPercent, noPages, false).text == QStringLiteral("30%"),
             "The percentage fields keep their percentage");
     auto printed = noPages;
+    printed.useScreens = true;
     printed.printedPage = "xiv";
     require(content(Field::BookPage, printed, true).text == "xiv"
                     && content(Field::TitleAndPage, printed, true).text.endsWith("xiv")
                     && content(Field::ChapterPage, printed, false).text == calculating
                     && content(Field::BookPercent, printed, false).text == "42%",
             "Publisher labels must keep their case and leave layout progress alone");
+    auto screens = values;
+    screens.useScreens = true;
+    screens.chapterPage = 13;
+    require(content(Field::ChapterPagesLeft, screens, false).text == "8 screens remaining"
+                    && content(Field::BookPage, screens, false).text.startsWith("Screen "),
+            "Layout counts should use screens when publisher pages are enabled");
+    screens.chapterPage = screens.chapterPages;
+    require(content(Field::ChapterPagesLeft, screens, false).text == "1 screen remaining",
+            "Use the singular for the final screen");
     noPages.decimalPercentages = true;
     require(content(Field::BookPercent, noPages, false).text == QStringLiteral("42.7%")
                     && content(Field::ChapterPercent, noPages, false).text

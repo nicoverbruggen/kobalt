@@ -34,12 +34,17 @@ QString counted(int count, const QString &many, const QString &one)
     return count == 1 ? one : many.arg(strings::count(count));
 }
 
-QString pagesText(int direction, int distance)
+QString pagesText(int direction, int distance, bool useScreens)
 {
-    return direction > 0 ? counted(distance, strings::get("kosync.pages_ahead"),
-                                   strings::get("kosync.pages_ahead_one"))
-                         : counted(distance, strings::get("kosync.pages_back"),
-                                   strings::get("kosync.pages_back_one"));
+    return direction > 0
+            ? counted(distance,
+                      strings::get(useScreens ? "kosync.screens_ahead" : "kosync.pages_ahead"),
+                      strings::get(useScreens ? "kosync.screens_ahead_one"
+                                              : "kosync.pages_ahead_one"))
+            : counted(distance,
+                      strings::get(useScreens ? "kosync.screens_back" : "kosync.pages_back"),
+                      strings::get(useScreens ? "kosync.screens_back_one"
+                                              : "kosync.pages_back_one"));
 }
 
 // A filled triangle whose tip is at `tip`, pointing along (dx, dy).
@@ -182,7 +187,8 @@ SyncChoiceView::Scale SyncChoiceView::scale() const
 
 QString SyncChoiceView::jumpLabel() const
 {
-    const auto pages = pagesText(value.direction(), std::abs(value.synced - value.here));
+    const auto pages =
+            pagesText(value.direction(), std::abs(value.synced - value.here), value.useScreens);
     const int crossed = value.startsCrossed();
     return crossed ? strings::get("kosync.jump_label")
                              .arg(pages,
@@ -195,7 +201,8 @@ QString SyncChoiceView::jumpLabel() const
 void SyncChoiceView::paintJumpLabel(QPainter &painter, int center, int top, int width) const
 {
     const auto label = jumpLabel();
-    auto pages = pagesText(value.direction(), std::abs(value.synced - value.here));
+    auto pages =
+            pagesText(value.direction(), std::abs(value.synced - value.here), value.useScreens);
     const auto bold = labelFont(true), normal = labelFont();
     // A label that does not start with the pages, as in a translation that
     // reorders it, is drawn whole in bold.
@@ -295,8 +302,10 @@ int SyncChoiceView::pagesGraph(int width, QPainter *painter) const
     painter->setRenderHint(QPainter::Antialiasing, false);
     paintJumpLabel(*painter, (xh + xs) / 2, 0, width);
     // Page numbers count from one. Neighbouring pages push their numbers apart.
-    const auto number = [](int page, const QString &printed) {
-        return strings::get("kosync.page_number").arg(locationPageLabel(page, printed));
+    const auto number = [this](int page, const QString &printed) {
+        return strings::get(value.useScreens && printed.isEmpty() ? "reader.screen_number"
+                                                                  : "kosync.page_number")
+                .arg(locationPageLabel(page, printed));
     };
     const auto hereText = number(value.here, value.hereLabel);
     const auto syncedText = number(value.synced, value.syncedLabel);

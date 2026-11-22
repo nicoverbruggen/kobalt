@@ -14,6 +14,7 @@ namespace kobalt {
 class SearchPanel : public ui::Panel
 {
 public:
+    bool useScreens = false;
     SearchPanel(QWidget *parent, KeyboardFactory makeKeyboard);
     std::function<void(QString)> requested;
     std::function<void(SearchHit)> selected;

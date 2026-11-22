@@ -316,10 +316,12 @@
 "common.off" = "Off";
 "common.on" = "On";
 "common.page" = "page";
+"common.screen" = "screen";
 /* Arguments: %1, %2 */
 "common.page_fraction" = "%1 / %2";
 "common.estimated_total" = "~%1";
 "common.pages" = "pages";
+"common.screens" = "screens";
 /* Arguments: %1 */
 "common.percent" = "%1";
 "common.previous_page" = "Previous page";
@@ -554,6 +556,9 @@
 "header_footer.field.book_page" = "Page in book";
 "header_footer.field.chapter_pages_left" = "Pages left in chapter";
 "header_footer.field.chapter_and_page" = "Chapter and page in chapter";
+"header_footer.field.chapter_screen" = "Screen in chapter";
+"header_footer.field.chapter_screens_left" = "Screens remaining in chapter";
+"header_footer.field.chapter_and_screen" = "Chapter and screen in chapter";
 "header_footer.field.title_and_page" = "Title and page in book";
 "header_footer.field.battery_percent" = "Battery, with percentage";
 "header_footer.field.battery_percent_only" = "Battery percentage only";
@@ -674,6 +679,7 @@
 "reader.zoom_scale" = "%1× zoom";
 /* Arguments: %1, %2, %3 */
 "reader.zoom_range" = "Pages %1 to %2 of %3";
+"reader.zoom_screen_range" = "Screens %1 to %2 of %3";
 "reader.previous_chapter" = "Previous chapter";
 "reader.next_chapter" = "Next chapter";
 /* Arguments: %1 */
@@ -754,6 +760,7 @@
 "reader.vertical_margins" = "Vertical margins: ";
 /* Arguments: %1, %2 */
 "reader.menu_page_of" = "PAGE %1 OF %2";
+"reader.menu_screen_of" = "SCREEN %1 OF %2";
 "reader.new_synced_position" = "New synced position";
 "reader.older_synced_position" = "Older synced position";
 "reader.page_layout" = "Page layout";
@@ -778,12 +785,14 @@
 "reader.stay_here" = "Stay here and forget return position";
 /* Arguments: %1 */
 "reader.return_page" = "Return to page %1";
+"reader.return_screen" = "Return to screen %1";
 /* Arguments: %1 */
 "reader.jumped_from_chapter" = "You jumped from %1";
 "reader.rotation" = "Rotation";
 "reader.search_book" = "Search book";
 /* Arguments: %1 */
 "reader.counting_pages" = "Counting pages";
+"reader.counting_screens" = "Counting screens";
 "reader.session_minutes" = "You've been reading for %1 minutes now";
 "reader.sideloaded_fonts" = "Sideloaded Fonts";
 "reader.simulate_nickel_progress_these_controls_change_only_the_synthetic" = "Simulate Nickel progress. These controls change only the synthetic progress test book. No server sync is performed.";
@@ -815,6 +824,7 @@
 "search_panel.no_matches_found" = "No matches";
 /* Arguments: %1, %2 */
 "search_panel.page_detail" = "Page %1: %2";
+"search_panel.screen_detail" = "Screen %1: %2";
 "search_panel.chapter_detail" = "%1: %2";
 "search_panel.return_to_original_position" = "Return to original position";
 "search_panel.search" = "Search";
@@ -930,7 +940,7 @@
 "settings.section_feature_visibility" = "Feature visibility";
 "settings.section_system_integration" = "System integration";
 "settings.publisher_page_numbers" = "Always display publisher provided page numbers";
-"settings.publisher_page_numbers_description" = "Use the print edition’s page labels when the book supplies them.";
+"settings.publisher_page_numbers_description" = "Use the print edition’s page labels when available. Kobalt counts its own layout in screens.";
 "settings.sideloaded_fonts_first" = "Show sideloaded fonts first";
 "settings.sideloaded_fonts_first_description" = "List your own fonts before recommended fonts in every typeface picker.";
 "settings.section_nitpicks" = "Nitpicks";
@@ -1138,6 +1148,7 @@
 "search_panel.empty_query" = "No matches for “%1”";
 /* Arguments: %1 */
 "search_panel.page_number" = "Page %1";
+"reader.screen_number" = "Screen %1";
 
 "settings.asks_first" = "ASKS FIRST";
 "bookmarks.title" = "Bookmarks";
@@ -1157,6 +1168,7 @@
 "bookmarks.remove_current" = "Remove bookmarked page";
 /* Arguments: %1, %2 */
 "bookmarks.remove_detail" = "Page %1 · %2";
+"bookmarks.remove_screen_detail" = "Screen %1 · %2";
 "settings.refresh_smart" = "Smart";
 /* Arguments: %1 */
 "settings.refresh_smart_description" = "At chapter starts, at most once every %1 turns.";
@@ -1176,6 +1188,7 @@
 "chapter_contents.summary" = "Contents · %1 chapters";
 "chapter_contents.summary_one" = "Contents · 1 chapter";
 "chapter_contents.page" = "Page";
+"chapter_contents.location" = "Location";
 "chapter_contents.chapters" = "Chapters";
 "chapter_contents.close" = "Close chapters";
 /* Arguments: %1 */
@@ -1192,15 +1205,19 @@
 "search_panel.no_matches_hint" = "Check the spelling or try a shorter phrase.";
 /* Arguments: %1, %2 */
 "search_panel.page_chapter" = "Page %1 · %2";
+"search_panel.screen_chapter" = "Screen %1 · %2";
 /* Arguments: %1, %2 */
 "stats.contents_position" = "Contents · %1 of %2";
 /* Arguments: %1, %2 */
 "stats.page_of" = "Page %1 of %2";
+"stats.screen_of" = "Screen %1 of %2";
 "stats.chapter" = "Chapter";
 "stats.book" = "Book";
 "stats.session" = "Session";
 "stats.pages_left" = "pages left";
+"stats.screens_left" = "screens remaining";
 "stats.page_left" = "page left";
+"stats.screen_left" = "screen remaining";
 "stats.minutes" = "min";
 /* %1: Page turns in the current reading session. */
 "stats.page_turn" = "%1 page turn";
@@ -1776,6 +1793,9 @@
 "marks.sort_oldest_description" = "Items created longest ago come first.";
 "marks.row_action" = "%1: %2";
 "marks.page_range" = "Pages %1 to %2";
+"marks.location_range" = "%1 to %2";
+"marks.screen_range" = "Screens %1–%2";
+"marks.screen_range_description" = "Screens %1 to %2";
 "annotations.numbered_entry" = "Annotation %1";
 "bookmarks.numbered_entry" = "Bookmark %1";
 "marks.sort_position" = "Book order";
@@ -1849,9 +1869,13 @@
 "kosync.jump_ahead" = "Jump ahead";
 "kosync.go_back" = "Go back";
 "kosync.pages_ahead" = "%1 pages ahead";
+"kosync.screens_ahead" = "%1 screens ahead";
 "kosync.pages_ahead_one" = "1 page ahead";
+"kosync.screens_ahead_one" = "1 screen ahead";
 "kosync.pages_back" = "%1 pages back";
+"kosync.screens_back" = "%1 screens back";
 "kosync.pages_back_one" = "1 page back";
+"kosync.screens_back_one" = "1 screen back";
 "kosync.chapters_crossed" = "%1 chapters";
 "kosync.chapters_crossed_one" = "1 chapter";
 "kosync.jump_label" = "%1 · %2";
@@ -2047,6 +2071,7 @@
 "words.in_context" = "In context";
 /* Arguments: %1 */
 "words.go_to_page" = "Go to page %1";
+"words.go_to_screen" = "Go to screen %1";
 "words.open_passage" = "Open at this passage";
 "words.book_missing" = "Book not on this device";
 "words.open_book_first" = "Open this book to go to the passage.";

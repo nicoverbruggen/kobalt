@@ -569,7 +569,10 @@ void Reader::askRemoveBookmark(const QString &position)
     const auto label = locationPageLabel(
             number, publisherPagesEnabled() ? bookmarks->printedPage(position) : QString());
     const auto detail = !label.isEmpty()
-            ? strings::get("bookmarks.remove_detail").arg(label, excerpt)
+            ? strings::get(publisherPagesEnabled() && bookmarks->printedPage(position).isEmpty()
+                                   ? "bookmarks.remove_screen_detail"
+                                   : "bookmarks.remove_detail")
+                      .arg(label, excerpt)
             : excerpt;
     const bool pinned = list[index].pinned();
     auto description = strings::get(pinned ? "bookmarks.remove_pinned_description"

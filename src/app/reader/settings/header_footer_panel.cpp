@@ -757,6 +757,7 @@ void FieldChooser::open(int slot, Field current, const headerfooter::Values &val
     for (int index = 0; index < rows.size(); ++index) {
         const auto field = headerfooter::choosableFields[index];
         list->setLeftOut(index, headerfooter::debugField(field) && !debug && field != current);
+        rows[index]->setText(headerfooter::fieldLabel(field, values.useScreens));
         setFieldValue(rows[index], field, values, uppercase, textPixels);
         if (field == current)
             list->setCurrent(index);

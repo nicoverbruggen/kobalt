@@ -8,6 +8,9 @@ inline QString locationPageLabel(int page, const QString &printed)
     return !printed.isEmpty() ? printed : page >= 0 ? QString::number(page + 1) : QString();
 }
 
+QString screenLabel(const QString &label, bool useScreens);
+QString remainingScreenUnit(int count, bool useScreens);
+
 inline constexpr auto secondaryNumberKey = "secondary_page_numbers";
 const QStringList &secondaryNumberStyles();
 QString bookPageLabel(int page, int firstMain, int lastMain, const QString &style = {});

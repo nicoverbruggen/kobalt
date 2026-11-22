@@ -38,6 +38,7 @@ public:
     explicit ChapterContents(QWidget *parent, QWidget *overlayHost = nullptr);
     void showChapters(const QString &title, QVector<Choice> choices, const QString &current,
                       ChapterGroups groups = ChapterGroups::Current);
+    bool useScreens = false;
     void setListMode(ContentsList active, const QVector<ContentsList> &available);
     void showPrintedPageInput(const QHash<QString, QString> &pages, bool hasOtherLabels,
                               std::function<void(QString)> jump, std::function<void()> other);
@@ -111,8 +112,10 @@ public:
                      ChapterGroups groups = ChapterGroups::Current);
     void setDropdownGeometry(const QRect &bounds);
 
-    void setListMode(ContentsList active, const QVector<ContentsList> &available)
+    void setListMode(ContentsList active, const QVector<ContentsList> &available,
+                     bool useScreens = false)
     {
+        contents->useScreens = useScreens;
         contents->setListMode(active, available);
     }
 

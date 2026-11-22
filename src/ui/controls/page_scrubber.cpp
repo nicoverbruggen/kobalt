@@ -434,29 +434,43 @@ void PageScrubber::syncRange(bool chaptersChanged)
         position->setMarkers(markers);
     }
     overview->setRange(totalPages, rangeFirst, rangeLast, current);
-    const auto label = [this](int page) {
-        const auto printed = !chapterBar && printedLabel ? printedLabel(page) : QString();
-        return printed.isEmpty() ? bookPageLabel(page, firstMainPage, lastMainPage, secondaryStyle)
-                                 : printed;
+    const auto printedAt = [this](int page) {
+        return !chapterBar && printedLabel ? printedLabel(page) : QString();
     };
-    const auto first = label(rangeFirst), last = label(rangeLast);
-    if (!chapterBar && printedLabel
-        && (!printedLabel(rangeFirst).isEmpty() || !printedLabel(rangeLast).isEmpty()))
+    const auto label = [this](int page, const QString &printed) {
+        return printed.isEmpty()
+                ? screenLabel(bookPageLabel(page, firstMainPage, lastMainPage, secondaryStyle),
+                              useScreens)
+                : printed;
+    };
+    const auto firstPrint = printedAt(rangeFirst), lastPrint = printedAt(rangeLast);
+    const auto first = label(rangeFirst, firstPrint), last = label(rangeLast, lastPrint);
+    if (useScreens && firstPrint.isEmpty() != lastPrint.isEmpty())
+        position->setAccessibleDescription(
+                strings::get("marks.location_range")
+                        .arg(firstPrint.isEmpty()
+                                     ? first
+                                     : strings::get("search_panel.page_number").arg(first),
+                             lastPrint.isEmpty()
+                                     ? last
+                                     : strings::get("search_panel.page_number").arg(last)));
+    else if (!firstPrint.isEmpty() || !lastPrint.isEmpty())
         position->setAccessibleDescription(strings::get("marks.page_range").arg(first, last));
     else
-        position->setAccessibleDescription(strings::get("reader.zoom_range")
-                                                   .arg(rangeFirst + 1)
-                                                   .arg(rangeLast + 1)
-                                                   .arg(totalPages));
+        position->setAccessibleDescription(
+                strings::get(useScreens ? "reader.zoom_screen_range" : "reader.zoom_range")
+                        .arg(rangeFirst + 1)
+                        .arg(rangeLast + 1)
+                        .arg(totalPages));
     const auto scope = strings::get("reader.zoom_scale").arg(zoomScales[zoomLevel]);
     rangeLabel->setText(chapterBar ? strings::get("chapter_graph.book_progress")
                                              .arg(strings::percentArgument(bookPercent))
                                              .toUpper()
                                    : scope.toUpper());
-    rangeStart->setText(label(rangeFirst));
-    rangeEnd->setText(label(rangeLast));
-    overviewStart->setText(label(0));
-    overviewEnd->setText(label(totalPages - 1));
+    rangeStart->setText(first);
+    rangeEnd->setText(last);
+    overviewStart->setText(label(0, printedAt(0)));
+    overviewEnd->setText(label(totalPages - 1, printedAt(totalPages - 1)));
     updateButtons();
 }
 
@@ -1154,9 +1168,11 @@ void PageScrubber::updateCaption()
     if (!printed.isEmpty())
         pageLabel = strings::get("search_panel.page_number").arg(printed);
     else if (page >= firstMainPage && page <= lastMainPage)
-        pageLabel = strings::get("reader.menu_page_of")
+        pageLabel = strings::get(useScreens ? "reader.menu_screen_of" : "reader.menu_page_of")
                             .arg(pageLabel)
                             .arg(lastMainPage - firstMainPage + 1);
+    else
+        pageLabel = screenLabel(pageLabel, useScreens);
     if (chapterBar && !chapterPrintedPage.isEmpty()) {
         pageLabel = strings::get("search_panel.page_number").arg(chapterPrintedPage);
         chapterName = chapterTitle.toUpper();

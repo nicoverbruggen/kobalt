@@ -217,10 +217,12 @@ void Reader::openWord(const kobalt::SavedWord &word)
         if (!guard)
             return;
         const int page = locations.bookPages.value(0, -1);
-        const auto label = locationPageLabel(
-                page, guard->publisherPagesEnabled() ? locations.printedPages.value(0) : QString());
+        const bool useScreens = guard->publisherPagesEnabled();
+        const auto printed = useScreens ? locations.printedPages.value(0) : QString();
+        const auto action = strings::get(useScreens && printed.isEmpty() ? "words.go_to_screen"
+                                                                         : "words.go_to_page");
         guard->wordPage->open(word,
-                              page >= 0 ? strings::get("words.go_to_page").arg(label) : QString(),
+                              page >= 0 ? action.arg(locationPageLabel(page, printed)) : QString(),
                               page >= 0 ? QString() : strings::get("words.passage_missing"));
     });
 }

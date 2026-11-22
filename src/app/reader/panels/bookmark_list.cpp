@@ -1121,11 +1121,31 @@ void BookmarkList::redraw()
         QStringList description;
         const auto start = locationPageLabel(item.page, item.printedPage);
         const auto end = locationPageLabel(item.endPage, item.printedEnd);
-        const bool range = annotations && !start.isEmpty() && !end.isEmpty() && start != end;
-        const auto label = range ? QString("%1–%2").arg(start, end) : start;
-        if (!start.isEmpty())
-            description << (range ? strings::get("marks.page_range").arg(start, end)
-                                  : strings::get("search_panel.page_number").arg(start));
+        const bool startScreen = useScreens && item.printedPage.isEmpty();
+        const bool endScreen = useScreens && item.printedEnd.isEmpty();
+        const bool range = annotations && !start.isEmpty() && !end.isEmpty()
+                && (start != end || startScreen != endScreen);
+        QString label = screenLabel(start, startScreen);
+        if (range) {
+            if (startScreen == endScreen) {
+                label = startScreen ? strings::get("marks.screen_range").arg(start, end)
+                                    : QString("%1–%2").arg(start, end);
+                description << strings::get(startScreen ? "marks.screen_range_description"
+                                                        : "marks.page_range")
+                                       .arg(start, end);
+            } else {
+                const auto first = strings::get(startScreen ? "reader.screen_number"
+                                                            : "search_panel.page_number")
+                                           .arg(start);
+                const auto last = strings::get(endScreen ? "reader.screen_number"
+                                                         : "search_panel.page_number")
+                                          .arg(end);
+                label = strings::get("marks.location_range").arg(first, last);
+                description << label;
+            }
+        } else if (!start.isEmpty())
+            description << (startScreen ? label
+                                        : strings::get("search_panel.page_number").arg(start));
         if (!title.isEmpty())
             description << title;
         if (!detailsReady || (description.isEmpty() && excerpt.isEmpty()))

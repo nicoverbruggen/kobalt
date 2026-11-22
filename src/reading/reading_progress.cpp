@@ -1,7 +1,20 @@
 #include "support/qt_compat.h"
 #include "reading_progress.h"
+#include "support/strings.h"
 
 namespace kobalt {
+QString screenLabel(const QString &label, bool useScreens)
+{
+    return useScreens && !label.isEmpty() ? strings::get("reader.screen_number").arg(label) : label;
+}
+
+QString remainingScreenUnit(int count, bool useScreens)
+{
+    if (useScreens)
+        return strings::get(count == 1 ? "stats.screen_left" : "stats.screens_left");
+    return strings::get(count == 1 ? "stats.page_left" : "stats.pages_left");
+}
+
 static QString romanPage(int page)
 {
     QString result;

@@ -1723,9 +1723,11 @@ void Reader::removeAnnotation(const QString &id)
     }
     QString excerpt = details.first().text;
     QString label;
+    bool screen = false;
     for (const auto &row : annotationRows()) {
         if (row.position == id) {
             label = locationPageLabel(row.page, row.printedPage);
+            screen = publisherPagesEnabled() && row.printedPage.isEmpty();
             break;
         }
     }
@@ -1733,7 +1735,8 @@ void Reader::removeAnnotation(const QString &id)
         return;
     excerpt = elideBookmarkExcerpt(excerpt, 40, 80);
     const auto detail = !label.isEmpty()
-            ? strings::get("bookmarks.remove_detail").arg(label, excerpt)
+            ? strings::get(screen ? "bookmarks.remove_screen_detail" : "bookmarks.remove_detail")
+                      .arg(label, excerpt)
             : excerpt;
     auto *choice = new ui::ChoiceModal(
             this, { detail, strings::get("annotations.remove_prompt"), {} },

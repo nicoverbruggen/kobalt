@@ -324,19 +324,21 @@ ChapterGraph::ChapterGraph(QWidget *parent, bool phoneLayout)
 
 void ChapterGraph::setProgress(const QString &title, int chapterPage, int chapterPages,
                                int nextChapterPages, int page, int pages, int bookPercent,
-                               bool estimated)
+                               bool estimated, bool useScreens)
 {
     if (this->title == title && progress.chapterPage == chapterPage
         && progress.chapterPages == chapterPages && progress.nextChapterPages == nextChapterPages
         && progress.page == page && progress.pages == pages && progress.bookPercent == bookPercent
-        && progress.estimated == estimated && progressWeight == ui::interfaceWeight())
+        && progress.estimated == estimated && progress.useScreens == useScreens
+        && progressWeight == ui::interfaceWeight())
         return;
     this->title = title;
     progressWeight = ui::interfaceWeight();
-    progress = { chapterPage, chapterPages, nextChapterPages, page, pages, bookPercent, estimated };
+    progress = { chapterPage, chapterPages, nextChapterPages, page,
+                 pages,       bookPercent,  estimated,        useScreens };
     chapterTitle->setAccessibleName(strings::get("chapter_graph.current_chapter").arg(title));
     this->chapterPage->setText(
-            chapterPages > 0 ? strings::get("stats.page_of")
+            chapterPages > 0 ? strings::get(useScreens ? "stats.screen_of" : "stats.page_of")
                                        .arg(qBound(1, chapterPage, chapterPages))
                                        .arg(headerfooter::pageTotal(chapterPages, estimated))
                              : QString());
@@ -395,16 +397,15 @@ void ChapterGraph::refreshCells()
                                              : pageProgressPercent(p.page, p.pages);
     const int left = qMax(0, p.chapterPages - p.chapterPage + 1),
               remaining = qMax(0, p.pages - p.page);
-    const auto pagesLeft = [](int count) {
-        return count == 1 ? strings::get("stats.page_left") : strings::get("stats.pages_left");
-    };
+
     // A time at the session's pace replaces the page-count detail when there is one.
     const QString next = chapterTime >= 0 ? duration(chapterTime)
             : p.nextChapterPages > 0
             ? strings::get("chapter_graph.next_chapter")
                       .arg(p.nextChapterPages)
-                      .arg(p.nextChapterPages == 1 ? strings::get("common.page")
-                                                   : strings::get("common.pages"))
+                      .arg(p.nextChapterPages == 1
+                                   ? strings::get(p.useScreens ? "common.screen" : "common.page")
+                                   : strings::get(p.useScreens ? "common.screens" : "common.pages"))
             : p.chapterPages > 0 ? strings::get("stats.last_chapter")
                                  : QString();
     const auto wordTotal = [](qint64 count) {
@@ -419,14 +420,14 @@ void ChapterGraph::refreshCells()
             ? chapters[selection.current].words
             : -1;
     chapterCell->set(p.chapterPages > 0 ? QString::number(left) : QString(),
-                     p.chapterPages > 0 ? pagesLeft(left) : QString(), next,
+                     p.chapterPages > 0 ? remainingScreenUnit(left, p.useScreens) : QString(), next,
                      p.chapterPages > 0 ? strings::percentage(chapterValue) : QString(),
                      chapterTime >= 0 ? duration(chapterTime, true) : QString(),
                      wordsInCells() ? wordTotal(chapterTotal) : QString());
     chapterCell->percent->setAccessibleName(strings::get("chapter_graph.chapter_progress")
                                                     .arg(strings::percentArgument(chapterValue)));
     bookCell->set(p.pages > 0 ? QString::number(remaining) : QString(),
-                  p.pages > 0 ? pagesLeft(remaining) : QString(),
+                  p.pages > 0 ? remainingScreenUnit(remaining, p.useScreens) : QString(),
                   bookTime >= 0 ? duration(bookTime) : QString(), strings::percentage(bookValue),
                   bookTime >= 0 ? duration(bookTime, true) : QString(),
                   wordsInCells() ? wordTotal(words) : QString());

@@ -364,6 +364,7 @@ Reader::Reader(std::unique_ptr<kobalt::ReadingBook> openedBook,
     appearanceLayout = buildMenu();
     built("menu");
     buildOverlays();
+    syncLocationUnits();
     built("overlays");
     // The Text and Layout controls are built when the menu first opens one
     // of them; see ensureAppearance().
@@ -749,11 +750,15 @@ void Reader::startClockTimer()
     });
 }
 
-void MenuSessionLabel::setCountingPages(bool counting)
+void MenuSessionLabel::setCountingPages(bool counting, bool useScreens)
 {
+    const auto name = counting
+            ? strings::get(useScreens ? "reader.counting_screens" : "reader.counting_pages")
+            : QString();
+    if (accessibleName() != name)
+        setAccessibleName(name);
     if (countingPages != counting) {
         countingPages = counting;
-        setAccessibleName(counting ? strings::get("reader.counting_pages") : QString());
         update();
     }
 }

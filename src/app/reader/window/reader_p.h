@@ -102,7 +102,7 @@ class MenuSessionLabel final : public ui::InterfaceLabel
 {
 public:
     using ui::InterfaceLabel::InterfaceLabel;
-    void setCountingPages(bool counting);
+    void setCountingPages(bool counting, bool useScreens);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -804,6 +804,7 @@ private:
     QString settingsDictionaryFontFace;
     QString settingsTimeRemainingFormat, settingsPercentageFormat, settingsSecondaryNumbers;
 
+    void syncLocationUnits();
     bool publisherPagesEnabled() const
     {
         return preferences.value("publisher_page_numbers").toBool();

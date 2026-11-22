@@ -172,6 +172,7 @@ struct Values
 {
     QString title, author, chapter, time;
     QString matterPage, printedPage;
+    bool useScreens = false;
     int chapterPage = 0, chapterPages = 0, page = 0, pages = 0;
     // True for a total that is an estimate. It shows with a mark.
     bool pagesEstimated = false, chapterPagesEstimated = false;
@@ -233,7 +234,7 @@ Content content(Field field, const Values &values, bool uppercase);
 // A page count alone, such as 5 / 33, which is drawn with half-width spaces.
 bool pageCount(Field field);
 
-QString fieldLabel(Field field);
+QString fieldLabel(Field field, bool useScreens = false);
 // A line that explains a field whose name does not, or an empty string.
 QString fieldDescription(Field field);
 QString slotLabel(int slot);

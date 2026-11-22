@@ -130,7 +130,9 @@ void WordList::setWords(QVector<SavedWord> words, bool pending)
 
 QString WordList::pageLabel(const QString &position) const
 {
-    return locationPageLabel(pageOf(position), printedLabels.value(position));
+    const auto printed = printedLabels.value(position);
+    return screenLabel(locationPageLabel(pageOf(position), printed),
+                       useScreens && printed.isEmpty());
 }
 
 void WordList::setPages(QHash<QString, int> value, QHash<QString, QString> labels)

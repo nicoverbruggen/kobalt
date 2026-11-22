@@ -6117,6 +6117,8 @@ private slots:
         QVERIFY(fixture.press("rrNavChapters"));
         // Chapter three starts before its own marker, so it inherits 42.
         QTRY_COMPARE(labelText(fixture, "rrChapter2Page"), QString("42"));
+        QTRY_COMPARE(labelText(fixture, "rrChapter0Page"),
+                     strings::get("reader.screen_number").arg(1));
     }
 
     void illustratedNavigation()

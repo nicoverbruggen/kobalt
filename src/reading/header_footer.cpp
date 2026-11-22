@@ -43,11 +43,13 @@ bool anything(const Layout &layout, int first)
     return false;
 }
 
-QString pageFraction(int page, int pages, bool estimated)
+QString pageFraction(int page, int pages, bool estimated, bool useScreens)
 {
-    return pages > 0
-            ? strings::get("common.page_fraction").arg(page).arg(pageTotal(pages, estimated))
-            : QString();
+    return pages > 0 ? screenLabel(strings::get("common.page_fraction")
+                                           .arg(page)
+                                           .arg(pageTotal(pages, estimated)),
+                                   useScreens)
+                     : QString();
 }
 
 // A standalone estimate remains approximate while reading history accumulates.
@@ -95,11 +97,13 @@ QString percentDone(int page, int pages, bool decimal)
 
 // Beside a name the page reads 5 of 33, so the slash does not compete with
 // the dot between the two parts.
-QString pageOf(int page, int pages, bool estimated)
+QString pageOf(int page, int pages, bool estimated, bool useScreens)
 {
-    return pages > 0
-            ? strings::get("header_footer.page_of").arg(page).arg(pageTotal(pages, estimated))
-            : QString();
+    return pages > 0 ? screenLabel(strings::get("header_footer.page_of")
+                                           .arg(page)
+                                           .arg(pageTotal(pages, estimated)),
+                                   useScreens)
+                     : QString();
 }
 
 QString milliseconds(qint64 value)
@@ -448,12 +452,12 @@ Content content(Field field, const Values &values, bool uppercase)
         result.text = values.percentTenths >= 0
                 ? calculating()
                 : pageFraction(values.chapterPage, values.chapterPages,
-                               values.chapterPagesEstimated);
+                               values.chapterPagesEstimated, values.useScreens);
         break;
     case Field::BookPage:
         result.text = values.percentTenths >= 0
                 ? calculating()
-                : pageFraction(values.page, values.pages, values.pagesEstimated);
+                : pageFraction(values.page, values.pages, values.pagesEstimated, values.useScreens);
         break;
     case Field::ChapterPagesLeft:
         if (values.percentTenths >= 0) {
@@ -461,24 +465,25 @@ Content content(Field field, const Values &values, bool uppercase)
         } else if (values.chapterPages > 0) {
             // The current page is still to be read, as in Stats: the last page shows 1.
             const int left = qMax(1, values.chapterPages - values.chapterPage + 1);
-            result.text =
-                    strings::get("header_footer.pages_left")
-                            .arg(left)
-                            .arg(strings::get(left == 1 ? "stats.page_left" : "stats.pages_left"));
+            result.text = strings::get("header_footer.pages_left")
+                                  .arg(left)
+                                  .arg(remainingScreenUnit(left, values.useScreens));
         }
         break;
     case Field::ChapterAndPage:
         result.chapterTitle = values.chapter;
         result.chapterPosition = values.percentTenths >= 0
                 ? calculating()
-                : pageOf(values.chapterPage, values.chapterPages, values.chapterPagesEstimated);
+                : pageOf(values.chapterPage, values.chapterPages, values.chapterPagesEstimated,
+                         values.useScreens);
         result.text = joined(result.chapterTitle, result.chapterPosition);
         break;
     case Field::TitleAndPage:
         result.text = joined(values.title,
                              values.percentTenths >= 0
                                      ? calculating()
-                                     : pageOf(values.page, values.pages, values.pagesEstimated));
+                                     : pageOf(values.page, values.pages, values.pagesEstimated,
+                                              values.useScreens));
         break;
     case Field::BatteryPercentOnly:
     case Field::BatteryPercent:
@@ -529,7 +534,9 @@ Content content(Field field, const Values &values, bool uppercase)
     }
     if (field == Field::BookPercent && !values.matterPage.isEmpty())
         result.text = percent(values.page <= 0 ? 0 : 1000, values.decimalPercentages);
-    const auto &label = values.printedPage.isEmpty() ? values.matterPage : values.printedPage;
+    const auto label = values.printedPage.isEmpty()
+            ? screenLabel(values.matterPage, values.useScreens)
+            : values.printedPage;
     if (!label.isEmpty() && (field == Field::BookPage || field == Field::TitleAndPage)) {
         result.text = field == Field::BookPage
                 ? label
@@ -549,7 +556,7 @@ bool pageCount(Field field)
     return field == Field::ChapterPage || field == Field::BookPage;
 }
 
-QString fieldLabel(Field field)
+QString fieldLabel(Field field, bool useScreens)
 {
     switch (field) {
     case Field::Nothing:
@@ -561,13 +568,16 @@ QString fieldLabel(Field field)
     case Field::Chapter:
         return strings::get("header_footer.field.chapter");
     case Field::ChapterPage:
-        return strings::get("header_footer.field.chapter_page");
+        return strings::get(useScreens ? "header_footer.field.chapter_screen"
+                                       : "header_footer.field.chapter_page");
     case Field::BookPage:
         return strings::get("header_footer.field.book_page");
     case Field::ChapterPagesLeft:
-        return strings::get("header_footer.field.chapter_pages_left");
+        return strings::get(useScreens ? "header_footer.field.chapter_screens_left"
+                                       : "header_footer.field.chapter_pages_left");
     case Field::ChapterAndPage:
-        return strings::get("header_footer.field.chapter_and_page");
+        return strings::get(useScreens ? "header_footer.field.chapter_and_screen"
+                                       : "header_footer.field.chapter_and_page");
     case Field::TitleAndPage:
         return strings::get("header_footer.field.title_and_page");
     case Field::BatteryPercentOnly:

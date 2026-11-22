@@ -120,6 +120,7 @@ kobalt::headerfooter::Values Reader::chromeValues(ChromeFields fields)
             values.matterPage =
                     session->displayPageLabel(session->bookPage(), secondaryNumberStyle());
     }
+    values.useScreens = publisherPagesEnabled();
     values.printedPage = currentPrintedPage();
     values.deviceStatus = !hideNativeStatus();
     // The chooser previews every field. The slot map also previews assigned
@@ -1127,6 +1128,16 @@ void Reader::applySettings()
     });
 }
 
+void Reader::syncLocationUnits()
+{
+    const bool screens = publisherPagesEnabled();
+    bookmarkList->useScreens = screens;
+    searchPanel->useScreens = screens;
+    pageScrubber->useScreens = screens;
+    if (wordList)
+        wordList->useScreens = screens;
+}
+
 void Reader::finishSettingsWrite(const QJsonObject &next, bool saved)
 {
     if (!saved) {
@@ -1147,6 +1158,7 @@ void Reader::finishSettingsWrite(const QJsonObject &next, bool saved)
     preferences = next;
     session->setPublisherPageNumbers(publisherPagesEnabled());
     if (pageLabelsChanged) {
+        syncLocationUnits();
         pageScrubber->refreshPageLabels();
         if (publisherPagesEnabled()) {
             QStringList positions;

@@ -22,6 +22,7 @@ void confirmWordRemoval(QWidget *host, const SavedWord &word, std::function<void
 class WordList : public ui::Panel
 {
 public:
+    bool useScreens = false;
     enum class Scope { Book, Library };
     WordList(QWidget *parent, Scope scope);
     // `loading` shows the list's loading text until the words arrive.

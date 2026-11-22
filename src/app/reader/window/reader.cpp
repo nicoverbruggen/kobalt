@@ -2668,8 +2668,11 @@ void Reader::syncNavigation()
             const auto &visit = linkHistory.last();
             const auto printed = publisherPagesEnabled() ? visit.printedPage : QString();
             returnText = !printed.isEmpty() ? strings::get("reader.return_page").arg(printed)
-                    : visit.page >= 0       ? strings::get("reader.return_page").arg(visit.page + 1)
-                                            : strings::get("reader.return_to_passage");
+                    : visit.page >= 0
+                    ? strings::get(publisherPagesEnabled() ? "reader.return_screen"
+                                                           : "reader.return_page")
+                              .arg(visit.page + 1)
+                    : strings::get("reader.return_to_passage");
         }
         pageScrubber->setReturnAction(returnText,
                                       linkHistory.isEmpty() || linkHistory.last().chapter.isEmpty()
@@ -2972,7 +2975,8 @@ void Reader::showChapters(ContentsList mode)
         return publisherPagesEnabled() ? session->navigationPrintedPage(i, true) : QString();
     };
     choices->pageLabel = [this](int p) {
-        return session->displayPageLabel(p, secondaryNumberStyle());
+        return screenLabel(session->displayPageLabel(p, secondaryNumberStyle()),
+                           publisherPagesEnabled());
     };
     const bool auxiliary = mode != ContentsList::Chapters;
     const auto list = mode == ContentsList::Landmarks ? session->landmarks()
@@ -3007,7 +3011,7 @@ void Reader::showChapters(ContentsList mode)
         lists.append(ContentsList::PrintedPages);
     if (!session->landmarks().isEmpty())
         lists.append(ContentsList::Landmarks);
-    choices->setListMode(mode, lists);
+    choices->setListMode(mode, lists, publisherPagesEnabled());
     choices->switchList = [this](ContentsList selected) {
         if (selected == ContentsList::PrintedPages) {
             QHash<QString, QString> pages;

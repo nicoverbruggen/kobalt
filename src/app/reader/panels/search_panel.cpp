@@ -342,7 +342,9 @@ void SearchPanel::open(bool returnAvailable, int originalPage, const QString &in
     }
     canReturn = returnAvailable;
     clearDetails();
-    original->setCaption(strings::get("search_panel.page_number")
+    original->setCaption(strings::get(useScreens && printedPage.isEmpty()
+                                              ? "reader.screen_number"
+                                              : "search_panel.page_number")
                                  .arg(locationPageLabel(originalPage, printedPage)));
     show();
     raise();
@@ -408,28 +410,25 @@ QFont SearchPanel::excerptFont() const
 
 QString SearchPanel::caption(const SearchHit &hit) const
 {
-    // In chapter mode a hit names its chapter, with an estimated page once
-    // there is one.
-    if (!hit.chapter.isEmpty())
-        return hit.page < 0 && hit.printedPage.isEmpty()
-                ? hit.chapter.simplified()
-                : strings::get("search_panel.page_chapter")
-                          .arg(locationPageLabel(hit.page, hit.printedPage))
-                          .arg(hit.chapter.simplified());
-    // The chapter that starts last at or before the hit's page contains it.
-    QString title;
-    int start = -1;
-    for (const auto &chapter : chapters)
-        if (chapter.page >= 0 && chapter.page <= hit.page && chapter.page >= start
-            && !chapter.title.trimmed().isEmpty()) {
-            start = chapter.page;
-            title = chapter.title.simplified();
-        }
-    return title.isEmpty() ? strings::get("search_panel.page_number")
-                                     .arg(locationPageLabel(hit.page, hit.printedPage))
-                           : strings::get("search_panel.page_chapter")
-                                     .arg(locationPageLabel(hit.page, hit.printedPage))
-                                     .arg(title);
+    QString title = hit.chapter.simplified();
+    if (title.isEmpty()) {
+        // The chapter that starts last at or before the hit contains it.
+        int start = -1;
+        for (const auto &chapter : chapters)
+            if (chapter.page >= 0 && chapter.page <= hit.page && chapter.page >= start
+                && !chapter.title.trimmed().isEmpty()) {
+                start = chapter.page;
+                title = chapter.title.simplified();
+            }
+    }
+    const auto label = locationPageLabel(hit.page, hit.printedPage);
+    if (label.isEmpty())
+        return title;
+    const bool screen = useScreens && hit.printedPage.isEmpty();
+    return title.isEmpty()
+            ? strings::get(screen ? "reader.screen_number" : "search_panel.page_number").arg(label)
+            : strings::get(screen ? "search_panel.screen_chapter" : "search_panel.page_chapter")
+                      .arg(label, title);
 }
 
 void SearchPanel::run()
@@ -701,7 +700,9 @@ void SearchPanel::redraw()
                 ui::fitSearchExcerpt(hit.before, hit.text, hit.after, font, labels[row]->size()));
         buttons[row]->setAccessibleName(
                 !hit.printedPage.isEmpty() || hit.page >= 0 || hit.chapter.isEmpty()
-                        ? strings::get("search_panel.page_detail")
+                        ? strings::get(useScreens && hit.printedPage.isEmpty()
+                                               ? "search_panel.screen_detail"
+                                               : "search_panel.page_detail")
                                   .arg(locationPageLabel(hit.page, hit.printedPage))
                                   .arg(hit.text)
                         : strings::get("search_panel.chapter_detail")

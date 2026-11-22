@@ -719,6 +719,7 @@ void Reader::showKosyncChoice()
                 jump.pages = session->bookPages();
                 jump.here = session->bookPage();
                 jump.synced = compared && info.page < jump.pages ? info.page : -1;
+                jump.useScreens = publisherPagesEnabled();
                 jump.hereLabel = currentPrintedPage();
                 if (compared && publisherPagesEnabled())
                     jump.syncedLabel = info.printedPage;

@@ -17,6 +17,7 @@ class PageThumbnail;
 class PageScrubber : public QWidget
 {
 public:
+    bool useScreens = false;
     explicit PageScrubber(QWidget *parent);
 
     SettingSlider *slider() const { return position; }

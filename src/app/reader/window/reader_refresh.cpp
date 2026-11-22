@@ -913,7 +913,8 @@ void Reader::updateGraph()
     const int page = volume ? session->bookPage() : session->mainPage();
     chapterGraph->setProgress(session->chapterTitle(), session->chapterPage(),
                               session->chapterPages(), nextPages, qBound(0, page, qMax(0, pages)),
-                              pages, session->statsPercent(volume), session->bookPagesEstimated());
+                              pages, session->statsPercent(volume), session->bookPagesEstimated(),
+                              publisherPagesEnabled());
 }
 
 void Reader::updateBatteryIndicators(const BatteryStatus &battery)
@@ -989,7 +990,7 @@ void Reader::updateMenuSession()
     const auto reading = book->sessionReadingMilliseconds();
     QString label;
     const bool counting = menuShowsPagination();
-    menuSession->setCountingPages(counting);
+    menuSession->setCountingPages(counting, publisherPagesEnabled());
     if (!counting && features::enabled(preferences, features::Stats) && reading > 300000)
         label = strings::get("reader.session_minutes").arg(reading / 60000);
     if (menuSession->text() != label)

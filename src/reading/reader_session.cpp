@@ -3078,8 +3078,8 @@ QString ReaderSession::displayBookPosition(const QString &style) const
         return strings::percentage(mainPercent());
     const auto label = displayPageLabel(bookPage(), style);
     if (mainPage() < 0 || mainPage() >= mainPages())
-        return label;
-    return strings::get("stats.page_of")
+        return screenLabel(label, usePublisherPageNumbers);
+    return strings::get(usePublisherPageNumbers ? "stats.screen_of" : "stats.page_of")
             .arg(label)
             .arg(headerfooter::pageTotal(mainPages(), bookPagesEstimated()));
 }
